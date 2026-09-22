@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="login-wrapper">
+    <div class="card">
+        {% if portal_school %}
+        {% if portal_school.logo_filename %}
+        <img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:64px; display:block; margin:0 auto 0.5rem;">
+        {% endif %}
+        <h2 style="text-align:center;">{{ portal_school.name }}</h2>
+        <p style="color:#666; font-size:0.9rem; text-align:center;">Sign in to your school portal</p>
+        {% else %}
+        <h2>📘 School Result System</h2>
+        <p style="color:#666; font-size:0.9rem;">Sign in to continue</p>
+        {% endif %}
+        <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label>Username / Email / Phone Number</label>
+            <input type="text" name="username" required autofocus autocomplete="username" placeholder="Username, email, or phone">
+            <label>Password</label>
+            <input type="password" name="password" required>
+            <button class="btn" type="submit" style="width:100%;">Login</button>
+        </form>
+        <p style="font-size:0.85rem; margin-top:1rem; text-align:center;">
+            <a href="{{ url_for('recover') }}">Forgot password?</a> &nbsp;|&nbsp;
+            <a href="{{ url_for('register') }}">Staff: create your login</a>
+        </p>
+        <p style="font-size:0.85rem; margin-top:0.5rem; text-align:center;">
+            <a href="{{ url_for('register_school') }}">New school? Register your school here</a>
+        </p>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='js/offline-crypto.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-auth.js') }}"></script>
+<script>
+/* Online login. While the password is still in memory we use it to set up (or
+   renew) this device's offline access, so the password a person types here is
+   also the one that unlocks the offline app later. Nothing is stored in plain
+   text: the offline credential is encrypted with the password (see
+   offline-auth.js). If anything about that fails, login itself carries on. */
+(function () {
+    var form = document.querySelector('form[method="POST"]');
+    if (!form || typeof OfflineAuth === "undefined" || !window.fetch) return;
+    var button = form.querySelector('button[type="submit"]');
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var username = form.username.value.trim();
+        var password = form.password.value;
+        if (button) { button.disabled = true; button.textContent = "Signing in…"; }
+        var body = new URLSearchParams(new FormData(form));
+        fetch(window.location.href, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+            credentials: "same-origin",
+        }).then(function (resp) {
+            var landed = new URL(resp.url).pathname;
+            if (resp.redirected && landed !== "/login") {
+                if (button) button.textContent = "Preparing offline access…";
+                return OfflineAuth.provisionAfterLogin(username, password)
+                    .catch(function () { /* offline access is a bonus; never block login */ })
+                    .then(function () { window.location.href = resp.url; });
+            }
+            // Wrong password etc.: show the server's page (with its message) as normal.
+            return resp.text().then(function (html) { document.open(); document.write(html); document.close(); });
+        }).catch(function () {
+            // The request itself failed — the connection dropped. Go to the offline app.
+            window.location.href = "/app";
+        });
+    });
+})();
+</script>
+{% endblock %}

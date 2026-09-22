@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ school_name or "School Results" }}</title>
+<link rel="manifest" href="{{ url_for('manifest') }}">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Results">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  #offlineRoot label { display:block; margin-top:0.75rem; font-size:0.85rem; color:#555; }
+  #offlineRoot input:not([type=checkbox]), #offlineRoot select { width:100%; padding:0.5rem; margin-top:0.25rem; box-sizing:border-box; }
+  .navbar #syncPill { flex-shrink:0; }
+</style>
+</head>
+<body>
+<!--
+  The one app. Staff work here whether or not there is a connection: every screen reads
+  and writes this device's own copy of the school's data (IndexedDB) and the sync engine
+  exchanges changes with the server automatically. The shell is the same static page
+  for everyone (nothing person-specific is rendered by the server), so it can be cached
+  and opened with no connection; the navigation and dashboard are drawn on the device
+  from the signed-in person's local data.
+-->
+<div id="appNav"></div>
+<main class="container">
+  <div id="liveClock" class="live-clock no-print"></div>
+  <div id="offlineRoot"></div>
+</main>
+<script src="{{ url_for('static', filename='js/connectivity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-crypto.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/sync-engine.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-results.js') }}"></script>
+<script src="{{ url_for('static', filename='js/xlsx-lite.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-materials.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-app-ui.js') }}"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("{{ url_for('service_worker') }}");
+}
+</script>
+</body>
+</html>
