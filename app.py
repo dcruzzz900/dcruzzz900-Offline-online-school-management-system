@@ -682,7 +682,17 @@ def login():
             if not tenant_id:
                 tenant_id = generate_tenant_id(conn)
                 conn.execute("UPDATE schools SET tenant_id=? WHERE id=?", (tenant_id, user["school_id"]))
-                conn.commit()
+
+            # Existing installations may have users created before tenant IDs
+            # were introduced.  The school row is authoritative, so repair a
+            # missing/stale user tenant stamp at the moment of successful
+            # authentication.  This also prevents the offline enrollment step
+            # from failing with tenant_mismatch and sending the user into the
+            # offline-login loop.
+            if user["tenant_id"] != tenant_id:
+                conn.execute("UPDATE users SET tenant_id=? WHERE id=?", (tenant_id, user["id"]))
+                user = conn.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
+            conn.commit()
             conn.close()
             if school and school["activation_status"] != "active":
                 flash("This school hasn't been activated yet. Enter your activation code on the Activate School page.", "error")
