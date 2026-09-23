@@ -60,7 +60,14 @@
             if (resp.redirected && landed !== "/login") {
                 if (button) button.textContent = "Preparing offline access…";
                 return OfflineAuth.provisionAfterLogin(username, password)
-                    .catch(function () { /* offline access is a bonus; never block login */ })
+                    .catch(function (err) {
+                        // Online authentication has already succeeded. Do not
+                        // send the user to the offline lock screen when device
+                        // provisioning fails; that creates an online→offline
+                        // login loop. The user can continue online and offline
+                        // provisioning can be retried from Settings.
+                        console.warn("Offline access provisioning failed:", err);
+                    })
                     .then(function () { window.location.href = resp.url; });
             }
             // Wrong password etc.: show the server's page (with its message) as normal.
