@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Parents{% endblock %}
+{% block content %}
+<h1>Parents</h1>
+
+<div class="card">
+    <h3>Add a Parent</h3>
+    <form method="POST" data-offline="true" data-offline-label="Add Parent">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Full Name</label>
+        <input type="text" name="name" required>
+        <label>Phone Number</label>
+        <input type="text" name="phone">
+        <label>Email</label>
+        <input type="email" name="email">
+        <p style="font-size:0.85rem; color:#666; margin-top:-0.5rem;">At least one of phone or email is required — the parent logs in with either.</p>
+        <label>Address</label>
+        <input type="text" name="address">
+        <label>Password</label>
+        <input type="password" name="password" required minlength="6">
+        <label>Link to a Child (optional — admission number)</label>
+        <input type="text" name="admission_no" placeholder="e.g. 001">
+        <label>Relationship</label>
+        <input type="text" name="relationship" placeholder="e.g. Mother, Father, Uncle">
+        <button class="btn" type="submit">Add Parent</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>All Parents</h3>
+    {% if not parents %}
+    <p style="color:#999;">No parent accounts yet.</p>
+    {% endif %}
+    {% for p in parents %}
+    <div class="card" style="background:#fafafa;">
+        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+            <div>
+                <b>{{ p.name }}</b>
+                {% if p.is_active %}<span style="color:#1a7f37;">(Active)</span>{% else %}<span style="color:#b3261e;">(Deactivated)</span>{% endif %}
+                <br>
+                <span style="font-size:0.9rem; color:#555;">{{ p.phone or '—' }} &middot; {{ p.email or '—' }}{% if p.address %} &middot; {{ p.address }}{% endif %}</span>
+            </div>
+            <div style="white-space:nowrap;">
+                <form method="POST" action="{{ url_for('toggle_parent_active', parent_id=p.id) }}" class="inline"
+                      {% if p.is_active %}onsubmit="return confirm('Deactivate {{ p.name }}? They will no longer be able to log in.');"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small" type="submit">{{ 'Deactivate' if p.is_active else 'Reactivate' }}</button>
+                </form>
+                <form method="POST" action="{{ url_for('admin_reset_parent_password', parent_id=p.id) }}" class="inline"
+                      onsubmit="return confirm('Reset the password for {{ p.name }}? A new temporary password will be shown here once.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small" type="submit">Reset Password</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_parent', parent_id=p.id) }}" class="inline"
+                      onsubmit="return confirm('Remove {{ p.name }}? This also removes their links to any children.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </div>
+        </div>
+
+        <table style="margin-top:0.75rem;">
+            <tr><th>Child</th><th>Class</th><th>Relationship</th><th></th></tr>
+            {% for c in children_by_parent.get(p.id, []) %}
+            <tr>
+                <td>{{ student_full_name(c) }} ({{ c.admission_no }})</td>
+                <td>{{ c.class_name }}</td>
+                <td>{{ c.relationship or '—' }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('unlink_parent_student', parent_id=p.id, student_id=c.id) }}" class="inline"
+                          onsubmit="return confirm('Unlink this child from {{ p.name }}?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-small" style="background:#b3261e;" type="submit">Unlink</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" style="color:#999;">No children linked yet.</td></tr>
+            {% endfor %}
+        </table>
+
+        <form method="POST" action="{{ url_for('link_parent_student', parent_id=p.id) }}"
+              style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:flex-end; margin-top:0.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div><label style="font-size:0.8rem;">Link another child (admission no.)</label><br>
+                <input type="text" name="admission_no" required style="width:8rem;"></div>
+            <div><label style="font-size:0.8rem;">Relationship</label><br>
+                <input type="text" name="relationship" style="width:8rem;"></div>
+            <button class="btn btn-small" type="submit">Link</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

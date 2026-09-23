@@ -42,6 +42,23 @@
             {% endfor %}
         </div>
 
+        <label style="margin-top:1rem;">School Name Alignment on Result Sheets</label>
+        <div style="margin-top:0.4rem; display:flex; gap:1.5rem;">
+            {% for value, display in [('left','Left'), ('center','Center'), ('right','Right')] %}
+            <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem;">
+                <input type="radio" name="school_name_align" value="{{ value }}" style="width:auto;"
+                    {% if (settings.school_name_align if settings else 'center') == value %}checked{% endif %}>
+                {{ display }}
+            </label>
+            {% endfor %}
+        </div>
+
+        <label style="margin-top:1rem;">Result Sheet Theme Color</label>
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+            <input type="color" name="result_theme_color" value="{{ settings.result_theme_color if settings and settings.result_theme_color else '#1f3a5f' }}" style="width:3.5rem; height:2.2rem; padding:0.2rem;">
+            <span style="font-size:0.85rem; color:#666;">Used for headings and table headers on the result sheet, on screen and in the PDF.</span>
+        </div>
+
         <label style="margin-top:1rem;">Result Comments</label>
         <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem; margin-top:0.4rem;">
             <input type="checkbox" name="auto_teacher_comment" style="width:auto;"
@@ -83,6 +100,7 @@
         </select>
 
         <button class="btn" type="submit" style="margin-top:1rem;">Save Changes</button>
+        <button class="btn btn-gold" type="submit" formaction="{{ url_for('preview_result_design') }}" formtarget="_blank" style="margin-top:1rem;">Preview Result Design</button>
     </form>
 </div>
 

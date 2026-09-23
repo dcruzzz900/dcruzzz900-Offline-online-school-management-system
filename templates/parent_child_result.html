@@ -10,9 +10,9 @@
 </div>
 
 <div class="no-print" style="margin-bottom:1rem;">
-    <a class="btn" href="{{ url_for('student_result_pdf', term_id=term.id) }}">⬇ Download PDF</a>
+    <a class="btn" href="{{ url_for('parent_child_result_pdf', student_id=student.id, term_id=term.id) }}">⬇ Download PDF</a>
     <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
-    <a class="btn" href="{{ url_for('student_dashboard') }}">← Back to My Results</a>
+    <a class="btn" href="{{ url_for('parent_child_profile', student_id=student.id) }}">← Back to Profile</a>
 </div>
 
 <div class="card">

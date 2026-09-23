@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ student_full_name(student) }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('parent_dashboard') }}">← Back to My Children</a></p>
+<div class="card">
+    <h3>{{ student_full_name(student) }}</h3>
+    <div class="grid-2">
+        <div>
+            {% if student.photo_filename %}
+            <img src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo"
+                 style="max-width:120px; max-height:150px; display:block; margin-bottom:0.75rem; border:1px solid #ddd;">
+            {% endif %}
+            <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
+            <p><b>Class / Arm:</b> {{ class_row.name }}</p>
+            <p><b>Gender:</b> {{ student.gender or '—' }}</p>
+        </div>
+        <div>
+            <p><b>Date of Birth:</b> {{ student.date_of_birth|dmy if student.date_of_birth else '—' }}</p>
+            <p><b>Religion:</b> {{ student.religion or '—' }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Published Results</h3>
+    {% if published_terms %}
+    <table>
+        <tr><th>Session</th><th>Term</th><th>Action</th></tr>
+        {% for t in published_terms %}
+        <tr>
+            <td>{{ t.session_name }}</td>
+            <td>{{ t.name }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('parent_child_result', student_id=student.id, term_id=t.id) }}">View Result</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p style="color:#999;">No results have been published yet for this child.</p>
+    {% endif %}
+</div>
+{% endblock %}

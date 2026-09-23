@@ -124,6 +124,24 @@ if ("serviceWorker" in navigator) {
         </a>
     </div>
 </nav>
+{% elif session.get('parent_id') %}
+<nav class="navbar">
+    <div class="navbar-brand navbar-brand-{{ school_logo_align or 'center' }}">
+        {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="navbar-logo">{% endif %}
+        <span>{{ school_name }}</span>
+    </div>
+    <div class="navbar-links">
+        <a href="{{ url_for('parent_dashboard') }}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+            My Children
+        </a>
+        <span class="navbar-user">{{ session.get('name') }}</span>
+        <a href="{{ url_for('parent_logout') }}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+        </a>
+    </div>
+</nav>
 {% elif session.get('platform_admin_id') %}
 <nav class="navbar">
     <div class="navbar-brand">

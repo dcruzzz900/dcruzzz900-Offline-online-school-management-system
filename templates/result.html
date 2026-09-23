@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Terminal Result{% endblock %}
 {% block content %}
+<div style="--navy: {{ result_theme_color }};">
 <div class="report-header">
     {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
+    <h2 style="margin:0.2rem 0; text-align:{{ school_name_align }};">{{ school_name }}</h2>
     <h1>Terminal Report Sheet</h1>
     <p>{{ term.session_name }} &mdash; {{ term.name }}</p>
     {% if result_date %}<p style="font-size:0.85rem; color:#666;">Date: {{ result_date }}</p>{% endif %}
@@ -91,7 +92,10 @@
         {% else %}<span class="comment-blank">&nbsp;</span>{% endif %}
     </p>
     <p class="signature-line">
-        <span>Teacher's Signature: __________________</span>
+        <span>
+            {% if teacher_signature_url %}<img src="{{ teacher_signature_url }}" alt="Teacher's signature"><br>{% endif %}
+            Teacher's Signature: {% if not teacher_signature_url %}__________________{% endif %}
+        </span>
         <span>Date: {{ info.teacher_signed_date|dmy if info and info.teacher_signed_date else '__________________' }}</span>
     </p>
 
@@ -100,7 +104,10 @@
         {% else %}<span class="comment-blank">&nbsp;</span>{% endif %}
     </p>
     <p class="signature-line">
-        <span>Principal's Signature: __________________</span>
+        <span>
+            {% if principal_signature_url %}<img src="{{ principal_signature_url }}" alt="Principal's signature"><br>{% endif %}
+            Principal's Signature: {% if not principal_signature_url %}__________________{% endif %}
+        </span>
         <span>Date: {{ info.principal_signed_date|dmy if info and info.principal_signed_date else '__________________' }}</span>
     </p>
 </div>
@@ -153,8 +160,10 @@
         <button class="btn" type="submit">Save Details</button>
     </form>
 </div>
+</div>
 <style>
 .comment-blank { display: inline-block; border-bottom: 1px solid #999; width: 100%; height: 1.5em; }
-.signature-line { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; }
+.signature-line { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; align-items: flex-end; }
+.signature-line img { max-height: 2.2em; max-width: 8em; object-fit: contain; }
 </style>
 {% endblock %}

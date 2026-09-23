@@ -61,6 +61,8 @@
                 <input type="email" name="parent_email">
                 <label>Parent/Guardian Phone</label>
                 <input type="text" name="parent_phone">
+                <label>Relationship to Student</label>
+                <input type="text" name="parent_relationship" placeholder="e.g. Mother, Father, Uncle">
             </div>
         </div>
         <button class="btn" type="submit">Add Student</button>
@@ -103,6 +105,7 @@
                     <div><label>Parent Address</label><input type="text" name="parent_address" value="{{ s.parent_address or '' }}"></div>
                     <div><label>Parent Email</label><input type="email" name="parent_email" value="{{ s.parent_email or '' }}"></div>
                     <div><label>Parent Phone</label><input type="text" name="parent_phone" value="{{ s.parent_phone or '' }}"></div>
+                    <div><label>Relationship</label><input type="text" name="parent_relationship" value="{{ s.parent_relationship or '' }}" style="width:8rem;"></div>
                     <button class="btn btn-small" type="submit">Save</button>
                 </form>
             </td>

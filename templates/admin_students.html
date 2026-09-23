@@ -8,7 +8,7 @@
     <p style="font-size:0.9rem; color:#666;">
         Upload a CSV with columns: <code>admission_no, first_name, last_name,
         other_names, gender, class_name, date_of_birth, religion, parent_name,
-        parent_address, parent_email, parent_phone</code>.
+        parent_address, parent_email, parent_phone, parent_relationship</code>.
         Only admission_no, first_name, last_name, and class_name are required — the rest
         can be left blank. The class must already exist (see Classes above) —
         <code>class_name</code> should match it exactly (not case-sensitive).
@@ -62,6 +62,8 @@
                 <input type="email" name="parent_email">
                 <label>Parent/Guardian Phone</label>
                 <input type="text" name="parent_phone">
+                <label>Relationship to Student</label>
+                <input type="text" name="parent_relationship" placeholder="e.g. Mother, Father, Uncle">
             </div>
         </div>
         <button class="btn" type="submit">Add Student</button>

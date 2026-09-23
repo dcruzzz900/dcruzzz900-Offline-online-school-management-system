@@ -11,6 +11,10 @@
         <input type="text" name="name" required>
         <label>Username</label>
         <input type="text" name="username" required>
+        <label>Email (optional)</label>
+        <input type="email" name="email">
+        <label>Phone Number (optional)</label>
+        <input type="text" name="phone">
         <label>Password</label>
         <input type="password" name="password" required minlength="6">
         <label>Position</label>
@@ -27,11 +31,20 @@
 <div class="card">
     <h3>All Teachers</h3>
     <table>
-        <tr><th>Name</th><th>Username</th><th>Position</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>Position</th><th>Status</th><th>Actions</th></tr>
         {% for t in teachers %}
         <tr>
             <td>{{ t.name }}</td>
             <td>{{ t.username }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
+                      style="display:flex; gap:0.3rem; flex-wrap:wrap; align-items:center;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;">
+                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;">
+                    <button class="btn btn-small" type="submit">Save</button>
+                </form>
+            </td>
             <td>
                 <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

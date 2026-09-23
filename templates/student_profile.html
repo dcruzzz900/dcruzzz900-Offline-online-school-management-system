@@ -7,6 +7,10 @@
     <h3>{{ student_full_name(student) }}</h3>
     <div class="grid-2">
         <div>
+            {% if student.photo_filename %}
+            <img src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo"
+                 style="max-width:120px; max-height:150px; display:block; margin-bottom:0.75rem; border:1px solid #ddd;">
+            {% endif %}
             <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
             <p><b>Class / Arm:</b> {{ class_row.name }}</p>
             <p><b>Gender:</b> {{ student.gender or '—' }}</p>
@@ -15,12 +19,30 @@
         </div>
         <div>
             <p><b>Parent/Guardian Name:</b> {{ student.parent_name or '—' }}</p>
+            <p><b>Relationship:</b> {{ student.parent_relationship or '—' }}</p>
             <p><b>Parent/Guardian Address:</b> {{ student.parent_address or '—' }}</p>
             <p><b>Parent/Guardian Email:</b> {{ student.parent_email or '—' }}</p>
             <p><b>Parent/Guardian Phone:</b> {{ student.parent_phone or '—' }}</p>
             <p><b>Student Login:</b> {% if student.username %}{{ student.username }} (active){% else %}Not set up{% endif %}</p>
         </div>
     </div>
+</div>
+
+<div class="card">
+    <h3>Passport Photo</h3>
+    <p style="font-size:0.9rem; color:#666;">Optional. Requires an internet connection to upload.</p>
+    <form method="POST" action="{{ url_for('upload_student_photo', student_id=student.id) }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" required>
+        <button class="btn btn-small" type="submit">{% if student.photo_filename %}Replace Photo{% else %}Upload Photo{% endif %}</button>
+    </form>
+    {% if student.photo_filename %}
+    <form method="POST" action="{{ url_for('remove_student_photo', student_id=student.id) }}" style="margin-top:0.5rem;"
+          onsubmit="return confirm('Remove this student\'s passport photo?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove Photo</button>
+    </form>
+    {% endif %}
 </div>
 
 {% if enrollment_history %}
