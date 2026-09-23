@@ -1,3 +1,45 @@
+# Update: Dashboard Date/Time Card
+
+## What's new in this update
+
+- A live date and time card now appears at the top of every dashboard —
+  admin, teacher, student, parent, and the platform (super admin) view —
+  in the same position each time. It shows the day and date in
+  dd/mm/yyyy (the format used throughout the rest of the system) and
+  updates the time every second on its own, with no page reload needed.
+- Shown in West Africa Time (WAT / Africa/Lagos), since that's the
+  timezone actual schools using this system operate in. There's no
+  per-school timezone setting elsewhere in the app to hook into, so this
+  intentionally isn't user-configurable — if that ever needs to change,
+  it's a small follow-up.
+- This appears in both places staff can work: the main offline-capable
+  app (`/app`) that almost everyone uses day-to-day, and the classic
+  server-rendered fallback pages (`/dashboard?classic=1`).
+
+## Database changes
+
+None — this update is templates and JavaScript only.
+
+## Steps
+
+1. Log in to **pythonanywhere.com**, go to **Files**, upload the new
+   `school-result-system-update.zip`.
+2. Open a **Bash** console and copy over the changed files:
+   ```
+   cd ~
+   unzip -o school-result-system-update.zip -d new_version
+   cp -r new_version/school-results/templates/. school-results/templates/
+   cp new_version/school-results/static/js/offline-app-ui.js school-results/static/js/offline-app-ui.js
+   ```
+3. Go to **Web** and click **Reload**.
+4. Test it: log in as any role and confirm the date/time card appears at
+   the top of the dashboard and the seconds are ticking on their own.
+
+If anything looks off after reloading, check the **Error log** link on
+the Web tab and paste me what it says.
+
+---
+
 # Update: Result Design Customization + Digital Signatures
 
 ## What's new in this update
