@@ -34,11 +34,11 @@ def _apply_pdf_font(styles, font_choice):
     return regular, bold
 
 
-def _header_elements(school_name, logo_path, document_title, subtitle_text, styles, theme_color="#1f3a5f", name_align="center"):
+def _header_elements(school_name, logo_path, document_title, subtitle_text, styles, accent_color="#1f3a5f", name_align=None):
     """Shared letterhead: logo (if any) + school name + document title + subtitle."""
-    align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT}
-    school_style = ParagraphStyle("school", parent=styles["Heading1"], alignment=align_map.get(name_align, TA_CENTER), fontSize=16)
-    title_style = ParagraphStyle("title", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.HexColor(theme_color))
+    align = {"left": TA_LEFT, "right": TA_RIGHT}.get(name_align, TA_CENTER)
+    school_style = ParagraphStyle("school", parent=styles["Heading1"], alignment=align, fontSize=16)
+    title_style = ParagraphStyle("title", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.HexColor(accent_color))
     sub_style = ParagraphStyle("sub", parent=styles["Normal"], alignment=TA_CENTER)
 
     elements = []
@@ -66,7 +66,7 @@ def _header_elements(school_name, logo_path, document_title, subtitle_text, styl
     return elements
 
 
-def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica"):
+def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica", accent_color="#1f3a5f"):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=1 * cm, bottomMargin=1 * cm)
     styles = getSampleStyleSheet()
@@ -76,7 +76,7 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
         school_name, logo_path, "BROADSHEET",
         f"{class_row['name']}" + (f" ({class_row['category']})" if class_row['category'] else "") +
         f" &mdash; {term['session_name']} &mdash; {term['name']}",
-        styles,
+        styles, accent_color=accent_color,
     )
 
     header = ["S/N", "Student Name"] + [s["name"] for s in subjects] + ["Total", "Average", "Position"]
@@ -93,7 +93,7 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
 
     table = Table(data, repeatRows=1)
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3a5f")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
         ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -108,10 +108,15 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
     return buf
 
 
-def _result_elements(data, term, school_name, logo_path, student_full_name, styles, theme_color="#1f3a5f", name_align="center", signature_paths=None):
+def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#1f3a5f",
+                      name_align=None, teacher_signature=None, principal_signature=None):
     """Builds the flowable elements for one student's terminal result —
-    shared by the single-student PDF and the whole-class PDF."""
-    signature_paths = signature_paths or {}
+    shared by the single-student PDF and the whole-class PDF.
+    teacher_signature/principal_signature, if given, are dicts with
+    "path" (image file) and "name" (signer's name) — used only when that
+    specific signer has uploaded a signature AND turned on automatic
+    stamping; otherwise a blank line is left for a manual signature, exactly
+    as before."""
     section_style = ParagraphStyle("section", parent=styles["Heading3"])
     regular = styles["Normal"].fontName
     bold = styles["Heading1"].fontName
@@ -123,7 +128,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements = _header_elements(
         school_name, logo_path, "TERMINAL REPORT SHEET",
         f"{term['session_name']} &mdash; {term['name']}",
-        styles, theme_color=theme_color, name_align=name_align,
+        styles, accent_color=accent_color, name_align=name_align,
     )
     if data.get("result_date"):
         elements.append(Paragraph(f"Date: {data['result_date']}", ParagraphStyle(
@@ -159,7 +164,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
                        else [4.2 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 3 * cm])
     subj_table = Table(subj_data, repeatRows=1, colWidths=subj_col_widths)
     subj_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme_color)),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
         ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -178,7 +183,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             skill_data.append([r["name"], r["category"].title(), str(r["rating"])])
         skill_table = Table(skill_data, colWidths=[6 * cm, 4 * cm, 4 * cm])
         skill_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme_color)),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, -1), regular),
             ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -213,61 +218,66 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements.append(Paragraph(f"<b>Teacher's Comment:</b> {teacher_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     teacher_date = format_dmy(info["teacher_signed_date"]) if info and info["teacher_signed_date"] else "________________"
-    teacher_sig_path = signature_paths.get("teacher")
-    if teacher_sig_path and os.path.exists(teacher_sig_path):
+    if teacher_signature and teacher_signature.get("path") and os.path.exists(teacher_signature["path"]):
         try:
             from PIL import Image as PILImage
-            with PILImage.open(teacher_sig_path) as im:
+            with PILImage.open(teacher_signature["path"]) as im:
+                im.load()
                 w, h = im.size
-            target_h = 1.1 * cm
-            target_w = min(target_h * (w / h), 5 * cm)
-            elements.append(Image(teacher_sig_path, width=target_w, height=target_h))
+            sig_h = 1.1 * cm
+            sig_w = sig_h * (w / h)
+            elements.append(Image(teacher_signature["path"], width=sig_w, height=sig_h))
         except Exception:
-            pass
-    elements.append(Paragraph(
-        f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}",
-        normal,
-    ))
+            elements.append(Paragraph("Teacher's Signature: ________________________________", normal))
+        elements.append(Paragraph(f"Date: {teacher_date}", normal))
+    else:
+        elements.append(Paragraph(
+            f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}",
+            normal,
+        ))
     elements.append(Spacer(1, 0.6 * cm))
 
     principal_comment = info["principal_comment"] if info and info["principal_comment"] else "_" * 70
     elements.append(Paragraph(f"<b>Principal's Comment:</b> {principal_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     principal_date = format_dmy(info["principal_signed_date"]) if info and info["principal_signed_date"] else "________________"
-    principal_sig_path = signature_paths.get("principal")
-    if principal_sig_path and os.path.exists(principal_sig_path):
+    if principal_signature and principal_signature.get("path") and os.path.exists(principal_signature["path"]):
         try:
             from PIL import Image as PILImage
-            with PILImage.open(principal_sig_path) as im:
+            with PILImage.open(principal_signature["path"]) as im:
+                im.load()
                 w, h = im.size
-            target_h = 1.1 * cm
-            target_w = min(target_h * (w / h), 5 * cm)
-            elements.append(Image(principal_sig_path, width=target_w, height=target_h))
+            sig_h = 1.1 * cm
+            sig_w = sig_h * (w / h)
+            elements.append(Image(principal_signature["path"], width=sig_w, height=sig_h))
         except Exception:
-            pass
-    elements.append(Paragraph(
-        f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}",
-        normal,
-    ))
+            elements.append(Paragraph("Principal's Signature: ________________________________", normal))
+        elements.append(Paragraph(f"Date: {principal_date}", normal))
+    else:
+        elements.append(Paragraph(
+            f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}",
+            normal,
+        ))
 
     return elements
 
 
 def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
-                      theme_color="#1f3a5f", name_align="center", signature_paths=None):
+                      accent_color="#1f3a5f", name_align=None, teacher_signature=None, principal_signature=None):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
     elements = _result_elements(data, term, school_name, logo_path, student_full_name, styles,
-                                 theme_color=theme_color, name_align=name_align, signature_paths=signature_paths)
+                                 accent_color=accent_color, name_align=name_align,
+                                 teacher_signature=teacher_signature, principal_signature=principal_signature)
     doc.build(elements)
     buf.seek(0)
     return buf
 
 
 def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
-                             theme_color="#1f3a5f", name_align="center", signature_paths=None):
+                             accent_color="#1f3a5f", name_align=None):
     """One combined, printable PDF containing every student's terminal
     result in a class, each starting on its own page."""
     buf = io.BytesIO()
@@ -279,23 +289,25 @@ def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, s
         if i > 0:
             elements.append(PageBreak())
         elements.extend(_result_elements(data, term, school_name, logo_path, student_full_name, styles,
-                                          theme_color=theme_color, name_align=name_align, signature_paths=signature_paths))
+                                          accent_color=accent_color, name_align=name_align))
     doc.build(elements)
     buf.seek(0)
     return buf
 
 
-def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica"):
+def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
+                                 accent_color="#1f3a5f", name_align=None):
     """Annual/Cumulative Result: one column per term plus a cumulative
     average/grade per subject, for the whole session rather than one term."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
     styles = getSampleStyleSheet()
     regular, bold = _apply_pdf_font(styles, font_choice)
-    section_style = ParagraphStyle("section", parent=styles["Heading3"], textColor=colors.HexColor("#1f3a5f"))
+    section_style = ParagraphStyle("section", parent=styles["Heading3"], textColor=colors.HexColor(accent_color))
 
     elements = _header_elements(
         school_name, logo_path, "ANNUAL / CUMULATIVE RESULT", session["name"], styles,
+        accent_color=accent_color, name_align=name_align,
     )
 
     student = data["student"]
@@ -332,7 +344,7 @@ def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None,
     col_widths = [5 * cm] + [2.2 * cm] * len(term_names) + [2.8 * cm, 2 * cm]
     subj_table = Table(subj_data, repeatRows=1, colWidths=col_widths)
     subj_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3a5f")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
         ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -353,7 +365,8 @@ def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None,
     return buf
 
 
-def build_generic_table_pdf(title, subtitle, headers, rows, school_name=None, logo_path=None, font_choice="Helvetica"):
+def build_generic_table_pdf(title, subtitle, headers, rows, school_name=None, logo_path=None, font_choice="Helvetica",
+                             accent_color="#1f3a5f"):
     """A plain landscape table report (headers + rows) with the school's
     letterhead — used for reports that aren't a results document, like the
     Staff Attendance export."""
@@ -361,12 +374,12 @@ def build_generic_table_pdf(title, subtitle, headers, rows, school_name=None, lo
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=1 * cm, bottomMargin=1 * cm)
     styles = getSampleStyleSheet()
     regular, bold = _apply_pdf_font(styles, font_choice)
-    elements = _header_elements(school_name, logo_path, title, subtitle, styles)
+    elements = _header_elements(school_name, logo_path, title, subtitle, styles, accent_color=accent_color)
 
     data = [headers] + [[str(c) for c in row] for row in rows]
     table = Table(data, repeatRows=1)
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3a5f")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
         ("FONTNAME", (0, 0), (-1, 0), bold),

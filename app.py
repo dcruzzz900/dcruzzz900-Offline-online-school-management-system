@@ -27,6 +27,7 @@ from db import (
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
     verify_activation_code, revoke_device_credentials_for_user, revoke_device_credentials_for_school,
+    TIMEZONE_CHOICES, RESULT_HEADER_LAYOUTS,
 )
 import datetime
 import json
@@ -46,6 +47,7 @@ MATERIAL_EXTENSIONS = {
 }
 MATERIALS_DIR = os.path.join(INSTANCE_DIR, "materials")
 STUDENT_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "student_photos")
+STAFF_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "staff_photos")
 SIGNATURES_DIR = os.path.join(INSTANCE_DIR, "signatures")
 
 app = Flask(__name__)
@@ -321,15 +323,6 @@ def login_required(*roles):
 
 def current_school_id():
     return session.get("school_id")
-
-
-def staff_or_parent_login_required(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        if "user_id" not in session and "parent_id" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return wrapped
 
 
 def offline_sync_existing_id(conn, token):
@@ -608,14 +601,19 @@ def inject_school_settings():
             return dict(
                 school_name=school["name"], school_logo_url=logo_url,
                 school_logo_align=school["logo_align"],
-                school_name_align=school["school_name_align"] or "center",
-                result_theme_color=school["result_theme_color"] or "#1f3a5f",
+                school_name_align=school["name_align"] or "center",
                 cumulative_enabled=bool(school["cumulative_enabled"]),
                 web_font_css=font["css"], web_font_google=font["google"],
+                school_timezone=school["timezone"] or "Africa/Lagos",
+                school_date_format=school["date_format"] or "dmy",
+                result_accent_color=school["result_accent_color"] or "#1f3a5f",
+                result_header_layout=school["result_header_layout"] or "logo-left",
             )
     return dict(school_name="School Result System", school_logo_url=None, school_logo_align="center",
-                school_name_align="center", result_theme_color="#1f3a5f",
-                cumulative_enabled=False, web_font_css=WEB_FONTS["system"]["css"], web_font_google=None)
+                school_name_align="center",
+                cumulative_enabled=False, web_font_css=WEB_FONTS["system"]["css"], web_font_google=None,
+                school_timezone="Africa/Lagos", school_date_format="dmy",
+                result_accent_color="#1f3a5f", result_header_layout="logo-left")
 
 
 @app.context_processor
@@ -1078,12 +1076,21 @@ def admin_school():
         logo_align = request.form.get("logo_align", "center")
         if logo_align not in ("left", "center", "right"):
             logo_align = "center"
-        school_name_align = request.form.get("school_name_align", "center")
-        if school_name_align not in ("left", "center", "right"):
-            school_name_align = "center"
-        result_theme_color = request.form.get("result_theme_color", "#1f3a5f").strip()
-        if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_theme_color):
-            result_theme_color = "#1f3a5f"
+        name_align = request.form.get("name_align", "center")
+        if name_align not in ("left", "center", "right"):
+            name_align = "center"
+        timezone = request.form.get("timezone", "Africa/Lagos").strip() or "Africa/Lagos"
+        if timezone not in TIMEZONE_CHOICES:
+            timezone = "Africa/Lagos"
+        date_format = request.form.get("date_format", "dmy")
+        if date_format not in ("dmy", "mdy", "ymd"):
+            date_format = "dmy"
+        result_accent_color = request.form.get("result_accent_color", "#1f3a5f").strip()
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_accent_color or ""):
+            result_accent_color = "#1f3a5f"
+        result_header_layout = request.form.get("result_header_layout", "logo-left")
+        if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
+            result_header_layout = "logo-left"
         auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
         auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
         show_result_date = 1 if request.form.get("show_result_date") else 0
@@ -1097,11 +1104,14 @@ def admin_school():
             flash("School name cannot be empty.", "error")
         else:
             conn.execute(
-                "UPDATE schools SET name=?, logo_align=?, school_name_align=?, result_theme_color=?, "
+                "UPDATE schools SET name=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
+                "result_accent_color=?, result_header_layout=?, "
                 "auto_teacher_comment=?, auto_principal_comment=?, "
                 "web_font=?, pdf_font=?, show_result_date=? WHERE id=?",
-                (name, logo_align, school_name_align, result_theme_color, auto_teacher_comment, auto_principal_comment,
-                 web_font, pdf_font, show_result_date, school_id),
+                (name, logo_align, name_align, timezone, date_format,
+                 result_accent_color, result_header_layout,
+                 auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
+                 show_result_date, school_id),
             )
             conn.commit()
             flash("School profile updated.", "success")
@@ -1127,47 +1137,7 @@ def admin_school():
     settings = get_school(conn, school_id)
     conn.close()
     return render_template("admin_school.html", settings=settings, web_fonts=WEB_FONTS, pdf_fonts=PDF_FONT_CHOICES,
-                            base_domain=BASE_DOMAIN)
-
-
-@app.route("/admin/school/preview-result-design", methods=["POST"])
-@login_required("admin", "sub_admin")
-def preview_result_design():
-    logo_align = request.form.get("logo_align", "center")
-    if logo_align not in ("left", "center", "right"):
-        logo_align = "center"
-    school_name_align = request.form.get("school_name_align", "center")
-    if school_name_align not in ("left", "center", "right"):
-        school_name_align = "center"
-    result_theme_color = request.form.get("result_theme_color", "#1f3a5f").strip()
-    if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_theme_color):
-        result_theme_color = "#1f3a5f"
-    school_name = request.form.get("school_name", "").strip() or "Your School"
-
-    conn = get_db()
-    school = get_school(conn, current_school_id())
-    conn.close()
-    logo_url = url_for("school_logo") if school and school["logo_filename"] else None
-
-    sample_student = {"admission_no": "001", "first_name": "Ada", "last_name": "Okafor", "other_names": ""}
-    sample_class = {"name": "JSS1A"}
-    sample_term = {"session_name": "2025/2026", "name": "First Term"}
-    sample_subjects = [
-        {"name": "Mathematics", "ca1": 8, "ca2": 9, "exam": 65, "total": 82, "grade": "A", "remark": "Excellent"},
-        {"name": "English Language", "ca1": 7, "ca2": 8, "exam": 58, "total": 73, "grade": "B", "remark": "Very Good"},
-        {"name": "Basic Science", "ca1": 9, "ca2": 7, "exam": 60, "total": 76, "grade": "B", "remark": "Very Good"},
-    ]
-    sample_info = {
-        "teacher_comment": "A hardworking and attentive student. Keep it up!",
-        "principal_comment": "Good result. Well done.",
-    }
-    return render_template(
-        "result_preview.html", student=sample_student, class_row=sample_class, term=sample_term,
-        subjects=sample_subjects, total=231, average=77.0, position=2, class_size=28,
-        info=sample_info, student_full_name=student_full_name,
-        school_name=school_name, school_logo_url=logo_url,
-        school_name_align=school_name_align, result_theme_color=result_theme_color,
-    )
+                            base_domain=BASE_DOMAIN, timezones=TIMEZONE_CHOICES, header_layouts=RESULT_HEADER_LAYOUTS)
 
 
 @app.route("/admin/school/subdomain", methods=["POST"])
@@ -1275,84 +1245,20 @@ def admin_email():
 
 # ---------- settings hub ----------
 
-@app.route("/signature/<int:user_id>")
-@staff_or_parent_login_required
-def staff_signature(user_id):
+@app.route("/admin/school/result-preview")
+@login_required("admin", "sub_admin")
+def result_design_preview():
     conn = get_db()
-    row = conn.execute(
-        "SELECT signature_filename, use_digital_signature, school_id FROM users WHERE id=?", (user_id,)
-    ).fetchone()
+    school = get_school(conn, current_school_id())
     conn.close()
-    if not row or row["school_id"] != current_school_id() or not row["use_digital_signature"] or not row["signature_filename"]:
-        return "", 404
-    return send_from_directory(SIGNATURES_DIR, row["signature_filename"])
-
-
-@app.route("/account/signature/upload", methods=["POST"])
-@login_required("admin", "sub_admin", "teacher")
-def upload_my_signature():
-    file = request.files.get("signature")
-    if not file or not file.filename:
-        flash("Please choose an image file to upload.", "error")
-        return redirect(url_for("settings_hub"))
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-    if ext not in ALLOWED_LOGO_EXTENSIONS:
-        flash("Signature must be a PNG, JPG, or GIF image (ideally with a transparent background).", "error")
-        return redirect(url_for("settings_hub"))
-    conn = get_db()
-    old = conn.execute("SELECT signature_filename FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    if old and old["signature_filename"]:
-        old_path = os.path.join(SIGNATURES_DIR, old["signature_filename"])
-        if os.path.exists(old_path):
-            os.remove(old_path)
-    new_filename = f"signature_{session['user_id']}.{ext}"
-    os.makedirs(SIGNATURES_DIR, exist_ok=True)
-    file.save(os.path.join(SIGNATURES_DIR, new_filename))
-    conn.execute("UPDATE users SET signature_filename=? WHERE id=?", (new_filename, session["user_id"]))
-    conn.commit()
-    conn.close()
-    flash("Signature uploaded.", "success")
-    return redirect(url_for("settings_hub"))
-
-
-@app.route("/account/signature/toggle", methods=["POST"])
-@login_required("admin", "sub_admin", "teacher")
-def toggle_my_signature():
-    conn = get_db()
-    row = conn.execute("SELECT signature_filename, use_digital_signature FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    if not row["signature_filename"]:
-        conn.close()
-        flash("Upload a signature image first.", "error")
-        return redirect(url_for("settings_hub"))
-    new_val = 0 if row["use_digital_signature"] else 1
-    conn.execute("UPDATE users SET use_digital_signature=? WHERE id=?", (new_val, session["user_id"]))
-    conn.commit()
-    conn.close()
-    flash("Digital signature enabled." if new_val else "Digital signature disabled — results will show a blank manual-signature line for you again.", "success")
-    return redirect(url_for("settings_hub"))
-
-
-@app.route("/account/signature/remove", methods=["POST"])
-@login_required("admin", "sub_admin", "teacher")
-def remove_my_signature():
-    conn = get_db()
-    row = conn.execute("SELECT signature_filename FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    if row and row["signature_filename"]:
-        old_path = os.path.join(SIGNATURES_DIR, row["signature_filename"])
-        if os.path.exists(old_path):
-            os.remove(old_path)
-        conn.execute("UPDATE users SET signature_filename=NULL, use_digital_signature=0 WHERE id=?", (session["user_id"],))
-        conn.commit()
-        flash("Signature removed.", "success")
-    conn.close()
-    return redirect(url_for("settings_hub"))
+    return render_template("result_preview.html", settings=school)
 
 
 @app.route("/settings")
 @login_required()
 def settings_hub():
     conn = get_db()
-    me = conn.execute("SELECT email, phone, signature_filename, use_digital_signature, position FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    me = conn.execute("SELECT email, phone FROM users WHERE id=?", (session["user_id"],)).fetchone()
     conn.close()
     return render_template("settings_hub.html", me=me)
 
@@ -1376,6 +1282,178 @@ def update_my_contact():
     conn.close()
     flash("Contact info updated.", "success")
     return redirect(url_for("settings_hub"))
+
+
+# ---------- staff profile, photo & digital signature ----------
+
+@app.route("/my-profile")
+@login_required()
+def my_profile():
+    return redirect(url_for("staff_profile", user_id=session["user_id"]))
+
+
+@app.route("/staff/<int:user_id>")
+@login_required()
+def staff_profile(user_id):
+    conn = get_db()
+    school_id = current_school_id()
+    staff = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (user_id, school_id)).fetchone()
+    if not staff:
+        conn.close()
+        flash("Staff member not found.", "error")
+        return redirect(url_for("dashboard"))
+    is_self = user_id == session["user_id"]
+    can_manage = session["role"] in ("admin", "sub_admin")
+    if not is_self and not can_manage:
+        conn.close()
+        flash("You don't have access to that profile.", "error")
+        return redirect(url_for("dashboard"))
+
+    subjects_taught = conn.execute(
+        "SELECT DISTINCT s.name FROM class_subjects cs JOIN subjects s ON s.id=cs.subject_id "
+        "WHERE cs.teacher_id=? ORDER BY s.name", (user_id,)
+    ).fetchall()
+    classes_taught = conn.execute(
+        "SELECT DISTINCT c.name FROM class_subjects cs JOIN classes c ON c.id=cs.class_id "
+        "WHERE cs.teacher_id=? ORDER BY c.name", (user_id,)
+    ).fetchall()
+    form_classes = conn.execute(
+        "SELECT name FROM classes WHERE form_teacher_id=? AND school_id=? ORDER BY name", (user_id, school_id)
+    ).fetchall()
+    recent_attendance = conn.execute(
+        "SELECT * FROM staff_attendance WHERE user_id=? ORDER BY date DESC, id DESC LIMIT 20", (user_id,)
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "staff_profile.html", staff=staff, is_self=is_self, can_manage=can_manage,
+        subjects_taught=subjects_taught, classes_taught=classes_taught, form_classes=form_classes,
+        recent_attendance=recent_attendance, position_labels=POSITION_LABELS,
+    )
+
+
+@app.route("/staff/<int:user_id>/photo")
+@login_required()
+def staff_photo(user_id):
+    conn = get_db()
+    staff = conn.execute("SELECT photo_filename, school_id FROM users WHERE id=?", (user_id,)).fetchone()
+    conn.close()
+    if not staff or staff["school_id"] != current_school_id() or not staff["photo_filename"]:
+        return "", 404
+    return send_from_directory(STAFF_PHOTOS_DIR, staff["photo_filename"])
+
+
+@app.route("/staff/<int:user_id>/signature")
+def staff_signature(user_id):
+    # Used as an <img src> straight from result pages (viewed by staff AND
+    # by logged-in students/parents), so this accepts either session kind —
+    # same rule school_logo() already uses — rather than @login_required(),
+    # which only recognises staff sessions.
+    if "school_id" not in session:
+        return "", 404
+    conn = get_db()
+    staff = conn.execute("SELECT signature_filename, school_id FROM users WHERE id=?", (user_id,)).fetchone()
+    conn.close()
+    if not staff or staff["school_id"] != session["school_id"] or not staff["signature_filename"]:
+        return "", 404
+    return send_from_directory(SIGNATURES_DIR, staff["signature_filename"])
+
+
+@app.route("/account/photo/upload", methods=["POST"])
+@login_required()
+def upload_my_photo():
+    conn = get_db()
+    user_id = session["user_id"]
+    file = request.files.get("photo")
+    if not file or not file.filename:
+        conn.close()
+        flash("Please choose an image file to upload.", "error")
+        return redirect(url_for("staff_profile", user_id=user_id))
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_LOGO_EXTENSIONS:
+        conn.close()
+        flash("Photo must be a PNG, JPG, or GIF image.", "error")
+        return redirect(url_for("staff_profile", user_id=user_id))
+    old = conn.execute("SELECT photo_filename FROM users WHERE id=?", (user_id,)).fetchone()
+    if old and old["photo_filename"]:
+        old_path = os.path.join(STAFF_PHOTOS_DIR, old["photo_filename"])
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    new_filename = f"staff_{user_id}.{ext}"
+    os.makedirs(STAFF_PHOTOS_DIR, exist_ok=True)
+    file.save(os.path.join(STAFF_PHOTOS_DIR, new_filename))
+    conn.execute("UPDATE users SET photo_filename=? WHERE id=?", (new_filename, user_id))
+    conn.commit()
+    conn.close()
+    flash("Photo updated.", "success")
+    return redirect(url_for("staff_profile", user_id=user_id))
+
+
+@app.route("/account/signature/upload", methods=["POST"])
+@login_required()
+def upload_my_signature():
+    conn = get_db()
+    user_id = session["user_id"]
+    file = request.files.get("signature")
+    if not file or not file.filename:
+        conn.close()
+        flash("Please choose an image file to upload.", "error")
+        return redirect(url_for("staff_profile", user_id=user_id))
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ALLOWED_LOGO_EXTENSIONS:
+        conn.close()
+        flash("Signature must be a PNG, JPG, or GIF image (ideally a transparent PNG).", "error")
+        return redirect(url_for("staff_profile", user_id=user_id))
+    old = conn.execute("SELECT signature_filename FROM users WHERE id=?", (user_id,)).fetchone()
+    if old and old["signature_filename"]:
+        old_path = os.path.join(SIGNATURES_DIR, old["signature_filename"])
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    new_filename = f"sig_{user_id}.{ext}"
+    os.makedirs(SIGNATURES_DIR, exist_ok=True)
+    file.save(os.path.join(SIGNATURES_DIR, new_filename))
+    # Uploading a fresh signature doesn't silently turn it on — the person
+    # may want to review it first, so `use_digital_signature` is left as-is
+    # and toggled explicitly below.
+    conn.execute("UPDATE users SET signature_filename=? WHERE id=?", (new_filename, user_id))
+    conn.commit()
+    conn.close()
+    flash("Signature uploaded. Turn it on below to have it stamped on results automatically.", "success")
+    return redirect(url_for("staff_profile", user_id=user_id))
+
+
+@app.route("/account/signature/toggle", methods=["POST"])
+@login_required()
+def toggle_my_signature():
+    conn = get_db()
+    user_id = session["user_id"]
+    use_it = 1 if request.form.get("use_digital_signature") else 0
+    row = conn.execute("SELECT signature_filename FROM users WHERE id=?", (user_id,)).fetchone()
+    if use_it and (not row or not row["signature_filename"]):
+        conn.close()
+        flash("Upload a signature image before turning this on.", "error")
+        return redirect(url_for("staff_profile", user_id=user_id))
+    conn.execute("UPDATE users SET use_digital_signature=? WHERE id=?", (use_it, user_id))
+    conn.commit()
+    conn.close()
+    flash("Digital signature " + ("enabled." if use_it else "disabled — results will show a blank line for a manual signature."), "success")
+    return redirect(url_for("staff_profile", user_id=user_id))
+
+
+@app.route("/account/signature/remove", methods=["POST"])
+@login_required()
+def remove_my_signature():
+    conn = get_db()
+    user_id = session["user_id"]
+    row = conn.execute("SELECT signature_filename FROM users WHERE id=?", (user_id,)).fetchone()
+    if row and row["signature_filename"]:
+        old_path = os.path.join(SIGNATURES_DIR, row["signature_filename"])
+        if os.path.exists(old_path):
+            os.remove(old_path)
+        conn.execute("UPDATE users SET signature_filename=NULL, use_digital_signature=0 WHERE id=?", (user_id,))
+        conn.commit()
+        flash("Signature removed.", "success")
+    conn.close()
+    return redirect(url_for("staff_profile", user_id=user_id))
 
 
 # ---------- notifications (staff) ----------
@@ -1756,8 +1834,9 @@ def admin_students():
             try:
                 cur = conn.execute(
                     "INSERT INTO students (admission_no, first_name, last_name, other_names, "
-                    "gender, class_id, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "gender, class_id, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship, "
+                    "status, phone) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         request.form["admission_no"].strip(),
                         request.form["first_name"].strip(),
@@ -1772,6 +1851,9 @@ def admin_students():
                         request.form.get("parent_email", "").strip() or None,
                         request.form.get("parent_phone", "").strip() or None,
                         request.form.get("parent_relationship", "").strip() or None,
+                        request.form.get("status", "Active") if request.form.get("status") in
+                            ("Active", "Graduated", "Transferred", "Withdrawn", "Suspended") else "Active",
+                        request.form.get("phone", "").strip() or None,
                     ),
                 )
                 upsert_enrollment(conn, cur.lastrowid, class_id)
@@ -1825,6 +1907,73 @@ def delete_student(student_id):
     return redirect(url_for("admin_students"))
 
 
+@app.route("/students/<int:student_id>/parent")
+@login_required()
+def parent_profile(student_id):
+    conn = get_db()
+    student = student_in_school(conn, student_id)
+    if not student:
+        conn.close()
+        flash("Student not found.", "error")
+        return redirect(url_for("dashboard"))
+    if session["role"] not in ("admin", "sub_admin") and student["class_id"] not in form_teacher_class_ids(conn, session["user_id"]):
+        conn.close()
+        flash("You don't have access to view this parent's profile.", "error")
+        return redirect(url_for("dashboard"))
+    if not student["parent_phone"] and not student["parent_email"]:
+        conn.close()
+        flash("No parent/guardian contact info has been recorded for this student yet.", "error")
+        return redirect(url_for("student_profile", student_id=student_id))
+
+    school_id = current_school_id()
+    # A "parent profile" isn't its own login/account in this system yet —
+    # it's assembled from the parent_* contact fields shared across every
+    # student record that has the same guardian, matched by phone (or email
+    # when no phone was given).
+    if student["parent_phone"]:
+        siblings = conn.execute(
+            "SELECT s.*, c.name as class_name FROM students s JOIN classes c ON c.id=s.class_id "
+            "WHERE c.school_id=? AND s.parent_phone=? AND s.is_active=1 ORDER BY s.first_name",
+            (school_id, student["parent_phone"]),
+        ).fetchall()
+    else:
+        siblings = conn.execute(
+            "SELECT s.*, c.name as class_name FROM students s JOIN classes c ON c.id=s.class_id "
+            "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1 ORDER BY s.first_name",
+            (school_id, student["parent_email"]),
+        ).fetchall()
+    conn.close()
+    return render_template(
+        "parent_profile.html", student=student, siblings=siblings, student_full_name=student_full_name,
+    )
+
+
+@app.route("/admin/parents")
+@login_required("admin", "sub_admin")
+def admin_parents():
+    conn = get_db()
+    school_id = current_school_id()
+    rows = conn.execute(
+        "SELECT s.id, s.parent_name, s.parent_phone, s.parent_email, s.parent_relationship "
+        "FROM students s JOIN classes c ON c.id=s.class_id "
+        "WHERE c.school_id=? AND s.is_active=1 AND (s.parent_phone IS NOT NULL OR s.parent_email IS NOT NULL) "
+        "ORDER BY s.parent_name", (school_id,)
+    ).fetchall()
+    conn.close()
+    # Group by the same key parent_profile() uses (phone, falling back to email),
+    # keeping only the first student id seen for each guardian as the entry point.
+    seen = {}
+    guardians = []
+    for r in rows:
+        key = r["parent_phone"] or r["parent_email"]
+        if key in seen:
+            continue
+        seen[key] = True
+        guardians.append(r)
+    return render_template("admin_parents.html", guardians=guardians)
+
+
+
 @app.route("/students/<int:student_id>/profile")
 @login_required()
 def student_profile(student_id):
@@ -1856,19 +2005,11 @@ def _can_manage_student(conn, student):
 
 
 @app.route("/students/<int:student_id>/photo")
-@staff_or_parent_login_required
+@login_required()
 def student_photo(student_id):
     conn = get_db()
-    if session.get("role") == "parent":
-        student = conn.execute(
-            "SELECT students.* FROM parent_students JOIN students ON students.id=parent_students.student_id "
-            "WHERE parent_students.parent_id=? AND students.id=?", (session["parent_id"], student_id)
-        ).fetchone()
-    else:
-        student = student_in_school(conn, student_id)
-        if student and not _can_manage_student(conn, student):
-            student = None
-    if not student:
+    student = student_in_school(conn, student_id)
+    if not student or not _can_manage_student(conn, student):
         conn.close()
         return "", 404
     filename = student["photo_filename"]
@@ -2238,207 +2379,6 @@ def admin_reset_teacher_password(teacher_id):
     return redirect(url_for("admin_teachers"))
 
 
-# ---------- parent account management ----------
-
-@app.route("/admin/parents", methods=["GET", "POST"])
-@login_required("admin", "sub_admin")
-def admin_parents():
-    conn = get_db()
-    school_id = current_school_id()
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        phone = request.form.get("phone", "").strip() or None
-        email = request.form.get("email", "").strip() or None
-        address = request.form.get("address", "").strip() or None
-        password = request.form.get("password", "")
-        admission_no = request.form.get("admission_no", "").strip()
-        relationship = request.form.get("relationship", "").strip() or None
-        offline_token = request.form.get("offline_token")
-        existing_id = offline_sync_existing_id(conn, offline_token)
-        if existing_id:
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": True, "id": existing_id}
-            flash(f"Parent '{name}' added.", "success")
-        elif not name or not password or (not phone and not email):
-            msg = "Please provide a name, password, and at least one of phone or email."
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": msg}, 400
-            flash(msg, "error")
-        elif phone and conn.execute("SELECT 1 FROM parents WHERE phone=?", (phone,)).fetchone():
-            msg = "That phone number is already registered to another parent account."
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": msg}, 409
-            flash(msg, "error")
-        elif email and conn.execute("SELECT 1 FROM parents WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
-            msg = "That email is already registered to another parent account."
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": msg}, 409
-            flash(msg, "error")
-        else:
-            student_row = None
-            if admission_no:
-                student_row = conn.execute(
-                    "SELECT students.* FROM students JOIN classes ON classes.id=students.class_id "
-                    "WHERE classes.school_id=? AND students.admission_no=?", (school_id, admission_no)
-                ).fetchone()
-                if not student_row:
-                    msg = f"No student found with admission number '{admission_no}' in your school."
-                    if is_offline_sync_request():
-                        conn.close()
-                        return {"ok": False, "error": msg}, 400
-                    conn.close()
-                    flash(msg, "error")
-                    return redirect(url_for("admin_parents"))
-            try:
-                cur = conn.execute(
-                    "INSERT INTO parents (school_id, name, phone, email, address, password_hash) VALUES (?,?,?,?,?,?)",
-                    (school_id, name, phone, email, address, generate_password_hash(password)),
-                )
-                parent_id = cur.lastrowid
-                if student_row:
-                    conn.execute(
-                        "INSERT INTO parent_students (parent_id, student_id, relationship) VALUES (?,?,?)",
-                        (parent_id, student_row["id"], relationship),
-                    )
-                conn.commit()
-                offline_sync_remember(conn, offline_token, "parent", parent_id)
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": True, "id": parent_id}
-                flash(f"Parent '{name}' added.", "success")
-            except Exception:
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": False, "error": "Couldn't save that parent account."}, 409
-                flash("Couldn't save that parent account — check the details and try again.", "error")
-
-    parents = conn.execute("SELECT * FROM parents WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
-    children_by_parent = {}
-    for p in parents:
-        kids = conn.execute(
-            "SELECT students.id, students.first_name, students.last_name, students.other_names, "
-            "students.admission_no, parent_students.relationship, classes.name as class_name "
-            "FROM parent_students JOIN students ON students.id=parent_students.student_id "
-            "JOIN classes ON classes.id=students.class_id "
-            "WHERE parent_students.parent_id=? ORDER BY students.first_name", (p["id"],)
-        ).fetchall()
-        children_by_parent[p["id"]] = kids
-    conn.close()
-    return render_template("admin_parents.html", parents=parents, children_by_parent=children_by_parent,
-                            student_full_name=student_full_name)
-
-
-def _parent_in_school(conn, parent_id):
-    return conn.execute("SELECT * FROM parents WHERE id=? AND school_id=?", (parent_id, current_school_id())).fetchone()
-
-
-@app.route("/admin/parents/<int:parent_id>/link", methods=["POST"])
-@login_required("admin", "sub_admin")
-def link_parent_student(parent_id):
-    conn = get_db()
-    parent = _parent_in_school(conn, parent_id)
-    if not parent:
-        conn.close()
-        flash("Parent not found.", "error")
-        return redirect(url_for("admin_parents"))
-    admission_no = request.form.get("admission_no", "").strip()
-    relationship = request.form.get("relationship", "").strip() or None
-    student_row = conn.execute(
-        "SELECT students.* FROM students JOIN classes ON classes.id=students.class_id "
-        "WHERE classes.school_id=? AND students.admission_no=?", (current_school_id(), admission_no)
-    ).fetchone()
-    if not student_row:
-        conn.close()
-        flash(f"No student found with admission number '{admission_no}' in your school.", "error")
-        return redirect(url_for("admin_parents"))
-    try:
-        conn.execute(
-            "INSERT INTO parent_students (parent_id, student_id, relationship) VALUES (?,?,?)",
-            (parent_id, student_row["id"], relationship),
-        )
-        conn.commit()
-        flash(f"Linked {student_full_name(student_row)} to {parent['name']}.", "success")
-    except Exception:
-        flash("That child is already linked to this parent.", "error")
-    conn.close()
-    return redirect(url_for("admin_parents"))
-
-
-@app.route("/admin/parents/<int:parent_id>/unlink/<int:student_id>", methods=["POST"])
-@login_required("admin", "sub_admin")
-def unlink_parent_student(parent_id, student_id):
-    conn = get_db()
-    parent = _parent_in_school(conn, parent_id)
-    if not parent:
-        conn.close()
-        flash("Parent not found.", "error")
-        return redirect(url_for("admin_parents"))
-    conn.execute("DELETE FROM parent_students WHERE parent_id=? AND student_id=?", (parent_id, student_id))
-    conn.commit()
-    conn.close()
-    flash("Child unlinked from parent.", "success")
-    return redirect(url_for("admin_parents"))
-
-
-@app.route("/admin/parents/<int:parent_id>/toggle_active", methods=["POST"])
-@login_required("admin", "sub_admin")
-def toggle_parent_active(parent_id):
-    conn = get_db()
-    parent = _parent_in_school(conn, parent_id)
-    if not parent:
-        conn.close()
-        flash("Parent not found.", "error")
-        return redirect(url_for("admin_parents"))
-    new_status = 0 if parent["is_active"] else 1
-    conn.execute("UPDATE parents SET is_active=? WHERE id=?", (new_status, parent_id))
-    conn.commit()
-    conn.close()
-    flash("Parent account deactivated." if not new_status else "Parent account reactivated.", "success")
-    return redirect(url_for("admin_parents"))
-
-
-@app.route("/admin/parents/<int:parent_id>/reset_password", methods=["POST"])
-@login_required("admin", "sub_admin")
-def admin_reset_parent_password(parent_id):
-    conn = get_db()
-    parent = _parent_in_school(conn, parent_id)
-    if not parent:
-        conn.close()
-        flash("Parent not found.", "error")
-        return redirect(url_for("admin_parents"))
-    new_password = secrets.token_urlsafe(6)
-    conn.execute("UPDATE parents SET password_hash=? WHERE id=?", (generate_password_hash(new_password), parent_id))
-    conn.commit()
-    conn.close()
-    flash(
-        f"Password reset for {parent['name']}. New temporary password: {new_password} — "
-        f"share this with them securely.",
-        "success",
-    )
-    return redirect(url_for("admin_parents"))
-
-
-@app.route("/admin/parents/<int:parent_id>/delete", methods=["POST"])
-@login_required("admin", "sub_admin")
-def delete_parent(parent_id):
-    conn = get_db()
-    parent = _parent_in_school(conn, parent_id)
-    if not parent:
-        conn.close()
-        flash("Parent not found.", "error")
-        return redirect(url_for("admin_parents"))
-    conn.execute("DELETE FROM parent_students WHERE parent_id=?", (parent_id,))
-    conn.execute("DELETE FROM parents WHERE id=?", (parent_id,))
-    conn.commit()
-    conn.close()
-    flash("Parent account removed.", "success")
-    return redirect(url_for("admin_parents"))
-
-
 # ---------- sub-admin management (main admin only) ----------
 
 @app.route("/admin/subadmins", methods=["GET", "POST"])
@@ -2691,6 +2631,7 @@ def reset_demo_data():
             conn.execute(f"DELETE FROM enrollments WHERE student_id IN ({sp})", student_ids)
             conn.execute(f"DELETE FROM students WHERE id IN ({sp})", student_ids)
         conn.execute(f"DELETE FROM class_subjects WHERE class_id IN ({placeholders})", class_ids)
+        conn.execute(f"DELETE FROM timetable_entries WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM classes WHERE id IN ({placeholders})", class_ids)
     conn.execute("DELETE FROM subjects WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM users WHERE role='teacher' AND school_id=?", (school_id,))
@@ -2782,6 +2723,197 @@ def admin_promote():
     return render_template(
         "admin_promote.html", classes=classes, from_class_id=from_class_id, students=students,
         student_full_name=student_full_name,
+    )
+
+
+# ---------- timetable ----------
+
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+
+def _timetable_can_edit():
+    return session.get("role") in ("admin", "sub_admin")
+
+
+def _timetable_can_view_class(conn, class_id):
+    if session.get("role") in ("admin", "sub_admin") or session.get("position") in FULL_ACCESS_POSITIONS:
+        return True
+    if class_id in form_teacher_class_ids(conn, session["user_id"]):
+        return True
+    row = conn.execute(
+        "SELECT 1 FROM class_subjects WHERE class_id=? AND teacher_id=?",
+        (class_id, session["user_id"]),
+    ).fetchone()
+    return bool(row)
+
+
+def _timetable_can_view_teacher(teacher_id):
+    if session.get("role") in ("admin", "sub_admin") or session.get("position") in FULL_ACCESS_POSITIONS:
+        return True
+    return teacher_id == session.get("user_id")
+
+
+@app.route("/timetable")
+@login_required()
+def timetable_hub():
+    conn = get_db()
+    school_id = current_school_id()
+    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    teachers = conn.execute(
+        "SELECT * FROM users WHERE school_id=? AND role='teacher' AND is_active=1 ORDER BY name", (school_id,)
+    ).fetchall()
+    conn.close()
+    return render_template("timetable_hub.html", classes=classes, teachers=teachers,
+                            can_edit=_timetable_can_edit())
+
+
+@app.route("/timetable/periods", methods=["GET", "POST"])
+@login_required("admin", "sub_admin")
+def timetable_periods():
+    conn = get_db()
+    school_id = current_school_id()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "add":
+            name = request.form.get("name", "").strip()
+            start_time = request.form.get("start_time", "").strip() or None
+            end_time = request.form.get("end_time", "").strip() or None
+            is_break = 1 if request.form.get("is_break") else 0
+            if name:
+                max_order = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order), -1) FROM timetable_periods WHERE school_id=?", (school_id,)
+                ).fetchone()[0]
+                conn.execute(
+                    "INSERT INTO timetable_periods (school_id, name, start_time, end_time, sort_order, is_break) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (school_id, name, start_time, end_time, max_order + 1, is_break),
+                )
+                conn.commit()
+                flash(f"Period '{name}' added.", "success")
+            else:
+                flash("Period name is required.", "error")
+        elif action == "delete":
+            period_id = request.form.get("period_id")
+            row = conn.execute(
+                "SELECT id FROM timetable_periods WHERE id=? AND school_id=?", (period_id, school_id)
+            ).fetchone()
+            if row:
+                conn.execute("DELETE FROM timetable_entries WHERE period_id=?", (period_id,))
+                conn.execute("DELETE FROM timetable_periods WHERE id=?", (period_id,))
+                conn.commit()
+                flash("Period removed (and any timetable entries using it).", "success")
+        conn.close()
+        return redirect(url_for("timetable_periods"))
+
+    periods = conn.execute(
+        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
+    ).fetchall()
+    conn.close()
+    return render_template("timetable_periods.html", periods=periods)
+
+
+@app.route("/timetable/class/<int:class_id>", methods=["GET", "POST"])
+@login_required()
+def timetable_class(class_id):
+    conn = get_db()
+    school_id = current_school_id()
+    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone()
+    if not class_row:
+        conn.close()
+        flash("Class not found.", "error")
+        return redirect(url_for("timetable_hub"))
+    if not _timetable_can_view_class(conn, class_id):
+        conn.close()
+        flash("You don't have access to that class's timetable.", "error")
+        return redirect(url_for("timetable_hub"))
+
+    can_edit = _timetable_can_edit()
+    if request.method == "POST":
+        if not can_edit:
+            conn.close()
+            flash("You don't have permission to edit the timetable.", "error")
+            return redirect(url_for("timetable_class", class_id=class_id))
+        period_rows = conn.execute(
+            "SELECT id FROM timetable_periods WHERE school_id=? AND is_break=0", (school_id,)
+        ).fetchall()
+        for day in range(len(DAY_NAMES)):
+            for prow in period_rows:
+                period_id = prow["id"]
+                key = f"cell_{day}_{period_id}"
+                subject_id = request.form.get(f"{key}_subject") or None
+                teacher_id = request.form.get(f"{key}_teacher") or None
+                room = request.form.get(f"{key}_room", "").strip() or None
+                existing = conn.execute(
+                    "SELECT id FROM timetable_entries WHERE class_id=? AND day_of_week=? AND period_id=?",
+                    (class_id, day, period_id),
+                ).fetchone()
+                if not subject_id and not teacher_id and not room:
+                    if existing:
+                        conn.execute("DELETE FROM timetable_entries WHERE id=?", (existing["id"],))
+                    continue
+                if existing:
+                    conn.execute(
+                        "UPDATE timetable_entries SET subject_id=?, teacher_id=?, room=? WHERE id=?",
+                        (subject_id, teacher_id, room, existing["id"]),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO timetable_entries "
+                        "(school_id, class_id, day_of_week, period_id, subject_id, teacher_id, room) "
+                        "VALUES (?,?,?,?,?,?,?)",
+                        (school_id, class_id, day, period_id, subject_id, teacher_id, room),
+                    )
+        conn.commit()
+        flash("Timetable saved.", "success")
+        return redirect(url_for("timetable_class", class_id=class_id))
+
+    periods = conn.execute(
+        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
+    ).fetchall()
+    subjects = conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    teachers = conn.execute(
+        "SELECT * FROM users WHERE school_id=? AND role='teacher' AND is_active=1 ORDER BY name", (school_id,)
+    ).fetchall()
+    entries = conn.execute(
+        "SELECT te.*, s.name as subject_name, u.name as teacher_name FROM timetable_entries te "
+        "LEFT JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id "
+        "WHERE te.class_id=?", (class_id,)
+    ).fetchall()
+    grid = {(e["day_of_week"], e["period_id"]): e for e in entries}
+    conn.close()
+    return render_template(
+        "timetable_class.html", class_row=class_row, periods=periods, subjects=subjects,
+        teachers=teachers, grid=grid, days=list(enumerate(DAY_NAMES)), can_edit=can_edit,
+    )
+
+
+@app.route("/timetable/teacher/<int:teacher_id>")
+@login_required()
+def timetable_teacher(teacher_id):
+    conn = get_db()
+    school_id = current_school_id()
+    teacher = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (teacher_id, school_id)).fetchone()
+    if not teacher:
+        conn.close()
+        flash("Teacher not found.", "error")
+        return redirect(url_for("timetable_hub"))
+    if not _timetable_can_view_teacher(teacher_id):
+        conn.close()
+        flash("You don't have access to that teacher's timetable.", "error")
+        return redirect(url_for("timetable_hub"))
+
+    periods = conn.execute(
+        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
+    ).fetchall()
+    entries = conn.execute(
+        "SELECT te.*, s.name as subject_name, c.name as class_name FROM timetable_entries te "
+        "LEFT JOIN subjects s ON s.id=te.subject_id LEFT JOIN classes c ON c.id=te.class_id "
+        "WHERE te.teacher_id=?", (teacher_id,)
+    ).fetchall()
+    grid = {(e["day_of_week"], e["period_id"]): e for e in entries}
+    conn.close()
+    return render_template(
+        "timetable_teacher.html", teacher=teacher, periods=periods, grid=grid, days=list(enumerate(DAY_NAMES)),
     )
 
 
@@ -2899,10 +3031,10 @@ def roll_call(class_id):
             else:
                 absent_count += 1
             conn.execute(
-                "INSERT INTO attendance_records (student_id, class_id, term_id, date, status, recorded_by) "
-                "VALUES (?,?,?,?,?,?) "
+                "INSERT INTO attendance_records (student_id, class_id, term_id, date, status, recorded_by, source) "
+                "VALUES (?,?,?,?,?,?,'online') "
                 "ON CONFLICT(student_id, term_id, date) DO UPDATE SET "
-                "status=excluded.status, recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP",
+                "status=excluded.status, recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP, source='online'",
                 (s["id"], class_id, term["id"], date_str, status, session["user_id"]),
             )
             recompute_attendance(conn, s["id"], term["id"])
@@ -3099,9 +3231,13 @@ def my_class_edit_student(class_id, student_id):
         flash("You're not the form teacher for that class.", "error")
         return redirect(url_for("dashboard"))
     try:
+        status = request.form.get("status", "Active")
+        if status not in ("Active", "Graduated", "Transferred", "Withdrawn", "Suspended"):
+            status = "Active"
         conn.execute(
             "UPDATE students SET first_name=?, last_name=?, other_names=?, admission_no=?, gender=?, "
-            "date_of_birth=?, religion=?, parent_name=?, parent_address=?, parent_email=?, parent_phone=?, parent_relationship=? "
+            "date_of_birth=?, religion=?, parent_name=?, parent_address=?, parent_email=?, parent_phone=?, parent_relationship=?, "
+            "status=?, phone=?, is_active=? "
             "WHERE id=? AND class_id=?",
             (
                 request.form["first_name"].strip(),
@@ -3116,6 +3252,9 @@ def my_class_edit_student(class_id, student_id):
                 request.form.get("parent_email", "").strip() or None,
                 request.form.get("parent_phone", "").strip() or None,
                 request.form.get("parent_relationship", "").strip() or None,
+                status,
+                request.form.get("phone", "").strip() or None,
+                1 if status == "Active" else 0,
                 student_id, class_id,
             ),
         )
@@ -3403,57 +3542,6 @@ def build_broadsheet_data(conn, class_id, term_id):
     return subjects, rows
 
 
-def resolve_result_signatures(conn, class_row):
-    """Digital signatures for a result sheet: the teacher signature comes
-    from the class's own form teacher; the principal signature comes from
-    whichever staff member in the school holds the 'principal' position.
-    Either resolves to None (falls back to a blank manual-signature line)
-    if that person hasn't enabled/uploaded a digital signature."""
-    paths = {"teacher": None, "principal": None}
-    if class_row and class_row["form_teacher_id"]:
-        t = conn.execute(
-            "SELECT signature_filename, use_digital_signature FROM users WHERE id=?",
-            (class_row["form_teacher_id"],),
-        ).fetchone()
-        if t and t["use_digital_signature"] and t["signature_filename"]:
-            p = os.path.join(SIGNATURES_DIR, t["signature_filename"])
-            if os.path.exists(p):
-                paths["teacher"] = p
-    principal = conn.execute(
-        "SELECT signature_filename, use_digital_signature FROM users "
-        "WHERE school_id=? AND position='principal' AND use_digital_signature=1 AND signature_filename IS NOT NULL "
-        "ORDER BY id LIMIT 1",
-        (current_school_id(),),
-    ).fetchone()
-    if principal:
-        p = os.path.join(SIGNATURES_DIR, principal["signature_filename"])
-        if os.path.exists(p):
-            paths["principal"] = p
-    return paths
-
-
-def resolve_result_signature_urls(conn, class_row):
-    """Same resolution as resolve_result_signatures, but returns URLs
-    (for the web result view) instead of filesystem paths (for the PDF)."""
-    urls = {"teacher": None, "principal": None}
-    if class_row and class_row["form_teacher_id"]:
-        t = conn.execute(
-            "SELECT id, signature_filename, use_digital_signature FROM users WHERE id=?",
-            (class_row["form_teacher_id"],),
-        ).fetchone()
-        if t and t["use_digital_signature"] and t["signature_filename"]:
-            urls["teacher"] = url_for("staff_signature", user_id=t["id"])
-    principal = conn.execute(
-        "SELECT id, signature_filename, use_digital_signature FROM users "
-        "WHERE school_id=? AND position='principal' AND use_digital_signature=1 AND signature_filename IS NOT NULL "
-        "ORDER BY id LIMIT 1",
-        (current_school_id(),),
-    ).fetchone()
-    if principal:
-        urls["principal"] = url_for("staff_signature", user_id=principal["id"])
-    return urls
-
-
 def build_cumulative_broadsheet_data(conn, class_id, session_id):
     """Annual/Cumulative broadsheet: for each subject, averages the totals
     from every term in the session that has a score recorded (a term with
@@ -3640,8 +3728,6 @@ def email_class_results(class_id):
         return redirect(url_for("broadsheet", class_id=class_id))
 
     school = get_school(conn, current_school_id())
-    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
-    signature_paths = resolve_result_signatures(conn, class_row)
     students = conn.execute(
         "SELECT * FROM students WHERE class_id=? AND is_active=1 ORDER BY last_name", (class_id,)
     ).fetchall()
@@ -3665,10 +3751,7 @@ def email_class_results(class_id):
                 logo_path = p
         pdf_buf = build_result_pdf(data, term, school_name=school["name"] if school else None,
                                     logo_path=logo_path, student_full_name=student_full_name,
-                                    font_choice=school["pdf_font"] if school else "Helvetica",
-                                    theme_color=school["result_theme_color"] if school else "#1f3a5f",
-                                    name_align=school["school_name_align"] if school else "center",
-                                    signature_paths=signature_paths)
+                                    font_choice=school["pdf_font"] if school else "Helvetica")
         ok, _ = send_email(
             school, st["parent_email"],
             f"{student_full_name(st)}'s Result — {term['session_name']} {term['name']}",
@@ -3738,6 +3821,7 @@ def build_result_data(conn, student_id, term_id):
             "days_school_opened": None, "days_present": None, "days_absent": None,
             "teacher_signed_date": None, "principal_signed_date": None,
             "teacher_comment": None, "principal_comment": None,
+            "teacher_signed_by": None, "principal_signed_by": None,
         }
         if school["auto_teacher_comment"]:
             info["teacher_comment"] = generate_teacher_comment(remark, average, subjects_written)
@@ -3750,6 +3834,27 @@ def build_result_data(conn, student_id, term_id):
         (student_id, term_id),
     ).fetchall()
 
+    # Digital signatures: only shown when the specific signer recorded on
+    # *this* result has one uploaded AND has turned it on — never "whoever
+    # is logged in now", and teacher/principal are always looked up
+    # separately so one can never appear in the other's slot.
+    def _signature_user(field):
+        if not info:
+            return None
+        signer_id = info[field] if field in info.keys() else None
+        if not signer_id:
+            return None
+        row = conn.execute(
+            "SELECT id, name, signature_filename, use_digital_signature FROM users WHERE id=? AND school_id=?",
+            (signer_id, school_id),
+        ).fetchone()
+        if row and row["signature_filename"] and row["use_digital_signature"]:
+            return row
+        return None
+
+    teacher_signature_user = _signature_user("teacher_signed_by")
+    principal_signature_user = _signature_user("principal_signed_by")
+
     return {
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
@@ -3760,6 +3865,8 @@ def build_result_data(conn, student_id, term_id):
         "show_ca3": ca3_enabled(conn.execute(
             "SELECT ca3_max FROM grading_config WHERE school_id=? LIMIT 1", (school_id,)).fetchone()),
         "result_date": format_dmy(datetime.date.today().isoformat()) if school and school["show_result_date"] else None,
+        "teacher_signature_user": teacher_signature_user,
+        "principal_signature_user": principal_signature_user,
     }
 
 
@@ -3785,12 +3892,10 @@ def result(student_id):
     data = build_result_data(conn, student_id, term["id"])
     all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (current_school_id(),)).fetchall()
     all_terms = all_terms_for_school(conn)
-    sig_urls = resolve_result_signature_urls(conn, data["class_row"])
     conn.close()
     return render_template(
         "result.html", term=term, all_traits=all_traits, student_full_name=student_full_name,
-        all_terms=all_terms, teacher_signature_url=sig_urls["teacher"], principal_signature_url=sig_urls["principal"],
-        **data
+        all_terms=all_terms, **data
     )
 
 
@@ -3820,16 +3925,22 @@ def result_pdf(student_id):
         p = os.path.join(INSTANCE_DIR, school["logo_filename"])
         if os.path.exists(p):
             logo_path = p
-    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (historical_class_id,)).fetchone()
-    signature_paths = resolve_result_signatures(conn, class_row)
+    teacher_signature = None
+    if data.get("teacher_signature_user"):
+        u = data["teacher_signature_user"]
+        teacher_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
+    principal_signature = None
+    if data.get("principal_signature_user"):
+        u = data["principal_signature_user"]
+        principal_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
     conn.close()
     buf = build_result_pdf(
         data, term, school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
-        theme_color=school["result_theme_color"] if school else "#1f3a5f",
-        name_align=school["school_name_align"] if school else "center",
-        signature_paths=signature_paths,
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        name_align=school["name_align"] if school else None,
+        teacher_signature=teacher_signature, principal_signature=principal_signature,
     )
     fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
@@ -3904,6 +4015,8 @@ def cumulative_result_pdf(student_id):
         data, session_row, school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        name_align=school["name_align"] if school else None,
     )
     fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
@@ -3958,14 +4071,9 @@ def email_result(student_id):
         p = os.path.join(INSTANCE_DIR, school["logo_filename"])
         if os.path.exists(p):
             logo_path = p
-    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (student_row["class_id"],)).fetchone()
-    signature_paths = resolve_result_signatures(conn, class_row)
     pdf_buf = build_result_pdf(data, term, school_name=school["name"] if school else None,
                                 logo_path=logo_path, student_full_name=student_full_name,
-                                font_choice=school["pdf_font"] if school else "Helvetica",
-                                theme_color=school["result_theme_color"] if school else "#1f3a5f",
-                                name_align=school["school_name_align"] if school else "center",
-                                signature_paths=signature_paths)
+                                font_choice=school["pdf_font"] if school else "Helvetica")
     conn.close()
     ok, msg = send_email(
         school, student_row["parent_email"],
@@ -4013,21 +4121,43 @@ def result_extra(student_id):
         )
         return redirect(url_for("result", student_id=student_id))
 
+    existing = conn.execute(
+        "SELECT teacher_signed_by, principal_signed_by FROM student_term_info WHERE student_id=? AND term_id=?",
+        (student_id, term_id),
+    ).fetchone()
+    teacher_signed_date = request.form.get("teacher_signed_date", "").strip() or None
+    principal_signed_date = request.form.get("principal_signed_date", "").strip() or None
+    # Whoever is saving a signed date is credited as that signer — but only
+    # if their own role matches (a subject teacher saving a date can never
+    # end up recorded as the principal's signature, or vice versa).
+    teacher_signed_by = existing["teacher_signed_by"] if existing else None
+    if teacher_signed_date and session.get("role") == "teacher":
+        teacher_signed_by = session["user_id"]
+    principal_signed_by = existing["principal_signed_by"] if existing else None
+    if principal_signed_date and (
+        session.get("role") in ("admin", "sub_admin") or session.get("position") in ("principal", "vice_principal")
+    ):
+        principal_signed_by = session["user_id"]
+
     conn.execute(
         "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, "
-        "days_school_opened, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date) "
-        "VALUES (?,?,?,?,?,?,?,?,?) "
+        "days_school_opened, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date, "
+        "teacher_signed_by, principal_signed_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(student_id, term_id) DO UPDATE SET "
         "days_present=excluded.days_present, days_absent=excluded.days_absent, "
         "days_school_opened=excluded.days_school_opened, "
         "teacher_comment=excluded.teacher_comment, principal_comment=excluded.principal_comment, "
-        "teacher_signed_date=excluded.teacher_signed_date, principal_signed_date=excluded.principal_signed_date",
+        "teacher_signed_date=excluded.teacher_signed_date, principal_signed_date=excluded.principal_signed_date, "
+        "teacher_signed_by=excluded.teacher_signed_by, principal_signed_by=excluded.principal_signed_by",
         (
             student_id, term_id, days_present, days_absent, days_school_opened,
             request.form.get("teacher_comment", ""),
             request.form.get("principal_comment", ""),
-            request.form.get("teacher_signed_date", "").strip() or None,
-            request.form.get("principal_signed_date", "").strip() or None,
+            teacher_signed_date,
+            principal_signed_date,
+            teacher_signed_by,
+            principal_signed_by,
         ),
     )
     all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=?", (current_school_id(),)).fetchall()
@@ -4107,15 +4237,13 @@ def class_results_pdf(class_id):
             logo_path = p
 
     data_list = [build_result_data(conn, s["id"], term["id"]) for s in students]
-    signature_paths = resolve_result_signatures(conn, class_row)
     conn.close()
     buf = build_class_results_pdf(
         data_list, term, school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
-        theme_color=school["result_theme_color"] if school else "#1f3a5f",
-        name_align=school["school_name_align"] if school else "center",
-        signature_paths=signature_paths,
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        name_align=school["name_align"] if school else None,
     )
     fname = f"all_results_{class_row['name']}_{term['name']}.pdf".replace(" ", "_")
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
@@ -4334,10 +4462,10 @@ def staff_attendance():
                 status = "Present"
             counts[status] += 1
             conn.execute(
-                "INSERT INTO staff_attendance (school_id, user_id, date, status, recorded_by) "
-                "VALUES (?,?,?,?,?) "
+                "INSERT INTO staff_attendance (school_id, user_id, date, status, recorded_by, source) "
+                "VALUES (?,?,?,?,?,'online') "
                 "ON CONFLICT(user_id, date) DO UPDATE SET status=excluded.status, "
-                "recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP",
+                "recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP, source='online'",
                 (school_id, member["id"], date_str, status, session["user_id"]),
             )
         conn.commit()
@@ -4883,11 +5011,9 @@ def student_result(term_id):
     all_traits = conn.execute(
         "SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (session["school_id"],)
     ).fetchall()
-    sig_urls = resolve_result_signature_urls(conn, data["class_row"])
     conn.close()
     return render_template(
-        "student_result.html", term=term, student_full_name=student_full_name, all_traits=all_traits,
-        teacher_signature_url=sig_urls["teacher"], principal_signature_url=sig_urls["principal"], **data
+        "student_result.html", term=term, student_full_name=student_full_name, all_traits=all_traits, **data
     )
 
 
@@ -4918,204 +5044,10 @@ def student_result_pdf(term_id):
         p = os.path.join(INSTANCE_DIR, school["logo_filename"])
         if os.path.exists(p):
             logo_path = p
-    signature_paths = resolve_result_signatures(conn, data["class_row"])
     conn.close()
     buf = build_result_pdf(data, term, school_name=school["name"] if school else None,
                             logo_path=logo_path, student_full_name=student_full_name,
-                            font_choice=school["pdf_font"] if school else "Helvetica",
-                            theme_color=school["result_theme_color"] if school else "#1f3a5f",
-                            name_align=school["school_name_align"] if school else "center",
-                            signature_paths=signature_paths)
-    fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
-    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
-
-
-# ---------- parent portal ----------
-
-def parent_login_required(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        if "parent_id" not in session:
-            return redirect(url_for("parent_login"))
-        return f(*args, **kwargs)
-    return wrapped
-
-
-@app.route("/parent/login", methods=["GET", "POST"])
-@rate_limit(max_attempts=10, window_seconds=300)
-def parent_login():
-    if request.method == "POST":
-        identifier = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        conn = get_db()
-        parent = conn.execute(
-            "SELECT * FROM parents WHERE (phone IS NOT NULL AND phone=?) "
-            "OR (email IS NOT NULL AND LOWER(email)=LOWER(?))",
-            (identifier, identifier),
-        ).fetchone()
-        if parent and check_password_hash(parent["password_hash"], password):
-            if not parent["is_active"]:
-                conn.close()
-                flash("This account has been deactivated. Contact your school admin.", "error")
-                return render_template("parent_login.html")
-            school = get_school(conn, parent["school_id"])
-            conn.close()
-            if school and school["activation_status"] != "active":
-                flash("This school hasn't been activated yet.", "error")
-                return render_template("parent_login.html")
-            if school and school["is_archived"]:
-                flash("This school's account has been archived. Contact the platform administrator.", "error")
-                return render_template("parent_login.html")
-            if school and school["is_suspended"]:
-                flash("This school's account has been suspended. Contact the platform administrator.", "error")
-                return render_template("parent_login.html")
-            if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
-                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
-                return render_template("parent_login.html")
-            session.clear()
-            session["parent_id"] = parent["id"]
-            session["role"] = "parent"
-            session["school_id"] = school["id"] if school else None
-            session["name"] = parent["name"]
-            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-            return redirect(url_for("parent_dashboard"))
-        conn.close()
-        flash("Invalid phone/email or password.", "error")
-    return render_template("parent_login.html")
-
-
-@app.route("/parent/logout")
-def parent_logout():
-    session.clear()
-    return redirect(url_for("parent_login"))
-
-
-@app.route("/parent/dashboard")
-@parent_login_required
-def parent_dashboard():
-    conn = get_db()
-    parent = conn.execute("SELECT * FROM parents WHERE id=?", (session["parent_id"],)).fetchone()
-    if not parent:
-        session.clear()
-        conn.close()
-        return redirect(url_for("parent_login"))
-    children = conn.execute(
-        "SELECT students.*, classes.name as class_name, parent_students.relationship "
-        "FROM parent_students JOIN students ON students.id=parent_students.student_id "
-        "JOIN classes ON classes.id=students.class_id "
-        "WHERE parent_students.parent_id=? ORDER BY students.first_name", (parent["id"],)
-    ).fetchall()
-    conn.close()
-    return render_template("parent_dashboard.html", parent=parent, children=children, student_full_name=student_full_name)
-
-
-def _linked_child(conn, student_id):
-    return conn.execute(
-        "SELECT students.* FROM parent_students JOIN students ON students.id=parent_students.student_id "
-        "WHERE parent_students.parent_id=? AND students.id=?", (session["parent_id"], student_id)
-    ).fetchone()
-
-
-@app.route("/parent/children/<int:student_id>")
-@parent_login_required
-def parent_child_profile(student_id):
-    conn = get_db()
-    student = _linked_child(conn, student_id)
-    if not student:
-        conn.close()
-        flash("You don't have access to that student's profile.", "error")
-        return redirect(url_for("parent_dashboard"))
-    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (student["class_id"],)).fetchone()
-    published_terms = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id = terms.session_id "
-        "JOIN enrollments e ON e.session_id = sessions.id "
-        "WHERE e.student_id=? AND terms.is_published=1 "
-        "ORDER BY sessions.id DESC, terms.id DESC",
-        (student["id"],),
-    ).fetchall()
-    conn.close()
-    return render_template(
-        "parent_child_profile.html", student=student, class_row=class_row,
-        published_terms=published_terms, student_full_name=student_full_name,
-    )
-
-
-@app.route("/parent/children/<int:student_id>/result/<int:term_id>")
-@parent_login_required
-def parent_child_result(student_id, term_id):
-    conn = get_db()
-    student = _linked_child(conn, student_id)
-    if not student:
-        conn.close()
-        flash("You don't have access to that student's profile.", "error")
-        return redirect(url_for("parent_dashboard"))
-    term = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
-    ).fetchone()
-    if not term or not term["is_published"]:
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
-        return redirect(url_for("parent_child_profile", student_id=student_id))
-    enrolled = conn.execute(
-        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
-    ).fetchone()
-    if not enrolled:
-        conn.close()
-        flash("This student wasn't enrolled in that term.", "error")
-        return redirect(url_for("parent_child_profile", student_id=student_id))
-    data = build_result_data(conn, student_id, term_id)
-    all_traits = conn.execute(
-        "SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (session["school_id"],)
-    ).fetchall()
-    sig_urls = resolve_result_signature_urls(conn, data["class_row"])
-    conn.close()
-    return render_template(
-        "parent_child_result.html", term=term, student_full_name=student_full_name, all_traits=all_traits,
-        teacher_signature_url=sig_urls["teacher"], principal_signature_url=sig_urls["principal"], **data
-    )
-
-
-@app.route("/parent/children/<int:student_id>/result/<int:term_id>/pdf")
-@parent_login_required
-def parent_child_result_pdf(student_id, term_id):
-    conn = get_db()
-    student = _linked_child(conn, student_id)
-    if not student:
-        conn.close()
-        flash("You don't have access to that student's profile.", "error")
-        return redirect(url_for("parent_dashboard"))
-    term = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
-    ).fetchone()
-    if not term or not term["is_published"]:
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
-        return redirect(url_for("parent_child_profile", student_id=student_id))
-    enrolled = conn.execute(
-        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
-    ).fetchone()
-    if not enrolled:
-        conn.close()
-        flash("This student wasn't enrolled in that term.", "error")
-        return redirect(url_for("parent_child_profile", student_id=student_id))
-    data = build_result_data(conn, student_id, term_id)
-    school = get_school(conn, session["school_id"])
-    logo_path = None
-    if school and school["logo_filename"]:
-        p = os.path.join(INSTANCE_DIR, school["logo_filename"])
-        if os.path.exists(p):
-            logo_path = p
-    signature_paths = resolve_result_signatures(conn, data["class_row"])
-    conn.close()
-    buf = build_result_pdf(data, term, school_name=school["name"] if school else None,
-                            logo_path=logo_path, student_full_name=student_full_name,
-                            font_choice=school["pdf_font"] if school else "Helvetica",
-                            theme_color=school["result_theme_color"] if school else "#1f3a5f",
-                            name_align=school["school_name_align"] if school else "center",
-                            signature_paths=signature_paths)
+                            font_choice=school["pdf_font"] if school else "Helvetica")
     fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
@@ -5480,7 +5412,9 @@ def platform_delete_school(school_id):
             conn.execute(f"DELETE FROM enrollments WHERE student_id IN ({sp})", student_ids)
             conn.execute(f"DELETE FROM students WHERE id IN ({sp})", student_ids)
         conn.execute(f"DELETE FROM class_subjects WHERE class_id IN ({placeholders})", class_ids)
+        conn.execute(f"DELETE FROM timetable_entries WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM classes WHERE id IN ({placeholders})", class_ids)
+    conn.execute("DELETE FROM timetable_periods WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM subjects WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM skill_traits WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM grade_scale WHERE school_id=?", (school_id,))

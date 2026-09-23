@@ -1030,47 +1030,120 @@ def migration_032_student_photo_and_relationship(conn):
     ensure_column(conn, "students", "photo_filename", "TEXT")
 
 
-def migration_033_parent_accounts(conn):
-    """Parent Profile as a real entity: login-capable parent accounts,
-    linked to one or more students. Additive only — the existing free-text
-    parent_* fields on students are untouched."""
+def migration_033_school_branding_extra(conn):
+    """School-name alignment is its own setting, independent of logo_align
+    (a school may want its logo on the left but its name centred). Also adds
+    the school's timezone and preferred date display format, used by the
+    dashboard's live date/time card and anywhere else a date is rendered."""
+    ensure_column(conn, "schools", "name_align", "TEXT NOT NULL DEFAULT 'center'")
+    ensure_column(conn, "schools", "timezone", "TEXT NOT NULL DEFAULT 'Africa/Lagos'")
+    ensure_column(conn, "schools", "date_format", "TEXT NOT NULL DEFAULT 'dmy'")
+
+
+def migration_034_result_theme(conn):
+    """Per-school result-sheet visual theme: an accent colour and a header
+    arrangement, on top of the existing font choice. Kept as plain columns
+    (not JSON) so they stay simple to validate and to read from SQL."""
+    ensure_column(conn, "schools", "result_accent_color", "TEXT NOT NULL DEFAULT '#1f3a5f'")
+    ensure_column(conn, "schools", "result_header_layout", "TEXT NOT NULL DEFAULT 'logo-left'")
+
+
+def migration_035_digital_signatures(conn):
+    """Lets a teacher or principal upload a digital signature image from
+    their own account and choose whether it should be stamped automatically
+    on results instead of leaving a blank line for a manual signature. Kept
+    strictly separate per user (a form teacher's signature can never appear
+    as the principal's, and vice versa — the result template picks the image
+    from student_term_info.teacher_signed_by / principal_signed_by, each an
+    explicit user id, never "whoever is logged in")."""
+    ensure_column(conn, "users", "signature_filename", "TEXT")
+    ensure_column(conn, "users", "use_digital_signature", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "users", "photo_filename", "TEXT")
+    ensure_column(conn, "student_term_info", "teacher_signed_by", "INTEGER")
+    ensure_column(conn, "student_term_info", "principal_signed_by", "INTEGER")
+
+
+def migration_036_student_status_contact(conn):
+    """An explicit lifecycle status (beyond the plain is_active toggle) and
+    an optional contact number for the student themselves, distinct from the
+    parent/guardian's. Existing rows default to 'Active', matching the is_active
+    default they already had."""
+    ensure_column(conn, "students", "status", "TEXT NOT NULL DEFAULT 'Active'")
+    ensure_column(conn, "students", "phone", "TEXT")
+    conn.execute("UPDATE students SET status='Active' WHERE status IS NULL")
+
+
+def migration_037_attendance_source(conn):
+    """Records whether an attendance entry was taken online (saved straight
+    to the server) or offline (saved to the device first, then synced), so
+    it can be shown in the attendance history and, for offline entries, kept
+    distinct from the moment it was later synced. Existing rows predate this
+    column and are assumed online, since offline sync didn't exist before it."""
+    ensure_column(conn, "attendance_records", "source", "TEXT NOT NULL DEFAULT 'online'")
+    ensure_column(conn, "attendance_records", "synced_at", "TEXT")
+    ensure_column(conn, "staff_attendance", "source", "TEXT NOT NULL DEFAULT 'online'")
+    ensure_column(conn, "staff_attendance", "synced_at", "TEXT")
+
+
+def migration_038_timetable(conn):
+    """A school timetable: named periods (with times) shared across the
+    school, and one entry per class/day/period holding the subject, teacher
+    and room. Both tables are made syncable (client_uuid/updated_at/is_deleted)
+    so they can be registered for offline read/write the same way classes and
+    subjects are."""
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS parents (
+        CREATE TABLE IF NOT EXISTS timetable_periods (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             school_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            phone TEXT,
-            email TEXT,
-            address TEXT,
-            password_hash TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            start_time TEXT,
+            end_time TEXT,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_break INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY(school_id) REFERENCES schools(id)
         )
     """)
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_phone ON parents(phone) WHERE phone IS NOT NULL")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_email ON parents(email) WHERE email IS NOT NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_timetable_periods_school ON timetable_periods(school_id, sort_order)")
+
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS parent_students (
+        CREATE TABLE IF NOT EXISTS timetable_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            parent_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            relationship TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(parent_id) REFERENCES parents(id),
-            FOREIGN KEY(student_id) REFERENCES students(id)
+            school_id INTEGER NOT NULL,
+            class_id INTEGER NOT NULL,
+            day_of_week INTEGER NOT NULL,
+            period_id INTEGER NOT NULL,
+            subject_id INTEGER,
+            teacher_id INTEGER,
+            room TEXT,
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            FOREIGN KEY(class_id) REFERENCES classes(id),
+            FOREIGN KEY(period_id) REFERENCES timetable_periods(id),
+            FOREIGN KEY(subject_id) REFERENCES subjects(id),
+            FOREIGN KEY(teacher_id) REFERENCES users(id)
         )
     """)
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_students_pair ON parent_students(parent_id, student_id)")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_timetable_entries_slot "
+        "ON timetable_entries(class_id, day_of_week, period_id)"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_timetable_entries_teacher ON timetable_entries(teacher_id, day_of_week)")
 
-
-def migration_034_result_design_and_signatures(conn):
-    """Result design customization (theme color, separate school-name
-    alignment) and digital signatures for teachers/principals."""
-    ensure_column(conn, "schools", "school_name_align", "TEXT NOT NULL DEFAULT 'center'")
-    ensure_column(conn, "schools", "result_theme_color", "TEXT DEFAULT '#1f3a5f'")
-    ensure_column(conn, "users", "signature_filename", "TEXT")
-    ensure_column(conn, "users", "use_digital_signature", "INTEGER DEFAULT 0")
+    _make_syncable(conn, "timetable_periods")
+    _make_syncable(conn, "timetable_entries")
+    for table, school_expr in (
+        ("timetable_periods", "OLD.school_id"),
+        ("timetable_entries", "OLD.school_id"),
+    ):
+        conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS trg_{table}_tombstone
+            AFTER DELETE ON {table}
+            FOR EACH ROW
+            WHEN OLD.client_uuid IS NOT NULL
+            BEGIN
+                INSERT INTO sync_tombstones (school_id, entity, client_uuid, deleted_at)
+                VALUES ({school_expr}, '{table}', OLD.client_uuid, strftime('%Y-%m-%dT%H:%M:%S','now'));
+            END
+        """)
 
 
 STEPS = [
@@ -1085,8 +1158,12 @@ STEPS = [
     ("materials_syncable", migration_030_materials_syncable),
     ("user_contact_identifiers", migration_031_user_contact_identifiers),
     ("student_photo_and_relationship", migration_032_student_photo_and_relationship),
-    ("parent_accounts", migration_033_parent_accounts),
-    ("result_design_and_signatures", migration_034_result_design_and_signatures),
+    ("school_branding_extra", migration_033_school_branding_extra),
+    ("result_theme", migration_034_result_theme),
+    ("digital_signatures", migration_035_digital_signatures),
+    ("student_status_contact", migration_036_student_status_contact),
+    ("attendance_source", migration_037_attendance_source),
+    ("timetable", migration_038_timetable),
 ]
 
 
@@ -1277,6 +1354,22 @@ WEB_FONTS = {
 
 
 ACTIVATION_CODE_EXPIRY_HOURS = 48
+
+# A short, practical list rather than the full IANA database — every school
+# using this system today is in one of these zones. "Africa/Lagos" (WAT,
+# UTC+1, no DST) is the default since the app originated in Nigeria.
+TIMEZONE_CHOICES = [
+    "Africa/Lagos", "Africa/Accra", "Africa/Abidjan", "Africa/Nairobi",
+    "Africa/Cairo", "Africa/Johannesburg", "Africa/Kampala", "Africa/Kigali",
+    "Africa/Casablanca", "Europe/London", "America/New_York", "Asia/Dubai",
+]
+
+RESULT_HEADER_LAYOUTS = [
+    ("logo-left", "Logo on the left, name/details beside it"),
+    ("logo-top-center", "Logo above the school name, both centred"),
+    ("logo-right", "Logo on the right, name/details beside it"),
+    ("no-logo", "No logo — text header only"),
+]
 
 
 def generate_activation_code(conn, school_id, created_by=None, expiry_hours=ACTIVATION_CODE_EXPIRY_HOURS):

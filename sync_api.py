@@ -374,7 +374,8 @@ ENTITIES = {
         "table": "students",
         "fields": ["admission_no", "first_name", "last_name", "other_names", "gender",
                    "class_id", "date_of_birth", "religion", "parent_name", "parent_address",
-                   "parent_email", "parent_phone", "parent_relationship", "is_active"],
+                   "parent_email", "parent_phone", "parent_relationship", "is_active",
+                   "status", "phone"],
         "school_col": _school_via_class,
         "scope_ids": _teacher_class_ids,
         "scope_col": "class_id",
@@ -401,7 +402,7 @@ ENTITIES = {
     },
     "attendance_records": {
         "table": "attendance_records",
-        "fields": ["student_id", "class_id", "term_id", "date", "status", "recorded_by"],
+        "fields": ["student_id", "class_id", "term_id", "date", "status", "recorded_by", "source"],
         "school_col": _school_via_class,
         "scope_ids": _teacher_class_ids,
         "scope_col": "class_id",
@@ -413,7 +414,7 @@ ENTITIES = {
     },
     "staff_attendance": {
         "table": "staff_attendance",
-        "fields": ["user_id", "date", "status", "recorded_by"],
+        "fields": ["user_id", "date", "status", "recorded_by", "source"],
         "school_col": "direct",
         "scope_ids": _admin_only_scope,
         "scope_col": None,
@@ -426,7 +427,8 @@ ENTITIES = {
     "student_term_info": {
         "table": "student_term_info",
         "fields": ["student_id", "term_id", "days_present", "days_absent", "days_school_opened",
-                   "teacher_comment", "principal_comment", "teacher_signed_date", "principal_signed_date"],
+                   "teacher_comment", "principal_comment", "teacher_signed_date", "principal_signed_date",
+                   "teacher_signed_by", "principal_signed_by"],
         "school_col": _school_via_student,
         "scope_ids": _teacher_class_ids,
         "scope_col": None,
@@ -462,7 +464,7 @@ ENTITIES = {
     },
     "users": {
         "table": "users",
-        "fields": ["name", "username", "password", "password_hash", "role", "position", "email", "phone", "use_digital_signature"],
+        "fields": ["name", "username", "password", "password_hash", "role", "position", "email", "phone"],
         "school_col": "direct",
         "scope_ids": _admin_only_scope,
         "scope_col": None,
@@ -583,6 +585,33 @@ ENTITIES = {
         "conflict_policy": POLICY_MERGE,
         "check_row": _check_grade_band,
     },
+    "timetable_periods": {
+        # Named periods (with times) shared across the whole school, e.g.
+        # "Period 1 08:00-08:40". Admins define them; every staff role reads
+        # them to build the timetable grid.
+        "table": "timetable_periods",
+        "fields": ["name", "start_time", "end_time", "sort_order", "is_break"],
+        "school_col": "direct",
+        "scope_ids": _all_scope,
+        "scope_col": None,
+        "can_write": set(ADMIN_ROLES),
+        "can_read": set(STAFF_ROLES),
+        "conflict_policy": POLICY_MERGE,
+    },
+    "timetable_entries": {
+        # One row per class + day + period: which subject/teacher/room is
+        # scheduled there. Admins can create and edit from a device the same
+        # way they assign subjects to classes.
+        "table": "timetable_entries",
+        "fields": ["class_id", "day_of_week", "period_id", "subject_id", "teacher_id", "room"],
+        "school_col": "direct",
+        "scope_ids": _all_scope,
+        "scope_col": None,
+        "can_write": set(ADMIN_ROLES),
+        "can_read": set(STAFF_ROLES),
+        "natural_key": ("class_id", "day_of_week", "period_id"),
+        "conflict_policy": POLICY_MERGE,
+    },
 }
 
 
@@ -665,6 +694,9 @@ def _scoped_sql_base(entity, identity):
     if entity in ("grading_config", "grade_scale", "skill_traits"):
         return f"FROM {entity} x", "x.school_id = ?", [school_id]
 
+    if entity in ("timetable_periods", "timetable_entries"):
+        return f"FROM {entity} x", "x.school_id = ?", [school_id]
+
     raise ValueError(f"no scoped query defined for entity '{entity}'")
 
 
@@ -705,6 +737,7 @@ _ENTITY_SELF_ALIAS = {
     "student_term_info": "x", "staff_attendance": "x", "users": "x",
     "classes": "x", "subjects": "x", "sessions": "x", "terms": "x",
     "class_subjects": "x", "grading_config": "x", "grade_scale": "x", "enrollments": "x", "skill_traits": "x", "student_skill_ratings": "x", "materials": "x",
+    "timetable_periods": "x", "timetable_entries": "x",
 }
 
 PAGE_SIZE = 500
@@ -1124,7 +1157,7 @@ def _ref_error(conn, entity, school_id, row):
 
     checks = {
         "scores": (("student_id", student_ok), ("subject_id", subject_ok), ("term_id", term_ok)),
-        "student_term_info": (("student_id", student_ok), ("term_id", term_ok)),
+        "student_term_info": (("student_id", student_ok), ("term_id", term_ok), ("teacher_signed_by", user_ok), ("principal_signed_by", user_ok)),
         "attendance_records": (("student_id", student_ok), ("term_id", term_ok), ("class_id", class_ok), ("recorded_by", user_ok)),
         "staff_attendance": (("user_id", user_ok), ("recorded_by", user_ok)),
         "classes": (("form_teacher_id", user_ok),),
