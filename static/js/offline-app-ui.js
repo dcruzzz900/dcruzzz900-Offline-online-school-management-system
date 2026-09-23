@@ -23,7 +23,6 @@
             .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"));
     let session = null;   // { device_id, device_secret, user, started_at }
     let schoolId = null;
-    let clockInterval = null;
 
     function el(html) {
         const t = document.createElement("template");
@@ -33,41 +32,6 @@
 
     function todayStr() {
         return new Date().toISOString().slice(0, 10);
-    }
-
-    // A live date/time card shown at the top of every dashboard, in the
-    // school's timezone (Africa/Lagos / WAT) and the dd/mm/yyyy format
-    // used throughout the rest of the system. frame() clears the previous
-    // interval on every navigation so this never leaks timers.
-    function datetimeCardHtml() {
-        return `<div class="card" id="datetime-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; padding:0.85rem 1.2rem;">
-            <div>
-                <div id="datetime-card-date" style="font-size:1.05rem; font-weight:600;">&nbsp;</div>
-                <div id="datetime-card-time" style="font-size:0.9rem; color:#666;">&nbsp;</div>
-            </div>
-        </div>`;
-    }
-
-    function startLiveClock() {
-        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
-        const dateEl = root.querySelector("#datetime-card-date");
-        const timeEl = root.querySelector("#datetime-card-time");
-        if (!dateEl || !timeEl) return;
-        const TZ = "Africa/Lagos";
-        const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "long" });
-        const partsFmt = new Intl.DateTimeFormat("en-GB", {
-            timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric",
-            hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
-        });
-        function tick() {
-            const now = new Date();
-            const parts = {};
-            partsFmt.formatToParts(now).forEach((p) => { parts[p.type] = p.value; });
-            dateEl.textContent = `${weekdayFmt.format(now)}, ${parts.day}/${parts.month}/${parts.year}`;
-            timeEl.textContent = `${parts.hour}:${parts.minute}:${parts.second} (WAT)`;
-        }
-        tick();
-        clockInterval = setInterval(tick, 1000);
     }
 
     // ---------------- boot ----------------
@@ -80,6 +44,16 @@
     // Online means the server was VERIFIED reachable (connectivity.js checks it in the
     // background) — not merely that the phone has wifi.
     const isOnline = () => Connectivity.isOnline();
+
+    // Every save writes to this device first (queueChange), then — only when
+    // online — fires a background sync attempt without waiting for it here, so
+    // typing stays snappy either way. What DOES have to be accurate right away
+    // is the message shown: saying "will sync when back online" while actually
+    // online is exactly the misleading status this system must never show.
+    function savedMessage(extra) {
+        const base = isOnline() ? "Saved — syncing online now." : "Saved offline — will sync when online.";
+        return extra ? `${base} ${extra}` : base;
+    }
 
     let profile = null;        // school profile (name, logo) cached on the device
     let logoUrl = null;
@@ -197,7 +171,11 @@
             items.push({ label: "Terms", href: "/admin/terms", online: true });
             items.push({ label: "Staff Attendance", route: "staff-attendance" });
             items.push({ label: "Promote Students", href: "/admin/promote", online: true });
+            items.push({ label: "Parents", href: "/admin/parents", online: true });
+            items.push({ label: "Timetable", href: "/timetable", online: true });
             items.push({ label: "Reports", route: "reports" });
+        } else {
+            items.push({ label: "Timetable", href: "/timetable", online: true });
         }
         items.push({ label: "Notifications", route: "notifications" });
         items.push({ label: "Settings", route: "settings" });
@@ -316,6 +294,31 @@
         return `${se ? se.name : ""} — ${term.name}`;
     }
 
+    function datetimeCardHtml() {
+        return `<div class="card" id="datetime-card" style="text-align:center;">
+            <div id="datetime-card-time" style="font-size:1.6rem; font-weight:600; letter-spacing:0.02em;">--:--:--</div>
+            <div id="datetime-card-date" style="color:#666; margin-top:0.1rem;">Loading date&hellip;</div>
+        </div>`;
+    }
+
+    function startDatetimeCardClock(root) {
+        const timeEl = root.querySelector("#datetime-card-time");
+        const dateEl = root.querySelector("#datetime-card-date");
+        if (!timeEl || !dateEl) return;
+        // The school's configured timezone/date-format live on the server's
+        // `schools` row, which isn't (yet) synced into this device's offline
+        // database — so this clock uses the device's own local timezone,
+        // which in practice is the school's, since it's the device that's
+        // physically there.
+        function render() {
+            const now = new Date();
+            timeEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+            dateEl.textContent = now.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "2-digit" });
+        }
+        render();
+        setInterval(render, 1000);
+    }
+
     async function renderHome() {
         return isAdminRole() ? renderAdminDashboard() : renderTeacherDashboard();
     }
@@ -325,8 +328,8 @@
         const [students, classes, users, subjects] = await Promise.all(
             ["students", "classes", "users", "subjects"].map((e) => OfflineDB.getAll(schoolId, e)));
         const body = el(`<div>
-            ${datetimeCardHtml()}
             ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set. Set one up under Terms (needs internet).</p>`}
+            ${datetimeCardHtml()}
             <div class="stat-grid">
                 <div class="stat-box"><div class="num">${students.filter((s) => s.is_active).length}</div><div class="label">Students</div></div>
                 <div class="stat-box"><div class="num">${classes.length}</div><div class="label">Classes</div></div>
@@ -347,7 +350,7 @@
         add("#dashResults", "Go to Classes", "results", true);
         for (const [t, r] of [["Attendance / Roll Call", "attendance"], ["Score Entry", "scores"], ["Teacher / Principal Comments", "comments"], ["Student Registration", "register"], ["Roll-Call History", "roll-call-history"]]) add("#dashWork", t, r);
         frame("Admin Dashboard", body);
-        startLiveClock();
+        startDatetimeCardClock(body);
     }
 
     async function renderTeacherDashboard() {
@@ -360,9 +363,9 @@
             return `<tr><td>${esc(c ? c.name : "")}</td><td>${esc(s ? s.name : "")}</td><td><a class="btn btn-small" href="#/scores">Enter Scores</a></td></tr>`;
         }).join("");
         const body = el(`<div>
-            ${datetimeCardHtml()}
             ${isFormTeacher ? `<a href="#/attendance" class="btn btn-small">Manage My Class Register</a>` : ""}
             ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set yet. Contact the admin.</p>`}
+            ${datetimeCardHtml()}
             <div class="card"><h3>Your Subject Assignments</h3>
                 ${rows ? `<table><tr><th>Class</th><th>Subject</th><th>Action</th></tr>${rows}</table>` : `<p>No subjects assigned to you yet.</p>`}
             </div>
@@ -375,7 +378,7 @@
             </div>
         </div>`);
         frame(`Welcome, ${session.user.name}`, body);
-        startLiveClock();
+        startDatetimeCardClock(body);
     }
 
     async function renderSetupHub() {
@@ -471,14 +474,14 @@
                 const status = tr.querySelector("input:checked").value;
                 const existing = forDay.get(userId);
                 if (existing && existing.status === status) continue;
-                const data = { user_id: userId, date: dateStr, status, recorded_by: session.user.user_id };
+                const data = { user_id: userId, date: dateStr, status, recorded_by: session.user.user_id, source: isOnline() ? "online" : "offline" };
                 if (existing) await SyncEngine.queueChange(schoolId, "staff_attendance", "update", data, existing.client_uuid);
                 else await SyncEngine.queueChange(schoolId, "staff_attendance", "create", data);
                 saved++;
             }
             const msg = table.querySelector("#saMsg");
             msg.style.color = "#2e7d4f";
-            msg.textContent = saved ? `Saved ${saved} change(s). They sync automatically.` : "No changes to save.";
+            msg.textContent = saved ? `${savedMessage()} (${saved} change(s))` : "No changes to save.";
             if (saved) setTimeout(() => renderStaffAttendance(dateStr), 600);
         });
     }
@@ -826,7 +829,6 @@
     // ---------------- home ----------------
 
     function frame(title, bodyEl) {
-        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
         renderNavbar();
         root.innerHTML = "";
         const wrap = el(`<div></div>`);
@@ -963,14 +965,14 @@
                     const studentId = parseInt(row.dataset.student, 10);
                     const status = row.querySelector("input[type=radio]:checked").value;
                     const clientUuid = row.dataset.clientUuid;
-                    const data = { student_id: studentId, class_id: classId, term_id: term.id, date, status, recorded_by: session.user.user_id };
+                    const data = { student_id: studentId, class_id: classId, term_id: term.id, date, status, recorded_by: session.user.user_id, source: isOnline() ? "online" : "offline" };
                     if (clientUuid) {
                         await SyncEngine.queueChange(schoolId, "attendance_records", "update", data, clientUuid);
                     } else {
                         await SyncEngine.queueChange(schoolId, "attendance_records", "create", data);
                     }
                 }
-                alert("Attendance saved on this device. It will sync automatically once you're back online.");
+                alert(savedMessage("Attendance recorded."));
                 renderList();
             });
         }
@@ -1091,7 +1093,7 @@
                 }
                 msg.style.color = "#2e7d4f";
                 msg.textContent = work.length
-                    ? `Saved ${work.length} score row(s) on this device. They will sync automatically once you're back online.`
+                    ? `${savedMessage()} (${work.length} score row(s))`
                     : "No changes to save.";
             });
         });
@@ -1158,7 +1160,7 @@
                         const record = await SyncEngine.queueChange(schoolId, "student_term_info", "create", data);
                         card.dataset.clientUuid = record.client_uuid;
                     }
-                    card.querySelector(".saveMsg").textContent = "Saved — will sync when online.";
+                    card.querySelector(".saveMsg").textContent = savedMessage();
                 });
             }
         });
@@ -1177,14 +1179,41 @@
         }
         const card = el(`
             <div class="card">
-                <label>Admission No.</label><input type="text" id="regAdmissionNo">
+                <h3>Student Information</h3>
+                <label>Admission / Registration No.</label><input type="text" id="regAdmissionNo">
                 <label>First Name</label><input type="text" id="regFirstName">
                 <label>Last Name</label><input type="text" id="regLastName">
+                <label>Other Names (optional)</label><input type="text" id="regOtherNames">
                 <label>Gender</label>
                 <select id="regGender"><option value="M">Male</option><option value="F">Female</option></select>
+                <label>Date of Birth (optional)</label><input type="date" id="regDob">
                 <label>Class</label>
                 <select id="regClass">${refOptions(classes, (c) => c.name)}</select>
-                <button class="btn" id="regSaveBtn" style="margin-top:1rem;">Register Student</button>
+                <label>Student Status</label>
+                <select id="regStatus">
+                    <option value="Active">Active</option>
+                    <option value="Graduated">Graduated</option>
+                    <option value="Transferred">Transferred</option>
+                    <option value="Withdrawn">Withdrawn</option>
+                    <option value="Suspended">Suspended</option>
+                </select>
+                <label>Student's Own Contact Number (optional)</label><input type="text" id="regPhone">
+                <label>Religion (optional)</label><input type="text" id="regReligion">
+            </div>
+            <div class="card">
+                <h3>Parent / Guardian Information</h3>
+                <label>Full Name</label><input type="text" id="regParentName">
+                <label>Relationship</label><input type="text" id="regParentRelationship" placeholder="e.g. Mother, Father, Uncle">
+                <label>Phone</label><input type="text" id="regParentPhone">
+                <label>Email (optional)</label><input type="text" id="regParentEmail">
+                <label>Residential Address (optional)</label><input type="text" id="regParentAddress">
+            </div>
+            <div class="card">
+                <p style="font-size:0.85rem; color:#666;">
+                    A passport photograph can be added afterwards from this student's profile once the
+                    device is back online — it's optional either way.
+                </p>
+                <button class="btn" id="regSaveBtn">Register Student</button>
                 <p id="regMsg" style="color:#2e7d4f;"></p>
             </div>
         `);
@@ -1196,24 +1225,36 @@
                 admission_no: document.getElementById("regAdmissionNo").value.trim(),
                 first_name: document.getElementById("regFirstName").value.trim(),
                 last_name: document.getElementById("regLastName").value.trim(),
+                other_names: document.getElementById("regOtherNames").value.trim() || null,
                 gender: document.getElementById("regGender").value,
+                date_of_birth: document.getElementById("regDob").value || null,
+                status: document.getElementById("regStatus").value,
+                phone: document.getElementById("regPhone").value.trim() || null,
+                religion: document.getElementById("regReligion").value.trim() || null,
+                parent_name: document.getElementById("regParentName").value.trim() || null,
+                parent_relationship: document.getElementById("regParentRelationship").value.trim() || null,
+                parent_phone: document.getElementById("regParentPhone").value.trim() || null,
+                parent_email: document.getElementById("regParentEmail").value.trim() || null,
+                parent_address: document.getElementById("regParentAddress").value.trim() || null,
                 is_active: 1,
             };
             const pendingRefs = {};
             applyRefSelection(document.getElementById("regClass").value, "class_id", "classes", data, pendingRefs);
             if (!data.admission_no || !data.first_name || !data.last_name || (!data.class_id && !pendingRefs.class_id)) {
                 document.getElementById("regMsg").style.color = "#b3261e";
-                document.getElementById("regMsg").textContent = "Please fill in all fields.";
+                document.getElementById("regMsg").textContent = "Please fill in Admission No., First Name, Last Name and Class.";
                 return;
             }
             await SyncEngine.queueChange(schoolId, "students", "create", data, undefined, pendingRefs);
             document.getElementById("regMsg").style.color = "#2e7d4f";
             document.getElementById("regMsg").textContent = pendingRefs.class_id
-                ? "Saved on this device. This student's class hasn't synced yet either — both will sync together once you're back online."
-                : "Saved on this device — will sync when back online.";
-            document.getElementById("regAdmissionNo").value = "";
-            document.getElementById("regFirstName").value = "";
-            document.getElementById("regLastName").value = "";
+                ? savedMessage("This student's class hasn't synced yet either — both will finish together.")
+                : savedMessage();
+            for (const id of ["regAdmissionNo", "regFirstName", "regLastName", "regOtherNames", "regDob",
+                               "regPhone", "regReligion", "regParentName", "regParentRelationship",
+                               "regParentPhone", "regParentEmail", "regParentAddress"]) {
+                document.getElementById(id).value = "";
+            }
         });
     }
 
@@ -1274,7 +1315,7 @@
                 await SyncEngine.queueChange(schoolId, "classes", "create", data, undefined, pendingRefs);
             }
             msg.style.color = "#2e7d4f";
-            msg.textContent = `Saved ${planned.length} class(es) on this device — will sync when back online.`;
+            msg.textContent = `${savedMessage()} (${planned.length} class(es))`;
             document.getElementById("clsName").value = "";
             document.getElementById("clsArms").value = "";
             await refreshList();
@@ -1312,7 +1353,7 @@
             if (!name) { msg.style.color = "#b3261e"; msg.textContent = "Subject name is required."; return; }
             await SyncEngine.queueChange(schoolId, "subjects", "create", { name });
             msg.style.color = "#2e7d4f";
-            msg.textContent = "Saved on this device — will sync when back online.";
+            msg.textContent = savedMessage();
             document.getElementById("subjName").value = "";
             await refreshList();
         });
@@ -1415,7 +1456,7 @@
             };
             await SyncEngine.queueChange(schoolId, "users", "create", data);
             msg.style.color = "#2e7d4f";
-            msg.textContent = "Saved on this device — will sync when back online.";
+            msg.textContent = savedMessage();
             document.getElementById("tName").value = "";
             document.getElementById("tUsername").value = "";
             document.getElementById("tPassword").value = "";
@@ -1975,14 +2016,14 @@
                 }
                 await SyncEngine.queueChange(schoolId, "grading_config", "update", v, cfg.client_uuid);
                 msg.style.color = "#2e7d4f";
-                msg.textContent = sum < 99.9999 ? `Saved on this device. Note: the maximums add up to ${sum}, not 100.` : "Saved on this device — it will sync when you're back online.";
+                msg.textContent = sum < 99.9999 ? `${savedMessage()} Note: the maximums add up to ${sum}, not 100.` : savedMessage();
             });
         }
         body.appendChild(el(`<p style="font-size:0.85rem; color:#777;">This device receives the latest settings each time it syncs. Removing a grade band is done online.</p>`));
         // Things only the server can do: the same pages as always, one tap away;
         // offline they say so instead of failing.
         const online = el(`<div class="card"><h3>Account &amp; school (needs internet)</h3></div>`);
-        const links = [["Change password", "/account/password"], ["School profile & logo", "/admin/school"],
+        const links = [["My profile & digital signature", "/my-profile"], ["Change password", "/account/password"], ["School profile & logo", "/admin/school"],
                        ["Email settings", "/admin/email"], ["Offline access on this device", "/settings"]];
         for (const [label, href] of links) {
             if (!isAdminRole() && ["/admin/school", "/admin/email"].includes(href)) continue;
@@ -2045,7 +2086,7 @@
             try {
                 const r = await importBackup(e.target.files[0]);
                 msg.style.color = "#2e7d4f";
-                msg.textContent = `Restored ${r.restored} change(s)${r.skipped ? `; left ${r.skipped} alone (already on this device)` : ""}. They will sync when you're online.`;
+                msg.textContent = `Restored ${r.restored} change(s)${r.skipped ? `; left ${r.skipped} alone (already on this device)` : ""}. ${isOnline() ? "Syncing online now." : "Will sync once this device is back online."}`;
                 setTimeout(renderSyncStatus, 1500);
             } catch (err) { msg.style.color = "#b3261e"; msg.textContent = err.message; }
         });

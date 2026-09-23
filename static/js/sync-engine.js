@@ -414,8 +414,8 @@ const SyncEngine = (function () {
     // students depend on classes/users; everything else depends on
     // students (+ subjects, already tier 1).
     const SYNC_TIERS = [
-        ["classes", "subjects", "users", "grading_config", "grade_scale"],
-        ["students", "class_subjects"],
+        ["classes", "subjects", "users", "grading_config", "grade_scale", "timetable_periods"],
+        ["students", "class_subjects", "timetable_entries"],
         ["scores", "attendance_records", "student_term_info", "staff_attendance"],
     ];
 
