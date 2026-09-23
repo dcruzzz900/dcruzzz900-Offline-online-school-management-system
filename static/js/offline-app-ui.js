@@ -45,18 +45,6 @@
     // background) — not merely that the phone has wifi.
     const isOnline = () => Connectivity.isOnline();
 
-    // The message a save should show. Saying "will sync when back online" while actually
-    // online is misleading (spec item 1): a save made while online has already been queued
-    // for a sync that is either already running or about to run in the background, so it
-    // reads "Saved — syncing to the server now" instead. Only when the device is verified
-    // offline does it say the record is waiting for a connection.
-    function saveStatusMessage(n) {
-        const noun = n === undefined ? "" : ` ${n} ${n === 1 ? "record" : "records"}`;
-        return isOnline()
-            ? `Saved${noun} — syncing to the server now.`
-            : `Saved${noun} offline — will sync automatically when you're back online.`;
-    }
-
     let profile = null;        // school profile (name, logo) cached on the device
     let logoUrl = null;
     let lastDetail = null;
@@ -400,15 +388,10 @@
         body.appendChild(nav);
         const table = el(`<div class="card"><table><thead><tr><th>Name</th><th>Role</th>${STAFF_STATUSES.map((s) => `<th>${s}</th>`).join("")}</tr></thead><tbody></tbody></table>
             <button class="btn" id="saSave" style="margin-top:1rem;">Save Attendance</button><p id="saMsg"></p></div>`);
-        table.querySelector("thead tr").insertAdjacentHTML("beforeend", "<th>Recorded</th>");
         for (const m of staff) {
-            const rec = forDay.get(m.id);
-            const current = rec ? rec.status : "Present";
-            const recordedNote = rec
-                ? `${esc(new Date(rec.recorded_at || rec.updated_at).toLocaleString())} <span style="color:#888;">(${esc(rec.source || "online")})</span>`
-                : `<span style="color:#999;">not yet recorded</span>`;
+            const current = forDay.has(m.id) ? forDay.get(m.id).status : "Present";
             table.querySelector("tbody").appendChild(el(`<tr data-user="${m.id}"><td>${esc(m.name)}</td><td>${esc((POSITIONS[m.position] || m.role.replace("_", " ")))}</td>${
-                STAFF_STATUSES.map((s) => `<td><input type="radio" name="sa_${m.id}" value="${s}" ${current === s ? "checked" : ""} style="width:auto;"></td>`).join("")}<td style="font-size:0.8rem;">${recordedNote}</td></tr>`));
+                STAFF_STATUSES.map((s) => `<td><input type="radio" name="sa_${m.id}" value="${s}" ${current === s ? "checked" : ""} style="width:auto;"></td>`).join("")}</tr>`));
         }
         body.appendChild(table);
         // History & reports: counts per person over a date range, from this device's records
@@ -448,7 +431,7 @@
                 const status = tr.querySelector("input:checked").value;
                 const existing = forDay.get(userId);
                 if (existing && existing.status === status) continue;
-                const data = { user_id: userId, date: dateStr, status, recorded_by: session.user.user_id, source: isOnline() ? "online" : "offline" };
+                const data = { user_id: userId, date: dateStr, status, recorded_by: session.user.user_id };
                 if (existing) await SyncEngine.queueChange(schoolId, "staff_attendance", "update", data, existing.client_uuid);
                 else await SyncEngine.queueChange(schoolId, "staff_attendance", "create", data);
                 saved++;
@@ -939,14 +922,14 @@
                     const studentId = parseInt(row.dataset.student, 10);
                     const status = row.querySelector("input[type=radio]:checked").value;
                     const clientUuid = row.dataset.clientUuid;
-                    const data = { student_id: studentId, class_id: classId, term_id: term.id, date, status, recorded_by: session.user.user_id, source: isOnline() ? "online" : "offline" };
+                    const data = { student_id: studentId, class_id: classId, term_id: term.id, date, status, recorded_by: session.user.user_id };
                     if (clientUuid) {
                         await SyncEngine.queueChange(schoolId, "attendance_records", "update", data, clientUuid);
                     } else {
                         await SyncEngine.queueChange(schoolId, "attendance_records", "create", data);
                     }
                 }
-                alert(saveStatusMessage(tbody.querySelectorAll("tr").length));
+                alert("Attendance saved on this device. It will sync automatically once you're back online.");
                 renderList();
             });
         }
@@ -1185,10 +1168,8 @@
             await SyncEngine.queueChange(schoolId, "students", "create", data, undefined, pendingRefs);
             document.getElementById("regMsg").style.color = "#2e7d4f";
             document.getElementById("regMsg").textContent = pendingRefs.class_id
-                ? (isOnline()
-                    ? "Saved — syncing to the server now. This student's class hasn't synced yet either, so both will go together."
-                    : "Saved offline. This student's class hasn't synced yet either — both will sync together once you're back online.")
-                : saveStatusMessage(1);
+                ? "Saved on this device. This student's class hasn't synced yet either — both will sync together once you're back online."
+                : "Saved on this device — will sync when back online.";
             document.getElementById("regAdmissionNo").value = "";
             document.getElementById("regFirstName").value = "";
             document.getElementById("regLastName").value = "";
@@ -1252,7 +1233,7 @@
                 await SyncEngine.queueChange(schoolId, "classes", "create", data, undefined, pendingRefs);
             }
             msg.style.color = "#2e7d4f";
-            msg.textContent = saveStatusMessage(planned.length).replace(/\d+ records?/, `${planned.length} class(es)`);
+            msg.textContent = `Saved ${planned.length} class(es) on this device — will sync when back online.`;
             document.getElementById("clsName").value = "";
             document.getElementById("clsArms").value = "";
             await refreshList();
@@ -1290,7 +1271,7 @@
             if (!name) { msg.style.color = "#b3261e"; msg.textContent = "Subject name is required."; return; }
             await SyncEngine.queueChange(schoolId, "subjects", "create", { name });
             msg.style.color = "#2e7d4f";
-            msg.textContent = saveStatusMessage(1);
+            msg.textContent = "Saved on this device — will sync when back online.";
             document.getElementById("subjName").value = "";
             await refreshList();
         });
@@ -1393,7 +1374,7 @@
             };
             await SyncEngine.queueChange(schoolId, "users", "create", data);
             msg.style.color = "#2e7d4f";
-            msg.textContent = saveStatusMessage(1);
+            msg.textContent = "Saved on this device — will sync when back online.";
             document.getElementById("tName").value = "";
             document.getElementById("tUsername").value = "";
             document.getElementById("tPassword").value = "";
@@ -1953,9 +1934,7 @@
                 }
                 await SyncEngine.queueChange(schoolId, "grading_config", "update", v, cfg.client_uuid);
                 msg.style.color = "#2e7d4f";
-                msg.textContent = sum < 99.9999
-                    ? `${saveStatusMessage()} Note: the maximums add up to ${sum}, not 100.`
-                    : saveStatusMessage();
+                msg.textContent = sum < 99.9999 ? `Saved on this device. Note: the maximums add up to ${sum}, not 100.` : "Saved on this device — it will sync when you're back online.";
             });
         }
         body.appendChild(el(`<p style="font-size:0.85rem; color:#777;">This device receives the latest settings each time it syncs. Removing a grade band is done online.</p>`));
