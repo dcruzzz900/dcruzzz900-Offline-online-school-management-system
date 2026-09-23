@@ -16,6 +16,8 @@
             <p><b>Gender:</b> {{ student.gender or '—' }}</p>
             <p><b>Date of Birth:</b> {{ student.date_of_birth|dmy if student.date_of_birth else '—' }}</p>
             <p><b>Religion:</b> {{ student.religion or '—' }}</p>
+            <p><b>Status:</b> {{ student.status or 'Active' }}</p>
+            <p><b>Student's Phone:</b> {{ student.phone or '—' }}</p>
         </div>
         <div>
             <p><b>Parent/Guardian Name:</b> {{ student.parent_name or '—' }}</p>
@@ -23,6 +25,9 @@
             <p><b>Parent/Guardian Address:</b> {{ student.parent_address or '—' }}</p>
             <p><b>Parent/Guardian Email:</b> {{ student.parent_email or '—' }}</p>
             <p><b>Parent/Guardian Phone:</b> {{ student.parent_phone or '—' }}</p>
+            {% if student.parent_phone or student.parent_email %}
+            <p><a href="{{ url_for('parent_profile', student_id=student.id) }}">View Parent Profile &rarr;</a></p>
+            {% endif %}
             <p><b>Student Login:</b> {% if student.username %}{{ student.username }} (active){% else %}Not set up{% endif %}</p>
         </div>
     </div>

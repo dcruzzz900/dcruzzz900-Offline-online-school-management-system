@@ -1,62 +1,79 @@
 {% extends "base.html" %}
 {% block title %}Result Design Preview{% endblock %}
 {% block content %}
-<div class="no-print card" style="background:#fff8e1; border-left:4px solid #b3900a;">
-    <p style="margin:0;"><b>Preview only</b> — this uses sample data and the settings you just entered. Nothing here is saved.
-    Close this tab and click <b>Save Changes</b> on School Profile to apply them for real.</p>
+<div class="no-print" style="margin-bottom:1rem;">
+    <a href="{{ url_for('admin_school') }}">&larr; Back to School Profile</a>
+    &nbsp;·&nbsp;
+    <button class="btn btn-gold" onclick="window.print()">🖨 Print Preview</button>
+    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
+        This is a sample result with dummy data, showing exactly how your current colour, header
+        arrangement, and alignment settings will look on a real result sheet. Nothing here is saved.
+    </p>
 </div>
 
-<div style="--navy: {{ result_theme_color }};">
-<div class="report-header">
-    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0; text-align:{{ school_name_align }};">{{ school_name }}</h2>
-    <h1>Terminal Report Sheet</h1>
-    <p>{{ term.session_name }} &mdash; {{ term.name }}</p>
+{% set accent = settings.result_accent_color if settings and settings.result_accent_color else '#1f3a5f' %}
+{% set layout = settings.result_header_layout if settings and settings.result_header_layout else 'logo-left' %}
+{% set name_align = settings.name_align if settings and settings.name_align else 'center' %}
+<div class="result-page" style="--result-accent: {{ accent }};">
+<div class="report-header result-header-{{ layout }}">
+    {% if layout != 'no-logo' and school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0; text-align:{{ name_align }}; color:var(--result-accent);">{{ school_name }}</h2>
+    <h1 style="border-bottom-color:var(--result-accent);">Terminal Report Sheet</h1>
+    <p>2025/2026 &mdash; First Term</p>
+    <p style="font-size:0.85rem; color:#666;">Date: 12 Dec 2025</p>
 </div>
 
 <div class="card">
     <div class="grid-2">
         <div>
-            <p><b>Name:</b> {{ student_full_name(student) }}</p>
-            <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
-            <p><b>Class / Arm:</b> {{ class_row.name }}</p>
+            <p><b>Name:</b> Sample Student</p>
+            <p><b>Admission No. / Register No.:</b> SS/2025/001</p>
+            <p><b>Class / Arm:</b> JSS 1 A</p>
         </div>
         <div>
-            <p><b>Total Score:</b> {{ total }}</p>
-            <p><b>Average:</b> {{ average }}</p>
-            <p><b>Position:</b> {{ position }} of {{ class_size }}</p>
+            <p><b>Total Score:</b> 540</p>
+            <p><b>Average:</b> 77.1</p>
+            <p><b>Position:</b> 3 of 32</p>
         </div>
     </div>
 </div>
 
 <div class="card">
     <h3>Academic Performance</h3>
-    <table>
+    <table class="result-table">
         <tr><th>Subject</th><th>CA1</th><th>CA2</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr>
-        {% for s in subjects %}
-        <tr>
-            <td>{{ s.name }}</td><td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td><td>{{ s.exam }}</td>
-            <td>{{ s.total }}</td><td>{{ s.grade }}</td><td>{{ s.remark }}</td>
-        </tr>
-        {% endfor %}
+        <tr><td>Mathematics</td><td>14</td><td>13</td><td>55</td><td>82</td><td>A</td><td>Excellent</td></tr>
+        <tr><td>English Language</td><td>12</td><td>11</td><td>48</td><td>71</td><td>B</td><td>Very Good</td></tr>
+        <tr><td>Basic Science</td><td>13</td><td>12</td><td>50</td><td>75</td><td>B</td><td>Very Good</td></tr>
     </table>
 </div>
 
 <div class="card">
     <h3>Attendance &amp; Comments</h3>
-    <p><b>Teacher's Comment:</b> {{ info.teacher_comment }}</p>
+    <p><b>Days School Opened:</b> 60 &nbsp; <b>Present:</b> 58 &nbsp; <b>Absent:</b> 2</p>
+
+    <p><b>Teacher's Comment:</b><br>A hardworking and attentive student. Keep it up!</p>
     <p class="signature-line">
         <span>Teacher's Signature: __________________</span>
-        <span>Date: __________________</span>
+        <span>Date: 12 Dec 2025</span>
     </p>
-    <p><b>Principal's Comment:</b> {{ info.principal_comment }}</p>
+
+    <p><b>Principal's Comment:</b><br>A commendable result. Well done.</p>
     <p class="signature-line">
         <span>Principal's Signature: __________________</span>
-        <span>Date: __________________</span>
+        <span>Date: 12 Dec 2025</span>
     </p>
 </div>
-</div>
+
 <style>
+.comment-blank { display: inline-block; border-bottom: 1px solid #999; width: 100%; height: 1.5em; }
 .signature-line { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; }
+.result-table th { background: var(--result-accent, #1f3a5f); color: #fff; }
+.result-header-logo-top-center { text-align: center; }
+.result-header-logo-top-center .report-logo { display: block; margin: 0 auto 0.4rem; }
+.result-header-logo-right { text-align: right; }
+.result-header-logo-right .report-logo { float: right; margin-left: 0.75rem; }
+.result-header-logo-left .report-logo { float: left; margin-right: 0.75rem; }
 </style>
+</div>
 {% endblock %}

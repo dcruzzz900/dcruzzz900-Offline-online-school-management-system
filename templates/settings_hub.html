@@ -20,40 +20,6 @@
     </form>
 </div>
 
-<div class="card">
-    <h3>Digital Signature</h3>
-    <p style="font-size:0.9rem; color:#666;">
-        Upload an image of your signature (ideally with a transparent background) to have it placed
-        automatically on results you sign, instead of leaving a blank line for a manual signature.
-        The correct signature area is used automatically — Teacher's for a form teacher, Principal's
-        for whoever holds the Principal position.
-    </p>
-    {% if me.signature_filename %}
-    <img src="{{ url_for('staff_signature', user_id=session['user_id']) if me.use_digital_signature else '' }}"
-         alt="Your signature" style="max-height:60px; max-width:200px; display:block; margin-bottom:0.75rem; border:1px solid #ddd; padding:0.3rem;"
-         {% if not me.use_digital_signature %}hidden{% endif %}>
-    {% if not me.use_digital_signature %}
-    <p style="font-size:0.85rem; color:#999;">A signature is on file but digital signing is currently off.</p>
-    {% endif %}
-    <form method="POST" action="{{ url_for('toggle_my_signature') }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-small" type="submit">{{ 'Disable Digital Signature' if me.use_digital_signature else 'Enable Digital Signature' }}</button>
-    </form>
-    <form method="POST" action="{{ url_for('remove_my_signature') }}" class="inline"
-          onsubmit="return confirm('Remove your signature image?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
-    </form>
-    {% else %}
-    <p style="color:#999; font-size:0.9rem;">No signature uploaded yet.</p>
-    {% endif %}
-    <form method="POST" action="{{ url_for('upload_my_signature') }}" enctype="multipart/form-data" style="margin-top:0.75rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="file" name="signature" accept=".png,.jpg,.jpeg,.gif" required>
-        <button class="btn btn-small" type="submit">{% if me.signature_filename %}Replace Signature{% else %}Upload Signature{% endif %}</button>
-    </form>
-</div>
-
 {% if session.get('role') in ['admin', 'sub_admin', 'teacher'] %}
 <div class="card" id="offlineAccessCard">
     <h3>Offline Access</h3>

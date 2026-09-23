@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Timetable{% endblock %}
+{% block content %}
+<h1>Timetable</h1>
+
+{% if can_edit %}
+<div class="card">
+    <h3>Manage Periods</h3>
+    <p style="font-size:0.9rem; color:#666;">Set up the school day (period names, times, breaks) before building
+        class timetables.</p>
+    <a class="btn" href="{{ url_for('timetable_periods') }}">Manage Periods</a>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Class Timetables</h3>
+    {% if classes %}
+    <table>
+        <tr><th>Class</th><th>Actions</th></tr>
+        {% for c in classes %}
+        <tr>
+            <td>{{ c.name }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('timetable_class', class_id=c.id) }}">
+                {% if can_edit %}View / Edit{% else %}View{% endif %}
+            </a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No classes yet — add classes in Setup first.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Teacher Timetables</h3>
+    {% if teachers %}
+    <table>
+        <tr><th>Teacher</th><th>Actions</th></tr>
+        {% for t in teachers %}
+        <tr>
+            <td>{{ t.name }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('timetable_teacher', teacher_id=t.id) }}">View Schedule</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No teachers yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

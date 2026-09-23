@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ teacher.name }}'s Timetable{% endblock %}
+{% block content %}
+<div class="report-header">
+    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
+    <h1>Teacher Timetable</h1>
+    <p>{{ teacher.name }}</p>
+</div>
+
+<div class="no-print" style="margin-bottom:1rem;">
+    <a href="{{ url_for('timetable_hub') }}">&larr; Back to Timetable</a>
+    &nbsp;·&nbsp;
+    <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
+</div>
+
+{% if not periods %}
+<div class="card"><p>No periods have been set up yet.</p></div>
+{% else %}
+<div class="card" style="overflow-x:auto;">
+    <table class="timetable-grid">
+        <tr>
+            <th>Period</th>
+            {% for idx, day in days %}<th>{{ day }}</th>{% endfor %}
+        </tr>
+        {% for p in periods %}
+        <tr>
+            <td style="white-space:nowrap;">
+                <b>{{ p.name }}</b>
+                {% if p.start_time or p.end_time %}<br><span style="font-size:0.75rem; color:#666;">{{ p.start_time or '?' }}–{{ p.end_time or '?' }}</span>{% endif %}
+            </td>
+            {% if p.is_break %}
+            <td colspan="{{ days|length }}" style="text-align:center; background:#f5f0e0; font-style:italic;">{{ p.name }}</td>
+            {% else %}
+                {% for idx, day in days %}
+                {% set cell = grid.get((idx, p.id)) %}
+                <td>
+                    {% if cell %}
+                    <b>{{ cell.subject_name or '—' }}</b><br>
+                    <span style="font-size:0.8rem;">{{ cell.class_name }}</span>
+                    {% if cell.room %}<br><span style="font-size:0.75rem; color:#666;">Room: {{ cell.room }}</span>{% endif %}
+                    {% else %}
+                    <span style="color:#bbb;">—</span>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+<style>
+.timetable-grid { width:100%; border-collapse:collapse; }
+.timetable-grid th, .timetable-grid td { border:1px solid #ddd; padding:0.4rem; vertical-align:top; }
+.timetable-grid th { background:#f5f6f8; }
+</style>
+{% endblock %}

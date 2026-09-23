@@ -2,6 +2,9 @@
 {% block title %}My Results{% endblock %}
 {% block content %}
 <h1>Welcome, {{ student_full_name(student) }}</h1>
+
+{% include "partials/datetime_card.html" %}
+
 <div class="card">
     <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
     <p><b>Class / Arm:</b> {{ class_row.name }}</p>

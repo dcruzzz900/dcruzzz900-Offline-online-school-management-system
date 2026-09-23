@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Timetable Periods{% endblock %}
+{% block content %}
+<h1>Timetable Periods</h1>
+<p><a href="{{ url_for('timetable_hub') }}">&larr; Back to Timetable</a></p>
+
+<div class="card">
+    <h3>Add a Period</h3>
+    <form method="POST" data-offline="true" data-offline-label="Add Timetable Period">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="add">
+        <div class="grid-2">
+            <div>
+                <label>Period Name</label>
+                <input type="text" name="name" placeholder="e.g. Period 1, Break, Lunch" required>
+            </div>
+            <div>
+                <label><input type="checkbox" name="is_break" style="width:auto;"> This is a break/lunch period (not a teaching slot)</label>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div>
+                <label>Start Time</label>
+                <input type="time" name="start_time">
+            </div>
+            <div>
+                <label>End Time</label>
+                <input type="time" name="end_time">
+            </div>
+        </div>
+        <button class="btn" type="submit">Add Period</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>All Periods</h3>
+    {% if periods %}
+    <table>
+        <tr><th>Period</th><th>Time</th><th>Type</th><th>Actions</th></tr>
+        {% for p in periods %}
+        <tr>
+            <td>{{ p.name }}</td>
+            <td>{% if p.start_time or p.end_time %}{{ p.start_time or '?' }} – {{ p.end_time or '?' }}{% else %}—{% endif %}</td>
+            <td>{{ 'Break' if p.is_break else 'Teaching' }}</td>
+            <td>
+                <form method="POST" class="inline" onsubmit="return confirm('Delete the {{ p.name }} period? Any timetable entries using it will also be removed.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="period_id" value="{{ p.id }}">
+                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No periods yet — add one above (e.g. "Period 1", 08:00–08:40).</p>
+    {% endif %}
+</div>
+{% endblock %}

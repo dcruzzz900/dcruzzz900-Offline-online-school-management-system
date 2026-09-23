@@ -8,6 +8,8 @@
 <p class="flash flash-error">No active term set. <a href="{{ url_for('admin_terms') }}">Set one up</a>.</p>
 {% endif %}
 
+{% include "partials/datetime_card.html" %}
+
 <div class="stat-grid">
     <div class="stat-box"><div class="num">{{ stats.students }}</div><div class="label">Students</div></div>
     <div class="stat-box"><div class="num">{{ stats.classes }}</div><div class="label">Classes</div></div>
@@ -24,7 +26,6 @@
         <a class="btn" href="{{ url_for('admin_class_subjects') }}">Assign Subjects</a>
         <a class="btn" href="{{ url_for('admin_students') }}">Students</a>
         <a class="btn" href="{{ url_for('admin_teachers') }}">Teachers</a>
-        <a class="btn" href="{{ url_for('admin_parents') }}">Parents</a>
     </div>
     <div class="card">
         <h3>Results</h3>
