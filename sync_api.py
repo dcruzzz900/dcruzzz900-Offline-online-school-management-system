@@ -102,23 +102,38 @@ def resolve_identity(conn):
         # demoting a sub-admin (or moving a teacher) would leave every device
         # they had already enrolled quietly holding the old, higher access.
         user = conn.execute(
-            "SELECT school_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
+            "SELECT school_id, tenant_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
         ).fetchone()
-        if (not user or user["school_id"] != cred["school_id"]
+        school = conn.execute(
+            "SELECT tenant_id, activation_status, is_suspended, is_archived FROM schools WHERE id=?",
+            (cred["school_id"],)
+        ).fetchone()
+        if (not user or not school or user["school_id"] != cred["school_id"]
+                or not user["tenant_id"] or user["tenant_id"] != school["tenant_id"]
+                or school["activation_status"] != "active" or school["is_suspended"] or school["is_archived"]
                 or user["role"] not in STAFF_ROLES or not user["is_active"]):
             g.sync_auth_reason = "revoked"
             return None
         return {
             "user_id": cred["user_id"],
             "school_id": cred["school_id"],
+            "tenant_id": school["tenant_id"],
             "role": user["role"],
             "position": user["position"],
             "device_id": device_id,
         }
     if "user_id" in session and session.get("role") in STAFF_ROLES:
+        school = conn.execute(
+            "SELECT tenant_id, activation_status, is_suspended, is_archived FROM schools WHERE id=?",
+            (session.get("school_id"),)
+        ).fetchone()
+        if not school or school["tenant_id"] != session.get("tenant_id") or school["activation_status"] != "active" or school["is_suspended"] or school["is_archived"]:
+            g.sync_auth_reason = "school_access_denied"
+            return None
         return {
             "user_id": session["user_id"],
             "school_id": session["school_id"],
+            "tenant_id": school["tenant_id"],
             "role": session["role"],
             "position": session.get("position"),
             "device_id": request.headers.get("X-Device-Id"),  # online but device already enrolled
@@ -848,7 +863,10 @@ def enroll():
             device_label=body.get("device_label"),
             device_id=body.get("device_id"),  # re-enrolling the same device keeps its id
         )
-        user = conn.execute("SELECT name FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        user = conn.execute("SELECT name, tenant_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        school = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (session["school_id"],)).fetchone()
+        if not school or not user or not user["tenant_id"] or user["tenant_id"] != school["tenant_id"]:
+            return jsonify({"error": "tenant_mismatch"}), 403
         return jsonify({
             "device_id": cred["device_id"],
             "device_secret": cred["secret"],
@@ -860,6 +878,7 @@ def enroll():
                 "role": session["role"],
                 "position": session.get("position"),
                 "school_id": session["school_id"],
+                "tenant_id": school["tenant_id"],
             },
         })
     finally:
@@ -916,6 +935,9 @@ def _school_meta(conn, school_id):
         return None
     return {
         "id": row["id"],
+        "school_code": row["school_code"],
+        "tenant_id": row["tenant_id"],
+        "school_level": row["school_level"],
         "name": row["name"],
         "logo_align": row["logo_align"],
         "has_logo": bool(row["logo_filename"]),
