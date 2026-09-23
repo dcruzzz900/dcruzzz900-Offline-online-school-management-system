@@ -15,6 +15,14 @@
         <label>School Name</label>
         <input type="text" name="school_name" required>
 
+        <label>School Level</label>
+        <select name="school_level" required>
+            <option value="nursery">Nursery</option>
+            <option value="primary">Primary</option>
+            <option value="secondary" selected>Secondary</option>
+            <option value="combined">Nursery + Primary + Secondary</option>
+        </select>
+
         <label>School's Registered Email</label>
         <input type="email" name="registered_email" required>
 
@@ -27,5 +35,6 @@
         <button class="btn" type="submit" style="margin-top:1rem;">Onboard School &amp; Send Activation Code</button>
     </form>
 </div>
+<p style="color:#666;font-size:.85rem;">A permanent School ID and Tenant ID will be generated automatically and cannot be changed by school users.</p>
 <a class="btn btn-small" href="{{ url_for('platform_schools') }}">&larr; Back to Schools</a>
 {% endblock %}
