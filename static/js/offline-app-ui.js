@@ -23,6 +23,7 @@
             .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"));
     let session = null;   // { device_id, device_secret, user, started_at }
     let schoolId = null;
+    let clockInterval = null;
 
     function el(html) {
         const t = document.createElement("template");
@@ -32,6 +33,41 @@
 
     function todayStr() {
         return new Date().toISOString().slice(0, 10);
+    }
+
+    // A live date/time card shown at the top of every dashboard, in the
+    // school's timezone (Africa/Lagos / WAT) and the dd/mm/yyyy format
+    // used throughout the rest of the system. frame() clears the previous
+    // interval on every navigation so this never leaks timers.
+    function datetimeCardHtml() {
+        return `<div class="card" id="datetime-card" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; padding:0.85rem 1.2rem;">
+            <div>
+                <div id="datetime-card-date" style="font-size:1.05rem; font-weight:600;">&nbsp;</div>
+                <div id="datetime-card-time" style="font-size:0.9rem; color:#666;">&nbsp;</div>
+            </div>
+        </div>`;
+    }
+
+    function startLiveClock() {
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+        const dateEl = root.querySelector("#datetime-card-date");
+        const timeEl = root.querySelector("#datetime-card-time");
+        if (!dateEl || !timeEl) return;
+        const TZ = "Africa/Lagos";
+        const weekdayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, weekday: "long" });
+        const partsFmt = new Intl.DateTimeFormat("en-GB", {
+            timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric",
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+        });
+        function tick() {
+            const now = new Date();
+            const parts = {};
+            partsFmt.formatToParts(now).forEach((p) => { parts[p.type] = p.value; });
+            dateEl.textContent = `${weekdayFmt.format(now)}, ${parts.day}/${parts.month}/${parts.year}`;
+            timeEl.textContent = `${parts.hour}:${parts.minute}:${parts.second} (WAT)`;
+        }
+        tick();
+        clockInterval = setInterval(tick, 1000);
     }
 
     // ---------------- boot ----------------
@@ -289,6 +325,7 @@
         const [students, classes, users, subjects] = await Promise.all(
             ["students", "classes", "users", "subjects"].map((e) => OfflineDB.getAll(schoolId, e)));
         const body = el(`<div>
+            ${datetimeCardHtml()}
             ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set. Set one up under Terms (needs internet).</p>`}
             <div class="stat-grid">
                 <div class="stat-box"><div class="num">${students.filter((s) => s.is_active).length}</div><div class="label">Students</div></div>
@@ -310,6 +347,7 @@
         add("#dashResults", "Go to Classes", "results", true);
         for (const [t, r] of [["Attendance / Roll Call", "attendance"], ["Score Entry", "scores"], ["Teacher / Principal Comments", "comments"], ["Student Registration", "register"], ["Roll-Call History", "roll-call-history"]]) add("#dashWork", t, r);
         frame("Admin Dashboard", body);
+        startLiveClock();
     }
 
     async function renderTeacherDashboard() {
@@ -322,6 +360,7 @@
             return `<tr><td>${esc(c ? c.name : "")}</td><td>${esc(s ? s.name : "")}</td><td><a class="btn btn-small" href="#/scores">Enter Scores</a></td></tr>`;
         }).join("");
         const body = el(`<div>
+            ${datetimeCardHtml()}
             ${isFormTeacher ? `<a href="#/attendance" class="btn btn-small">Manage My Class Register</a>` : ""}
             ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set yet. Contact the admin.</p>`}
             <div class="card"><h3>Your Subject Assignments</h3>
@@ -336,6 +375,7 @@
             </div>
         </div>`);
         frame(`Welcome, ${session.user.name}`, body);
+        startLiveClock();
     }
 
     async function renderSetupHub() {
@@ -786,6 +826,7 @@
     // ---------------- home ----------------
 
     function frame(title, bodyEl) {
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
         renderNavbar();
         root.innerHTML = "";
         const wrap = el(`<div></div>`);
