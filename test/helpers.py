@@ -35,6 +35,19 @@ def login(client, username, password):
                        follow_redirects=False)
 
 
+def parent_login(client, identifier, password):
+    """Log in through the real /parent/login form."""
+    client.get("/parent/login")
+    with client.session_transaction() as s:
+        token = s.get("_csrf_token")
+    if not token:
+        client.get("/parent/login")
+        with client.session_transaction() as s:
+            token = s["_csrf_token"]
+    return client.post("/parent/login", data={"username": identifier, "password": password, "csrf_token": token},
+                       follow_redirects=False)
+
+
 def csrf(client):
     with client.session_transaction() as s:
         if "_csrf_token" not in s:

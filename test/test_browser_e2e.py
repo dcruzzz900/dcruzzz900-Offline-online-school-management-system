@@ -193,7 +193,7 @@ def test_offline_app_in_a_real_browser():
             page.fill("#tUsername", "offlineteacher")
             page.fill("#tPassword", "Sup3r-secret-pw")
             page.click("#tSaveBtn")
-            page.wait_for_function("document.querySelector('#tMsg').textContent.includes('Saved') && document.querySelector('#tMsg').textContent.includes('offline')", timeout=30000)
+            page.wait_for_function("document.querySelector('#tMsg').textContent.includes('Saved on this device')", timeout=30000)
             stored = page.evaluate(f"OfflineDB.getByStatus({ids['school']}, 'users', 'pending').then(r => JSON.stringify(r))")
             assert "Sup3r-secret-pw" not in stored, "plaintext password reached IndexedDB"
             assert "pbkdf2:sha256:600000$" in stored
