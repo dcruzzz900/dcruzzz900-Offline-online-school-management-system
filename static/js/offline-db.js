@@ -41,7 +41,7 @@ const OfflineDB = (function () {
     // IndexedDB run onupgradeneeded for devices that enrolled before that
     // store existed, so they pick it up next time they open the DB.
     // v6 added "timetable_periods"/"timetable_entries".
-    const SCHOOL_DB_VERSION = 6;
+    const SCHOOL_DB_VERSION = 7;
 
     function openDb(name, version, onUpgrade) {
         return new Promise((resolve, reject) => {
@@ -67,6 +67,7 @@ const OfflineDB = (function () {
                     const store = db.createObjectStore(entity, { keyPath: "client_uuid" });
                     store.createIndex("sync_status", "_sync.status");
                     store.createIndex("updated_at", "updated_at");
+                    store.createIndex("tenant_id", "tenant_id");
                 }
             }
             if (!db.objectStoreNames.contains("_meta")) {
@@ -120,17 +121,24 @@ const OfflineDB = (function () {
     // ---- per-school entity storage ----
 
     async function putRecord(schoolId, entity, record) {
+        // Tenant identity is copied from the server-authenticated school profile,
+        // never accepted from a form or URL.
+        const tenant = await getMeta(schoolId, "tenant_id");
+        const safeRecord = Object.assign({}, record);
+        if (tenant) safeRecord.tenant_id = tenant;
         const db = await openSchoolDb(schoolId);
-        await tx(db, entity, "readwrite", (t) => t.objectStore(entity).put(record));
+        await tx(db, entity, "readwrite", (t) => t.objectStore(entity).put(safeRecord));
         db.close();
     }
 
     async function putRecords(schoolId, entity, records) {
         if (!records.length) return;
+        const tenant = await getMeta(schoolId, "tenant_id");
+        const safeRecords = tenant ? records.map(r => Object.assign({}, r, {tenant_id: tenant})) : records;
         const db = await openSchoolDb(schoolId);
         await tx(db, entity, "readwrite", (t) => {
             const store = t.objectStore(entity);
-            records.forEach((r) => store.put(r));
+            safeRecords.forEach((r) => store.put(r));
         });
         db.close();
     }

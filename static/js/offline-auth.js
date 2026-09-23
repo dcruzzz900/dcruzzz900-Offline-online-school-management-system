@@ -81,9 +81,13 @@ const OfflineAuth = (function () {
             username: data.user.username || null,
             user_id: data.user.user_id,
             school_id: data.user.school_id,
+            tenant_id: data.user.tenant_id || null,
             enrolled_at: new Date().toISOString(),
             expires_at: data.expires_at,
         });
+        if (data.user.tenant_id) {
+            await OfflineDB.setMeta(data.user.school_id, "tenant_id", data.user.tenant_id);
+        }
         if (opts.bootstrap !== false) {
             // Seed the local database immediately so this device works offline
             // even if it never gets a second online moment before connectivity is lost.
