@@ -1,4 +1,207 @@
-# What changed for everyday use: one app
+# Update: Result Design Customization + Digital Signatures
+
+## What's new in this update
+
+- **Result-sheet theme color**: pick a color (School Profile) used for
+  headings and table headers on the terminal result — on screen and in
+  the downloaded PDF. Doesn't affect the rest of the app's color scheme.
+- **School-name alignment on the result sheet**, separate from the
+  existing logo alignment on the dashboard — left, center, or right.
+- **Preview before saving**: a "Preview Result Design" button on School
+  Profile opens a sample result in a new tab using whatever you've typed
+  into the form so far, without saving anything — so you can see the
+  effect before committing to it.
+- **Digital signatures**: any teacher or admin/principal can upload a
+  signature image from Settings → Digital Signature and turn it on. Once
+  enabled, that person's signature image is placed automatically in the
+  correct spot on results — Teacher's Signature for whoever is the form
+  teacher of the class, Principal's Signature for whoever holds the
+  Principal position — with the date kept in its usual place either way.
+  Nobody's forced into this — leaving it off keeps today's blank
+  manual-signature line exactly as before.
+
+## Database changes
+
+One new migration step (`result_design_and_signatures`) adds four new
+columns (`schools.school_name_align`, `schools.result_theme_color`,
+`users.signature_filename`, `users.use_digital_signature`) — additive
+only, runs automatically on first start.
+
+## Steps
+
+1. Log in to **pythonanywhere.com**, go to **Files**, upload the new
+   `school-result-system-update.zip`.
+2. Open a **Bash** console:
+   ```
+   cd school-results
+   python backup_db.py
+   ```
+3. Unzip and copy over the changed files:
+   ```
+   cd ~
+   unzip -o school-result-system-update.zip -d new_version
+   cp new_version/school-results/app.py school-results/app.py
+   cp new_version/school-results/db.py school-results/db.py
+   cp new_version/school-results/pdf_utils.py school-results/pdf_utils.py
+   cp new_version/school-results/schema.sql school-results/schema.sql
+   cp -r new_version/school-results/templates/. school-results/templates/
+   ```
+4. Go to **Web** and click **Reload**. The database upgrades itself on
+   the first request.
+5. Test it:
+   - Go to **School Profile**, pick a theme color and a school-name
+     alignment, click **Preview Result Design** — confirm the sample
+     result reflects what you picked, then **Save Changes** for real.
+   - As a teacher, go to **Settings**, upload a signature image, enable
+     it, then open a result for one of your form-teacher class's
+     students and confirm your signature shows up in place of the blank
+     line, on screen and in the PDF.
+
+If anything looks off after reloading, check the **Error log** link on
+the Web tab and paste me what it says.
+
+---
+
+# Update: Parent Profile (Parent Accounts + Portal)
+
+## What's new in this update
+
+- **Parent accounts are now a real, login-capable entity** — separate from
+  the free-text parent/guardian fields already on a student's record
+  (those are untouched and still shown on the student profile).
+- **Admin → Parents** page: add a parent (name, phone and/or email,
+  password, address), link them to one or more children by admission
+  number with an optional relationship label (Mother, Father, Guardian,
+  etc.), deactivate/reactivate, reset password, delete, and unlink a
+  specific child.
+- **A parent portal at `/parent/login`**, separate from staff and student
+  logins. Parents log in with their phone or email, see a dashboard of
+  their linked children, and can open each child's profile (photo, class,
+  basic info) and view/download any of that child's *published* term
+  results — nothing else. A parent can never see a child they aren't
+  linked to, or any other school's data.
+- Adding a parent works offline too (same queued-and-replayed pattern as
+  Add Teacher); the parent portal itself is a normal online web experience
+  (it isn't part of the offline-installable app, since it's read-only and
+  used occasionally rather than for daily school operations).
+
+## Database changes
+
+One new migration step (`parent_accounts`) creates two new tables
+(`parents`, `parent_students`) — purely additive, runs automatically on
+first start, no existing data touched.
+
+## Steps
+
+1. Log in to **pythonanywhere.com**, go to **Files**, upload the new
+   `school-result-system-update.zip`.
+2. Open a **Bash** console:
+   ```
+   cd school-results
+   python backup_db.py
+   ```
+3. Unzip and copy over the changed files:
+   ```
+   cd ~
+   unzip -o school-result-system-update.zip -d new_version
+   cp new_version/school-results/app.py school-results/app.py
+   cp new_version/school-results/db.py school-results/db.py
+   cp new_version/school-results/schema.sql school-results/schema.sql
+   cp -r new_version/school-results/templates/. school-results/templates/
+   ```
+4. Go to **Web** and click **Reload**. The database upgrades itself on
+   the first request.
+5. Test it:
+   - As an admin, go to **Parents**, add a parent with an email or phone,
+     link them to an existing student by admission number.
+   - Open a private/incognito window, go to `/parent/login`, sign in with
+     that email/phone, confirm you see the linked child and (once a term
+     is published) can view their result.
+   - Confirm a parent cannot open `/parent/children/<id>` for a child that
+     isn't linked to them (they'll see an access-denied message).
+
+If anything looks off after reloading, check the **Error log** link on
+the Web tab and paste me what it says.
+
+---
+
+# Update: Login by Email/Phone, Staff Contact Fields, Passport Photo & Parent Relationship
+
+## What's new in this update
+
+- **Login by username, email, or phone.** The login box now accepts any of
+  the three. Existing usernames keep working exactly as before — this is
+  additive, nobody's login changes unless they choose to add an email/phone.
+- **Staff can have an email and phone number on file**, settable three ways:
+  optionally at self-registration, by an admin from **Teachers** (inline
+  Save next to each row), or by the staff member themselves from
+  **Settings → Your Account**. Each is optional and must be unique
+  platform-wide (same rule as usernames) — you'll get a clear error if one
+  is already in use.
+- **Students can have an optional passport photo**, uploaded from the
+  student's profile page. Like the school logo, this requires an internet
+  connection to upload (photos are not bulk-synced to offline devices — the
+  rest of the student's record still is).
+- **A "Relationship to Student" field** (e.g. Mother, Father, Uncle)
+  alongside the existing parent/guardian contact fields — available
+  everywhere those fields already are: Admin → Students, a form teacher's
+  Class Register (add + inline edit), and both CSV import/export paths.
+
+---
+
+## Database changes
+
+Two new migration steps (`user_contact_identifiers`,
+`student_photo_and_relationship`) run automatically the first time the
+updated app starts — no manual SQL needed, and no data is touched beyond
+adding the new (empty) columns. As always, back up first.
+
+## Steps
+
+1. Log in to **pythonanywhere.com** and go to the **Files** tab.
+2. Upload this new `school-result-system.zip` to your home directory.
+3. Go to the **Consoles** tab, open a **Bash** console.
+4. Back up your database first:
+   ```
+   cd school-results
+   python backup_db.py
+   ```
+5. Unzip the new version to a temporary folder:
+   ```
+   cd ~
+   unzip -o school-result-system.zip -d new_version
+   ```
+6. Copy over the changed files (skips `instance/`, so your database is untouched):
+   ```
+   cp new_version/school-results/app.py school-results/app.py
+   cp new_version/school-results/db.py school-results/db.py
+   cp new_version/school-results/sync_api.py school-results/sync_api.py
+   cp new_version/school-results/schema.sql school-results/schema.sql
+   cp -r new_version/school-results/templates/. school-results/templates/
+   ```
+7. Reload dependencies aren't needed this time (no new packages), but it's
+   safe to run:
+   ```
+   workon schoolenv
+   cd school-results
+   pip install -r requirements.txt
+   ```
+8. Go to the **Web** tab and click the big green **Reload** button. The
+   database upgrades itself on this first request.
+9. Test it:
+   - Log in with your usual username — should work unchanged.
+   - As an admin, go to **Teachers**, add an email/phone to a teacher's row
+     and hit **Save**, then log out and log back in using that email —
+     should work.
+   - Open a student's profile, upload a passport photo, confirm it shows.
+   - Add a "Relationship to Student" on a student and confirm it saves.
+
+If anything looks off after reloading, check the **Error log** link on the
+Web tab and paste me what it says.
+
+---
+
+
 
 Staff now land in **the app** after logging in (`/app`) instead of the old server-rendered
 dashboard. It looks and navigates like the old one (same colours, top bar and menu) but

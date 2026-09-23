@@ -1011,20 +1011,66 @@ def migration_030_materials_syncable(conn):
     """)
 
 
-def migration_031_user_contact_fields(conn):
-    """Optional email/phone per staff account, so login can accept whichever
-    identifier (username, email, or phone) the person types."""
+def migration_031_user_contact_identifiers(conn):
+    """Lets staff log in with an email or phone number in addition to their
+    username (the login form now accepts any of the three). Both are
+    optional and, when present, unique platform-wide — same as username —
+    so the login lookup can never match two different accounts."""
     ensure_column(conn, "users", "email", "TEXT")
     ensure_column(conn, "users", "phone", "TEXT")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL AND email != ''")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL AND phone != ''")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL")
 
 
-def migration_032_attendance_source(conn):
-    """Records whether an attendance entry was taken online or offline (spec items 2-3),
-    system-generated at the moment it was taken -- never a value the user types in."""
-    ensure_column(conn, "attendance_records", "source", "TEXT DEFAULT 'online'")
-    ensure_column(conn, "staff_attendance", "source", "TEXT DEFAULT 'online'")
+def migration_032_student_photo_and_relationship(conn):
+    """Optional passport photo (uploaded like the school logo — online only,
+    never bulk-synced to devices) and a guardian relationship field
+    alongside the existing parent_* contact columns."""
+    ensure_column(conn, "students", "parent_relationship", "TEXT")
+    ensure_column(conn, "students", "photo_filename", "TEXT")
+
+
+def migration_033_parent_accounts(conn):
+    """Parent Profile as a real entity: login-capable parent accounts,
+    linked to one or more students. Additive only — the existing free-text
+    parent_* fields on students are untouched."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            password_hash TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_phone ON parents(phone) WHERE phone IS NOT NULL")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_email ON parents(email) WHERE email IS NOT NULL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            relationship TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent_id) REFERENCES parents(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_students_pair ON parent_students(parent_id, student_id)")
+
+
+def migration_034_result_design_and_signatures(conn):
+    """Result design customization (theme color, separate school-name
+    alignment) and digital signatures for teachers/principals."""
+    ensure_column(conn, "schools", "school_name_align", "TEXT NOT NULL DEFAULT 'center'")
+    ensure_column(conn, "schools", "result_theme_color", "TEXT DEFAULT '#1f3a5f'")
+    ensure_column(conn, "users", "signature_filename", "TEXT")
+    ensure_column(conn, "users", "use_digital_signature", "INTEGER DEFAULT 0")
 
 
 STEPS = [
@@ -1037,8 +1083,10 @@ STEPS = [
     ("skills_syncable", migration_028_skills_syncable),
     ("class_arms", migration_029_class_arms),
     ("materials_syncable", migration_030_materials_syncable),
-    ("user_contact_fields", migration_031_user_contact_fields),
-    ("attendance_source", migration_032_attendance_source),
+    ("user_contact_identifiers", migration_031_user_contact_identifiers),
+    ("student_photo_and_relationship", migration_032_student_photo_and_relationship),
+    ("parent_accounts", migration_033_parent_accounts),
+    ("result_design_and_signatures", migration_034_result_design_and_signatures),
 ]
 
 

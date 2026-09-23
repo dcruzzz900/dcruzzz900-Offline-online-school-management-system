@@ -8,7 +8,7 @@ from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 
 # Reportlab only ships the base-14 fonts without embedding a font file, so
 # "font customization" here means choosing among these three families —
@@ -34,10 +34,11 @@ def _apply_pdf_font(styles, font_choice):
     return regular, bold
 
 
-def _header_elements(school_name, logo_path, document_title, subtitle_text, styles):
+def _header_elements(school_name, logo_path, document_title, subtitle_text, styles, theme_color="#1f3a5f", name_align="center"):
     """Shared letterhead: logo (if any) + school name + document title + subtitle."""
-    school_style = ParagraphStyle("school", parent=styles["Heading1"], alignment=TA_CENTER, fontSize=16)
-    title_style = ParagraphStyle("title", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.HexColor("#1f3a5f"))
+    align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT}
+    school_style = ParagraphStyle("school", parent=styles["Heading1"], alignment=align_map.get(name_align, TA_CENTER), fontSize=16)
+    title_style = ParagraphStyle("title", parent=styles["Heading2"], alignment=TA_CENTER, textColor=colors.HexColor(theme_color))
     sub_style = ParagraphStyle("sub", parent=styles["Normal"], alignment=TA_CENTER)
 
     elements = []
@@ -107,9 +108,10 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
     return buf
 
 
-def _result_elements(data, term, school_name, logo_path, student_full_name, styles):
+def _result_elements(data, term, school_name, logo_path, student_full_name, styles, theme_color="#1f3a5f", name_align="center", signature_paths=None):
     """Builds the flowable elements for one student's terminal result —
     shared by the single-student PDF and the whole-class PDF."""
+    signature_paths = signature_paths or {}
     section_style = ParagraphStyle("section", parent=styles["Heading3"])
     regular = styles["Normal"].fontName
     bold = styles["Heading1"].fontName
@@ -121,7 +123,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements = _header_elements(
         school_name, logo_path, "TERMINAL REPORT SHEET",
         f"{term['session_name']} &mdash; {term['name']}",
-        styles,
+        styles, theme_color=theme_color, name_align=name_align,
     )
     if data.get("result_date"):
         elements.append(Paragraph(f"Date: {data['result_date']}", ParagraphStyle(
@@ -157,7 +159,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
                        else [4.2 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 3 * cm])
     subj_table = Table(subj_data, repeatRows=1, colWidths=subj_col_widths)
     subj_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3a5f")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme_color)),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
         ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -176,7 +178,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             skill_data.append([r["name"], r["category"].title(), str(r["rating"])])
         skill_table = Table(skill_data, colWidths=[6 * cm, 4 * cm, 4 * cm])
         skill_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f3a5f")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(theme_color)),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, -1), regular),
             ("FONTNAME", (0, 0), (-1, 0), bold),
@@ -211,6 +213,17 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements.append(Paragraph(f"<b>Teacher's Comment:</b> {teacher_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     teacher_date = format_dmy(info["teacher_signed_date"]) if info and info["teacher_signed_date"] else "________________"
+    teacher_sig_path = signature_paths.get("teacher")
+    if teacher_sig_path and os.path.exists(teacher_sig_path):
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(teacher_sig_path) as im:
+                w, h = im.size
+            target_h = 1.1 * cm
+            target_w = min(target_h * (w / h), 5 * cm)
+            elements.append(Image(teacher_sig_path, width=target_w, height=target_h))
+        except Exception:
+            pass
     elements.append(Paragraph(
         f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}",
         normal,
@@ -221,6 +234,17 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements.append(Paragraph(f"<b>Principal's Comment:</b> {principal_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     principal_date = format_dmy(info["principal_signed_date"]) if info and info["principal_signed_date"] else "________________"
+    principal_sig_path = signature_paths.get("principal")
+    if principal_sig_path and os.path.exists(principal_sig_path):
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(principal_sig_path) as im:
+                w, h = im.size
+            target_h = 1.1 * cm
+            target_w = min(target_h * (w / h), 5 * cm)
+            elements.append(Image(principal_sig_path, width=target_w, height=target_h))
+        except Exception:
+            pass
     elements.append(Paragraph(
         f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}",
         normal,
@@ -229,18 +253,21 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     return elements
 
 
-def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica"):
+def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
+                      theme_color="#1f3a5f", name_align="center", signature_paths=None):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
-    elements = _result_elements(data, term, school_name, logo_path, student_full_name, styles)
+    elements = _result_elements(data, term, school_name, logo_path, student_full_name, styles,
+                                 theme_color=theme_color, name_align=name_align, signature_paths=signature_paths)
     doc.build(elements)
     buf.seek(0)
     return buf
 
 
-def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica"):
+def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
+                             theme_color="#1f3a5f", name_align="center", signature_paths=None):
     """One combined, printable PDF containing every student's terminal
     result in a class, each starting on its own page."""
     buf = io.BytesIO()
@@ -251,7 +278,8 @@ def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, s
     for i, data in enumerate(data_list):
         if i > 0:
             elements.append(PageBreak())
-        elements.extend(_result_elements(data, term, school_name, logo_path, student_full_name, styles))
+        elements.extend(_result_elements(data, term, school_name, logo_path, student_full_name, styles,
+                                          theme_color=theme_color, name_align=name_align, signature_paths=signature_paths))
     doc.build(elements)
     buf.seek(0)
     return buf

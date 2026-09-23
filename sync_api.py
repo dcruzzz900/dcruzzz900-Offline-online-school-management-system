@@ -334,15 +334,6 @@ def _check_grade_band(conn, identity, existing, fields):
     fields["min_score"], fields["max_score"] = lo, hi
 
 
-def _normalize_attendance_source(fields):
-    """'source' says whether the entry was taken online or offline -- it is set by the
-    client automatically from its own connectivity state at the moment of saving, never
-    typed by a person, so an unrecognised value is simply treated as 'online' rather than
-    rejecting an otherwise-good attendance entry."""
-    if "source" in fields and fields["source"] not in ("online", "offline"):
-        fields["source"] = "online"
-
-
 def _validate_staff_attendance(conn, identity, fields):
     from db import STAFF_ATTENDANCE_STATUSES
     if "status" in fields and fields["status"] not in STAFF_ATTENDANCE_STATUSES:
@@ -352,7 +343,6 @@ def _validate_staff_attendance(conn, identity, fields):
             datetime.date.fromisoformat(str(fields["date"]))
         except ValueError:
             raise SyncValidationError("Attendance date must be YYYY-MM-DD.")
-    _normalize_attendance_source(fields)
 
 
 def _validate_attendance(conn, identity, fields):
@@ -363,7 +353,6 @@ def _validate_attendance(conn, identity, fields):
             datetime.date.fromisoformat(str(fields["date"]))
         except ValueError:
             raise SyncValidationError("Attendance date must be YYYY-MM-DD.")
-    _normalize_attendance_source(fields)
 
 
 def _guard_user_update(conn, identity, existing, fields):
@@ -385,7 +374,7 @@ ENTITIES = {
         "table": "students",
         "fields": ["admission_no", "first_name", "last_name", "other_names", "gender",
                    "class_id", "date_of_birth", "religion", "parent_name", "parent_address",
-                   "parent_email", "parent_phone", "is_active"],
+                   "parent_email", "parent_phone", "parent_relationship", "is_active"],
         "school_col": _school_via_class,
         "scope_ids": _teacher_class_ids,
         "scope_col": "class_id",
@@ -412,7 +401,7 @@ ENTITIES = {
     },
     "attendance_records": {
         "table": "attendance_records",
-        "fields": ["student_id", "class_id", "term_id", "date", "status", "recorded_by", "source"],
+        "fields": ["student_id", "class_id", "term_id", "date", "status", "recorded_by"],
         "school_col": _school_via_class,
         "scope_ids": _teacher_class_ids,
         "scope_col": "class_id",
@@ -424,7 +413,7 @@ ENTITIES = {
     },
     "staff_attendance": {
         "table": "staff_attendance",
-        "fields": ["user_id", "date", "status", "recorded_by", "source"],
+        "fields": ["user_id", "date", "status", "recorded_by"],
         "school_col": "direct",
         "scope_ids": _admin_only_scope,
         "scope_col": None,
@@ -473,7 +462,7 @@ ENTITIES = {
     },
     "users": {
         "table": "users",
-        "fields": ["name", "username", "password", "password_hash", "role", "position"],
+        "fields": ["name", "username", "password", "password_hash", "role", "position", "email", "phone", "use_digital_signature"],
         "school_col": "direct",
         "scope_ids": _admin_only_scope,
         "scope_col": None,
@@ -1376,15 +1365,6 @@ def _apply_one(conn, identity, change):
     new_fields = dict(fields)
     new_fields["client_uuid"] = client_uuid
     new_fields["updated_at"] = now
-    if entity in ("attendance_records", "staff_attendance"):
-        # recorded_at is system-generated -- the moment the device actually saved the entry
-        # (its own client_ts, captured automatically when the person tapped save), not the
-        # moment it happens to reach the server. An offline entry keeps that original time
-        # even if it syncs hours or days later; recorded_at is never present in "fields"
-        # (it isn't in the entity's writable field list) so this is the only place it's set,
-        # and it is never touched again on later corrections -- see the UPDATE branch above.
-        new_fields["recorded_at"] = change.get("client_ts") or now
-        new_fields.setdefault("source", "online")
     cols = ", ".join(new_fields.keys())
     placeholders = ", ".join("?" for _ in new_fields)
     try:

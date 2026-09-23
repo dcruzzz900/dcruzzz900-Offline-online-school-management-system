@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS schools (
     name TEXT NOT NULL DEFAULT 'My School',
     logo_filename TEXT,
     logo_align TEXT NOT NULL DEFAULT 'center',   -- left / center / right
+    school_name_align TEXT NOT NULL DEFAULT 'center',
+    result_theme_color TEXT DEFAULT '#1f3a5f',
     staff_signup_code TEXT,
     smtp_host TEXT,
     smtp_port INTEGER,
@@ -80,6 +82,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('admin', 'sub_admin', 'teacher')),
     position TEXT,
+    email TEXT,
+    phone TEXT,
+    signature_filename TEXT,
+    use_digital_signature INTEGER DEFAULT 0,
     security_question TEXT,
     security_answer_hash TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -154,6 +160,8 @@ CREATE TABLE IF NOT EXISTS students (
     parent_address TEXT,
     parent_email TEXT,
     parent_phone TEXT,
+    parent_relationship TEXT,
+    photo_filename TEXT,
     username TEXT,
     password_hash TEXT,
     last_notification_seen_id INTEGER DEFAULT 0,
@@ -166,6 +174,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_students_class_admission_no
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_students_username
     ON students(username) WHERE username IS NOT NULL;
+
+-- A parent/guardian account, separate from students.parent_* (which stays
+-- as simple free-text contact info shown on the student profile). A parent
+-- here is a real login-capable person who can be linked to one or more
+-- students via parent_students below.
+CREATE TABLE IF NOT EXISTS parents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    school_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    password_hash TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(school_id) REFERENCES schools(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_phone ON parents(phone) WHERE phone IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parents_email ON parents(email) WHERE email IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS parent_students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL,
+    relationship TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(parent_id) REFERENCES parents(id),
+    FOREIGN KEY(student_id) REFERENCES students(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_students_pair
+    ON parent_students(parent_id, student_id);
 
 -- Which class a student was in during each academic session. This is the
 -- source of truth for historical broadsheets/results after a promotion —
