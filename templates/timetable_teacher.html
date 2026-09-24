@@ -17,7 +17,14 @@
 {% if not periods %}
 <div class="card"><p>No periods have been set up yet.</p></div>
 {% else %}
-<div class="card" style="overflow-x:auto;">
+<div class="no-print" style="margin-bottom:0.75rem;">
+    <div class="seg-toggle">
+        <button type="button" class="on" id="ttBtnVertical" onclick="ttShow('vertical')">Vertical (periods down)</button>
+        <button type="button" id="ttBtnHorizontal" onclick="ttShow('horizontal')">Horizontal (periods across)</button>
+    </div>
+</div>
+
+<div class="card" style="overflow-x:auto;" id="ttVertical">
     <table class="timetable-grid">
         <tr>
             <th>Period</th>
@@ -49,11 +56,53 @@
         {% endfor %}
     </table>
 </div>
+
+<div class="card" style="overflow-x:auto; display:none;" id="ttHorizontal">
+    <table class="timetable-grid">
+        <tr>
+            <th>Day</th>
+            {% for p in periods %}<th style="white-space:nowrap;">{{ p.name }}{% if p.start_time %}<br><span style="font-weight:normal; font-size:0.7rem;">{{ p.start_time }}–{{ p.end_time or '?' }}</span>{% endif %}</th>{% endfor %}
+        </tr>
+        {% for idx, day in days %}
+        <tr>
+            <td style="white-space:nowrap;"><b>{{ day }}</b></td>
+            {% for p in periods %}
+            {% if p.is_break %}
+            <td style="text-align:center; background:#f5f0e0; font-style:italic;">{{ p.name }}</td>
+            {% else %}
+            {% set cell = grid.get((idx, p.id)) %}
+            <td>
+                {% if cell %}
+                <b>{{ cell.subject_name or '—' }}</b><br>
+                <span style="font-size:0.8rem;">{{ cell.class_name }}</span>
+                {% if cell.room %}<br><span style="font-size:0.75rem; color:#666;">Room: {{ cell.room }}</span>{% endif %}
+                {% else %}
+                <span style="color:#bbb;">—</span>
+                {% endif %}
+            </td>
+            {% endif %}
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </table>
+</div>
 {% endif %}
 
 <style>
 .timetable-grid { width:100%; border-collapse:collapse; }
 .timetable-grid th, .timetable-grid td { border:1px solid #ddd; padding:0.4rem; vertical-align:top; }
 .timetable-grid th { background:#f5f6f8; }
+.seg-toggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.seg-toggle button { appearance:none; border:none; background:#fff; padding:0.45rem 0.8rem; font:600 0.8rem 'Inter',sans-serif; color:#666; cursor:pointer; border-right:1px solid var(--border); }
+.seg-toggle button:last-child { border-right:none; }
+.seg-toggle button.on { background:var(--navy); color:#fff; }
 </style>
+<script>
+function ttShow(mode) {
+    document.getElementById('ttVertical').style.display = (mode === 'vertical') ? '' : 'none';
+    document.getElementById('ttHorizontal').style.display = (mode === 'horizontal') ? '' : 'none';
+    document.getElementById('ttBtnVertical').classList.toggle('on', mode === 'vertical');
+    document.getElementById('ttBtnHorizontal').classList.toggle('on', mode === 'horizontal');
+}
+</script>
 {% endblock %}
