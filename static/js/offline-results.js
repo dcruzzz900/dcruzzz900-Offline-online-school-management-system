@@ -264,7 +264,7 @@ const OfflineResults = (function () {
         .head h2 { font-size: 12pt; margin: 1mm 0 0; font-weight: normal; color:#333; }
         table { border-collapse: collapse; width: 100%; margin: 3mm 0; font-size: 10pt; }
         th, td { border: 1px solid #555; padding: 1.5mm 2mm; text-align: center; }
-        th { background: #182a44; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        th { background: #1f3a5f; color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         td.l, th.l { text-align: left; }
         .info td { border: none; text-align: left; padding: 0.8mm 2mm; }
         .sum { display:flex; gap: 8mm; font-size: 10pt; margin: 2mm 0; }
