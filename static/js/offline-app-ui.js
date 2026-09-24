@@ -90,28 +90,14 @@
     // (first-time setup downloads it, with progress), start automatic syncing, and
     // show the screen the address asks for.
     async function afterUnlock() {
-        try {
-            session = OfflineAuth.getSession();
-            if (!session || !session.user) throw new Error("Offline session is incomplete. Please sign in online again.");
-            schoolId = session.user.school_id;
-            if (!schoolId) throw new Error("This account is not assigned to a school.");
-            await loadProfile();
-            try { SyncEngine.startAutoSync(schoolId); } catch (e) { /* UI must remain usable if background sync cannot start */ }
-            const ready = await OfflineDB.getMeta(schoolId, "last_sync_at");
-            if (!ready) return renderFirstSetup();
-            try { SyncEngine.ensureReady(schoolId, session.device_id, session.device_secret).catch(() => {}); } catch (e) {}
-            return dispatch();
-        } catch (e) {
-            return renderBootError(e);
-        }
-    }
-
-    function renderBootError(error) {
-        clearNavbar();
-        const message = error && error.message ? error.message : "The offline app could not load its local data.";
-        root.innerHTML = `<div class="card" style="margin-top:1rem;"><h2>School dashboard could not load</h2><p>${esc(message)}</p><p>Your online account and server data have not been deleted.</p><div style="display:flex;gap:.5rem;flex-wrap:wrap;"><a class="btn" href="/dashboard?classic=1">Open online dashboard</a><button class="btn" id="retryApp">Retry</button></div></div>`;
-        const retry = document.getElementById("retryApp");
-        if (retry) retry.addEventListener("click", () => { root.innerHTML = ""; afterUnlock(); });
+        session = OfflineAuth.getSession();
+        schoolId = session.user.school_id;
+        await loadProfile();
+        SyncEngine.startAutoSync(schoolId);
+        const ready = await OfflineDB.getMeta(schoolId, "last_sync_at");
+        if (!ready) return renderFirstSetup();
+        SyncEngine.ensureReady(schoolId, session.device_id, session.device_secret).catch(() => {});
+        return dispatch();
     }
 
     async function loadProfile() {
@@ -124,8 +110,16 @@
         const tick = () => {
             const box = document.getElementById("liveClock");
             if (!box) return;
-            const d = new Date(), p = (n) => String(n).padStart(2, "0");
-            box.textContent = `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} — ${p(d.getHours())}:${p(d.getMinutes())}`;
+            const tz = (profile && profile.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const d = new Date();
+            try {
+                const dateStr = new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+                const timeStr = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+                box.textContent = `${dateStr} — ${timeStr}`;
+            } catch (e) {
+                const p = (n) => String(n).padStart(2, "0");
+                box.textContent = `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} — ${p(d.getHours())}:${p(d.getMinutes())}`;
+            }
         };
         tick();
         setInterval(tick, 15000);
@@ -166,12 +160,8 @@
     async function dispatch() {
         if (!session) return;
         const fn = ROUTES[currentRoute()] || ROUTES[""];
-        try {
-            await fn();
-            window.scrollTo(0, 0);
-        } catch (e) {
-            renderBootError(e);
-        }
+        await fn();
+        window.scrollTo(0, 0);
     }
 
     function isAdminRole() { return ["admin", "sub_admin"].includes(session.user.role); }
@@ -270,7 +260,7 @@
         const attention = (detail.conflict || 0) + (detail.failed || 0);
         let text, bg, fg;
         if (!online) { text = "🟠 Offline — Saved Locally"; bg = "#fff1dc"; fg = "#8a5300"; }
-        else if (detail.syncing || detail.pending) { text = "🔄 Syncing"; bg = "#e6effa"; fg = "#1f3a5f"; }
+        else if (detail.syncing || detail.pending) { text = "🔄 Syncing"; bg = "#e6effa"; fg = "#182a44"; }
         else if (attention) { text = `🟠 ${attention} to review`; bg = "#fff1dc"; fg = "#8a5300"; }
         else { text = "🟢 Online — Synced"; bg = "#e3f5e8"; fg = "#1d6b3a"; }
         pill.textContent = text;
@@ -323,15 +313,33 @@
         const timeEl = root.querySelector("#datetime-card-time");
         const dateEl = root.querySelector("#datetime-card-date");
         if (!timeEl || !dateEl) return;
-        // The school's configured timezone/date-format live on the server's
-        // `schools` row, which isn't (yet) synced into this device's offline
-        // database — so this clock uses the device's own local timezone,
-        // which in practice is the school's, since it's the device that's
-        // physically there.
+        // Prefer the school's configured timezone/date-format, synced onto this
+        // device as part of the "school" profile every bootstrap/pull already
+        // fetches; fall back to the device's own local timezone for a device
+        // that hasn't completed its first sync yet.
+        const tz = (profile && profile.timezone) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const fmt = (profile && profile.date_format) || "dmy";
         function render() {
             const now = new Date();
-            timeEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-            dateEl.textContent = now.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "2-digit" });
+            try {
+                timeEl.textContent = new Intl.DateTimeFormat("en-GB", {
+                    timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
+                }).format(now);
+                const parts = new Intl.DateTimeFormat("en-GB", {
+                    timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "2-digit",
+                }).formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+                if (fmt === "mdy") {
+                    dateEl.textContent = `${parts.weekday}, ${parts.month} ${parts.day}, ${parts.year}`;
+                } else if (fmt === "ymd") {
+                    const mm = new Intl.DateTimeFormat("en-GB", { timeZone: tz, month: "2-digit" }).format(now);
+                    dateEl.textContent = `${parts.year}-${mm}-${parts.day} (${parts.weekday})`;
+                } else {
+                    dateEl.textContent = `${parts.weekday}, ${parts.day} ${parts.month} ${parts.year}`;
+                }
+            } catch (e) {
+                timeEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                dateEl.textContent = now.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "2-digit" });
+            }
         }
         render();
         setInterval(render, 1000);
@@ -2190,5 +2198,5 @@
         frame("Sync Status & Conflicts", body);
     }
 
-    boot().catch((e) => renderBootError(e));
+    boot();
 })();
