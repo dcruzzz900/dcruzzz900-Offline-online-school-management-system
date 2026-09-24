@@ -1146,6 +1146,45 @@ def migration_038_timetable(conn):
         """)
 
 
+def migration_039_parent_portal(conn):
+    """A real parent/guardian identity with its own login, separate from the
+    denormalized parent_* contact fields still kept on each student row (those
+    stay as-is — used by registration, CSV import, and the printed result
+    sheet). A parents row is created explicitly by an admin from the Parent
+    Profile page, then linked to one or more student rows via
+    parent_students, so one login covers every child of that guardian.
+    Like the student portal, this is a browser-only login (no offline access
+    yet) — consistent with how student accounts already work."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            relationship TEXT,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            username TEXT UNIQUE,
+            password_hash TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_notification_seen_id INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parents_school ON parents(school_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            PRIMARY KEY (parent_id, student_id),
+            FOREIGN KEY(parent_id) REFERENCES parents(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id)")
+
+
 STEPS = [
     ("offline_sync", migration_024_offline_sync),
     ("deferred_actions", migration_025_deferred_actions),
@@ -1164,6 +1203,7 @@ STEPS = [
     ("student_status_contact", migration_036_student_status_contact),
     ("attendance_source", migration_037_attendance_source),
     ("timetable", migration_038_timetable),
+    ("parent_portal", migration_039_parent_portal),
 ]
 
 

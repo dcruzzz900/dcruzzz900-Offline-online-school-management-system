@@ -1942,10 +1942,122 @@ def parent_profile(student_id):
             "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1 ORDER BY s.first_name",
             (school_id, student["parent_email"]),
         ).fetchall()
+    parent_account = _find_parent_account(conn, school_id, student)
+    can_manage = session["role"] in ("admin", "sub_admin")
     conn.close()
     return render_template(
         "parent_profile.html", student=student, siblings=siblings, student_full_name=student_full_name,
+        parent_account=parent_account, can_manage=can_manage,
     )
+
+
+def _find_parent_account(conn, school_id, student):
+    """The parents row for this guardian, if an account has been created —
+    matched the same way parent_profile() groups siblings: by phone, falling
+    back to email."""
+    if student["parent_phone"]:
+        return conn.execute(
+            "SELECT * FROM parents WHERE school_id=? AND phone=?", (school_id, student["parent_phone"])
+        ).fetchone()
+    if student["parent_email"]:
+        return conn.execute(
+            "SELECT * FROM parents WHERE school_id=? AND email=?", (school_id, student["parent_email"])
+        ).fetchone()
+    return None
+
+
+@app.route("/students/<int:student_id>/parent/set_login", methods=["POST"])
+@login_required("admin", "sub_admin")
+def set_parent_login(student_id):
+    conn = get_db()
+    student = student_in_school(conn, student_id)
+    if not student:
+        conn.close()
+        flash("Student not found.", "error")
+        return redirect(url_for("dashboard"))
+    if not student["parent_phone"] and not student["parent_email"]:
+        conn.close()
+        flash("Add a parent/guardian phone or email to this student before creating a login.", "error")
+        return redirect(url_for("student_profile", student_id=student_id))
+
+    school_id = current_school_id()
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    if not username:
+        conn.close()
+        flash("Username is required.", "error")
+        return redirect(url_for("parent_profile", student_id=student_id))
+    if password and len(password) < 6:
+        conn.close()
+        flash("Password must be at least 6 characters.", "error")
+        return redirect(url_for("parent_profile", student_id=student_id))
+
+    account = _find_parent_account(conn, school_id, student)
+    try:
+        if account:
+            conn.execute(
+                "UPDATE parents SET name=?, relationship=?, phone=?, email=?, address=?, username=? WHERE id=?",
+                (student["parent_name"] or account["name"], student["parent_relationship"], student["parent_phone"],
+                 student["parent_email"], student["parent_address"], username, account["id"]),
+            )
+            parent_id = account["id"]
+            if password:
+                conn.execute("UPDATE parents SET password_hash=? WHERE id=?", (generate_password_hash(password), parent_id))
+        else:
+            cur = conn.execute(
+                "INSERT INTO parents (school_id, name, relationship, phone, email, address, username, password_hash) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (school_id, student["parent_name"] or "Parent/Guardian", student["parent_relationship"],
+                 student["parent_phone"], student["parent_email"], student["parent_address"], username,
+                 generate_password_hash(password) if password else None),
+            )
+            parent_id = cur.lastrowid
+            if not password:
+                conn.close()
+                flash("Set a password the first time you create this login.", "error")
+                return redirect(url_for("parent_profile", student_id=student_id))
+
+        # Link every currently-matching sibling (same lookup parent_profile()
+        # itself uses) so one login covers all of this guardian's children —
+        # re-run on every save so a newly registered sibling gets picked up.
+        if student["parent_phone"]:
+            siblings = conn.execute(
+                "SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id "
+                "WHERE c.school_id=? AND s.parent_phone=? AND s.is_active=1", (school_id, student["parent_phone"])
+            ).fetchall()
+        else:
+            siblings = conn.execute(
+                "SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id "
+                "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1", (school_id, student["parent_email"])
+            ).fetchall()
+        for s in siblings:
+            conn.execute("INSERT OR IGNORE INTO parent_students (parent_id, student_id) VALUES (?,?)", (parent_id, s["id"]))
+        conn.commit()
+        flash("Parent login saved.", "success")
+    except Exception:
+        conn.rollback()
+        flash("That username is already taken by another parent account.", "error")
+    conn.close()
+    return redirect(url_for("parent_profile", student_id=student_id))
+
+
+@app.route("/students/<int:student_id>/parent/remove_login", methods=["POST"])
+@login_required("admin", "sub_admin")
+def remove_parent_login(student_id):
+    conn = get_db()
+    student = student_in_school(conn, student_id)
+    if not student:
+        conn.close()
+        flash("Student not found.", "error")
+        return redirect(url_for("dashboard"))
+    account = _find_parent_account(conn, current_school_id(), student)
+    if account:
+        conn.execute("DELETE FROM parent_students WHERE parent_id=?", (account["id"],))
+        conn.execute("DELETE FROM parents WHERE id=?", (account["id"],))
+        conn.commit()
+        flash("Parent login removed.", "success")
+    conn.close()
+    return redirect(url_for("parent_profile", student_id=student_id))
 
 
 @app.route("/admin/parents")
@@ -1959,6 +2071,9 @@ def admin_parents():
         "WHERE c.school_id=? AND s.is_active=1 AND (s.parent_phone IS NOT NULL OR s.parent_email IS NOT NULL) "
         "ORDER BY s.parent_name", (school_id,)
     ).fetchall()
+    has_login = set()
+    for r in conn.execute("SELECT phone, email FROM parents WHERE school_id=? AND username IS NOT NULL", (school_id,)).fetchall():
+        has_login.add(r["phone"] or r["email"])
     conn.close()
     # Group by the same key parent_profile() uses (phone, falling back to email),
     # keeping only the first student id seen for each guardian as the entry point.
@@ -1969,7 +2084,9 @@ def admin_parents():
         if key in seen:
             continue
         seen[key] = True
-        guardians.append(r)
+        row = dict(r)
+        row["has_login"] = key in has_login
+        guardians.append(row)
     return render_template("admin_parents.html", guardians=guardians)
 
 
@@ -4807,6 +4924,205 @@ def report_student_history(fmt=None):
     return _send_report(fmt, "Academic History", headers, rows, fname)
 
 
+
+
+# ---------- parent portal ----------
+# A separate, browser-only login (no offline access yet — same as the
+# student portal below), scoped entirely to the parents/parent_students
+# tables so it can never see or touch staff/student credentials.
+
+def parent_login_required(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if "parent_id" not in session:
+            return redirect(url_for("parent_login"))
+        return f(*args, **kwargs)
+    return wrapped
+
+
+def _parent_own_child(conn, parent_id, student_id):
+    """The requested student, only if linked to this parent account —
+    the access boundary for every parent-facing route below."""
+    return conn.execute(
+        "SELECT s.* FROM students s JOIN parent_students ps ON ps.student_id=s.id "
+        "WHERE ps.parent_id=? AND s.id=?", (parent_id, student_id)
+    ).fetchone()
+
+
+@app.route("/parent/login", methods=["GET", "POST"])
+@rate_limit(max_attempts=10, window_seconds=300)
+def parent_login():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        conn = get_db()
+        parent = conn.execute("SELECT * FROM parents WHERE username=? AND is_active=1", (username,)).fetchone()
+        if parent and parent["password_hash"] and check_password_hash(parent["password_hash"], password):
+            school = get_school(conn, parent["school_id"])
+            conn.close()
+            if school and school["activation_status"] != "active":
+                flash("This school hasn't been activated yet.", "error")
+                return render_template("parent_login.html")
+            if school and school["is_archived"]:
+                flash("This school's account has been archived. Contact the platform administrator.", "error")
+                return render_template("parent_login.html")
+            if school and school["is_suspended"]:
+                flash("This school's account has been suspended. Contact the platform administrator.", "error")
+                return render_template("parent_login.html")
+            if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
+                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
+                return render_template("parent_login.html")
+            session.clear()
+            session["parent_id"] = parent["id"]
+            session["parent_name"] = parent["name"]
+            session["role"] = "parent"
+            session["school_id"] = school["id"] if school else None
+            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
+            return redirect(url_for("parent_dashboard"))
+        conn.close()
+        flash("Invalid username or password.", "error")
+    return render_template("parent_login.html")
+
+
+@app.route("/parent/logout")
+def parent_logout():
+    session.clear()
+    return redirect(url_for("parent_login"))
+
+
+@app.route("/parent/dashboard")
+@parent_login_required
+def parent_dashboard():
+    conn = get_db()
+    parent = conn.execute("SELECT * FROM parents WHERE id=?", (session["parent_id"],)).fetchone()
+    if not parent:
+        session.clear()
+        conn.close()
+        return redirect(url_for("parent_login"))
+    children = conn.execute(
+        "SELECT s.*, c.name as class_name FROM students s "
+        "JOIN parent_students ps ON ps.student_id=s.id "
+        "JOIN classes c ON c.id=s.class_id "
+        "WHERE ps.parent_id=? ORDER BY s.first_name", (parent["id"],)
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "parent_dashboard.html", parent=parent, children=children, student_full_name=student_full_name,
+    )
+
+
+@app.route("/parent/child/<int:student_id>")
+@parent_login_required
+def parent_child(student_id):
+    conn = get_db()
+    student = _parent_own_child(conn, session["parent_id"], student_id)
+    if not student:
+        conn.close()
+        flash("That student isn't linked to your account.", "error")
+        return redirect(url_for("parent_dashboard"))
+    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (student["class_id"],)).fetchone()
+    published_terms = conn.execute(
+        "SELECT terms.*, sessions.name as session_name FROM terms "
+        "JOIN sessions ON sessions.id = terms.session_id "
+        "JOIN enrollments e ON e.session_id = sessions.id "
+        "WHERE e.student_id=? AND terms.is_published=1 "
+        "ORDER BY sessions.id DESC, terms.id DESC",
+        (student["id"],),
+    ).fetchall()
+    recent_attendance = conn.execute(
+        "SELECT * FROM attendance_records WHERE student_id=? ORDER BY date DESC LIMIT 20", (student_id,)
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "parent_child.html", student=student, class_row=class_row, published_terms=published_terms,
+        recent_attendance=recent_attendance, student_full_name=student_full_name,
+    )
+
+
+@app.route("/parent/child/<int:student_id>/result/<int:term_id>")
+@parent_login_required
+def parent_child_result(student_id, term_id):
+    conn = get_db()
+    student = _parent_own_child(conn, session["parent_id"], student_id)
+    if not student:
+        conn.close()
+        flash("That student isn't linked to your account.", "error")
+        return redirect(url_for("parent_dashboard"))
+    term = conn.execute(
+        "SELECT terms.*, sessions.name as session_name FROM terms "
+        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
+    ).fetchone()
+    if not term or not term["is_published"]:
+        conn.close()
+        flash("That term's result isn't published yet.", "error")
+        return redirect(url_for("parent_child", student_id=student_id))
+    enrolled = conn.execute(
+        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
+    ).fetchone()
+    if not enrolled:
+        conn.close()
+        flash("This student wasn't enrolled in that term.", "error")
+        return redirect(url_for("parent_child", student_id=student_id))
+    data = build_result_data(conn, student_id, term_id)
+    all_traits = conn.execute(
+        "SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (session["school_id"],)
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "parent_child_result.html", term=term, student_full_name=student_full_name, all_traits=all_traits, **data
+    )
+
+
+@app.route("/parent/child/<int:student_id>/result/<int:term_id>/pdf")
+@parent_login_required
+def parent_child_result_pdf(student_id, term_id):
+    conn = get_db()
+    student = _parent_own_child(conn, session["parent_id"], student_id)
+    if not student:
+        conn.close()
+        flash("That student isn't linked to your account.", "error")
+        return redirect(url_for("parent_dashboard"))
+    term = conn.execute(
+        "SELECT terms.*, sessions.name as session_name FROM terms "
+        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
+    ).fetchone()
+    if not term or not term["is_published"]:
+        conn.close()
+        flash("That term's result isn't published yet.", "error")
+        return redirect(url_for("parent_child", student_id=student_id))
+    enrolled = conn.execute(
+        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
+    ).fetchone()
+    if not enrolled:
+        conn.close()
+        flash("This student wasn't enrolled in that term.", "error")
+        return redirect(url_for("parent_child", student_id=student_id))
+    data = build_result_data(conn, student_id, term_id)
+    school = get_school(conn, session["school_id"])
+    logo_path = None
+    if school and school["logo_filename"]:
+        p = os.path.join(INSTANCE_DIR, school["logo_filename"])
+        if os.path.exists(p):
+            logo_path = p
+    teacher_signature = None
+    if data.get("teacher_signature_user"):
+        u = data["teacher_signature_user"]
+        teacher_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
+    principal_signature = None
+    if data.get("principal_signature_user"):
+        u = data["principal_signature_user"]
+        principal_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
+    conn.close()
+    buf = build_result_pdf(
+        data, term, school_name=school["name"] if school else None,
+        logo_path=logo_path, student_full_name=student_full_name,
+        font_choice=school["pdf_font"] if school else "Helvetica",
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        name_align=school["name_align"] if school else None,
+        teacher_signature=teacher_signature, principal_signature=principal_signature,
+    )
+    filename = f"{student_full_name(data['student'])}_{term['name']}_Result.pdf".replace(" ", "_")
+    return send_file(buf, mimetype="application/pdf", as_attachment=False, download_name=filename)
 
 
 def student_login_required(f):
