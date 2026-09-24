@@ -160,6 +160,91 @@ app.jinja_env.filters["dmy"] = format_dmy
 app.register_blueprint(sync_bp)
 
 
+
+# ---------- Role & permission helpers ----------
+ROLE_CATALOG = {
+    "School Admin": ["view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users"],
+    "Principal": ["view","create","edit","approve","verify","finalize","lock","publish","import","export","manage_users"],
+    "Head Teacher": ["view","create","edit","approve","verify","finalize","publish","import","export","manage_users"],
+    "Vice Principal": ["view","create","edit","approve","verify","finalize","publish","export"],
+    "Deputy Head": ["view","create","edit","approve","verify","publish","export"],
+    "HOD": ["view","create","edit","approve","verify","export"],
+    "Examination/Result Officer": ["view","create","edit","verify","finalize","lock","publish","import","export"],
+    "ICT Officer": ["view","create","edit","import","export"],
+    "Finance/Bursar": ["view","create","edit","export"],
+    "Sub-Admin": ["view","create","edit","import","export"],
+    "Class Teacher": ["view","create","edit","import","export"],
+    "Teacher": ["view","create","edit","export"],
+    "Other Staff": ["view"],
+}
+SCHOOL_LEVELS = ("All","Nursery","Primary","Secondary")
+
+def active_role_assignments(conn, user_id, school_id):
+    today = datetime.date.today().isoformat()
+    return conn.execute("""
+        SELECT ra.*, u.name AS user_name, s.name AS school_name
+        FROM role_assignments ra
+        JOIN users u ON u.id=ra.user_id
+        JOIN schools s ON s.id=ra.school_id
+        WHERE ra.user_id=? AND ra.school_id=?
+          AND ra.status='active'
+          AND (ra.start_date IS NULL OR ra.start_date<=?)
+          AND (ra.end_date IS NULL OR ra.end_date>=?)
+        ORDER BY ra.id DESC
+    """, (user_id, school_id, today, today)).fetchall()
+
+def user_has_permission(conn, user_id, school_id, permission, school_level=None, class_id=None, subject_id=None):
+    rows = active_role_assignments(conn, user_id, school_id)
+    for ra in rows:
+        if school_level and ra["school_level"] not in ("All", school_level):
+            continue
+        if class_id and ra["class_id"] and int(ra["class_id"]) != int(class_id):
+            continue
+        if subject_id and ra["subject_id"] and int(ra["subject_id"]) != int(subject_id):
+            continue
+        p = conn.execute(
+            "SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",
+            (ra["id"], permission)
+        ).fetchone()
+        if p:
+            return True
+    # Legacy admin/sub-admin remain functional while assignments are being adopted.
+    if permission == "view" and session.get("role") in ("admin","sub_admin","teacher"):
+        return True
+    return session.get("role") == "admin"
+
+def role_scope_label(row):
+    parts = [row["school_level"]]
+    if row["department"]: parts.append(row["department"])
+    if row["class_id"]: parts.append(f"class #{row['class_id']}")
+    if row["class_arm"]: parts.append(f"arm {row['class_arm']}")
+    if row["subject_id"]: parts.append(f"subject #{row['subject_id']}")
+    return " · ".join(parts)
+
+
+
+# ---------- Scoped authorization helpers ----------
+def can_access_scope(user_id, school_id, permission, school_level=None, department=None, class_id=None, class_arm=None, subject_id=None):
+    """Server-side scope check; client-supplied tenant IDs are never trusted."""
+    conn=get_db()
+    if school_id != current_school_id() and session.get("role") != "admin":
+        conn.close(); return False
+    if session.get("role") == "admin":
+        conn.close(); return True
+    for a in active_role_assignments(conn,user_id,school_id):
+        if school_level and a["school_level"] not in ("All",school_level): continue
+        if department and a["department"] and a["department"] != department: continue
+        if class_id and a["class_id"] and int(a["class_id"]) != int(class_id): continue
+        if class_arm and a["class_arm"] and a["class_arm"] != class_arm: continue
+        if subject_id and a["subject_id"] and int(a["subject_id"]) != int(subject_id): continue
+        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",(a["id"],permission)).fetchone():
+            conn.close(); return True
+    conn.close(); return False
+
+def require_scoped_permission(permission, school_level=None, department=None, class_id=None, class_arm=None, subject_id=None):
+    uid=session.get("user_id"); sid=current_school_id()
+    return bool(uid and sid and can_access_scope(uid,sid,permission,school_level,department,class_id,class_arm,subject_id))
+
 @app.route("/healthz")
 def healthz():
     """Cheap liveness probe for hosts like Railway (no login, no data)."""
@@ -531,12 +616,17 @@ def teacher_in_school(conn, teacher_id):
     ).fetchone()
 
 
-def require_class_result_access(conn, class_id):
-    """Returns None if allowed, or a redirect response if denied."""
+def require_class_result_access(conn, class_id, permission="view"):
+    """Authorize a class using the authenticated user's scoped assignment first,
+    then retain the legacy form-teacher/result rule for older accounts."""
     class_row = class_in_school(conn, class_id)
     if not class_row:
         flash("That class doesn't exist.", "error")
         return redirect(url_for("dashboard"))
+    level = class_row["level"] if "level" in class_row.keys() else None
+    if can_access_scope(session.get("user_id"), current_school_id(), permission,
+                        school_level=level, class_id=class_id):
+        return None
     if not can_view_class_results(conn, session.get("role"), session.get("position"), session.get("user_id"), class_id):
         flash(
             "You don't have access to view results for this class. Only the principal, "
@@ -677,6 +767,8 @@ def login():
             session["role"] = user["role"]
             session["position"] = user["position"]
             session["school_id"] = user["school_id"]
+            session["tenant_id"] = school["tenant_id"] if school and "tenant_id" in school.keys() else None
+            session["school_code"] = school["school_code"] if school and "school_code" in school.keys() else None
             session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
             return redirect(url_for("dashboard"))
         conn.close()
@@ -1564,6 +1656,12 @@ def delete_account():
 def admin_classes():
     conn = get_db()
     school_id = current_school_id()
+    if request.method == "POST" and not require_scoped_permission("create"):
+        flash("You do not have permission to create classes in your assigned scope.", "error")
+        return redirect(url_for("admin_classes"))
+    if request.method == "GET" and not require_scoped_permission("view"):
+        flash("You do not have permission to view classes in your assigned scope.", "error")
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
         name = request.form["name"].strip()
         category = request.form.get("category", "").strip() or None
@@ -1622,6 +1720,9 @@ def admin_classes():
 @app.route("/admin/classes/<int:class_id>/set_category", methods=["POST"])
 @login_required("admin", "sub_admin")
 def set_class_category(class_id):
+    if not require_scoped_permission("edit", class_id=class_id):
+        flash("You do not have permission to edit this class.", "error")
+        return redirect(url_for("admin_classes"))
     conn = get_db()
     class_row = class_in_school(conn, class_id)
     if not class_row:
@@ -1643,6 +1744,9 @@ def set_class_category(class_id):
 @app.route("/admin/classes/<int:class_id>/set_form_teacher", methods=["POST"])
 @login_required("admin", "sub_admin")
 def set_form_teacher(class_id):
+    if not require_scoped_permission("edit", class_id=class_id):
+        flash("You do not have permission to edit this class.", "error")
+        return redirect(url_for("admin_classes"))
     conn = get_db()
     if not class_in_school(conn, class_id):
         conn.close()
@@ -1663,6 +1767,9 @@ def set_form_teacher(class_id):
 @app.route("/admin/classes/<int:class_id>/delete", methods=["POST"])
 @login_required("admin", "sub_admin")
 def delete_class(class_id):
+    if not require_scoped_permission("delete", class_id=class_id):
+        flash("You do not have permission to delete this class.", "error")
+        return redirect(url_for("admin_classes"))
     conn = get_db()
     if not class_in_school(conn, class_id):
         conn.close()
@@ -1688,6 +1795,14 @@ def delete_class(class_id):
 def admin_subjects():
     conn = get_db()
     school_id = current_school_id()
+    if request.method == "POST" and not require_scoped_permission("create"):
+        conn.close()
+        flash("You do not have permission to create subjects in your assigned scope.", "error")
+        return redirect(url_for("admin_subjects"))
+    if request.method == "GET" and not require_scoped_permission("view"):
+        conn.close()
+        flash("You do not have permission to view subjects in your assigned scope.", "error")
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
         name = request.form["name"].strip()
         offline_token = request.form.get("offline_token")
@@ -1720,6 +1835,9 @@ def admin_subjects():
 @app.route("/admin/subjects/<int:subject_id>/delete", methods=["POST"])
 @login_required("admin", "sub_admin")
 def delete_subject(subject_id):
+    if not require_scoped_permission("delete", subject_id=subject_id):
+        flash("You do not have permission to delete this subject.", "error")
+        return redirect(url_for("admin_subjects"))
     conn = get_db()
     if not subject_in_school(conn, subject_id):
         conn.close()
@@ -1745,6 +1863,19 @@ def admin_class_subjects():
     conn = get_db()
     school_id = current_school_id()
     if request.method == "POST":
+        try:
+            _class_id_scope = int(request.form.get("class_id"))
+            _subject_id_scope = int(request.form.get("subject_id"))
+        except (TypeError, ValueError):
+            _class_id_scope = _subject_id_scope = None
+        if not require_scoped_permission("create", class_id=_class_id_scope, subject_id=_subject_id_scope):
+            conn.close()
+            flash("You do not have permission to assign subjects in this scope.", "error")
+            return redirect(url_for("admin_class_subjects"))
+    elif not require_scoped_permission("view"):
+        conn.close()
+        flash("You do not have permission to view class-subject assignments.", "error")
+        return redirect(url_for("dashboard"))
         class_id = request.form["class_id"]
         subject_id = request.form["subject_id"]
         teacher_id = request.form.get("teacher_id") or None
@@ -1782,6 +1913,11 @@ def admin_class_subjects():
 @login_required("admin", "sub_admin")
 def assign_teacher(cs_id):
     conn = get_db()
+    cs_scope = conn.execute("SELECT * FROM class_subjects WHERE id=? AND class_id IN (SELECT id FROM classes WHERE school_id=?)", (cs_id, current_school_id())).fetchone()
+    if not cs_scope or not require_scoped_permission("edit", class_id=cs_scope["class_id"], subject_id=cs_scope["subject_id"]):
+        conn.close()
+        flash("You do not have permission to edit this class-subject assignment.", "error")
+        return redirect(url_for("admin_class_subjects"))
     teacher_id = request.form.get("teacher_id") or None
     if teacher_id and not teacher_in_school(conn, teacher_id):
         conn.close()
@@ -1801,6 +1937,11 @@ def assign_teacher(cs_id):
 @login_required("admin", "sub_admin")
 def delete_class_subject(cs_id):
     conn = get_db()
+    cs_scope = conn.execute("SELECT * FROM class_subjects WHERE id=? AND class_id IN (SELECT id FROM classes WHERE school_id=?)", (cs_id, current_school_id())).fetchone()
+    if not cs_scope or not require_scoped_permission("delete", class_id=cs_scope["class_id"], subject_id=cs_scope["subject_id"]):
+        conn.close()
+        flash("You do not have permission to delete this class-subject assignment.", "error")
+        return redirect(url_for("admin_class_subjects"))
     conn.execute(
         "DELETE FROM class_subjects WHERE id=? AND class_id IN (SELECT id FROM classes WHERE school_id=?)",
         (cs_id, current_school_id()),
@@ -1817,6 +1958,18 @@ def admin_students():
     conn = get_db()
     school_id = current_school_id()
     if request.method == "POST":
+        try:
+            _student_class_scope = int(request.form.get("class_id"))
+        except (TypeError, ValueError):
+            _student_class_scope = None
+        if not require_scoped_permission("create", class_id=_student_class_scope):
+            conn.close()
+            flash("You do not have permission to create students in this class scope.", "error")
+            return redirect(url_for("admin_students"))
+    elif not require_scoped_permission("view"):
+        conn.close()
+        flash("You do not have permission to view students.", "error")
+        return redirect(url_for("dashboard"))
         class_id = request.form["class_id"]
         offline_token = request.form.get("offline_token")
         existing_id = offline_sync_existing_id(conn, offline_token)
@@ -1891,6 +2044,11 @@ def admin_students():
 @login_required("admin", "sub_admin")
 def delete_student(student_id):
     conn = get_db()
+    student_scope = conn.execute("SELECT class_id FROM students WHERE id=? AND school_id=?", (student_id, current_school_id())).fetchone()
+    if not student_scope or not require_scoped_permission("delete", class_id=student_scope["class_id"]):
+        conn.close()
+        flash("You do not have permission to delete this student.", "error")
+        return redirect(url_for("admin_students"))
     if not student_in_school(conn, student_id):
         conn.close()
         flash("Student not found.", "error")
@@ -1942,122 +2100,10 @@ def parent_profile(student_id):
             "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1 ORDER BY s.first_name",
             (school_id, student["parent_email"]),
         ).fetchall()
-    parent_account = _find_parent_account(conn, school_id, student)
-    can_manage = session["role"] in ("admin", "sub_admin")
     conn.close()
     return render_template(
         "parent_profile.html", student=student, siblings=siblings, student_full_name=student_full_name,
-        parent_account=parent_account, can_manage=can_manage,
     )
-
-
-def _find_parent_account(conn, school_id, student):
-    """The parents row for this guardian, if an account has been created —
-    matched the same way parent_profile() groups siblings: by phone, falling
-    back to email."""
-    if student["parent_phone"]:
-        return conn.execute(
-            "SELECT * FROM parents WHERE school_id=? AND phone=?", (school_id, student["parent_phone"])
-        ).fetchone()
-    if student["parent_email"]:
-        return conn.execute(
-            "SELECT * FROM parents WHERE school_id=? AND email=?", (school_id, student["parent_email"])
-        ).fetchone()
-    return None
-
-
-@app.route("/students/<int:student_id>/parent/set_login", methods=["POST"])
-@login_required("admin", "sub_admin")
-def set_parent_login(student_id):
-    conn = get_db()
-    student = student_in_school(conn, student_id)
-    if not student:
-        conn.close()
-        flash("Student not found.", "error")
-        return redirect(url_for("dashboard"))
-    if not student["parent_phone"] and not student["parent_email"]:
-        conn.close()
-        flash("Add a parent/guardian phone or email to this student before creating a login.", "error")
-        return redirect(url_for("student_profile", student_id=student_id))
-
-    school_id = current_school_id()
-    username = request.form.get("username", "").strip()
-    password = request.form.get("password", "")
-    if not username:
-        conn.close()
-        flash("Username is required.", "error")
-        return redirect(url_for("parent_profile", student_id=student_id))
-    if password and len(password) < 6:
-        conn.close()
-        flash("Password must be at least 6 characters.", "error")
-        return redirect(url_for("parent_profile", student_id=student_id))
-
-    account = _find_parent_account(conn, school_id, student)
-    try:
-        if account:
-            conn.execute(
-                "UPDATE parents SET name=?, relationship=?, phone=?, email=?, address=?, username=? WHERE id=?",
-                (student["parent_name"] or account["name"], student["parent_relationship"], student["parent_phone"],
-                 student["parent_email"], student["parent_address"], username, account["id"]),
-            )
-            parent_id = account["id"]
-            if password:
-                conn.execute("UPDATE parents SET password_hash=? WHERE id=?", (generate_password_hash(password), parent_id))
-        else:
-            cur = conn.execute(
-                "INSERT INTO parents (school_id, name, relationship, phone, email, address, username, password_hash) "
-                "VALUES (?,?,?,?,?,?,?,?)",
-                (school_id, student["parent_name"] or "Parent/Guardian", student["parent_relationship"],
-                 student["parent_phone"], student["parent_email"], student["parent_address"], username,
-                 generate_password_hash(password) if password else None),
-            )
-            parent_id = cur.lastrowid
-            if not password:
-                conn.close()
-                flash("Set a password the first time you create this login.", "error")
-                return redirect(url_for("parent_profile", student_id=student_id))
-
-        # Link every currently-matching sibling (same lookup parent_profile()
-        # itself uses) so one login covers all of this guardian's children —
-        # re-run on every save so a newly registered sibling gets picked up.
-        if student["parent_phone"]:
-            siblings = conn.execute(
-                "SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id "
-                "WHERE c.school_id=? AND s.parent_phone=? AND s.is_active=1", (school_id, student["parent_phone"])
-            ).fetchall()
-        else:
-            siblings = conn.execute(
-                "SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id "
-                "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1", (school_id, student["parent_email"])
-            ).fetchall()
-        for s in siblings:
-            conn.execute("INSERT OR IGNORE INTO parent_students (parent_id, student_id) VALUES (?,?)", (parent_id, s["id"]))
-        conn.commit()
-        flash("Parent login saved.", "success")
-    except Exception:
-        conn.rollback()
-        flash("That username is already taken by another parent account.", "error")
-    conn.close()
-    return redirect(url_for("parent_profile", student_id=student_id))
-
-
-@app.route("/students/<int:student_id>/parent/remove_login", methods=["POST"])
-@login_required("admin", "sub_admin")
-def remove_parent_login(student_id):
-    conn = get_db()
-    student = student_in_school(conn, student_id)
-    if not student:
-        conn.close()
-        flash("Student not found.", "error")
-        return redirect(url_for("dashboard"))
-    account = _find_parent_account(conn, current_school_id(), student)
-    if account:
-        conn.execute("DELETE FROM parent_students WHERE parent_id=?", (account["id"],))
-        conn.execute("DELETE FROM parents WHERE id=?", (account["id"],))
-        conn.commit()
-        flash("Parent login removed.", "success")
-    conn.close()
-    return redirect(url_for("parent_profile", student_id=student_id))
 
 
 @app.route("/admin/parents")
@@ -2071,9 +2117,6 @@ def admin_parents():
         "WHERE c.school_id=? AND s.is_active=1 AND (s.parent_phone IS NOT NULL OR s.parent_email IS NOT NULL) "
         "ORDER BY s.parent_name", (school_id,)
     ).fetchall()
-    has_login = set()
-    for r in conn.execute("SELECT phone, email FROM parents WHERE school_id=? AND username IS NOT NULL", (school_id,)).fetchall():
-        has_login.add(r["phone"] or r["email"])
     conn.close()
     # Group by the same key parent_profile() uses (phone, falling back to email),
     # keeping only the first student id seen for each guardian as the entry point.
@@ -2084,9 +2127,7 @@ def admin_parents():
         if key in seen:
             continue
         seen[key] = True
-        row = dict(r)
-        row["has_login"] = key in has_login
-        guardians.append(row)
+        guardians.append(r)
     return render_template("admin_parents.html", guardians=guardians)
 
 
@@ -2335,6 +2376,10 @@ def students_bulk_upload():
 def admin_teachers():
     conn = get_db()
     school_id = current_school_id()
+    if not require_scoped_permission("manage_users"):
+        conn.close()
+        flash("You do not have permission to manage teachers.", "error")
+        return redirect(url_for("dashboard"))
     if request.method == "POST":
         name = request.form["name"].strip()
         username = request.form["username"].strip()
@@ -2386,6 +2431,9 @@ def admin_teachers():
 @app.route("/admin/teachers/<int:teacher_id>/contact", methods=["POST"])
 @login_required("admin", "sub_admin")
 def update_teacher_contact(teacher_id):
+    if not require_scoped_permission("manage_users"):
+        flash("You do not have permission to manage this teacher.", "error")
+        return redirect(url_for("admin_teachers"))
     conn = get_db()
     if not teacher_in_school(conn, teacher_id):
         conn.close()
@@ -2411,6 +2459,9 @@ def update_teacher_contact(teacher_id):
 @app.route("/admin/teachers/<int:teacher_id>/delete", methods=["POST"])
 @login_required("admin", "sub_admin")
 def delete_teacher(teacher_id):
+    if not require_scoped_permission("manage_users"):
+        flash("You do not have permission to manage this teacher.", "error")
+        return redirect(url_for("admin_teachers"))
     conn = get_db()
     if not teacher_in_school(conn, teacher_id):
         conn.close()
@@ -2429,6 +2480,9 @@ def delete_teacher(teacher_id):
 @app.route("/admin/teachers/<int:teacher_id>/set_position", methods=["POST"])
 @login_required("admin", "sub_admin")
 def set_teacher_position(teacher_id):
+    if not require_scoped_permission("manage_users"):
+        flash("You do not have permission to manage this teacher.", "error")
+        return redirect(url_for("admin_teachers"))
     conn = get_db()
     if not teacher_in_school(conn, teacher_id):
         conn.close()
@@ -2449,6 +2503,9 @@ def set_teacher_position(teacher_id):
 @app.route("/admin/teachers/<int:teacher_id>/toggle_active", methods=["POST"])
 @login_required("admin", "sub_admin")
 def toggle_teacher_active(teacher_id):
+    if not require_scoped_permission("manage_users"):
+        flash("You do not have permission to manage this teacher.", "error")
+        return redirect(url_for("admin_teachers"))
     conn = get_db()
     teacher = teacher_in_school(conn, teacher_id)
     if not teacher:
@@ -2473,6 +2530,9 @@ def toggle_teacher_active(teacher_id):
 @app.route("/admin/teachers/<int:teacher_id>/reset_password", methods=["POST"])
 @login_required("admin", "sub_admin")
 def admin_reset_teacher_password(teacher_id):
+    if not require_scoped_permission("manage_users"):
+        flash("You do not have permission to manage this teacher.", "error")
+        return redirect(url_for("admin_teachers"))
     conn = get_db()
     teacher = teacher_in_school(conn, teacher_id)
     if not teacher:
@@ -3401,6 +3461,13 @@ def score_entry(class_id, subject_id):
         conn.close()
         flash("Class or subject not found.", "error")
         return redirect(url_for("dashboard"))
+    level = class_row["level"] if "level" in class_row.keys() else None
+    needed = "edit" if request.method == "POST" else "view"
+    if not can_access_scope(session.get("user_id"), current_school_id(), needed,
+                            school_level=level, class_id=class_id, subject_id=subject_id):
+        conn.close()
+        flash("You do not have permission for this class and subject.", "error")
+        return redirect(url_for("dashboard"))
 
     cs = conn.execute(
         "SELECT * FROM class_subjects WHERE class_id=? AND subject_id=?", (class_id, subject_id)
@@ -3473,6 +3540,11 @@ def score_csv_template(class_id, subject_id):
         conn.close()
         flash("Class, subject, or active term not found.", "error")
         return redirect(url_for("dashboard"))
+    level = class_row["level"] if "level" in class_row.keys() else None
+    if not can_access_scope(session.get("user_id"), current_school_id(), "view", school_level=level, class_id=class_id, subject_id=subject_id):
+        conn.close()
+        flash("You do not have permission for this class and subject.", "error")
+        return redirect(url_for("dashboard"))
 
     config = get_grading_config(conn)
     students = conn.execute(
@@ -3516,6 +3588,11 @@ def score_csv_upload(class_id, subject_id):
     if not class_row or not subject_row or not term:
         conn.close()
         flash("Class, subject, or active term not found.", "error")
+        return redirect(url_for("dashboard"))
+    level = class_row["level"] if "level" in class_row.keys() else None
+    if not can_access_scope(session.get("user_id"), current_school_id(), "edit", school_level=level, class_id=class_id, subject_id=subject_id):
+        conn.close()
+        flash("You do not have permission for this class and subject.", "error")
         return redirect(url_for("dashboard"))
 
     cs = conn.execute("SELECT * FROM class_subjects WHERE class_id=? AND subject_id=?", (class_id, subject_id)).fetchone()
@@ -3588,6 +3665,11 @@ def score_history_view(class_id, subject_id):
     if not class_row or not subject_row:
         conn.close()
         flash("Class or subject not found.", "error")
+        return redirect(url_for("dashboard"))
+    level = class_row["level"] if "level" in class_row.keys() else None
+    if not can_access_scope(session.get("user_id"), current_school_id(), "view", school_level=level, class_id=class_id, subject_id=subject_id):
+        conn.close()
+        flash("You do not have permission for this class and subject.", "error")
         return redirect(url_for("dashboard"))
     cs = conn.execute("SELECT * FROM class_subjects WHERE class_id=? AND subject_id=?", (class_id, subject_id)).fetchone()
     if session["role"] == "teacher" and (not cs or cs["teacher_id"] != session["user_id"]):
@@ -4215,7 +4297,7 @@ def result_extra(student_id):
         conn.close()
         flash("Student not found.", "error")
         return redirect(url_for("dashboard"))
-    denied = require_class_result_access(conn, student_row["class_id"])
+    denied = require_class_result_access(conn, student_row["class_id"], permission="edit")
     if denied:
         conn.close()
         return denied
@@ -4403,12 +4485,12 @@ def _staff_accessible_classes(conn):
 def materials():
     conn = get_db()
     school_id = current_school_id()
-    can_upload = session.get("role") in ("admin", "sub_admin")
+    can_upload = session.get("role") in ("admin", "sub_admin") and require_scoped_permission("create")
 
     if request.method == "POST":
         if not can_upload:
             conn.close()
-            flash("Only a School Admin can upload learning materials.", "error")
+            flash("You do not have permission to upload learning materials in your assigned scope.", "error")
             return redirect(url_for("materials"))
         session_id = request.form.get("session_id", type=int)
         class_id = request.form.get("class_id", type=int)
@@ -4430,6 +4512,10 @@ def materials():
 
         if not (owner_session and owner_class and owner_subject):
             flash("Choose a valid session, class and subject.", "error")
+        elif not can_access_scope(session.get("user_id"), school_id, "create",
+                                  school_level=owner_class["level"] if "level" in owner_class.keys() else None,
+                                  class_id=class_id, subject_id=subject_id):
+            flash("You do not have permission for this class and subject.", "error")
         elif not title:
             flash("Give the material a title.", "error")
         elif not has_file and not external_url:
@@ -4512,6 +4598,13 @@ def delete_material(material_id):
         conn.close()
         flash("Material not found.", "error")
         return redirect(url_for("materials"))
+    class_row = class_in_school(conn, m["class_id"])
+    if not class_row or not can_access_scope(session.get("user_id"), current_school_id(), "delete",
+                                             school_level=class_row["level"] if "level" in class_row.keys() else None,
+                                             class_id=m["class_id"], subject_id=m["subject_id"]):
+        conn.close()
+        flash("You do not have permission to delete that material.", "error")
+        return redirect(url_for("materials"))
     if m["filename"]:
         p = os.path.join(MATERIALS_DIR, str(current_school_id()), m["filename"])
         if os.path.exists(p):
@@ -4532,6 +4625,11 @@ def _authorize_material_for_download(conn, material_id):
     m = conn.execute("SELECT * FROM materials WHERE id=? AND school_id=?", (material_id, current_school_id())).fetchone()
     if not m:
         return None
+    class_row = class_in_school(conn, m["class_id"])
+    if class_row and can_access_scope(session.get("user_id"), current_school_id(), "view",
+                                      school_level=class_row["level"] if "level" in class_row.keys() else None,
+                                      class_id=m["class_id"], subject_id=m["subject_id"]):
+        return m
     if not can_view_class_results(conn, session.get("role"), session.get("position"), session.get("user_id"), m["class_id"]):
         return None
     return m
@@ -4741,7 +4839,10 @@ def offline_app_shell():
 def reports_hub():
     conn = get_db()
     school_id = current_school_id()
-    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    all_classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    classes = [c for c in all_classes if can_access_scope(session.get("user_id"), school_id, "view",
+                                                         school_level=c["level"] if "level" in c.keys() else None,
+                                                         class_id=c["id"])]
     all_terms = all_terms_for_school(conn)
     students = conn.execute(
         "SELECT s.*, c.name as class_name FROM students s JOIN classes c ON c.id=s.class_id "
@@ -4788,6 +4889,11 @@ def report_broadsheet(fmt=None):
         conn.close()
         flash("Please choose a class.", "error")
         return redirect(url_for("reports_hub"))
+    if not can_access_scope(session.get("user_id"), current_school_id(), "view",
+                            school_level=class_row["level"] if "level" in class_row.keys() else None, class_id=class_id):
+        conn.close()
+        flash("You do not have permission to view this class report.", "error")
+        return redirect(url_for("reports_hub"))
     term = resolve_term(conn, request.args.get("term_id", type=int))
     subjects, rows_data = build_broadsheet_data(conn, class_id, term["id"])
     conn.close()
@@ -4817,7 +4923,9 @@ def report_subject_performance(fmt=None):
         return redirect(url_for("reports_hub"))
 
     school_id = current_school_id()
-    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    all_classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    classes = [c for c in all_classes if can_access_scope(session.get("user_id"), school_id, "view",
+                                                         school_level=c["level"] if "level" in c.keys() else None, class_id=c["id"])]
     headers = ["Class", "Subject", "Students with Scores", "Average", "Highest", "Lowest"]
     rows = []
     for class_row in classes:
@@ -4853,6 +4961,13 @@ def report_attendance(fmt=None):
     class_id = request.args.get("class_id", type=int)
 
     school_id = current_school_id()
+    if class_id:
+        class_row = class_in_school(conn, class_id)
+        if not class_row or not can_access_scope(session.get("user_id"), school_id, "view",
+                                                 school_level=class_row["level"] if "level" in class_row.keys() else None, class_id=class_id):
+            conn.close()
+            flash("You do not have permission to view attendance for this class.", "error")
+            return redirect(url_for("reports_hub"))
     query = (
         "SELECT s.*, c.name as class_name, sti.days_school_opened, sti.days_present, sti.days_absent "
         "FROM students s JOIN classes c ON c.id=s.class_id "
@@ -4891,6 +5006,12 @@ def report_student_history(fmt=None):
         conn.close()
         flash("Please choose a student.", "error")
         return redirect(url_for("reports_hub"))
+    student_class = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (student["class_id"], current_school_id())).fetchone()
+    if not student_class or not can_access_scope(session.get("user_id"), current_school_id(), "view",
+                                                 school_level=student_class["level"] if "level" in student_class.keys() else None, class_id=student_class["id"]):
+        conn.close()
+        flash("You do not have permission to view this student's history.", "error")
+        return redirect(url_for("reports_hub"))
 
     terms = all_terms_for_school(conn)
     headers = ["Session", "Term", "Class / Arm", "Subject", "CA1", "CA2", "Exam", "Total", "Grade"]
@@ -4924,205 +5045,6 @@ def report_student_history(fmt=None):
     return _send_report(fmt, "Academic History", headers, rows, fname)
 
 
-
-
-# ---------- parent portal ----------
-# A separate, browser-only login (no offline access yet — same as the
-# student portal below), scoped entirely to the parents/parent_students
-# tables so it can never see or touch staff/student credentials.
-
-def parent_login_required(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        if "parent_id" not in session:
-            return redirect(url_for("parent_login"))
-        return f(*args, **kwargs)
-    return wrapped
-
-
-def _parent_own_child(conn, parent_id, student_id):
-    """The requested student, only if linked to this parent account —
-    the access boundary for every parent-facing route below."""
-    return conn.execute(
-        "SELECT s.* FROM students s JOIN parent_students ps ON ps.student_id=s.id "
-        "WHERE ps.parent_id=? AND s.id=?", (parent_id, student_id)
-    ).fetchone()
-
-
-@app.route("/parent/login", methods=["GET", "POST"])
-@rate_limit(max_attempts=10, window_seconds=300)
-def parent_login():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        conn = get_db()
-        parent = conn.execute("SELECT * FROM parents WHERE username=? AND is_active=1", (username,)).fetchone()
-        if parent and parent["password_hash"] and check_password_hash(parent["password_hash"], password):
-            school = get_school(conn, parent["school_id"])
-            conn.close()
-            if school and school["activation_status"] != "active":
-                flash("This school hasn't been activated yet.", "error")
-                return render_template("parent_login.html")
-            if school and school["is_archived"]:
-                flash("This school's account has been archived. Contact the platform administrator.", "error")
-                return render_template("parent_login.html")
-            if school and school["is_suspended"]:
-                flash("This school's account has been suspended. Contact the platform administrator.", "error")
-                return render_template("parent_login.html")
-            if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
-                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
-                return render_template("parent_login.html")
-            session.clear()
-            session["parent_id"] = parent["id"]
-            session["parent_name"] = parent["name"]
-            session["role"] = "parent"
-            session["school_id"] = school["id"] if school else None
-            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-            return redirect(url_for("parent_dashboard"))
-        conn.close()
-        flash("Invalid username or password.", "error")
-    return render_template("parent_login.html")
-
-
-@app.route("/parent/logout")
-def parent_logout():
-    session.clear()
-    return redirect(url_for("parent_login"))
-
-
-@app.route("/parent/dashboard")
-@parent_login_required
-def parent_dashboard():
-    conn = get_db()
-    parent = conn.execute("SELECT * FROM parents WHERE id=?", (session["parent_id"],)).fetchone()
-    if not parent:
-        session.clear()
-        conn.close()
-        return redirect(url_for("parent_login"))
-    children = conn.execute(
-        "SELECT s.*, c.name as class_name FROM students s "
-        "JOIN parent_students ps ON ps.student_id=s.id "
-        "JOIN classes c ON c.id=s.class_id "
-        "WHERE ps.parent_id=? ORDER BY s.first_name", (parent["id"],)
-    ).fetchall()
-    conn.close()
-    return render_template(
-        "parent_dashboard.html", parent=parent, children=children, student_full_name=student_full_name,
-    )
-
-
-@app.route("/parent/child/<int:student_id>")
-@parent_login_required
-def parent_child(student_id):
-    conn = get_db()
-    student = _parent_own_child(conn, session["parent_id"], student_id)
-    if not student:
-        conn.close()
-        flash("That student isn't linked to your account.", "error")
-        return redirect(url_for("parent_dashboard"))
-    class_row = conn.execute("SELECT * FROM classes WHERE id=?", (student["class_id"],)).fetchone()
-    published_terms = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id = terms.session_id "
-        "JOIN enrollments e ON e.session_id = sessions.id "
-        "WHERE e.student_id=? AND terms.is_published=1 "
-        "ORDER BY sessions.id DESC, terms.id DESC",
-        (student["id"],),
-    ).fetchall()
-    recent_attendance = conn.execute(
-        "SELECT * FROM attendance_records WHERE student_id=? ORDER BY date DESC LIMIT 20", (student_id,)
-    ).fetchall()
-    conn.close()
-    return render_template(
-        "parent_child.html", student=student, class_row=class_row, published_terms=published_terms,
-        recent_attendance=recent_attendance, student_full_name=student_full_name,
-    )
-
-
-@app.route("/parent/child/<int:student_id>/result/<int:term_id>")
-@parent_login_required
-def parent_child_result(student_id, term_id):
-    conn = get_db()
-    student = _parent_own_child(conn, session["parent_id"], student_id)
-    if not student:
-        conn.close()
-        flash("That student isn't linked to your account.", "error")
-        return redirect(url_for("parent_dashboard"))
-    term = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
-    ).fetchone()
-    if not term or not term["is_published"]:
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
-        return redirect(url_for("parent_child", student_id=student_id))
-    enrolled = conn.execute(
-        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
-    ).fetchone()
-    if not enrolled:
-        conn.close()
-        flash("This student wasn't enrolled in that term.", "error")
-        return redirect(url_for("parent_child", student_id=student_id))
-    data = build_result_data(conn, student_id, term_id)
-    all_traits = conn.execute(
-        "SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (session["school_id"],)
-    ).fetchall()
-    conn.close()
-    return render_template(
-        "parent_child_result.html", term=term, student_full_name=student_full_name, all_traits=all_traits, **data
-    )
-
-
-@app.route("/parent/child/<int:student_id>/result/<int:term_id>/pdf")
-@parent_login_required
-def parent_child_result_pdf(student_id, term_id):
-    conn = get_db()
-    student = _parent_own_child(conn, session["parent_id"], student_id)
-    if not student:
-        conn.close()
-        flash("That student isn't linked to your account.", "error")
-        return redirect(url_for("parent_dashboard"))
-    term = conn.execute(
-        "SELECT terms.*, sessions.name as session_name FROM terms "
-        "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
-    ).fetchone()
-    if not term or not term["is_published"]:
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
-        return redirect(url_for("parent_child", student_id=student_id))
-    enrolled = conn.execute(
-        "SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (student_id, term["session_id"])
-    ).fetchone()
-    if not enrolled:
-        conn.close()
-        flash("This student wasn't enrolled in that term.", "error")
-        return redirect(url_for("parent_child", student_id=student_id))
-    data = build_result_data(conn, student_id, term_id)
-    school = get_school(conn, session["school_id"])
-    logo_path = None
-    if school and school["logo_filename"]:
-        p = os.path.join(INSTANCE_DIR, school["logo_filename"])
-        if os.path.exists(p):
-            logo_path = p
-    teacher_signature = None
-    if data.get("teacher_signature_user"):
-        u = data["teacher_signature_user"]
-        teacher_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
-    principal_signature = None
-    if data.get("principal_signature_user"):
-        u = data["principal_signature_user"]
-        principal_signature = {"path": os.path.join(SIGNATURES_DIR, u["signature_filename"]), "name": u["name"]}
-    conn.close()
-    buf = build_result_pdf(
-        data, term, school_name=school["name"] if school else None,
-        logo_path=logo_path, student_full_name=student_full_name,
-        font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
-        name_align=school["name_align"] if school else None,
-        teacher_signature=teacher_signature, principal_signature=principal_signature,
-    )
-    filename = f"{student_full_name(data['student'])}_{term['name']}_Result.pdf".replace(" ", "_")
-    return send_file(buf, mimetype="application/pdf", as_attachment=False, download_name=filename)
 
 
 def student_login_required(f):
@@ -5470,15 +5392,23 @@ def platform_new_school():
         conn = get_db()
         try:
             cur = conn.execute(
-                "INSERT INTO schools (name, registered_email, activation_status) VALUES (?,?,'pending')",
-                (school_name, registered_email),
+                "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code) VALUES (?,?, 'pending', ?, ?)",
+                (school_name, registered_email, "TEN-" + secrets.token_hex(4).upper(), re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL"),
             )
             school_id = cur.lastrowid
+            # Resolve any school-code collision deterministically.
+            code_base = re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL"
+            code = code_base
+            n = 2
+            while conn.execute("SELECT 1 FROM schools WHERE school_code=? AND id<>?", (code, school_id)).fetchone():
+                suffix = str(n); code = code_base[:max(1, 20-len(suffix))] + suffix; n += 1
+            conn.execute("UPDATE schools SET school_code=? WHERE id=?", (code, school_id))
             # No usable password yet — the School Admin sets a real one during activation.
             placeholder_hash = generate_password_hash(secrets.token_urlsafe(32))
+            tenant_id = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()["tenant_id"]
             conn.execute(
-                "INSERT INTO users (school_id, name, username, password_hash, role) VALUES (?,?,?,?, 'admin')",
-                (school_id, admin_name, admin_username, placeholder_hash),
+                "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role) VALUES (?,?,?,?,?, 'admin')",
+                (school_id, tenant_id, admin_name, admin_username, placeholder_hash),
             )
             code, expires_at = generate_activation_code(conn, school_id, created_by=session.get("platform_admin_name"))
             log_audit(conn, "platform_admin", session.get("platform_admin_name"), "onboard_school",
@@ -5806,6 +5736,190 @@ def platform_audit():
     ).fetchall()
     conn.close()
     return render_template("platform_audit.html", logs=logs)
+
+
+
+
+@app.route("/admin/roles/<int:assignment_id>/scope", methods=["POST"])
+@login_required("admin")
+def admin_role_scope(assignment_id):
+    conn=get_db(); sid=current_school_id()
+    ra=conn.execute("SELECT * FROM role_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
+    if not ra:
+        conn.close(); flash("Role assignment not found.","error"); return redirect(url_for("admin_roles"))
+    level=request.form.get("school_level","All").strip(); department=request.form.get("department","").strip() or None
+    class_id=request.form.get("class_id",type=int); class_arm=request.form.get("class_arm","").strip() or None
+    subject_id=request.form.get("subject_id",type=int); start_date=request.form.get("start_date","").strip() or None
+    end_date=request.form.get("end_date","").strip() or None
+    conn.execute("UPDATE role_assignments SET school_level=?,department=?,class_id=?,class_arm=?,subject_id=?,start_date=?,end_date=?,is_temporary=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",(level,department,class_id,class_arm,subject_id,start_date,end_date,1 if end_date else 0,assignment_id,sid))
+    new_scope=f"level={level}; department={department or '*'}; class={class_id or '*'}; arm={class_arm or '*'}; subject={subject_id or '*'}"
+    old_scope=f"level={ra['school_level']}; department={ra['department'] or '*'}; class={ra['class_id'] or '*'}; arm={ra['class_arm'] or '*'}; subject={ra['subject_id'] or '*'}"
+    conn.execute("INSERT INTO role_assignment_audit (assignment_id,user_id,school_id,actor_user_id,actor_name,action,previous_role,new_role,previous_scope,new_scope,approval_status,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",(assignment_id,ra['user_id'],sid,session['user_id'],session.get('name'),'scope_changed',ra['role'],ra['role'],old_scope,new_scope,'approved','Scope updated by School Admin'))
+    conn.commit(); conn.close(); flash("Role scope updated.","success"); return redirect(url_for("admin_roles"))
+
+@app.route("/admin/roles/<int:assignment_id>/permissions", methods=["POST"])
+@login_required("admin")
+def admin_role_permissions(assignment_id):
+    conn=get_db(); sid=current_school_id()
+    ra=conn.execute("SELECT * FROM role_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
+    if not ra:
+        conn.close(); flash("Role assignment not found.","error"); return redirect(url_for("admin_roles"))
+    allowed=set(ROLE_CATALOG.get(ra['role'],[])); requested=set(request.form.getlist('permissions')) & allowed
+    conn.execute("DELETE FROM role_assignment_permissions WHERE assignment_id=?",(assignment_id,))
+    for perm in sorted(requested): conn.execute("INSERT INTO role_assignment_permissions (assignment_id,permission,granted) VALUES (?,?,1)",(assignment_id,perm))
+    conn.execute("INSERT INTO role_assignment_audit (assignment_id,user_id,school_id,actor_user_id,actor_name,action,previous_role,new_role,approval_status,reason) VALUES (?,?,?,?,?,?,?,?,?,?)",(assignment_id,ra['user_id'],sid,session['user_id'],session.get('name'),'permissions_changed',ra['role'],ra['role'],'approved','Permissions updated by School Admin'))
+    conn.commit(); conn.close(); flash("Permissions updated.","success"); return redirect(url_for("admin_roles"))
+
+@app.route("/platform/roles")
+@platform_admin_required
+def platform_roles():
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT ra.*, u.name AS user_name, u.username, s.name AS school_name,
+               s.school_code, s.tenant_id
+        FROM role_assignments ra
+        JOIN users u ON u.id=ra.user_id
+        JOIN schools s ON s.id=ra.school_id
+        ORDER BY ra.id DESC
+    """).fetchall()
+    schools = conn.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
+    conn.close()
+    return render_template("platform_roles.html", assignments=rows, schools=schools,
+                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS, ROLE_CATALOG=ROLE_CATALOG)
+
+@app.route("/platform/roles/new", methods=["GET","POST"])
+@platform_admin_required
+def platform_role_new():
+    conn = get_db()
+    if request.method == "POST":
+        user_id = request.form.get("user_id", type=int)
+        school_id = request.form.get("school_id", type=int)
+        role = request.form.get("role","").strip()
+        level = request.form.get("school_level","All").strip()
+        reason = request.form.get("reason","").strip()
+        if not user_id or not school_id or role not in ROLE_CATALOG or level not in SCHOOL_LEVELS:
+            flash("Select a valid user, school, role and school level.", "error")
+            users = conn.execute("SELECT id,name,username,school_id FROM users WHERE school_id=? ORDER BY name",(school_id or 0,)).fetchall()
+            schools = conn.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
+            conn.close()
+            return render_template("platform_role_form.html", users=users, schools=schools, roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS)
+        user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (user_id, school_id)).fetchone()
+        school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+        if not user or not school:
+            flash("User does not belong to the selected school.", "error")
+        else:
+            cur = conn.execute("""
+                INSERT INTO role_assignments
+                (user_id, school_id, tenant_id, school_level, role, status, requested_by, approved_by, approved_at, reason)
+                VALUES (?,?,?,?,?,'active',?,?,CURRENT_TIMESTAMP,?)
+            """, (user_id, school_id, school["tenant_id"], level, role,
+                  None, session.get("platform_admin_id"), reason or "Assigned by Super Admin"))
+            aid = cur.lastrowid
+            for perm in ROLE_CATALOG[role]:
+                conn.execute("INSERT INTO role_assignment_permissions (assignment_id,permission) VALUES (?,?)",(aid,perm))
+            conn.execute("""
+                INSERT INTO role_assignment_audit
+                (assignment_id,user_id,school_id,actor_user_id,actor_name,action,new_role,new_scope,approval_status,reason)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,(aid,user_id,school_id,None,session.get("platform_admin_name"),"assigned",role,level,"approved",reason))
+            log_audit(conn, "platform_admin", session.get("platform_admin_name"), "role_assigned",
+                      f"{user['name']} → {role} ({level})", school_id)
+            conn.commit()
+            flash("Role assigned successfully.", "success")
+            conn.close()
+            return redirect(url_for("platform_roles"))
+    school_id = request.args.get("school_id", type=int)
+    schools = conn.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
+    users = conn.execute(
+        "SELECT id,name,username,school_id FROM users WHERE (? IS NULL OR school_id=?) ORDER BY name",
+        (school_id,school_id)
+    ).fetchall()
+    conn.close()
+    return render_template("platform_role_form.html", users=users, schools=schools,
+                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS, selected_school=school_id)
+
+@app.route("/platform/roles/<int:assignment_id>/revoke", methods=["POST"])
+@platform_admin_required
+def platform_role_revoke(assignment_id):
+    conn = get_db()
+    ra = conn.execute("SELECT * FROM role_assignments WHERE id=?", (assignment_id,)).fetchone()
+    if not ra:
+        conn.close(); flash("Role assignment not found.", "error"); return redirect(url_for("platform_roles"))
+    conn.execute("UPDATE role_assignments SET status='revoked', updated_at=CURRENT_TIMESTAMP WHERE id=?", (assignment_id,))
+    conn.execute("""
+        INSERT INTO role_assignment_audit
+        (assignment_id,user_id,school_id,actor_name,action,previous_role,previous_scope,approval_status,reason)
+        VALUES (?,?,?,?,?,?,?,?,?)
+    """,(assignment_id,ra["user_id"],ra["school_id"],session.get("platform_admin_name"),
+        "revoked",ra["role"],ra["school_level"],"approved","Revoked by Super Admin"))
+    log_audit(conn, "platform_admin", session.get("platform_admin_name"), "role_revoked", ra["role"], ra["school_id"])
+    conn.commit(); conn.close()
+    flash("Role assignment revoked.", "success")
+    return redirect(url_for("platform_roles"))
+
+@app.route("/admin/roles")
+@login_required("admin","sub_admin")
+def admin_roles():
+    conn = get_db()
+    sid = current_school_id()
+    users = conn.execute("SELECT id,name,username,role FROM users WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    assignments = conn.execute("""
+        SELECT ra.*, u.name AS user_name
+        FROM role_assignments ra JOIN users u ON u.id=ra.user_id
+        WHERE ra.school_id=? ORDER BY ra.id DESC
+    """,(sid,)).fetchall()
+    conn.close()
+    return render_template("admin_roles.html", users=users, assignments=assignments,
+                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS)
+
+@app.route("/admin/roles", methods=["POST"])
+@login_required("admin")
+def admin_role_assign():
+    conn = get_db(); sid = current_school_id()
+    user_id = request.form.get("user_id",type=int)
+    role = request.form.get("role","").strip()
+    level = request.form.get("school_level","All").strip()
+    reason = request.form.get("reason","").strip()
+    if not user_id or role not in ROLE_CATALOG or level not in SCHOOL_LEVELS:
+        conn.close(); flash("Invalid role assignment.", "error"); return redirect(url_for("admin_roles"))
+    if role in ("School Admin",):
+        conn.close(); flash("School Admin is controlled by the platform and cannot be assigned here.", "error"); return redirect(url_for("admin_roles"))
+    user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?",(user_id,sid)).fetchone()
+    school = conn.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
+    if not user:
+        conn.close(); flash("User not found in your school.", "error"); return redirect(url_for("admin_roles"))
+    cur = conn.execute("""
+        INSERT INTO role_assignments
+        (user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at,reason)
+        VALUES (?,?,?,?,?,'active',?,?,CURRENT_TIMESTAMP,?)
+    """,(user_id,sid,school["tenant_id"],level,role,session["user_id"],session["user_id"],reason or "Assigned by School Admin"))
+    aid=cur.lastrowid
+    for perm in ROLE_CATALOG[role]:
+        conn.execute("INSERT INTO role_assignment_permissions (assignment_id,permission) VALUES (?,?)",(aid,perm))
+    conn.execute("""
+        INSERT INTO role_assignment_audit
+        (assignment_id,user_id,school_id,actor_user_id,actor_name,action,new_role,new_scope,approval_status,reason)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
+    """,(aid,user_id,sid,session["user_id"],session.get("name"),"assigned",role,level,"approved",reason))
+    conn.commit(); conn.close()
+    flash("Role assigned.", "success")
+    return redirect(url_for("admin_roles"))
+
+@app.route("/admin/roles/<int:assignment_id>/revoke", methods=["POST"])
+@login_required("admin")
+def admin_role_revoke(assignment_id):
+    conn=get_db(); sid=current_school_id()
+    ra=conn.execute("SELECT * FROM role_assignments WHERE id=? AND school_id=?",(assignment_id,sid)).fetchone()
+    if not ra:
+        conn.close(); flash("Role assignment not found.", "error"); return redirect(url_for("admin_roles"))
+    conn.execute("UPDATE role_assignments SET status='revoked',updated_at=CURRENT_TIMESTAMP WHERE id=?",(assignment_id,))
+    conn.execute("""
+        INSERT INTO role_assignment_audit
+        (assignment_id,user_id,school_id,actor_user_id,actor_name,action,previous_role,previous_scope,approval_status,reason)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
+    """,(assignment_id,ra["user_id"],sid,session["user_id"],session.get("name"),"revoked",ra["role"],ra["school_level"],"approved","Revoked by School Admin"))
+    conn.commit(); conn.close()
+    flash("Role revoked.", "success"); return redirect(url_for("admin_roles"))
 
 
 @app.route("/platform/notifications", methods=["GET", "POST"])
