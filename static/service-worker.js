@@ -1,4 +1,4 @@
-const CACHE_NAME = "school-results-shell-v8";
+const CACHE_NAME = "school-results-shell-v7";
 const SHELL_ASSETS = [
   "/static/css/style.css",
   "/static/icons/icon-192.png",
