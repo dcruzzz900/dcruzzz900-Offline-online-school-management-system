@@ -118,10 +118,3 @@ for sideloading/Play Store distribution.
 - The built-in server (`python app.py`) is for development. For real
   deployment, run it behind a production WSGI server (e.g. gunicorn) — ask
   if you'd like help setting that up.
-
-
-## V4 — Role & Permissions
-Adds controlled role assignments for Nursery, Primary and Secondary schools.
-Super Admin can assign/revoke roles platform-wide. School Admin can assign/revoke
-school roles except School Admin itself. Assignments carry school/tenant and level
-scope, and role changes are written to a dedicated audit table.

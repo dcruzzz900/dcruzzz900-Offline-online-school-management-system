@@ -918,11 +918,16 @@ def _school_meta(conn, school_id):
         "id": row["id"],
         "name": row["name"],
         "logo_align": row["logo_align"],
+        "name_align": row["name_align"] or "center",
         "has_logo": bool(row["logo_filename"]),
         "logo_url": f"/portal-logo/{row['id']}" if row["logo_filename"] else None,
         "show_result_date": bool(row["show_result_date"]),
         "auto_teacher_comment": bool(row["auto_teacher_comment"]),
         "auto_principal_comment": bool(row["auto_principal_comment"]),
+        "timezone": row["timezone"] or "Africa/Lagos",
+        "date_format": row["date_format"] or "dmy",
+        "result_accent_color": row["result_accent_color"] or "#1f3a5f",
+        "result_header_layout": row["result_header_layout"] or "logo-left",
     }
 
 
