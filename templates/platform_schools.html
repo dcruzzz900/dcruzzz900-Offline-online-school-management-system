@@ -10,14 +10,12 @@
 <div class="card" style="overflow-x:auto;">
     <table>
         <tr>
-            <th>School ID</th><th>Tenant ID</th><th>Level</th><th>School</th><th>Registered Email</th><th>Activation</th><th>Account</th>
+            <th>ID</th><th>School</th><th>Registered Email</th><th>Activation</th><th>Account</th>
             <th>Code</th><th>Registered</th><th>Activated</th><th>Actions</th>
         </tr>
         {% for s in schools %}
         <tr>
-            <td><strong>{{ s.school_code or s.id }}</strong></td>
-            <td><code>{{ s.tenant_id }}</code></td>
-            <td>{{ (s.school_level or "secondary")|title }}</td>
+            <td>{{ s.id }}</td>
             <td>{{ s.name }}</td>
             <td>{{ s.registered_email or '—' }}</td>
             <td>
@@ -58,7 +56,7 @@
             </td>
         </tr>
         <tr id="more_{{ s.id }}" class="hidden-row">
-            <td colspan="12">
+            <td colspan="9">
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; padding:0.5rem 0;">
                     <form method="POST" action="{{ url_for('platform_regenerate_code', school_id=s.id) }}" class="inline"
                           onsubmit="return confirm('Issue a new activation code for {{ s.name }}? Any previous code stops working immediately.');">
@@ -89,7 +87,7 @@
             </td>
         </tr>
         <tr id="delete_{{ s.id }}" class="hidden-row">
-            <td colspan="12">
+            <td colspan="9">
                 <form method="POST" action="{{ url_for('platform_delete_school', school_id=s.id) }}"
                       style="display:flex; gap:0.5rem; align-items:center; padding:0.5rem 0;"
                       onsubmit="return confirm('This permanently deletes {{ s.name }} and ALL its data. This cannot be undone. Continue?');">
