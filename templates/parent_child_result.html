@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}My Result{% endblock %}
+{% block title %}{{ student_full_name(student) }}'s Result{% endblock %}
 {% block content %}
-<div style="--navy: {{ result_theme_color }};">
-<div class="report-header">
-    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0; text-align:{{ school_name_align }};">{{ school_name }}</h2>
-    <h1>Terminal Report Sheet</h1>
+<div class="result-page" style="--result-accent: {{ result_accent_color or '#1f3a5f' }};">
+<div class="report-header result-header-{{ result_header_layout or 'logo-left' }}">
+    {% if result_header_layout != 'no-logo' and school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0; text-align:{{ school_name_align or 'center' }}; color:var(--result-accent);">{{ school_name }}</h2>
+    <h1 style="border-bottom-color:var(--result-accent);">Terminal Report Sheet</h1>
     <p>{{ term.session_name }} &mdash; {{ term.name }}</p>
 </div>
 
 <div class="no-print" style="margin-bottom:1rem;">
     <a class="btn" href="{{ url_for('parent_child_result_pdf', student_id=student.id, term_id=term.id) }}">⬇ Download PDF</a>
     <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
-    <a class="btn" href="{{ url_for('parent_child_profile', student_id=student.id) }}">← Back to Profile</a>
+    <a class="btn" href="{{ url_for('parent_child', student_id=student.id) }}">← Back to {{ student_full_name(student) }}</a>
 </div>
 
 <div class="card">
@@ -33,7 +33,7 @@
 
 <div class="card">
     <h3>Academic Performance</h3>
-    <table>
+    <table class="result-table">
         <tr><th>Subject</th><th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr>
         {% for s in subjects %}
         <tr>
@@ -61,26 +61,29 @@
     <p><b>Days School Opened:</b> {{ info.days_school_opened if info else '—' }} &nbsp;
        <b>Present:</b> {{ info.days_present if info else '—' }} &nbsp;
        <b>Absent:</b> {{ info.days_absent if info else '—' }}</p>
-    {% if info and info.teacher_comment %}<p><b>Teacher's Comment:</b> {{ info.teacher_comment }}</p>{% endif %}
-    <p class="signature-line">
-        <span>
-            {% if teacher_signature_url %}<img src="{{ teacher_signature_url }}" alt="Teacher's signature"><br>{% endif %}
-            Teacher's Signature: {% if not teacher_signature_url %}__________________{% endif %}
-        </span>
-        <span>Date: {{ info.teacher_signed_date|dmy if info and info.teacher_signed_date else '__________________' }}</span>
+
+    <p><b>Teacher's Comment:</b><br>
+        {% if info and info.teacher_comment %}{{ info.teacher_comment }}{% else %}<span style="color:#999;">Not yet added.</span>{% endif %}
     </p>
-    {% if info and info.principal_comment %}<p><b>Principal's Comment:</b> {{ info.principal_comment }}</p>{% endif %}
-    <p class="signature-line">
-        <span>
-            {% if principal_signature_url %}<img src="{{ principal_signature_url }}" alt="Principal's signature"><br>{% endif %}
-            Principal's Signature: {% if not principal_signature_url %}__________________{% endif %}
-        </span>
-        <span>Date: {{ info.principal_signed_date|dmy if info and info.principal_signed_date else '__________________' }}</span>
+    {% if teacher_signature_user %}
+    <p><img src="{{ url_for('staff_signature', user_id=teacher_signature_user.id) }}" alt="Teacher's signature" style="max-height:42px;"></p>
+    {% endif %}
+
+    <p><b>Principal's Comment:</b><br>
+        {% if info and info.principal_comment %}{{ info.principal_comment }}{% else %}<span style="color:#999;">Not yet added.</span>{% endif %}
     </p>
+    {% if principal_signature_user %}
+    <p><img src="{{ url_for('staff_signature', user_id=principal_signature_user.id) }}" alt="Principal's signature" style="max-height:42px;"></p>
+    {% endif %}
 </div>
-</div>
+
 <style>
-.signature-line { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; align-items: flex-end; }
-.signature-line img { max-height: 2.2em; max-width: 8em; object-fit: contain; }
+.result-table th { background: var(--result-accent, #1f3a5f); color: #fff; }
+.result-header-logo-top-center { text-align: center; }
+.result-header-logo-top-center .report-logo { display: block; margin: 0 auto 0.4rem; }
+.result-header-logo-right { text-align: right; }
+.result-header-logo-right .report-logo { float: right; margin-left: 0.75rem; }
+.result-header-logo-left .report-logo { float: left; margin-right: 0.75rem; }
 </style>
+</div>
 {% endblock %}

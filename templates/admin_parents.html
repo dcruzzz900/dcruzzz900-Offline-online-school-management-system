@@ -10,13 +10,14 @@
 <div class="card">
     {% if guardians %}
     <table>
-        <tr><th>Name</th><th>Relationship</th><th>Phone</th><th>Email</th><th></th></tr>
+        <tr><th>Name</th><th>Relationship</th><th>Phone</th><th>Email</th><th>Login</th><th></th></tr>
         {% for g in guardians %}
         <tr>
             <td>{{ g.parent_name or '—' }}</td>
             <td>{{ g.parent_relationship or '—' }}</td>
             <td>{{ g.parent_phone or '—' }}</td>
             <td>{{ g.parent_email or '—' }}</td>
+            <td>{{ '✅ Active' if g.has_login else '—' }}</td>
             <td><a class="btn btn-small" href="{{ url_for('parent_profile', student_id=g.id) }}">View Profile</a></td>
         </tr>
         {% endfor %}

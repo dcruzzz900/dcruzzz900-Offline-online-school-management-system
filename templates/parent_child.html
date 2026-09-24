@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ student_full_name(student) }}{% endblock %}
+{% block content %}
+<h1>{{ student_full_name(student) }}</h1>
+<p><a href="{{ url_for('parent_dashboard') }}">&larr; Back to My Children</a></p>
+
+<div class="card">
+    <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
+    <p><b>Class / Arm:</b> {{ class_row.name if class_row else '—' }}</p>
+    <p><b>Status:</b> {{ student.status or 'Active' }}</p>
+</div>
+
+<div class="card">
+    <h3>Published Results</h3>
+    {% if published_terms %}
+    <table>
+        <tr><th>Session</th><th>Term</th><th>Action</th></tr>
+        {% for t in published_terms %}
+        <tr>
+            <td>{{ t.session_name }}</td>
+            <td>{{ t.name }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('parent_child_result', student_id=student.id, term_id=t.id) }}">View Result</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No published results yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Recent Attendance</h3>
+    {% if recent_attendance %}
+    <table>
+        <tr><th>Date</th><th>Status</th></tr>
+        {% for a in recent_attendance %}
+        <tr><td>{{ a.date|dmy }}</td><td>{{ a.status }}</td></tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>No attendance recorded yet.</p>
+    {% endif %}
+</div>
+{% endblock %}

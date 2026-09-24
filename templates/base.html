@@ -5,14 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}{{ school_name }}{% endblock %}</title>
 <link rel="manifest" href="{{ url_for('manifest') }}">
-<meta name="theme-color" content="#1f3a5f">
+<meta name="theme-color" content="#182a44">
 <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Results">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-ui.css') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
 {% if web_font_google %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -128,6 +130,24 @@ if ("serviceWorker" in navigator) {
             Notifications{% if unread_notifications %} <span class="notif-badge">{{ unread_notifications }}</span>{% endif %}
         </a>
         <a href="{{ url_for('student_logout') }}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+        </a>
+    </div>
+</nav>
+{% elif session.get('parent_id') %}
+<nav class="navbar">
+    <div class="navbar-brand navbar-brand-{{ school_logo_align or 'center' }}">
+        {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="navbar-logo">{% endif %}
+        <span>{{ school_name }}</span>
+    </div>
+    <div class="navbar-links">
+        <a href="{{ url_for('parent_dashboard') }}">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+            My Children
+        </a>
+        <span class="navbar-user">{{ session.get('parent_name') }}</span>
+        <a href="{{ url_for('parent_logout') }}">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Logout
         </a>
@@ -262,7 +282,7 @@ setInterval(updateLiveClock, 30000);
         const attention = (counts.conflict || 0) + (counts.failed || 0);
         let text = "🟢 Online — Synced", bg = "#e3f5e8", fg = "#1d6b3a";
         if (!Connectivity.isOnline()) { text = "🟠 Offline — Saved Locally"; bg = "#fff1dc"; fg = "#8a5300"; }
-        else if (counts.syncing || waiting) { text = "🔄 Syncing"; bg = "#e6effa"; fg = "#1f3a5f"; }
+        else if (counts.syncing || waiting) { text = "🔄 Syncing"; bg = "#e6effa"; fg = "#182a44"; }
         else if (attention) { text = "🟠 " + attention + " to review"; bg = "#fff1dc"; fg = "#8a5300"; }
         pill.textContent = text; pill.style.background = bg; pill.style.color = fg;
     }

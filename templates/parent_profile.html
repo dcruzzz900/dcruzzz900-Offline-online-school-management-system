@@ -12,10 +12,44 @@
     <p><b>Email:</b> {{ student.parent_email or '—' }}</p>
     <p><b>Address:</b> {{ student.parent_address or '—' }}</p>
     <p style="font-size:0.8rem; color:#999; margin-top:0.75rem;">
-        This profile is assembled from the parent/guardian contact fields on each student's record —
-        there isn't a separate parent login yet. To update this information, edit any of the children below.
+        This profile is assembled from the parent/guardian contact fields on each student's record.
+        To update the name, phone, email or address, edit any of the children below — the portal login
+        below picks up the latest details each time it's saved.
     </p>
 </div>
+
+{% if can_manage %}
+<div class="card" style="max-width:640px;">
+    <h3>Parent Portal Login</h3>
+    {% if parent_account %}
+    <p><b>Username:</b> {{ parent_account.username }} &nbsp; <b>Status:</b> {{ 'Active' if parent_account.is_active else 'Inactive' }}</p>
+    <p style="font-size:0.85rem; color:#666;">This login covers every child currently listed below. Re-saving picks up any newly registered siblings automatically.</p>
+    <form method="POST" action="{{ url_for('set_parent_login', student_id=student.id) }}" style="margin-top:0.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Username</label>
+        <input type="text" name="username" value="{{ parent_account.username }}" required>
+        <label>New Password (leave blank to keep current password)</label>
+        <input type="password" name="password">
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Save</button>
+    </form>
+    <form method="POST" action="{{ url_for('remove_parent_login', student_id=student.id) }}"
+          onsubmit="return confirm('Remove this parent login? They will no longer be able to sign in.');" style="margin-top:0.5rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove Login</button>
+    </form>
+    {% else %}
+    <p style="font-size:0.85rem; color:#666;">No login set up yet for this guardian. Creating one links every child listed below.</p>
+    <form method="POST" action="{{ url_for('set_parent_login', student_id=student.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Username</label>
+        <input type="text" name="username" required>
+        <label>Password (at least 6 characters)</label>
+        <input type="password" name="password" required>
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Create Login</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 
 <div class="card" style="max-width:640px;">
     <h3>Linked Children ({{ siblings|length }})</h3>

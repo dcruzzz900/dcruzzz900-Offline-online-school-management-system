@@ -8,22 +8,24 @@
         <img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:64px; display:block; margin:0 auto 0.5rem;">
         {% endif %}
         <h2 style="text-align:center;">{{ portal_school.name }} — Parent Portal</h2>
-        <p style="color:#666; font-size:0.9rem; text-align:center;">Sign in to view your children's published results</p>
+        <p style="color:#666; font-size:0.9rem; text-align:center;">Sign in to view your children's published results and attendance</p>
         {% else %}
         <h2>👪 Parent Portal</h2>
-        <p style="color:#666; font-size:0.9rem;">Sign in to view your children's published results</p>
+        <p style="color:#666; font-size:0.9rem;">Sign in to view your children's published results and attendance</p>
         {% endif %}
         <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label>Phone Number or Email</label>
+            <label>Username</label>
             <input type="text" name="username" required autofocus>
             <label>Password</label>
             <input type="password" name="password" required>
             <button class="btn" type="submit" style="width:100%;">Login</button>
         </form>
         <p style="font-size:0.85rem; margin-top:1rem; text-align:center;">
-            <a href="{{ url_for('login') }}">Staff login</a> &middot;
-            <a href="{{ url_for('student_login') }}">Student login</a>
+            Don't have a login yet? Ask your child's school to set one up from their Parent Profile page.
+        </p>
+        <p style="font-size:0.85rem; text-align:center;">
+            <a href="{{ url_for('login') }}">Staff login</a> &middot; <a href="{{ url_for('student_login') }}">Student login</a>
         </p>
     </div>
 </div>

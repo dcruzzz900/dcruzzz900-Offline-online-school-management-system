@@ -3,27 +3,24 @@
 {% block content %}
 <h1>Welcome, {{ parent.name }}</h1>
 
+{% include "partials/datetime_card.html" %}
+
 <div class="card">
     <h3>My Children</h3>
     {% if children %}
     <table>
-        <tr><th></th><th>Name</th><th>Class</th><th>Relationship</th><th>Action</th></tr>
+        <tr><th>Name</th><th>Class</th><th>Status</th><th></th></tr>
         {% for c in children %}
         <tr>
-            <td>
-                {% if c.photo_filename %}
-                <img src="{{ url_for('student_photo', student_id=c.id) }}" alt="" style="width:36px; height:44px; object-fit:cover; border:1px solid #ddd;">
-                {% endif %}
-            </td>
             <td>{{ student_full_name(c) }}</td>
             <td>{{ c.class_name }}</td>
-            <td>{{ c.relationship or '—' }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('parent_child_profile', student_id=c.id) }}">View Profile</a></td>
+            <td>{{ c.status or 'Active' }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('parent_child', student_id=c.id) }}">View</a></td>
         </tr>
         {% endfor %}
     </table>
     {% else %}
-    <p style="color:#999;">No children are linked to your account yet. Contact your school admin to have your child linked.</p>
+    <p>No children are linked to this account yet. Contact the school office.</p>
     {% endif %}
 </div>
 {% endblock %}
