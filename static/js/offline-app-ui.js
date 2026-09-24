@@ -90,14 +90,28 @@
     // (first-time setup downloads it, with progress), start automatic syncing, and
     // show the screen the address asks for.
     async function afterUnlock() {
-        session = OfflineAuth.getSession();
-        schoolId = session.user.school_id;
-        await loadProfile();
-        SyncEngine.startAutoSync(schoolId);
-        const ready = await OfflineDB.getMeta(schoolId, "last_sync_at");
-        if (!ready) return renderFirstSetup();
-        SyncEngine.ensureReady(schoolId, session.device_id, session.device_secret).catch(() => {});
-        return dispatch();
+        try {
+            session = OfflineAuth.getSession();
+            if (!session || !session.user) throw new Error("Offline session is incomplete. Please sign in online again.");
+            schoolId = session.user.school_id;
+            if (!schoolId) throw new Error("This account is not assigned to a school.");
+            await loadProfile();
+            try { SyncEngine.startAutoSync(schoolId); } catch (e) { /* UI must remain usable if background sync cannot start */ }
+            const ready = await OfflineDB.getMeta(schoolId, "last_sync_at");
+            if (!ready) return renderFirstSetup();
+            try { SyncEngine.ensureReady(schoolId, session.device_id, session.device_secret).catch(() => {}); } catch (e) {}
+            return dispatch();
+        } catch (e) {
+            return renderBootError(e);
+        }
+    }
+
+    function renderBootError(error) {
+        clearNavbar();
+        const message = error && error.message ? error.message : "The offline app could not load its local data.";
+        root.innerHTML = `<div class="card" style="margin-top:1rem;"><h2>School dashboard could not load</h2><p>${esc(message)}</p><p>Your online account and server data have not been deleted.</p><div style="display:flex;gap:.5rem;flex-wrap:wrap;"><a class="btn" href="/dashboard?classic=1">Open online dashboard</a><button class="btn" id="retryApp">Retry</button></div></div>`;
+        const retry = document.getElementById("retryApp");
+        if (retry) retry.addEventListener("click", () => { root.innerHTML = ""; afterUnlock(); });
     }
 
     async function loadProfile() {
@@ -152,8 +166,12 @@
     async function dispatch() {
         if (!session) return;
         const fn = ROUTES[currentRoute()] || ROUTES[""];
-        await fn();
-        window.scrollTo(0, 0);
+        try {
+            await fn();
+            window.scrollTo(0, 0);
+        } catch (e) {
+            renderBootError(e);
+        }
     }
 
     function isAdminRole() { return ["admin", "sub_admin"].includes(session.user.role); }
@@ -2172,5 +2190,5 @@
         frame("Sync Status & Conflicts", body);
     }
 
-    boot();
+    boot().catch((e) => renderBootError(e));
 })();
