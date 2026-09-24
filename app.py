@@ -26,7 +26,6 @@ from db import (
     generate_teacher_comment, generate_principal_comment,
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
-    generate_tenant_id, generate_school_id, tenant_for_user,
     verify_activation_code, revoke_device_credentials_for_user, revoke_device_credentials_for_school,
     TIMEZONE_CHOICES, RESULT_HEADER_LAYOUTS,
 )
@@ -308,9 +307,9 @@ def login_required(*roles):
             # A session must not outlive its account: if an admin deactivated
             # or deleted this user since they logged in, end it now.
             _conn = get_db()
-            _u = tenant_for_user(_conn, session["user_id"])
+            _u = _conn.execute("SELECT is_active FROM users WHERE id=?", (session["user_id"],)).fetchone()
             _conn.close()
-            if _u is None:
+            if _u is None or not _u["is_active"]:
                 session.clear()
                 flash("This account is no longer active. Contact your school admin.", "error")
                 return redirect(url_for("login"))
@@ -324,19 +323,6 @@ def login_required(*roles):
 
 def current_school_id():
     return session.get("school_id")
-
-
-def current_tenant_id():
-    return session.get("tenant_id")
-
-
-def require_current_tenant(conn):
-    """Resolve tenant from the authenticated user, never from request data."""
-    uid = session.get("user_id")
-    identity = tenant_for_user(conn, uid) if uid else None
-    if not identity:
-        return None
-    return identity["school_tenant_id"]
 
 
 def offline_sync_existing_id(conn, token):
@@ -672,27 +658,6 @@ def login():
                 flash("This account has been deactivated. Contact your school admin.", "error")
                 return render_template("login.html")
             school = get_school(conn, user["school_id"])
-            if not school:
-                conn.close()
-                flash("This account is not assigned to a valid school.", "error")
-                return render_template("login.html")
-            # Tenant identity is derived from the authenticated account and the
-            # authoritative school row; it is never accepted from the browser.
-            tenant_id = school["tenant_id"]
-            if not tenant_id:
-                tenant_id = generate_tenant_id(conn)
-                conn.execute("UPDATE schools SET tenant_id=? WHERE id=?", (tenant_id, user["school_id"]))
-
-            # Existing installations may have users created before tenant IDs
-            # were introduced.  The school row is authoritative, so repair a
-            # missing/stale user tenant stamp at the moment of successful
-            # authentication.  This also prevents the offline enrollment step
-            # from failing with tenant_mismatch and sending the user into the
-            # offline-login loop.
-            if user["tenant_id"] != tenant_id:
-                conn.execute("UPDATE users SET tenant_id=? WHERE id=?", (tenant_id, user["id"]))
-                user = conn.execute("SELECT * FROM users WHERE id=?", (user["id"],)).fetchone()
-            conn.commit()
             conn.close()
             if school and school["activation_status"] != "active":
                 flash("This school hasn't been activated yet. Enter your activation code on the Activate School page.", "error")
@@ -712,8 +677,6 @@ def login():
             session["role"] = user["role"]
             session["position"] = user["position"]
             session["school_id"] = user["school_id"]
-            session["tenant_id"] = tenant_id
-            session["school_code"] = school["school_code"]
             session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
             return redirect(url_for("dashboard"))
         conn.close()
@@ -804,19 +767,13 @@ def register_school():
 
         conn = get_db()
         try:
-            tenant_id = generate_tenant_id(conn)
-            school_code = generate_school_id(conn, school_name)
-            school_level = request.form.get("school_level", "secondary").strip().lower()
-            if school_level not in ("nursery", "primary", "secondary", "combined"):
-                school_level = "secondary"
-            cur = conn.execute(
-                "INSERT INTO schools (name, school_code, tenant_id, school_level, registered_email) VALUES (?,?,?,?,?)",
-                (school_name, school_code, tenant_id, school_level, registered_email))
+            cur = conn.execute("INSERT INTO schools (name, registered_email) VALUES (?,?)",
+                                (school_name, registered_email))
             school_id = cur.lastrowid
             conn.execute(
-                "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, security_question, security_answer_hash) "
-                "VALUES (?,?,?,?, 'admin', ?, ?, ?)",
-                (school_id, tenant_id, name, username, generate_password_hash(password),
+                "INSERT INTO users (school_id, name, username, password_hash, role, security_question, security_answer_hash) "
+                "VALUES (?,?,?,?, 'admin', ?, ?)",
+                (school_id, name, username, generate_password_hash(password),
                  security_question, generate_password_hash(security_answer.lower())),
             )
             conn.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?,1)", (school_id, "2025/2026"))
@@ -5196,21 +5153,16 @@ def platform_new_school():
 
         conn = get_db()
         try:
-            tenant_id = generate_tenant_id(conn)
-            school_code = generate_school_id(conn, school_name)
-            school_level = request.form.get("school_level", "secondary").strip().lower()
-            if school_level not in ("nursery", "primary", "secondary", "combined"):
-                school_level = "secondary"
             cur = conn.execute(
-                "INSERT INTO schools (name, school_code, tenant_id, school_level, registered_email, activation_status) VALUES (?,?,?,?,?,'pending')",
-                (school_name, school_code, tenant_id, school_level, registered_email),
+                "INSERT INTO schools (name, registered_email, activation_status) VALUES (?,?,'pending')",
+                (school_name, registered_email),
             )
             school_id = cur.lastrowid
             # No usable password yet — the School Admin sets a real one during activation.
             placeholder_hash = generate_password_hash(secrets.token_urlsafe(32))
             conn.execute(
-                "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role) VALUES (?,?,?, ?,?,'admin')",
-                (school_id, tenant_id, admin_name, admin_username, placeholder_hash),
+                "INSERT INTO users (school_id, name, username, password_hash, role) VALUES (?,?,?,?, 'admin')",
+                (school_id, admin_name, admin_username, placeholder_hash),
             )
             code, expires_at = generate_activation_code(conn, school_id, created_by=session.get("platform_admin_name"))
             log_audit(conn, "platform_admin", session.get("platform_admin_name"), "onboard_school",
