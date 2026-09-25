@@ -52,6 +52,7 @@ OFFLINE_ARCHITECTURE.md for the migration checklist). Each entry says:
 """
 import datetime
 import json
+import os
 import re
 import sqlite3
 from functools import wraps
@@ -102,23 +103,34 @@ def resolve_identity(conn):
         # demoting a sub-admin (or moving a teacher) would leave every device
         # they had already enrolled quietly holding the old, higher access.
         user = conn.execute(
-            "SELECT school_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
+            "SELECT school_id, tenant_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
         ).fetchone()
-        if (not user or user["school_id"] != cred["school_id"]
+        school = get_school(conn, cred["school_id"])
+        if (not school or not school["tenant_id"] or cred["tenant_id"] != school["tenant_id"]
+                or not user or user["school_id"] != cred["school_id"] or user["tenant_id"] != cred["tenant_id"]
                 or user["role"] not in STAFF_ROLES or not user["is_active"]):
             g.sync_auth_reason = "revoked"
             return None
         return {
             "user_id": cred["user_id"],
             "school_id": cred["school_id"],
+            "tenant_id": cred["tenant_id"],
             "role": user["role"],
             "position": user["position"],
             "device_id": device_id,
         }
     if "user_id" in session and session.get("role") in STAFF_ROLES:
+        tenant_id = session.get("tenant_id")
+        school = get_school(conn, session["school_id"])
+        if not tenant_id and school:
+            tenant_id = school["tenant_id"]
+        if not school or not tenant_id or school["tenant_id"] != tenant_id:
+            g.sync_auth_reason = "tenant_mismatch"
+            return None
         return {
             "user_id": session["user_id"],
             "school_id": session["school_id"],
+            "tenant_id": tenant_id,
             "role": session["role"],
             "position": session.get("position"),
             "device_id": request.headers.get("X-Device-Id"),  # online but device already enrolled
@@ -138,6 +150,10 @@ def require_identity(f):
             # person's unsynced work safe instead of just retrying forever.
             return jsonify({"error": "not_authenticated",
                             "status": getattr(g, "sync_auth_reason", "not_authenticated")}), 401
+        school = get_school(conn, identity["school_id"])
+        if not school or school["tenant_id"] != identity.get("tenant_id"):
+            conn.close()
+            return jsonify({"error": "tenant_mismatch", "status": "tenant_mismatch"}), 403
         g.sync_conn = conn
         g.sync_identity = identity
         try:
@@ -824,6 +840,168 @@ def _in_scope(conn, entity_name, identity, row):
 
 
 # ---------------------------------------------------------------------------
+# Deferred command authorization / execution
+# ---------------------------------------------------------------------------
+
+def _assignment_has_permission(conn, identity, permission, class_id=None, subject_id=None):
+    """Check the V5/V6 role-assignment permissions without trusting Flask's
+    normal session. Offline requests may authenticate with a device credential,
+    so the check must use the resolved identity instead."""
+    if identity["role"] == "admin":
+        return True
+    today = datetime.date.today().isoformat()
+    rows = conn.execute("""
+        SELECT ra.*
+        FROM role_assignments ra
+        WHERE ra.user_id=? AND ra.school_id=? AND ra.status='active'
+          AND (ra.start_date IS NULL OR ra.start_date<=?)
+          AND (ra.end_date IS NULL OR ra.end_date>=?)
+    """, (identity["user_id"], identity["school_id"], today, today)).fetchall()
+    for ra in rows:
+        if class_id is not None and ra["class_id"] and int(ra["class_id"]) != int(class_id):
+            continue
+        if subject_id is not None and ra["subject_id"] and int(ra["subject_id"]) != int(subject_id):
+            continue
+        if conn.execute(
+            "SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",
+            (ra["id"], permission),
+        ).fetchone():
+            return True
+    # Preserve the legacy access model while the role-assignment migration is
+    # being adopted. Teachers/sub-admins can still act only within their
+    # server-derived class scope; they never gain cross-school access.
+    return False
+
+
+def _action_class_allowed(conn, identity, class_id):
+    row = conn.execute("SELECT id, school_id FROM classes WHERE id=?", (class_id,)).fetchone()
+    if not row or row["school_id"] != identity["school_id"]:
+        return False
+    if identity["role"] in ADMIN_ROLES:
+        return True
+    scoped = _assignment_has_permission(conn, identity, "export", class_id=class_id)
+    if scoped:
+        return True
+    # Legacy teacher/sub-admin scope: form teacher class or assigned subject class.
+    return class_id in _teacher_class_ids(conn, identity) or class_id in _teacher_subject_class_ids(conn, identity)
+
+
+def _execute_email_class_results(conn, identity, payload):
+    class_id = int(payload.get("class_id")) if str(payload.get("class_id", "")).isdigit() else None
+    term_id = int(payload.get("term_id")) if str(payload.get("term_id", "")).isdigit() else None
+    if not class_id or not term_id:
+        raise SyncValidationError("A valid class and term are required.")
+    if not _action_class_allowed(conn, identity, class_id):
+        raise SyncValidationError("You are not authorized to email results for this class.")
+
+    term = conn.execute("""
+        SELECT t.*, se.school_id
+        FROM terms t JOIN sessions se ON se.id=t.session_id
+        WHERE t.id=? AND se.school_id=?
+    """, (term_id, identity["school_id"])).fetchone()
+    if not term:
+        raise SyncValidationError("That term does not belong to this school.")
+    if not term["is_published"]:
+        raise SyncValidationError("The term's results must be published before they can be emailed.")
+
+    # Import the application helpers lazily to avoid a circular import while
+    # sync_api.py is registered by app.py during startup.
+    from app import build_result_data, build_result_pdf, student_full_name, INSTANCE_DIR
+    from email_utils import send_email
+
+    school = get_school(conn, identity["school_id"])
+    students = conn.execute(
+        "SELECT * FROM students WHERE class_id=? AND is_active=1 ORDER BY last_name, first_name",
+        (class_id,),
+    ).fetchall()
+    sent = skipped = 0
+    for st in students:
+        if not st["parent_email"]:
+            skipped += 1
+            continue
+        data = build_result_data(conn, st["id"], term_id)
+        logo_path = None
+        if school and school["logo_filename"]:
+            candidate = os.path.join(INSTANCE_DIR, school["logo_filename"])
+            if os.path.exists(candidate):
+                logo_path = candidate
+        pdf_buf = build_result_pdf(
+            data, term, school_name=school["name"] if school else None,
+            logo_path=logo_path, student_full_name=student_full_name,
+            font_choice=school["pdf_font"] if school else "Helvetica",
+        )
+        ok, _ = send_email(
+            school, st["parent_email"],
+            f"{student_full_name(st)}'s Result — {term['session_name']} {term['name']}",
+            f"Please find attached {student_full_name(st)}'s result for {term['session_name']} {term['name']}.",
+            attachment_bytes=pdf_buf.getvalue(),
+            attachment_filename=f"result_{st['admission_no']}.pdf".replace("/", "-"),
+        )
+        if ok:
+            sent += 1
+        else:
+            skipped += 1
+    return f"Emailed {sent} result(s). {skipped} skipped (no parent email or sending failed)."
+
+
+@sync_bp.route("/api/actions/queue", methods=["POST"])
+@require_identity
+def queue_deferred_actions():
+    """Accept offline commands only after resolving the caller from the
+    authenticated session/device credential. The tenant, user and scope are
+    never accepted from the action body. Commands are idempotent by client_uuid
+    and are processed immediately when connectivity exists."""
+    conn, identity = g.sync_conn, g.sync_identity
+    body = request.get_json(silent=True) or {}
+    actions = body.get("actions") or []
+    if not isinstance(actions, list) or len(actions) > 25:
+        return jsonify({"error": "invalid_actions"}), 400
+
+    results = []
+    for action in actions:
+        client_uuid = str(action.get("client_uuid") or "").strip()
+        action_type = str(action.get("action_type") or "").strip()
+        payload = action.get("payload") or {}
+        if not client_uuid or len(client_uuid) > 120 or not re.fullmatch(r"[A-Za-z0-9._:-]+", client_uuid):
+            results.append({"client_uuid": client_uuid, "status": "failed", "message": "Invalid action ID."})
+            continue
+        if action_type != "email_class_results":
+            results.append({"client_uuid": client_uuid, "status": "failed", "message": "This offline action is not permitted."})
+            continue
+        if not isinstance(payload, dict):
+            results.append({"client_uuid": client_uuid, "status": "failed", "message": "Invalid action payload."})
+            continue
+
+        existing = conn.execute(
+            "SELECT status, result_message FROM deferred_actions WHERE client_uuid=? AND school_id=?",
+            (client_uuid, identity["school_id"]),
+        ).fetchone()
+        if existing:
+            results.append({"client_uuid": client_uuid, "status": existing["status"], "message": existing["result_message"] or "Already processed."})
+            continue
+
+        conn.execute(
+            "INSERT INTO deferred_actions (school_id,device_id,user_id,client_uuid,action_type,payload,status) VALUES (?,?,?,?,?,?,?)",
+            (identity["school_id"], identity.get("device_id"), identity["user_id"], client_uuid, action_type, json.dumps(payload), "pending"),
+        )
+        try:
+            message = _execute_email_class_results(conn, identity, payload)
+            conn.execute(
+                "UPDATE deferred_actions SET status='done', result_message=?, processed_at=CURRENT_TIMESTAMP WHERE client_uuid=? AND school_id=?",
+                (message, client_uuid, identity["school_id"]),
+            )
+            conn.commit()
+            results.append({"client_uuid": client_uuid, "status": "done", "message": message})
+        except Exception as exc:
+            conn.execute(
+                "UPDATE deferred_actions SET status='failed', result_message=?, processed_at=CURRENT_TIMESTAMP WHERE client_uuid=? AND school_id=?",
+                (str(exc), client_uuid, identity["school_id"]),
+            )
+            conn.commit()
+            results.append({"client_uuid": client_uuid, "status": "failed", "message": str(exc)})
+    return jsonify({"results": results})
+
+# ---------------------------------------------------------------------------
 # Enrollment
 # ---------------------------------------------------------------------------
 
@@ -838,7 +1016,7 @@ def enroll():
         return jsonify({"error": "not_authenticated"}), 401
     conn = get_db()
     try:
-        me = conn.execute("SELECT is_active, username FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        me = conn.execute("SELECT is_active, username, tenant_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
         if not me or not me["is_active"]:
             return jsonify({"error": "not_authenticated"}), 401
         body = request.get_json(silent=True) or {}
@@ -860,6 +1038,7 @@ def enroll():
                 "role": session["role"],
                 "position": session.get("position"),
                 "school_id": session["school_id"],
+                "tenant_id": me["tenant_id"],
             },
         })
     finally:
@@ -883,9 +1062,11 @@ def verify():
         if status != "ok":
             return jsonify({"status": status}), 200
         user = conn.execute(
-            "SELECT name, school_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
+            "SELECT name, school_id, tenant_id, role, position, is_active FROM users WHERE id=?", (cred["user_id"],)
         ).fetchone()
-        if (not user or user["school_id"] != cred["school_id"] or user["role"] not in STAFF_ROLES
+        school = get_school(conn, cred["school_id"])
+        if (not school or not school["tenant_id"] or cred["tenant_id"] != school["tenant_id"]
+                or not user or user["school_id"] != cred["school_id"] or user["tenant_id"] != cred["tenant_id"] or user["role"] not in STAFF_ROLES
                 or not user["is_active"]):
             return jsonify({"status": "revoked"}), 200
         return jsonify({
@@ -897,6 +1078,7 @@ def verify():
                 "role": user["role"],
                 "position": user["position"],
                 "school_id": cred["school_id"],
+                "tenant_id": cred["tenant_id"],
             },
         })
     finally:
@@ -918,16 +1100,11 @@ def _school_meta(conn, school_id):
         "id": row["id"],
         "name": row["name"],
         "logo_align": row["logo_align"],
-        "name_align": row["name_align"] or "center",
         "has_logo": bool(row["logo_filename"]),
         "logo_url": f"/portal-logo/{row['id']}" if row["logo_filename"] else None,
         "show_result_date": bool(row["show_result_date"]),
         "auto_teacher_comment": bool(row["auto_teacher_comment"]),
         "auto_principal_comment": bool(row["auto_principal_comment"]),
-        "timezone": row["timezone"] or "Africa/Lagos",
-        "date_format": row["date_format"] or "dmy",
-        "result_accent_color": row["result_accent_color"] or "#1f3a5f",
-        "result_header_layout": row["result_header_layout"] or "logo-left",
     }
 
 
@@ -1012,7 +1189,7 @@ def pull():
     offsets, done = _parse_cursor(cursor_raw)
 
     out = {"generated_at": now_iso(), "entities": {},
-           "school": _school_meta(conn, identity["school_id"]),
+           "school": {**(_school_meta(conn, identity["school_id"]) or {}), "tenant_id": identity["tenant_id"]},
            # deletions are listed once, on the first page
            "deleted": [] if cursor_raw else _tombstones_since(conn, identity, since)}
     next_offsets = {}

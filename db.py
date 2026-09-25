@@ -587,6 +587,7 @@ def migration_024_offline_sync(conn):
         CREATE TABLE IF NOT EXISTS device_credentials (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             school_id INTEGER NOT NULL,
+            tenant_id TEXT,
             user_id INTEGER NOT NULL,
             device_id TEXT NOT NULL UNIQUE,
             device_label TEXT,
@@ -603,7 +604,10 @@ def migration_024_offline_sync(conn):
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_device_credentials_user ON device_credentials(user_id)")
+    ensure_column(conn, "device_credentials", "tenant_id", "TEXT")
+    conn.execute("UPDATE device_credentials SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=device_credentials.school_id) WHERE tenant_id IS NULL")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_device_credentials_school ON device_credentials(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_device_credentials_tenant ON device_credentials(tenant_id)")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sync_conflicts (
@@ -936,6 +940,106 @@ def parse_arms(text):
     return out[:30]
 
 
+
+def migration_036_role_permissions(conn):
+    """Controlled role assignments and scoped permissions.
+
+    A user's legacy role remains the compatibility/authentication role. This
+    layer adds explicit assignments for Nursery/Primary/Secondary workflows,
+    scoped access, approval, temporary assignments and auditability.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS role_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT,
+            school_level TEXT NOT NULL DEFAULT 'All'
+                CHECK(school_level IN ('All','Nursery','Primary','Secondary')),
+            role TEXT NOT NULL,
+            department TEXT,
+            class_id INTEGER,
+            class_arm TEXT,
+            subject_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'active'
+                CHECK(status IN ('pending','active','rejected','revoked','expired')),
+            is_temporary INTEGER NOT NULL DEFAULT 0,
+            start_date TEXT,
+            end_date TEXT,
+            requested_by INTEGER,
+            approved_by INTEGER,
+            approved_at TEXT,
+            reason TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_user ON role_assignments(user_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_school ON role_assignments(school_id, status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_tenant ON role_assignments(tenant_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS role_assignment_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id INTEGER NOT NULL,
+            permission TEXT NOT NULL,
+            granted INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY(assignment_id) REFERENCES role_assignments(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignment_permissions_assignment ON role_assignment_permissions(assignment_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS role_assignment_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            assignment_id INTEGER,
+            user_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            actor_user_id INTEGER,
+            actor_name TEXT,
+            action TEXT NOT NULL,
+            previous_role TEXT,
+            new_role TEXT,
+            previous_scope TEXT,
+            new_scope TEXT,
+            approval_status TEXT,
+            reason TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignment_audit_school ON role_assignment_audit(school_id, created_at)")
+    # Seed one assignment from each existing school admin so the new screen
+    # does not appear empty on upgraded installations.
+    admins = conn.execute("""
+        SELECT u.id, u.school_id, u.role, s.tenant_id
+        FROM users u JOIN schools s ON s.id=u.school_id
+        WHERE u.role='admin'
+    """).fetchall()
+    for a in admins:
+        exists = conn.execute(
+            "SELECT 1 FROM role_assignments WHERE user_id=? AND role='School Admin' AND status='active' LIMIT 1",
+            (a["id"],)
+        ).fetchone()
+        if not exists:
+            cur = conn.execute("""
+                INSERT INTO role_assignments
+                (user_id, school_id, tenant_id, school_level, role, status, requested_by, approved_by, approved_at, reason)
+                VALUES (?,?,?,?,?,'active',?,?,CURRENT_TIMESTAMP,?)
+            """, (a["id"], a["school_id"], a["tenant_id"], "All", "School Admin",
+                  a["id"], a["id"], "Migrated from existing School Admin account"))
+            aid = cur.lastrowid
+            for perm in ("view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users"):
+                conn.execute("INSERT INTO role_assignment_permissions (assignment_id, permission) VALUES (?,?)", (aid, perm))
+
+
+
+
+def migration_037_scope_indexes(conn):
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_class ON role_assignments(school_id, class_id, class_arm)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_subject ON role_assignments(school_id, subject_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_department ON role_assignments(school_id, department)")
+    conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < date('now')")
+
 MIGRATIONS = [
     migration_001_baseline,
     migration_002_multi_school,
@@ -960,6 +1064,8 @@ MIGRATIONS = [
     migration_021_school_subdomain,
     migration_022_result_date_toggle,
     migration_023_school_activation,
+    migration_036_role_permissions,
+    migration_037_scope_indexes,
 ]
 
 
@@ -1146,43 +1252,45 @@ def migration_038_timetable(conn):
         """)
 
 
-def migration_039_parent_portal(conn):
-    """A real parent/guardian identity with its own login, separate from the
-    denormalized parent_* contact fields still kept on each student row (those
-    stay as-is — used by registration, CSV import, and the printed result
-    sheet). A parents row is created explicitly by an admin from the Parent
-    Profile page, then linked to one or more student rows via
-    parent_students, so one login covers every child of that guardian.
-    Like the student portal, this is a browser-only login (no offline access
-    yet) — consistent with how student accounts already work."""
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS parents (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            school_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            relationship TEXT,
-            phone TEXT,
-            email TEXT,
-            address TEXT,
-            username TEXT UNIQUE,
-            password_hash TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            last_notification_seen_id INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(school_id) REFERENCES schools(id)
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_parents_school ON parents(school_id)")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS parent_students (
-            parent_id INTEGER NOT NULL,
-            student_id INTEGER NOT NULL,
-            PRIMARY KEY (parent_id, student_id),
-            FOREIGN KEY(parent_id) REFERENCES parents(id),
-            FOREIGN KEY(student_id) REFERENCES students(id)
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id)")
+def migration_039_tenant_identifiers(conn):
+    """Add permanent human-readable school and tenant identifiers.
+
+    Existing numeric school_id values remain the internal relational key.
+    tenant_id and school_code are stable identifiers used by the application
+    and offline client; they are never accepted as authorization credentials.
+    """
+    ensure_column(conn, "schools", "tenant_id", "TEXT")
+    ensure_column(conn, "schools", "school_code", "TEXT")
+    ensure_column(conn, "users", "tenant_id", "TEXT")
+
+    def make_code(name, school_id):
+        raw = re.sub(r"[^A-Za-z0-9]+", "", (name or "SCHOOL").upper())
+        raw = raw[:18] or "SCHOOL"
+        code = raw
+        n = 2
+        while conn.execute("SELECT 1 FROM schools WHERE school_code=? AND id<>?", (code, school_id)).fetchone():
+            suffix = str(n)
+            code = (raw[:max(1, 20-len(suffix))] + suffix)
+            n += 1
+        return code
+
+    schools = conn.execute("SELECT id, name, tenant_id, school_code FROM schools ORDER BY id").fetchall()
+    for school in schools:
+        tenant_id = school["tenant_id"]
+        school_code = school["school_code"]
+        if not tenant_id:
+            tenant_id = "TEN-" + _secrets.token_hex(4).upper()
+            while conn.execute("SELECT 1 FROM schools WHERE tenant_id=?", (tenant_id,)).fetchone():
+                tenant_id = "TEN-" + _secrets.token_hex(4).upper()
+        if not school_code:
+            school_code = make_code(school["name"], school["id"])
+        conn.execute("UPDATE schools SET tenant_id=?, school_code=? WHERE id=?",
+                     (tenant_id, school_code, school["id"]))
+        conn.execute("UPDATE users SET tenant_id=? WHERE school_id=?", (tenant_id, school["id"]))
+
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_schools_tenant_id ON schools(tenant_id)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_schools_school_code ON schools(school_code)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id)")
 
 
 STEPS = [
@@ -1203,7 +1311,8 @@ STEPS = [
     ("student_status_contact", migration_036_student_status_contact),
     ("attendance_source", migration_037_attendance_source),
     ("timetable", migration_038_timetable),
-    ("parent_portal", migration_039_parent_portal),
+    ("tenant_identifiers", migration_039_tenant_identifiers),
+    ("role_scope_compat", migration_role_scope_compat),
 ]
 
 
@@ -1721,18 +1830,25 @@ def issue_device_credential(conn, school_id, user_id, role, position, device_lab
             "SELECT school_id, user_id FROM device_credentials WHERE device_id=?", (device_id,)).fetchone()
         if existing and (existing["school_id"] != school_id or existing["user_id"] != user_id):
             device_id = None
+    school = get_school(conn, school_id)
+    if not school or not school["tenant_id"]:
+        raise ValueError("School has no valid tenant identifier")
+    tenant_id = school["tenant_id"]
+    user = conn.execute("SELECT school_id, tenant_id, is_active FROM users WHERE id=?", (user_id,)).fetchone()
+    if not user or user["school_id"] != school_id or user["tenant_id"] != tenant_id or not user["is_active"]:
+        raise ValueError("User and school tenant do not match")
     device_id = device_id or _secrets.token_hex(12)
     secret = _secrets.token_urlsafe(32)
     expires_at = (_dt.datetime.utcnow() + _dt.timedelta(days=OFFLINE_CREDENTIAL_LIFETIME_DAYS)).isoformat(timespec="seconds")
     conn.execute(
         "INSERT INTO device_credentials "
-        "(school_id, user_id, device_id, device_label, secret_hash, role_snapshot, position_snapshot, expires_at, last_verified_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?) "
+        "(school_id, tenant_id, user_id, device_id, device_label, secret_hash, role_snapshot, position_snapshot, expires_at, last_verified_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(device_id) DO UPDATE SET secret_hash=excluded.secret_hash, "
         "role_snapshot=excluded.role_snapshot, position_snapshot=excluded.position_snapshot, "
         "expires_at=excluded.expires_at, revoked=0, revoked_reason=NULL, last_verified_at=excluded.last_verified_at "
         "WHERE device_credentials.user_id = excluded.user_id AND device_credentials.school_id = excluded.school_id",
-        (school_id, user_id, device_id, device_label, _hash_device_secret(secret), role, position, expires_at, now_iso()),
+        (school_id, tenant_id, user_id, device_id, device_label, _hash_device_secret(secret), role, position, expires_at, now_iso()),
     )
     # Keep the number of live devices per person bounded (a new browser or a
     # cleared profile enrols as a new device): beyond MAX_DEVICES_PER_USER the
@@ -1786,6 +1902,11 @@ def verify_device_credential(conn, device_id, secret):
     if cred["expires_at"] and cred["expires_at"] < now_iso():
         return "expired", cred
     school = get_school(conn, cred["school_id"])
+    if not school or not school["tenant_id"] or cred["tenant_id"] != school["tenant_id"]:
+        return "tenant_mismatch", cred
+    user = conn.execute("SELECT school_id, tenant_id, is_active FROM users WHERE id=?", (cred["user_id"],)).fetchone()
+    if not user or user["school_id"] != cred["school_id"] or user["tenant_id"] != cred["tenant_id"] or not user["is_active"]:
+        return "revoked", cred
     if school and school["is_suspended"]:
         return "school_suspended", cred
     if school and school["is_archived"]:
