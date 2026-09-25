@@ -216,51 +216,53 @@
         if (!nav || !session) return;
         const name = (profile && profile.name) || "School Results";
         nav.innerHTML = "";
-        const bar = el(`<nav class="navbar">
-            <div class="navbar-brand navbar-brand-${esc((profile && profile.logo_align) || "center")}">
-                ${logoUrl ? `<img src="${esc(logoUrl)}" alt="" class="navbar-logo">` : ""}<span>${esc(name)}</span>
-            </div>
-            <span id="syncPill" role="button" tabindex="0" title="Connection and sync status"></span>
-            <button class="navbar-toggle" id="navbarToggle" aria-label="Toggle menu" type="button">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-            <div class="navbar-links" id="navbarLinks"></div>
-        </nav>`);
-        const links = bar.querySelector("#navbarLinks");
+        const icon = (label) => ({"Dashboard":"⌂","Classes":"▦","My Class":"✓","Materials":"▤","Setup":"⚙","Terms":"◷","Staff Attendance":"✓","Promote Students":"↑","Parents":"♧","Timetable":"▣","Reports":"▥","Notifications":"♢","Settings":"⚙"}[label] || "•");
+        const bar = el(`<div class="app-shell">
+            <aside class="app-sidebar" id="appSidebar">
+                <div class="sidebar-brand"><div class="brand-mark">${esc(name.slice(0,2).toUpperCase())}</div><div><strong>${esc(name)}</strong><span>${esc(session.user.role.replace("_", " "))}</span></div></div>
+                <div class="sidebar-scroll" id="offlineSidebarLinks"></div>
+                <div class="sidebar-footer"><div class="sidebar-user"><div class="avatar">${esc((session.user.name || "U").slice(0,1).toUpperCase())}</div><div><strong>${esc(session.user.name || "User")}</strong><span>${esc(session.user.role.replace("_", " "))}</span></div></div><a class="logout-link" href="/logout" id="offlineLogout">Sign out</a></div>
+            </aside>
+            <div class="sidebar-overlay" id="sidebarOverlay"></div>
+            <section class="app-main">
+                <header class="topbar"><button class="navbar-toggle topbar-menu" id="navbarToggle" aria-label="Toggle navigation" type="button">☰</button><div class="topbar-search"><span>⌕</span><input aria-label="Search" placeholder="Search students, classes, results..." disabled></div><div class="topbar-actions"><span id="syncPill" class="sync-pill" role="button" tabindex="0" title="Connection and sync status"></span><span class="topbar-date" id="liveClock"></span><div class="topbar-profile"><div class="avatar avatar-sm">${esc((session.user.name || "U").slice(0,1).toUpperCase())}</div><span>${esc(session.user.name || "User")}</span></div></div></header>
+            </section>
+        </div>`);
+        const links = bar.querySelector("#offlineSidebarLinks");
+        const groups = [];
         for (const item of navItems()) {
-            const a = el(`<a href="${item.route !== undefined ? "#/" + esc(item.route) : esc(item.href)}">${esc(item.label)}${item.online ? "" : ""}</a>`);
-            a.addEventListener("click", (ev) => {
-                links.classList.remove("nav-open");
-                if (item.route !== undefined) return;            // hash change is handled by the router
-                ev.preventDefault();
-                if (!isOnline()) toast(`${item.label} needs an internet connection.`);
-                else location.href = item.href;
-            });
+            const a = el(`<a class="side-link" href="${item.route !== undefined ? "#/" + esc(item.route) : esc(item.href)}"><span class="side-icon">${icon(item.label)}</span><span>${esc(item.label)}</span></a>`);
+            a.addEventListener("click", () => { if (item.route === undefined) return; });
             links.appendChild(a);
         }
-        links.appendChild(el(`<span class="navbar-user">${esc(session.user.name)} (${esc(session.user.role.replace("_", " "))})</span>`));
-        const out = el(`<a href="/logout">Logout</a>`);
-        out.addEventListener("click", (ev) => {
-            ev.preventDefault();
-            OfflineAuth.lock();
-            SyncEngine.stopAutoSync();
-            session = null;
-            clearNavbar();
-            try { navigator.serviceWorker.ready.then((reg) => reg.active && reg.active.postMessage({ type: "purge-pages" })); } catch (e) { /* no service worker */ }
-            if (isOnline()) setTimeout(() => { location.href = "/logout"; }, 200);
-            else renderAccountPicker();
+        const label = currentRoute();
+        links.querySelectorAll(".side-link").forEach(a => {
+            const href = a.getAttribute("href") || "";
+            const r = href.replace(/^#\/?/, "");
+            if (r === label) a.classList.add("active");
+            if (!label && r === "") a.classList.add("active");
         });
-        links.appendChild(out);
-        bar.querySelector("#navbarToggle").addEventListener("click", () => links.classList.toggle("nav-open"));
-        const pill = bar.querySelector("#syncPill");
-        pill.addEventListener("click", () => go("sync"));
-        pill.addEventListener("keydown", (ev) => { if (ev.key === "Enter") go("sync"); });
+        bar.querySelector("#navbarToggle").addEventListener("click", () => {
+            bar.querySelector("#appSidebar").classList.toggle("open");
+            bar.querySelector("#sidebarOverlay").classList.toggle("show");
+        });
+        bar.querySelector("#sidebarOverlay").addEventListener("click", () => {
+            bar.querySelector("#appSidebar").classList.remove("open");
+            bar.querySelector("#sidebarOverlay").classList.remove("show");
+        });
+        bar.querySelectorAll(".side-link").forEach(a => a.addEventListener("click", () => {
+            bar.querySelector("#appSidebar").classList.remove("open");
+            bar.querySelector("#sidebarOverlay").classList.remove("show");
+        }));
+        bar.querySelector("#offlineLogout").addEventListener("click", (ev) => {
+            ev.preventDefault();
+            try { OfflineAuth.lock(); } catch (e) {}
+            try { navigator.serviceWorker.ready.then(reg => reg.active && reg.active.postMessage({type:"purge-pages"})); } catch (e) {}
+            setTimeout(() => { window.location.href = "/logout"; }, 200);
+        });
         nav.appendChild(bar);
-        refreshPill(lastDetail);
     }
 
-    // The only connection indicator: three states, small, always visible.
-    //   🟢 Online — Synced   |   🟠 Offline — Saved Locally   |   🔄 Syncing
     async function refreshPill(detail) {
         const pill = document.getElementById("syncPill");
         if (!pill) return;
@@ -345,29 +347,29 @@
         const label = await termLabel();
         const [students, classes, users, subjects] = await Promise.all(
             ["students", "classes", "users", "subjects"].map((e) => OfflineDB.getAll(schoolId, e)));
+        const activeStudents = students.filter((s) => s.is_active).length;
+        const teachers = users.filter((u) => u.role === "teacher").length;
         const body = el(`<div>
-            ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set. Set one up under Terms (needs internet).</p>`}
+            <div class="page-head"><div><h1>Good day, ${esc(session.user.name || "Administrator")}</h1><p class="page-kicker">Your offline workspace is ready. Changes are saved to this device first and synchronized automatically.</p></div><div class="page-actions"><a class="btn" href="#/students">Manage Students</a><a class="btn btn-gold" href="#/results">Open Results</a></div></div>
+            ${label ? `<div class="hero-card card"><h2>${esc(label)}</h2><p>Current academic term. Results, attendance and comments are available from the workspace below.</p></div>` : `<p class="flash flash-error">No active term set. Set one up under Terms (needs internet).</p>`}
             ${datetimeCardHtml()}
-            <div class="stat-grid">
-                <div class="stat-box"><div class="num">${students.filter((s) => s.is_active).length}</div><div class="label">Students</div></div>
-                <div class="stat-box"><div class="num">${classes.length}</div><div class="label">Classes</div></div>
-                <div class="stat-box"><div class="num">${users.filter((u) => u.role === "teacher").length}</div><div class="label">Teachers</div></div>
-                <div class="stat-box"><div class="num">${subjects.length}</div><div class="label">Subjects</div></div>
+            <div class="metric-grid">
+              <div class="metric-card"><div class="metric-label">Students</div><div class="metric-value">${activeStudents}</div><div class="metric-note">Active learners</div></div>
+              <div class="metric-card"><div class="metric-label">Classes</div><div class="metric-value">${classes.length}</div><div class="metric-note">Configured classes</div></div>
+              <div class="metric-card"><div class="metric-label">Teachers</div><div class="metric-value">${teachers}</div><div class="metric-note">Teaching staff</div></div>
+              <div class="metric-card"><div class="metric-label">Subjects</div><div class="metric-value">${subjects.length}</div><div class="metric-note">Available subjects</div></div>
             </div>
-            <div class="grid-2">
-                <div class="card" id="dashSetup"><h3>School Setup</h3><p>Manage classes, subjects, students and teachers.</p></div>
-                <div class="card" id="dashResults"><h3>Results</h3><p>View broadsheets and terminal results by class.</p></div>
-                <div class="card" id="dashWork"><h3>Daily Work</h3><p>Attendance, scores and comments.</p></div>
+            <div class="card"><div class="section-title"><h3>Quick actions</h3><span class="mini-muted">Works offline</span></div><div class="action-grid" id="dashActions"></div></div>
+            <div class="split-panel">
+              <div class="card"><div class="section-title"><h3>School setup</h3><span class="mini-muted">Manage local records</span></div><div id="dashSetup" class="action-grid"></div></div>
+              <div class="card hero-card"><h3>Sync & conflicts</h3><p>Your local changes remain safe while offline. Open Sync when you need to review pending work or conflicts.</p><a class="btn" href="#/sync">Open Sync Center</a></div>
             </div>
         </div>`);
-        const add = (parent, text, route, gold) => {
-            const b = el(`<a class="btn${gold ? " btn-gold" : ""}" href="#/${route}">${esc(text)}</a>`);
-            body.querySelector(parent).appendChild(b);
-        };
-        for (const [t, r] of [["Classes", "classes"], ["Subjects", "subjects"], ["Assign Subjects", "assign"], ["Students", "students"], ["Teachers", "teachers"]]) add("#dashSetup", t, r);
-        add("#dashResults", "Go to Classes", "results", true);
-        for (const [t, r] of [["Attendance / Roll Call", "attendance"], ["Score Entry", "scores"], ["Teacher / Principal Comments", "comments"], ["Student Registration", "register"], ["Roll-Call History", "roll-call-history"]]) add("#dashWork", t, r);
-        frame("Admin Dashboard", body);
+        const actions = [["Students","students","Profiles & enrolment","S"],["Teachers","teachers","Staff accounts","T"],["Classes","classes","Classes & arms","C"],["Subjects","subjects","Curriculum setup","▦"],["Results","results","Scores & broadsheets","R"],["Attendance","attendance","Roll call","✓"],["Reports","reports","Academic reports","▥"],["Settings","settings","Preferences","⚙"]];
+        const setup = [["Classes","classes","Manage classes","C"],["Subjects","subjects","Manage subjects","▦"],["Assign Subjects","assign","Teacher assignments","A"],["Students","students","Student records","S"],["Teachers","teachers","Staff records","T"]];
+        for (const [t,r,d,i] of actions) body.querySelector("#dashActions").appendChild(el(`<a class="action-tile" href="#/${r}"><span class="action-icon">${i}</span><span><strong>${esc(t)}</strong><span>${esc(d)}</span></span></a>`));
+        for (const [t,r,d,i] of setup) body.querySelector("#dashSetup").appendChild(el(`<a class="action-tile" href="#/${r}"><span class="action-icon">${i}</span><span><strong>${esc(t)}</strong><span>${esc(d)}</span></span></a>`));
+        frame("", body);
         startDatetimeCardClock(body);
     }
 
@@ -378,24 +380,27 @@
         const isFormTeacher = classes.some((c) => c.form_teacher_id === session.user.user_id);
         const rows = mine.map((l) => {
             const c = classes.find((x) => x.id === l.class_id), s = subjects.find((x) => x.id === l.subject_id);
-            return `<tr><td>${esc(c ? c.name : "")}</td><td>${esc(s ? s.name : "")}</td><td><a class="btn btn-small" href="#/scores">Enter Scores</a></td></tr>`;
+            return `<tr><td><strong>${esc(c ? c.name : "")}</strong></td><td>${esc(s ? s.name : "")}</td><td><a class="btn btn-small" href="#/scores">Enter Scores</a></td></tr>`;
         }).join("");
         const body = el(`<div>
-            ${isFormTeacher ? `<a href="#/attendance" class="btn btn-small">Manage My Class Register</a>` : ""}
-            ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set yet. Contact the admin.</p>`}
+            <div class="page-head"><div><h1>Welcome, ${esc(session.user.name || "Teacher")}</h1><p class="page-kicker">Your classes, assignments and daily teaching tools in one place.</p></div><div class="page-actions">${isFormTeacher ? `<a href="#/attendance" class="btn">Manage My Class</a>` : ""}<a href="#/results" class="btn btn-gold">View Results</a></div></div>
+            ${label ? `<div class="hero-card card"><h2>${esc(label)}</h2><p>Active academic term. Record work confidently whether you are online or offline.</p></div>` : `<p class="flash flash-error">No active term set yet. Contact the admin.</p>`}
             ${datetimeCardHtml()}
-            <div class="card"><h3>Your Subject Assignments</h3>
-                ${rows ? `<table><tr><th>Class</th><th>Subject</th><th>Action</th></tr>${rows}</table>` : `<p>No subjects assigned to you yet.</p>`}
+            <div class="metric-grid">
+              <div class="metric-card"><div class="metric-label">Assignments</div><div class="metric-value">${mine.length}</div><div class="metric-note">Subject allocations</div></div>
+              <div class="metric-card"><div class="metric-label">Result classes</div><div class="metric-value">${classes.filter(c => mine.some(l => l.class_id === c.id) || c.form_teacher_id === session.user.user_id).length}</div><div class="metric-note">Your accessible classes</div></div>
+              <div class="metric-card"><div class="metric-label">Class role</div><div class="metric-value" style="font-size:20px;">${isFormTeacher ? "Form Teacher" : "Subject Teacher"}</div><div class="metric-note">Current responsibility</div></div>
+              <div class="metric-card"><div class="metric-label">Sync</div><div class="metric-value" style="font-size:20px;">Ready</div><div class="metric-note">Offline work supported</div></div>
             </div>
-            <div class="card"><h3>Daily Work</h3>
-                <a class="btn" href="#/attendance">Attendance / Roll Call</a>
-                <a class="btn" href="#/scores">Score Entry</a>
-                <a class="btn" href="#/comments">Teacher / Principal Comments</a>
-                <a class="btn" href="#/results">Results &amp; Broadsheets</a>
-                <a class="btn" href="#/roll-call-history">Roll-Call History</a>
-            </div>
+            <div class="card"><div class="section-title"><h3>Daily teaching tools</h3><span class="mini-muted">Start a task</span></div><div class="action-grid">
+              <a class="action-tile" href="#/scores"><span class="action-icon">▤</span><span><strong>Score Entry</strong><span>Enter CA & exam scores</span></span></a>
+              <a class="action-tile" href="#/attendance"><span class="action-icon">✓</span><span><strong>Attendance</strong><span>Roll call & register</span></span></a>
+              <a class="action-tile" href="#/comments"><span class="action-icon">✎</span><span><strong>Comments</strong><span>Teacher & principal remarks</span></span></a>
+              <a class="action-tile" href="#/results"><span class="action-icon">R</span><span><strong>Results</strong><span>Broadsheets & terminal results</span></span></a>
+            </div></div>
+            <div class="card table-card"><div class="section-title"><h3>Your subject assignments</h3><span class="mini-muted">${mine.length} assignment${mine.length === 1 ? "" : "s"}</span></div>${rows ? `<table><thead><tr><th>Class</th><th>Subject</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table>` : `<div class="empty-state">No subjects assigned to you yet.</div>`}</div>
         </div>`);
-        frame(`Welcome, ${session.user.name}`, body);
+        frame("", body);
         startDatetimeCardClock(body);
     }
 
@@ -853,7 +858,7 @@
         const banners = el(`<div></div>`);
         wrap.appendChild(banners);
         fillBanners(banners).catch(() => {});
-        wrap.appendChild(el(`<h1>${esc(title)}</h1>`));
+        if (title) wrap.appendChild(el(`<h1>${esc(title)}</h1>`));
         wrap.appendChild(bodyEl);
         root.appendChild(wrap);
         refreshPill(lastDetail);
