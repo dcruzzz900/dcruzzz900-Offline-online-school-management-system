@@ -114,16 +114,18 @@ if ("serviceWorker" in navigator) {
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}
       {% endwith %}
-      {% block content %}{% endblock %}
-    </main>
-  </section>
-</div>
 {% else %}
 <main class="public-shell">
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}{% for category, message in messages %}<div class="flash flash-{{ category }} public-flash">{{ message }}</div>{% endfor %}{% endif %}
   {% endwith %}
-  {% block content %}{% endblock %}
+{% endif %}
+      {% block content %}{% endblock %}
+{% if signed_in %}
+    </main>
+  </section>
+</div>
+{% else %}
 </main>
 {% endif %}
 
