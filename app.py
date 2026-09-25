@@ -20,7 +20,7 @@ from db import (
     get_db, init_db, grade_for, get_school, INSTANCE_DIR,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
-    seed_school_defaults, upsert_enrollment, log_audit,
+    seed_school_defaults, upsert_enrollment, log_audit, assign_tenant_identifiers,
     get_visible_notifications, get_unread_notification_count,
     recompute_attendance, attendance_percentage, grading_problems, grade_band_problems, parse_arms,
     generate_teacher_comment, generate_principal_comment,
@@ -1296,6 +1296,7 @@ def register_school():
             conn.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?,1)", (school_id, "2025/2026"))
             session_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             conn.execute("INSERT INTO terms (name, session_id, is_active) VALUES ('1st Term', ?, 1)", (session_id,))
+            assign_tenant_identifiers(conn, school_id, school_name)
             conn.commit()
             seed_school_defaults(conn, school_id)
             conn.close()

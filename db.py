@@ -1548,6 +1548,14 @@ def init_db(reset=False):
     # applied even though parent_students is missing.
     _ensure_parent_core_schema(conn)
     run_migrations(conn)
+    # Safety net, not a migration: migration_039_tenant_identifiers only ever
+    # runs once. A school created afterwards by a code path that (bug) skips
+    # assigning tenant_id/school_code — e.g. register_school before this fix —
+    # would otherwise be stuck without one forever. Cheap on every startup
+    # since it's a no-op once every school has an identifier.
+    for row in conn.execute("SELECT id, name FROM schools WHERE tenant_id IS NULL OR school_code IS NULL"):
+        assign_tenant_identifiers(conn, row["id"], row["name"])
+    conn.commit()
 
     # SKIP_DEMO_SEED=1 (recommended for any public deployment): don't create
     # the demo school with its well-known admin/teacher passwords. Create the
@@ -1585,6 +1593,27 @@ def seed_school_defaults(conn, school_id):
     conn.commit()
 
 
+def assign_tenant_identifiers(conn, school_id, school_name):
+    """Give a newly-created school its tenant_id and school_code, and stamp
+    tenant_id onto its users. Every school row needs both before any user
+    under it can enroll an offline device (see issue_device_credential) or
+    use anything else keyed by tenant — see migration_039_tenant_identifiers,
+    whose generation scheme this mirrors for schools created afterwards."""
+    tenant_id = "TEN-" + _secrets.token_hex(4).upper()
+    while conn.execute("SELECT 1 FROM schools WHERE tenant_id=?", (tenant_id,)).fetchone():
+        tenant_id = "TEN-" + _secrets.token_hex(4).upper()
+    code_base = re.sub(r"[^A-Za-z0-9]+", "", (school_name or "SCHOOL").upper())[:18] or "SCHOOL"
+    code = code_base
+    n = 2
+    while conn.execute("SELECT 1 FROM schools WHERE school_code=? AND id<>?", (code, school_id)).fetchone():
+        suffix = str(n)
+        code = code_base[:max(1, 20 - len(suffix))] + suffix
+        n += 1
+    conn.execute("UPDATE schools SET tenant_id=?, school_code=? WHERE id=?", (tenant_id, code, school_id))
+    conn.execute("UPDATE users SET tenant_id=? WHERE school_id=?", (tenant_id, school_id))
+    return tenant_id, code
+
+
 def seed(conn):
     cur = conn.cursor()
 
@@ -1603,6 +1632,8 @@ def seed(conn):
         (school_id, "Mrs. Ada Okafor", "aokafor", generate_password_hash("teacher123"), "teacher", "form_teacher"),
     )
     teacher_id = cur.lastrowid
+
+    assign_tenant_identifiers(conn, school_id, "My School")
 
     cur.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?,1)", (school_id, "2025/2026"))
     session_id = cur.lastrowid
