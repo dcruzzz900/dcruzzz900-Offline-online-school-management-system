@@ -1042,7 +1042,45 @@ def migration_037_scope_indexes(conn):
 
 
 def migration_038_parent_portal_indexes(conn):
-    """Indexes supporting parent portal lookups and notification delivery."""
+    """Indexes supporting parent portal lookups and notification delivery.
+
+    The parent tables were originally introduced as post-migration schema
+    steps.  Some upgraded Railway databases can therefore reach this migration
+    before those steps have run (or can have a stale schema_steps marker).
+    Create the parent tables defensively here before creating their indexes so
+    startup is self-healing and never fails with ``no such table: parent_students``.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            address TEXT,
+            relationship TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_notification_seen_id INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_accounts_school_username ON parent_accounts(school_id, username)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            UNIQUE(parent_id, student_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_parent ON parent_students(parent_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student_parent ON parent_students(student_id, parent_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_school_role_id ON notifications(school_id, target_role, id)")
 
@@ -1459,6 +1497,45 @@ def run_migrations(conn):
     conn.commit()
 
 
+def _ensure_parent_core_schema(conn):
+    """Repair guard for databases created by builds that introduced the parent
+    portal as a schema step.  The application imports can query parent_students
+    during startup on an already-migrated database, so these two core tables
+    must exist before the normal migration/step bookkeeping is trusted."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            address TEXT,
+            relationship TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_notification_seen_id INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_accounts_school_username ON parent_accounts(school_id, username)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            UNIQUE(parent_id, student_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_parent ON parent_students(parent_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id)")
+    conn.commit()
+
+
 def init_db(reset=False):
     os.makedirs(INSTANCE_DIR, exist_ok=True)
     if reset and os.path.exists(DB_PATH):
@@ -1466,6 +1543,10 @@ def init_db(reset=False):
 
     fresh = not os.path.exists(DB_PATH)
     conn = get_db()
+    # Repair older Railway volumes before migration bookkeeping runs.  In
+    # particular, a stale schema_steps row can say the parent portal was
+    # applied even though parent_students is missing.
+    _ensure_parent_core_schema(conn)
     run_migrations(conn)
 
     # SKIP_DEMO_SEED=1 (recommended for any public deployment): don't create
