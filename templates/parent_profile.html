@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Parent Profile{% endblock %}
+{% block title %}Parent Profile
+
 {% block content %}
 <h1>Parent / Guardian Profile</h1>
 <p><a href="{{ url_for('student_profile', student_id=student.id) }}">&larr; Back to {{ student_full_name(student) }}'s Profile</a></p>
@@ -13,7 +14,7 @@
     <p><b>Address:</b> {{ student.parent_address or '—' }}</p>
     <p style="font-size:0.8rem; color:#999; margin-top:0.75rem;">
         This profile is assembled from the parent/guardian contact fields on each student's record —
-        there isn't a separate parent login yet. To update this information, edit any of the children below.
+        the dedicated parent portal account is managed below. To update this information, edit any of the children below.
     </p>
 </div>
 
@@ -35,4 +36,7 @@
     <p>No linked children found.</p>
     {% endif %}
 </div>
+{% endblock %}
+
+<div class="card" style="margin-top:18px"><div class="card-head"><h2>Parent Portal Account</h2></div><p class="muted">Create or reset the dedicated parent login. The account is linked to all active children sharing this guardian's phone number or email.</p><form method="post" action="{{ url_for('create_parent_account', student_id=student.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="grid-2"><label>Username<input name="username" value="{{ student.parent_email or student.parent_phone or '' }}" placeholder="Email or phone"></label><label>Temporary password<input type="password" name="password" minlength="8" required placeholder="At least 8 characters"></label></div><button class="btn btn-primary" type="submit">Create / Reset Parent Login</button></form></div>
 {% endblock %}

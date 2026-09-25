@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}My Children{% endblock %}{% block content %}
+<div class="page-head"><div><h1>My Children</h1><p>Manage and view the students linked to your parent account.</p></div></div>
+<div class="child-grid">{% for c in children %}<article class="card child-card"><div class="avatar avatar-lg">{{ (c.first_name[:1] ~ c.last_name[:1])|upper }}</div><h2>{{ c.first_name }} {{ c.last_name }}</h2><p>{{ c.class_name }}</p><span class="badge">Active</span><div class="child-actions"><a class="btn btn-primary" href="{{ url_for('parent_dashboard', child_id=c.id) }}">Open Dashboard</a><a class="btn btn-small" href="{{ url_for('parent_results', child_id=c.id) }}">Results</a></div></article>{% else %}<div class="card"><p>No active children are linked to this account.</p></div>{% endfor %}</div>
+{% endblock %}

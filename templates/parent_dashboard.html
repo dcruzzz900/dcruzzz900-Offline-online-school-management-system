@@ -1,26 +1,13 @@
 {% extends "base.html" %}
-{% block title %}My Children{% endblock %}
+{% block title %}Parent Dashboard{% endblock %}
 {% block content %}
-<h1>Welcome, {{ parent.name }}</h1>
-
-{% include "partials/datetime_card.html" %}
-
-<div class="card">
-    <h3>My Children</h3>
-    {% if children %}
-    <table>
-        <tr><th>Name</th><th>Class</th><th>Status</th><th></th></tr>
-        {% for c in children %}
-        <tr>
-            <td>{{ student_full_name(c) }}</td>
-            <td>{{ c.class_name }}</td>
-            <td>{{ c.status or 'Active' }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('parent_child', student_id=c.id) }}">View</a></td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p>No children are linked to this account yet. Contact the school office.</p>
-    {% endif %}
-</div>
+<div class="page-head"><div><h1>Parent Dashboard</h1><p>Welcome back. Stay informed about your child's progress.</p></div></div>
+{% if children %}<div class="child-switcher">{% for c in children %}<a class="child-chip {% if child and c.id==child.id %}active{% endif %}" href="{{ url_for('parent_dashboard', child_id=c.id) }}">{{ c.first_name }} {{ c.last_name }}<small>{{ c.class_name }}</small></a>{% endfor %}</div>{% endif %}
+{% if child %}
+<div class="profile-banner card"><div class="avatar avatar-lg">{{ (child.first_name[:1] ~ child.last_name[:1])|upper }}</div><div><h2>{{ child.first_name }} {{ child.last_name }}</h2><p>{{ child.class_name }} · Admission No. {{ child.admission_no }}</p></div><a class="btn btn-small" href="{{ url_for('parent_results', child_id=child.id) }}">View Results</a></div>
+<div class="stat-grid"><div class="stat-card"><span>Average Score</span><strong>{{ summary.average }}%</strong><small>{{ term.name if term else 'No published term' }}</small></div><div class="stat-card"><span>Attendance</span><strong>{{ summary.attendance }}%</strong><small>{{ summary.present }} present · {{ summary.absent }} absent</small></div><div class="stat-card"><span>Subjects</span><strong>{{ summary.subjects }}</strong><small>Published results</small></div><div class="stat-card"><span>Class</span><strong>{{ child.class_name }}</strong><small>{{ child.class_category or 'Current class' }}</small></div></div>
+<div class="dashboard-grid"><section class="card"><div class="card-head"><h2>Recent Results</h2><a href="{{ url_for('parent_results', child_id=child.id) }}">View all</a></div>{% if recent_results %}<div class="table-wrap"><table><thead><tr><th>Subject</th><th>CA</th><th>Exam</th><th>Total</th><th>Grade</th></tr></thead><tbody>{% for r in recent_results %}<tr><td>{{ r.name }}</td><td>{{ r.ca1 }}{% if r.ca2 != '-' %} + {{ r.ca2 }}{% endif %}</td><td>{{ r.exam }}</td><td><strong>{{ r.total }}</strong></td><td><span class="badge">{{ r.grade }}</span></td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">No published result is available yet.</p>{% endif %}</section>
+<section class="card"><div class="card-head"><h2>Latest Notifications</h2><a href="{{ url_for('parent_notifications') }}">View all</a></div>{% for n in notifications %}<div class="activity-row"><div class="activity-icon">♢</div><div><strong>{{ n.title }}</strong><p>{{ n.message|truncate(110) }}</p><small>{{ n.created_at|default('') }}</small></div></div>{% else %}<p class="muted">No notifications yet.</p>{% endfor %}</section></div>
+<div class="quick-grid"><a class="quick-card" href="{{ url_for('parent_attendance', child_id=child.id) }}">✓ <strong>Attendance</strong><span>View attendance history</span></a><a class="quick-card" href="{{ url_for('parent_timetable', child_id=child.id) }}">▣ <strong>Timetable</strong><span>See weekly schedule</span></a><a class="quick-card" href="{{ url_for('parent_reports', child_id=child.id) }}">▥ <strong>Reports</strong><span>Download report cards</span></a><a class="quick-card" href="{{ url_for('parent_contact_teacher', child_id=child.id) }}">✉ <strong>Contact Teacher</strong><span>View class teachers</span></a></div>
+{% else %}<div class="empty-state card"><h2>No linked children</h2><p>Your school administrator needs to link at least one active student to your parent account.</p></div>{% endif %}
 {% endblock %}

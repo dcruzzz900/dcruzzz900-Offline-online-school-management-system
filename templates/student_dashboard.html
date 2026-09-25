@@ -1,30 +1,11 @@
 {% extends "base.html" %}
 {% block title %}My Results{% endblock %}
 {% block content %}
-<h1>Welcome, {{ student_full_name(student) }}</h1>
-
+<div class="page-head"><div><h1>Welcome, {{ student_full_name(student) }}</h1><p class="page-kicker">Your published academic results and school information.</p></div><div class="page-actions"><a class="btn" href="{{ url_for('student_materials') }}">Learning Materials</a><a class="btn btn-gold" href="{{ url_for('student_notifications') }}">Notifications</a></div></div>
 {% include "partials/datetime_card.html" %}
-
-<div class="card">
-    <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
-    <p><b>Class / Arm:</b> {{ class_row.name }}</p>
+<div class="split-panel">
+  <div class="hero-card card"><h2>{{ class_row.name }}</h2><p>Admission / Register No.: <strong>{{ student.admission_no }}</strong></p><p>Keep checking this portal as new term results are published by your school.</p></div>
+  <div class="card"><div class="section-title"><h3>Student profile</h3></div><p><strong>Name</strong><br>{{ student_full_name(student) }}</p><p><strong>Class / Arm</strong><br>{{ class_row.name }}</p><p><strong>Admission No.</strong><br>{{ student.admission_no }}</p></div>
 </div>
-
-<div class="card">
-    <h3>Your Published Results</h3>
-    {% if published_terms %}
-    <table>
-        <tr><th>Session</th><th>Term</th><th>Action</th></tr>
-        {% for t in published_terms %}
-        <tr>
-            <td>{{ t.session_name }}</td>
-            <td>{{ t.name }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('student_result', term_id=t.id) }}">View Result</a></td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p style="color:#999;">No results have been published yet. Check back once your school publishes a term's results.</p>
-    {% endif %}
-</div>
+<div class="card table-card"><div class="section-title"><h3>Published results</h3><span class="mini-muted">{{ published_terms|length }} term{{ '' if published_terms|length == 1 else 's' }} available</span></div>{% if published_terms %}<table><thead><tr><th>Session</th><th>Term</th><th>Status</th><th>Action</th></tr></thead><tbody>{% for t in published_terms %}<tr><td>{{ t.session_name }}</td><td><strong>{{ t.name }}</strong></td><td><span class="pill-success">Published</span></td><td><a class="btn btn-small" href="{{ url_for('student_result', term_id=t.id) }}">View Result</a></td></tr>{% endfor %}</tbody></table>{% else %}<div class="empty-state">No results have been published yet. Check back once your school publishes a term's results.</div>{% endif %}</div>
 {% endblock %}

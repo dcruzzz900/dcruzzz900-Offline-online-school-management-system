@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Reports{% endblock %}{% block content %}
+<div class="page-head"><div><h1>Reports</h1><p>Published report cards and academic documents.</p></div></div>
+{% if children %}<div class="child-switcher">{% for c in children %}<a class="child-chip {% if child and c.id==child.id %}active{% endif %}" href="{{ url_for('parent_reports', child_id=c.id) }}">{{ c.first_name }} {{ c.last_name }}<small>{{ c.class_name }}</small></a>{% endfor %}</div>{% endif %}
+<div class="report-list">{% for r in reports %}<article class="card report-row"><div><h2>{{ r.session_name }} · {{ r.name }}</h2><p>Published academic report for {{ child.first_name }} {{ child.last_name }}.</p></div><a class="btn btn-primary" href="{{ url_for('parent_result_pdf', term_id=r.id, child_id=child.id) }}">Download PDF</a></article>{% else %}<div class="card"><p>No published reports are available yet.</p></div>{% endfor %}</div>
+{% endblock %}

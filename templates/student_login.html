@@ -1,29 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Student Login{% endblock %}
+{% block title %}Student Portal{% endblock %}
 {% block content %}
-<div class="login-wrapper">
-    <div class="card">
-        {% if portal_school %}
-        {% if portal_school.logo_filename %}
-        <img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:64px; display:block; margin:0 auto 0.5rem;">
-        {% endif %}
-        <h2 style="text-align:center;">{{ portal_school.name }} — Student Portal</h2>
-        <p style="color:#666; font-size:0.9rem; text-align:center;">Sign in to view your published results</p>
-        {% else %}
-        <h2>📘 Student Portal</h2>
-        <p style="color:#666; font-size:0.9rem;">Sign in to view your published results</p>
-        {% endif %}
-        <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <label>Username</label>
-            <input type="text" name="username" required autofocus>
-            <label>Password</label>
-            <input type="password" name="password" required>
-            <button class="btn" type="submit" style="width:100%;">Login</button>
-        </form>
-        <p style="font-size:0.85rem; margin-top:1rem; text-align:center;">
-            <a href="{{ url_for('login') }}">Staff login</a>
-        </p>
-    </div>
-</div>
+<div class="login-wrapper"><div class="card">
+  {% if portal_school and portal_school.logo_filename %}<img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:72px;max-width:180px;display:block;margin:0 auto 16px;object-fit:contain">{% else %}<div class="brand-mark" style="margin:0 auto 14px">SR</div>{% endif %}
+  <div style="text-align:center"><span class="badge">Student Portal</span><h1 style="margin-top:12px">View your results</h1><p style="color:var(--muted);font-size:13px">{{ portal_school.name if portal_school else 'School Results' }}</p></div>
+  <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Username</label><input type="text" name="username" autocomplete="username" required autofocus><label>Password</label><input type="password" name="password" autocomplete="current-password" required><button class="btn" type="submit" style="width:100%;margin-top:18px">Sign in</button></form>
+  <p style="font-size:12px;margin-top:18px;text-align:center"><a href="{{ url_for('login') }}">Staff login</a></p>
+</div></div>
 {% endblock %}

@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% block title %}Notifications{% endblock %}{% block content %}
+<div class="page-head"><div><h1>Notifications</h1><p>School announcements, academic updates and important reminders.</p></div></div><div class="notification-list card">{% for n in notifications %}<article class="activity-row"><div class="activity-icon">♢</div><div><strong>{{ n.title }}</strong><p>{{ n.message }}</p><small>{{ n.created_at }}</small></div></article>{% else %}<div class="empty-state"><h2>You're all caught up</h2><p>No notifications are available.</p></div>{% endfor %}</div>
+{% endblock %}
