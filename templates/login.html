@@ -1,23 +1,98 @@
 {% extends "base.html" %}
-{% block title %}Sign in · {{ portal_school.name if portal_school else 'School Results' }}{% endblock %}
+{% block title %}Login{% endblock %}
 {% block content %}
 <div class="login-wrapper">
-  <div class="card login-card">
-    {% if portal_school and portal_school.logo_filename %}<img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:72px;max-width:180px;display:block;margin:0 auto 16px;object-fit:contain">{% else %}<div class="brand-mark" style="margin:0 auto 14px">SR</div>{% endif %}
-    <div style="text-align:center"><span class="badge">School Portal</span><h1 style="margin-top:12px">Welcome back</h1><p style="color:var(--muted);font-size:13px">{{ portal_school.name if portal_school else 'School Results' }} · Sign in to continue</p></div>
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Username, email or phone</label><input type="text" name="username" autocomplete="username" required autofocus>
-      <label>Password</label><input type="password" name="password" autocomplete="current-password" required>
-      <button class="btn" type="submit" style="width:100%;margin-top:18px">Sign in</button>
-    </form>
-<p style="text-align:center;margin-top:14px"><a href="{{ url_for('parent_login') }}">Parent Portal Login</a></p>
-    <div style="text-align:center;margin-top:18px;font-size:12px;color:var(--muted)"><a href="{{ url_for('recover') }}">Forgot password?</a><span style="margin:0 8px">·</span><a href="{{ url_for('register') }}">Create staff login</a></div>
-    <div style="text-align:center;margin-top:10px;font-size:12px"><a href="{{ url_for('register_school') }}">Register a new school</a></div>
-  </div>
+    <div class="card">
+        {% if portal_school %}
+        {% if portal_school.logo_filename %}
+        <img src="{{ url_for('portal_logo', school_id=portal_school.id) }}" alt="{{ portal_school.name }}" style="max-height:64px; display:block; margin:0 auto 0.5rem;">
+        {% endif %}
+        <h2 style="text-align:center;">{{ portal_school.name }}</h2>
+        <p style="color:#666; font-size:0.9rem; text-align:center;">Sign in to your school portal</p>
+        {% else %}
+        <h2>📘 School Result System</h2>
+        <p style="color:#666; font-size:0.9rem;">Sign in to continue</p>
+        {% endif %}
+        <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label>Username / Email / Phone Number</label>
+            <input type="text" name="username" required autofocus>
+            <label>Password</label>
+            <input type="password" name="password" required>
+            <button class="btn" type="submit" style="width:100%;">Login</button>
+        </form>
+        <p style="font-size:0.85rem; margin-top:1rem; text-align:center;">
+            <a href="{{ url_for('recover') }}">Forgot password?</a> &nbsp;|&nbsp;
+            <a href="{{ url_for('register') }}">Staff: create your login</a>
+        </p>
+        <p style="font-size:0.85rem; margin-top:0.5rem; text-align:center;">
+            <a href="{{ url_for('register_school') }}">New school? Register your school here</a>
+        </p>
+    </div>
 </div>
-<script src="{{ url_for('static', filename='js/offline-crypto.js') }}"></script><script src="{{ url_for('static', filename='js/offline-db.js') }}"></script><script src="{{ url_for('static', filename='js/offline-auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-crypto.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-auth.js') }}"></script>
 <script>
-(function(){var form=document.querySelector('form[method="POST"]');if(!form||!window.fetch)return;var button=form.querySelector('button[type="submit"]');form.addEventListener('submit',function(e){e.preventDefault();var username=form.username.value.trim(),password=form.password.value;if(button){button.disabled=true;button.textContent='Signing in…';}var body=new URLSearchParams(new FormData(form));fetch(window.location.href,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body.toString(),credentials:'same-origin',redirect:'follow'}).then(function(resp){var landed=new URL(resp.url,window.location.origin).pathname;if(resp.redirected&&landed!=='/login'){var destination=resp.url;if(typeof OfflineAuth!=='undefined'&&navigator.onLine){if(button)button.textContent='Preparing offline access…';OfflineAuth.provisionAfterLogin(username,password).catch(function(){}).finally(function(){window.location.replace(destination)});window.setTimeout(function(){window.location.replace(destination)},2500)}else window.location.replace(destination);return}return resp.text().then(function(html){document.open();document.write(html);document.close()})}).catch(function(){if(button){button.disabled=false;button.textContent='Sign in'}if(!navigator.onLine)window.location.href='/app';else alert('Unable to reach the server. Please check your connection and try again.')})})})();
+/* Online login must never be redirected into the offline lock screen.
+   Offline enrollment is a best-effort background step after the server has
+   authenticated the user. If enrollment fails, the normal online dashboard
+   remains the destination. This prevents the online -> offline -> online
+   login loop on devices where IndexedDB/service-worker/offline provisioning
+   is unavailable or stale. */
+(function () {
+    var form = document.querySelector('form[method="POST"]');
+    if (!form || !window.fetch) return;
+    var button = form.querySelector('button[type="submit"]');
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var username = form.username.value.trim();
+        var password = form.password.value;
+        if (button) { button.disabled = true; button.textContent = "Signing in…"; }
+        var body = new URLSearchParams(new FormData(form));
+
+        fetch(window.location.href, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+            credentials: "same-origin",
+            redirect: "follow"
+        }).then(function (resp) {
+            var landed = new URL(resp.url, window.location.origin).pathname;
+            if (resp.redirected && landed !== "/login") {
+                /* The server login succeeded. Navigate to the online dashboard
+                   immediately; offline provisioning must never block login. */
+                var destination = resp.url;
+                if (typeof OfflineAuth !== "undefined" && navigator.onLine) {
+                    if (button) button.textContent = "Preparing offline access…";
+                    OfflineAuth.provisionAfterLogin(username, password).catch(function () {
+                        /* Keep online login successful even when offline setup fails. */
+                    }).finally(function () {
+                        window.location.replace(destination);
+                    });
+                    /* Safety timeout: a broken IndexedDB/crypto implementation
+                       must not leave the user stuck on the login screen. */
+                    window.setTimeout(function () { window.location.replace(destination); }, 2500);
+                } else {
+                    window.location.replace(destination);
+                }
+                return;
+            }
+            return resp.text().then(function (html) {
+                document.open(); document.write(html); document.close();
+            });
+        }).catch(function () {
+            if (button) { button.disabled = false; button.textContent = "Login"; }
+            /* Do not silently send a failed online login to /app. Only the
+               offline app itself should handle offline authentication. */
+            if (!navigator.onLine) {
+                window.location.href = "/app";
+            } else {
+                alert("Unable to reach the server. Please check your connection and try again.");
+            }
+        });
+    });
+})();
 </script>
 {% endblock %}

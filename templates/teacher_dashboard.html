@@ -1,40 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Teacher Dashboard{% endblock %}
 {% block content %}
-<div class="page-head">
-  <div><h1>Welcome, {{ session.get('name') }}</h1><p class="page-kicker">Your classes, assignments and daily teaching tools in one place.</p>{% if position_label %}<span class="badge">{{ position_label }}</span>{% endif %}</div>
-  <div class="page-actions">{% if is_form_teacher %}<a href="{{ url_for('my_class') }}" class="btn">Manage My Class</a>{% endif %}<a href="{{ url_for('score_history_view', class_id=assignments[0].class_id, subject_id=assignments[0].subject_id) if assignments else url_for('classes_list') }}" class="btn btn-gold">Score History</a></div>
-</div>
-{% if term %}<div class="hero-card card"><h2>{{ term.session_name }} · {{ term.name }}</h2><p>Active academic term. Use the tools below to record, review and publish work.</p></div>{% else %}<p class="flash flash-error">No active term set yet. Contact the admin.</p>{% endif %}
+<h1>Welcome, {{ session.get('name') }}</h1>
+{% if position_label %}<p class="badge">{{ position_label }}</p>{% endif %}
+{% if is_form_teacher %}<a href="{{ url_for('my_class') }}" class="btn btn-small">Manage My Class Register</a>{% endif %}
+{% if term %}
+<p class="badge">Active: {{ term.session_name }} — {{ term.name }}</p>
+{% else %}
+<p class="flash flash-error">No active term set yet. Contact the admin.</p>
+{% endif %}
+
 {% include "partials/datetime_card.html" %}
 
-<div class="metric-grid">
-  <div class="metric-card"><div class="metric-label">Assignments</div><div class="metric-value">{{ assignments|length }}</div><div class="metric-note">Your subject allocations</div></div>
-  <div class="metric-card"><div class="metric-label">Result classes</div><div class="metric-value">{{ result_classes|length }}</div><div class="metric-note">Classes you can access</div></div>
-  <div class="metric-card"><div class="metric-label">Role</div><div class="metric-value" style="font-size:20px;">{{ position_label or 'Teacher' }}</div><div class="metric-note">Current staff position</div></div>
-  <div class="metric-card"><div class="metric-label">Sync</div><div class="metric-value" style="font-size:20px;">Ready</div><div class="metric-note">Offline work is supported</div></div>
-</div>
-
 <div class="card">
-  <div class="section-title"><h3>Daily teaching tools</h3><span class="mini-muted">Start a task</span></div>
-  <div class="action-grid">
-    <a class="action-tile" href="{{ url_for('score_entry', class_id=assignments[0].class_id, subject_id=assignments[0].subject_id) if assignments else url_for('classes_list') }}"><span class="action-icon">▤</span><span><strong>Score Entry</strong><span>Enter CA & exam scores</span></span></a>
-    <a class="action-tile" href="/app#/attendance"><span class="action-icon">✓</span><span><strong>Attendance</strong><span>Roll call & register</span></span></a>
-    <a class="action-tile" href="/app#/comments"><span class="action-icon">✎</span><span><strong>Comments</strong><span>Teacher & principal remarks</span></span></a>
-    <a class="action-tile" href="{{ url_for('classes_list') }}"><span class="action-icon">R</span><span><strong>Results</strong><span>Broadsheets & terminal results</span></span></a>
-  </div>
-</div>
-
-<div class="card table-card">
-  <div class="section-title"><h3>Your subject assignments</h3><span class="mini-muted">{{ assignments|length }} assignment{{ '' if assignments|length == 1 else 's' }}</span></div>
-  {% if assignments %}
-  <table><thead><tr><th>Class</th><th>Subject</th><th>Action</th></tr></thead><tbody>
-    {% for a in assignments %}<tr><td><strong>{{ a.class_name }}</strong></td><td>{{ a.subject_name }}</td><td><a class="btn btn-small" href="{{ url_for('score_entry', class_id=a.class_id, subject_id=a.subject_id) }}">Enter Scores</a></td></tr>{% endfor %}
-  </tbody></table>
-  {% else %}<div class="empty-state">You have not been assigned any subjects yet. Contact the admin.</div>{% endif %}
+    <h3>Your Subject Assignments</h3>
+    {% if assignments %}
+    <table>
+        <tr><th>Class</th><th>Subject</th><th>Action</th></tr>
+        {% for a in assignments %}
+        <tr>
+            <td>{{ a.class_name }}</td>
+            <td>{{ a.subject_name }}</td>
+            <td><a class="btn btn-small" href="{{ url_for('score_entry', class_id=a.class_id, subject_id=a.subject_id) }}">Enter Scores</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>You have not been assigned any subjects yet. Contact the admin.</p>
+    {% endif %}
 </div>
 
 {% if result_classes %}
-<div class="card table-card"><div class="section-title"><h3>Results access</h3><span class="mini-muted">Only classes permitted by your role are shown</span></div><table><thead><tr><th>Class</th><th>Actions</th></tr></thead><tbody>{% for c in result_classes %}<tr><td><strong>{{ c.name }}</strong></td><td><a class="btn btn-small" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a> <a class="btn btn-small" href="{{ url_for('class_results_list', class_id=c.id) }}">Terminal Results</a></td></tr>{% endfor %}</tbody></table></div>
+<div class="card">
+    <h3>Broadsheet &amp; Results Access</h3>
+    <table>
+        <tr><th>Class</th><th>Action</th></tr>
+        {% for c in result_classes %}
+        <tr>
+            <td>{{ c.name }}</td>
+            <td>
+                <a class="btn btn-small" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
+                <a class="btn btn-small" href="{{ url_for('class_results_list', class_id=c.id) }}">Terminal Results</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
 {% endif %}
 {% endblock %}

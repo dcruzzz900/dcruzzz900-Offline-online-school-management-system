@@ -1,21 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Notifications{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Notifications</h1><p class="page-kicker">Stay updated with school announcements, academic activity and important account messages.</p></div><div class="page-actions">{% if session.get('role') in ['admin', 'sub_admin'] %}<a class="btn" href="{{ url_for('notifications_compose') }}">+ Compose Notification</a>{% endif %}</div></div>
-<div class="metric-grid">
-  <div class="metric-card"><div class="metric-label">Total</div><div class="metric-value">{{ notifications|length }}</div><div class="metric-note">Available messages</div></div>
-  <div class="metric-card"><div class="metric-label">Academic</div><div class="metric-value">—</div><div class="metric-note">School updates</div></div>
-  <div class="metric-card"><div class="metric-label">Attendance</div><div class="metric-value">—</div><div class="metric-note">Register alerts</div></div>
-  <div class="metric-card"><div class="metric-label">System</div><div class="metric-value">—</div><div class="metric-note">Account updates</div></div>
+<h1>Notifications</h1>
+{% if session.get('role') in ['admin', 'sub_admin'] %}
+<div class="no-print" style="margin-bottom:1rem;">
+    <a class="btn" href="{{ url_for('notifications_compose') }}">Compose Notification</a>
 </div>
-<div class="card table-card">
-  <div class="section-title"><h3>Recent notifications</h3><span class="mini-muted">Newest first</span></div>
-  {% if notifications %}
-  <div style="padding:0 18px;">
-  {% for n in notifications %}
-    <div class="list-item"><div><div><span class="status-dot"></span><strong>{{ n.title }}</strong></div><div class="mini-muted">{{ n.message }}</div><div class="mini-muted">From: {{ n.sender_label }}{% if n.school_name %} · {{ n.school_name }}{% elif n.school_id is none %} · All Schools{% endif %}</div></div><div class="mini-muted">{{ n.created_at|dmy }}</div></div>
-  {% endfor %}
-  </div>
-  {% else %}<div class="empty-state">No notifications yet.</div>{% endif %}
+{% endif %}
+
+<div class="card">
+    {% if notifications %}
+    {% for n in notifications %}
+    <div style="padding:0.75rem 0; border-bottom:1px solid var(--border);">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <h3 style="margin:0;">{{ n.title }}</h3>
+            <span style="font-size:0.8rem; color:#999;">{{ n.created_at|dmy }}</span>
+        </div>
+        <p style="margin:0.3rem 0; white-space:pre-wrap;">{{ n.message }}</p>
+        <p style="font-size:0.8rem; color:#999; margin:0;">
+            From: {{ n.sender_label }}{% if n.school_name %} — {{ n.school_name }}{% elif n.school_id is none %} — All Schools{% endif %}
+        </p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:#999;">No notifications yet.</p>
+    {% endif %}
 </div>
 {% endblock %}

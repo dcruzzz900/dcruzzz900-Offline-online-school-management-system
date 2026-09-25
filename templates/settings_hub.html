@@ -1,55 +1,144 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>Settings</h1><p class="page-kicker">Manage your account, security, offline access and school configuration.</p></div><div class="page-actions"><a class="btn" href="{{ url_for('change_password') }}">Change Password</a></div></div>
-<div class="split-panel">
-  <div class="card">
-    <div class="section-title"><h3>Your account</h3><span class="pill-success">Active</span></div>
-    <p class="mini-muted">Keep your contact details current so important school updates can reach you.</p>
-    <form method="POST" action="{{ url_for('update_my_contact') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="grid-2"><div><label>Email</label><input type="email" name="email" value="{{ me.email or '' }}"></div><div><label>Phone Number</label><input type="text" name="phone" value="{{ me.phone or '' }}"></div></div>
-      <button class="btn" type="submit">Save Contact Info</button>
+<h1>Settings</h1>
+
+<div class="card">
+    <h3>Your Account</h3>
+    <a class="btn" href="{{ url_for('change_password') }}">Change Password</a>
+    <p style="font-size:0.9rem; color:#666; margin-top:1rem;">
+        Add an email or phone number so you can also log in with either of them,
+        in addition to your username.
+    </p>
+    <form method="POST" action="{{ url_for('update_my_contact') }}" style="max-width:320px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ me.email or '' }}">
+        <label>Phone Number</label>
+        <input type="text" name="phone" value="{{ me.phone or '' }}">
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Save Contact Info</button>
     </form>
-  </div>
-  <div class="card hero-card"><h3>Security</h3><p>Use a strong password and keep your sign-in details private. You can change your password at any time.</p><a class="btn" href="{{ url_for('change_password') }}">Update Password</a></div>
 </div>
 
 {% if session.get('role') in ['admin', 'sub_admin', 'teacher'] %}
 <div class="card" id="offlineAccessCard">
-  <div class="section-title"><h3>Offline access</h3><span class="pill-blue">Staff workspace</span></div>
-  <p class="mini-muted">Keep working with student records, score entry, attendance, comments and results when there is no internet connection. Changes sync automatically when you reconnect.</p>
-  <div id="offlineAccessStatus"></div>
-  <div id="offlineEnrollForm" style="max-width:420px;display:none;"><label>Confirm your password</label><input type="password" id="offlinePassword" placeholder="Your password" autocomplete="current-password"><button class="btn" id="offlineEnrollBtn">Set Up Offline Access</button><p id="offlineEnrollMsg"></p></div>
-  <div class="page-actions"><a class="btn" href="{{ url_for('offline_app_shell') }}">Open Staff App</a>{% if session.get('role') in ['admin', 'sub_admin'] %}<a class="btn" href="{{ url_for('admin_sync_conflicts') }}">Review Sync Conflicts</a>{% endif %}</div>
+    <h3>Offline Access</h3>
+    <p style="font-size:0.9rem; color:#666;">
+        Keep working — student records, score entry, attendance, comments, results —
+        even with no internet connection. Changes made offline sync automatically the
+        next time this device reconnects.
+    </p>
+    <p style="font-size:0.9rem; color:#666;">
+        <b>Your normal password</b> unlocks the offline app. Offline access is set up
+        (and renewed) automatically every time you log in on this device — there is nothing
+        extra to remember.
+    </p>
+    <div id="offlineAccessStatus"></div>
+    <div id="offlineEnrollForm" style="max-width:320px; display:none;">
+        <p style="font-size:0.85rem;">This device isn't set up yet. Confirm your password to set it up now:</p>
+        <input type="password" id="offlinePassword" placeholder="Your password" autocomplete="current-password">
+        <button class="btn" id="offlineEnrollBtn" style="margin-top:0.5rem;">Set Up Offline Access on This Device</button>
+        <p id="offlineEnrollMsg" style="margin-top:0.5rem;"></p>
+    </div>
+    <a class="btn" href="{{ url_for('offline_app_shell') }}" style="background:#888; margin-top:0.75rem;">Open the App</a>
+    {% if session.get('role') in ['admin', 'sub_admin'] %}
+    <a class="btn" href="{{ url_for('admin_sync_conflicts') }}" style="background:#888; margin-top:0.75rem;">Review Sync Conflicts</a>
+    {% endif %}
 </div>
 {% endif %}
 
 {% if session.get('role') in ['admin', 'sub_admin'] %}
-<div class="card"><div class="section-title"><h3>School administration</h3><span class="mini-muted">Configuration & workflows</span></div><div class="action-grid">
-  <a class="action-tile" href="{{ url_for('admin_school') }}"><span class="action-icon">S</span><span><strong>School Profile</strong><span>Name, logo & portal settings</span></span></a>
-  <a class="action-tile" href="{{ url_for('admin_email') }}"><span class="action-icon">@</span><span><strong>Email Settings</strong><span>SMTP & notifications</span></span></a>
-  <a class="action-tile" href="{{ url_for('admin_promote') }}"><span class="action-icon">↑</span><span><strong>Promote Students</strong><span>Move learners forward</span></span></a>
-  <a class="action-tile" href="{{ url_for('admin_subadmins') }}"><span class="action-icon">A</span><span><strong>Sub-Admins</strong><span>Manage delegated access</span></span></a>
-</div></div>
-<div class="card" style="border-left:4px solid var(--gold);"><div class="section-title"><h3>Clear demo data</h3><span class="mini-muted">Admin only</span></div><p class="mini-muted">Wipes sample classes, subjects, students, teachers and scores while keeping your account and academic configuration.</p><form method="POST" action="{{ url_for('reset_demo_data') }}" onsubmit="return confirm('This permanently deletes all classes, subjects, students, teachers and their scores. Continue?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Type RESET to confirm</label><input type="text" name="confirm_text" placeholder="RESET" required style="max-width:200px;"><button class="btn btn-gold" type="submit">Clear Demo Data</button></form></div>
+<div class="card">
+    <h3>School Settings</h3>
+    <a class="btn" href="{{ url_for('admin_school') }}">School Profile (name, logo, alignment, signup code)</a>
+    <a class="btn" href="{{ url_for('admin_email') }}">Email Settings (SMTP for parent notifications)</a>
+    <a class="btn" href="{{ url_for('admin_promote') }}">Promote Students</a>
+</div>
+
+<div class="card" style="border-left: 4px solid var(--gold);">
+    <h3>Clear Demo Data</h3>
+    <p style="font-size:0.9rem; color:#666;">
+        A lighter option than Delete Account below — this wipes just the sample
+        classes, subjects, students, and teachers so you can start loading your
+        real school's data on a clean slate. Your login, sessions/terms, grading
+        setup, and skill traits are all kept.
+    </p>
+    <form method="POST" action="{{ url_for('reset_demo_data') }}"
+          onsubmit="return confirm('This permanently deletes all classes, subjects, students, teachers and their scores. Continue?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Type RESET to confirm</label>
+        <input type="text" name="confirm_text" placeholder="RESET" required style="max-width:200px;">
+        <button class="btn btn-gold" style="margin-top:0.75rem;" type="submit">Clear Demo Data</button>
+    </form>
+</div>
 {% endif %}
 
 {% if session.get('role') == 'admin' %}
-<div class="card" style="border-left:4px solid var(--danger);"><div class="section-title"><h3>Delete school account</h3><span class="mini-muted">Permanent action</span></div><p class="mini-muted">This permanently deletes the school's entire account and all associated data. This cannot be undone.</p><form method="POST" action="{{ url_for('delete_account') }}" onsubmit="return confirm('This will PERMANENTLY delete your entire school account and all its data. This cannot be undone. Are you absolutely sure?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="grid-2"><div><label>Your Password</label><input type="password" name="password" required></div><div><label>Type DELETE to confirm</label><input type="text" name="confirm_text" placeholder="DELETE" required></div></div><button class="btn" style="background:#b3261e;" type="submit">Permanently Delete Account</button></form></div>
+<div class="card">
+    <h3>Sub-Admins</h3>
+    <a class="btn" href="{{ url_for('admin_subadmins') }}">Manage Sub-Admins</a>
+</div>
+
+<div class="card" style="border-left: 4px solid #b3261e;">
+    <h3>Delete Account</h3>
+    <p style="font-size:0.9rem; color:#666;">
+        This permanently deletes your school's entire account — every class, subject,
+        student, score, and staff login. <b>This cannot be undone.</b> There is no way
+        to recover this data afterward.
+    </p>
+    <form method="POST" action="{{ url_for('delete_account') }}"
+          onsubmit="return confirm('This will PERMANENTLY delete your entire school account and all its data. This cannot be undone. Are you absolutely sure?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Your Password</label>
+        <input type="password" name="password" required>
+        <label>Type DELETE to confirm</label>
+        <input type="text" name="confirm_text" placeholder="DELETE" required style="max-width:200px;">
+        <button class="btn" style="background:#b3261e; margin-top:0.75rem;" type="submit">Permanently Delete My Account</button>
+    </form>
+</div>
 {% endif %}
 
 {% if session.get('role') in ['admin', 'sub_admin', 'teacher'] %}
 <script>
 document.addEventListener("DOMContentLoaded", async function () {
-    const statusEl = document.getElementById("offlineAccessStatus"), formEl = document.getElementById("offlineEnrollForm");
-    if (!statusEl || !formEl || typeof OfflineAuth === "undefined") return;
+    const statusEl = document.getElementById("offlineAccessStatus");
+    const formEl = document.getElementById("offlineEnrollForm");
     const accounts = await OfflineAuth.listAccounts();
-    const already = accounts.find((a) => a.school_id === {{ session.get('school_id', 'null') }} && a.user_id === {{ session.get('user_id', 'null') }});
-    if (already) { const days = already.expires_at ? Math.max(0, Math.ceil((new Date(already.expires_at).getTime() - Date.now()) / 86400000)) : null; statusEl.innerHTML = `<p class="pill-success">✓ Offline access enabled${days !== null ? ` · ${days} day${days === 1 ? "" : "s"} remaining` : ""}</p>`; }
-    else formEl.style.display = "block";
-    const btn = document.getElementById("offlineEnrollBtn"); if (!btn) return;
-    btn.addEventListener("click", async () => { const msg=document.getElementById("offlineEnrollMsg"), password=document.getElementById("offlinePassword").value; if(!password){msg.textContent="Enter your password.";return;} msg.textContent="Checking your password…"; try { const csrf=(await (await fetch("/csrf-token",{credentials:"same-origin"})).json()).csrf_token; const ok=await fetch("/api/offline/confirm_password",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":csrf},body:JSON.stringify({password})}); let good=false; try{good=(await ok.json()).ok===true;}catch(e){} if(!good)throw new Error("That isn't your password (or too many attempts — wait a few minutes)."); msg.textContent="Setting up offline access…"; await OfflineAuth.enroll(password,null,{bootstrap:true}); msg.className="pill-success"; msg.textContent="Offline access enabled on this device."; document.getElementById("offlinePassword").value=""; }catch(e){msg.style.color="#b3261e";msg.textContent=e.message||"Could not enable offline access.";} });
+    const already = accounts.find((a) => a.school_id === {{ session.get('school_id', 'null') }}
+        && a.user_id === {{ session.get('user_id', 'null') }});
+    if (already) {
+        const days = already.expires_at ? Math.max(0, Math.ceil((new Date(already.expires_at).getTime() - Date.now()) / 86400000)) : null;
+        statusEl.innerHTML = `<p style="color:#2e7d4f;">✓ Offline access is enabled on this device.
+            ${days !== null ? `It renews every time you log in or sync online (currently good for ${days} more day${days === 1 ? "" : "s"} without connecting).` : ""}</p>`;
+    } else {
+        formEl.style.display = "block";
+    }
+    document.getElementById("offlineEnrollBtn").addEventListener("click", async () => {
+        const msg = document.getElementById("offlineEnrollMsg");
+        const password = document.getElementById("offlinePassword").value;
+        if (!password) { msg.style.color = "#b3261e"; msg.textContent = "Enter your password."; return; }
+        msg.style.color = "#555";
+        msg.textContent = "Checking your password…";
+        try {
+            const csrf = (await (await fetch("/csrf-token", { credentials: "same-origin" })).json()).csrf_token;
+            const ok = await fetch("/api/offline/confirm_password", {
+                method: "POST", credentials: "same-origin",
+                headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+                body: JSON.stringify({ password }),
+            });
+            let good = false;
+            try { good = (await ok.json()).ok === true; } catch (e) { good = false; }   // a rate-limit reply is a redirect page, not JSON
+            if (!good) throw new Error("That isn't your password (or too many attempts — wait a few minutes).");
+            msg.textContent = "Setting up offline access and downloading your school's data…";
+            await OfflineAuth.enroll(password, null, { bootstrap: true });
+            document.getElementById("offlinePassword").value = "";
+            msg.style.color = "#2e7d4f";
+            msg.textContent = "Offline access enabled on this device. You can now use the Offline App even with no internet connection.";
+        } catch (e) {
+            msg.style.color = "#b3261e";
+            msg.textContent = e.message || "Could not enable offline access. Please try again while online.";
+        }
+    });
 });
 </script>
 {% endif %}
