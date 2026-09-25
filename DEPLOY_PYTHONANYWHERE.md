@@ -105,21 +105,27 @@ Replace `yourusername` with your actual username in that path. Click **Save**.
 
 ---
 
-## Step 6 — Launch it
+## Step 6 — Configure production settings and launch
 
-1. Scroll to the top of the **Web** tab and click the big green **Reload** button.
-2. Click your web app's address at the top of the page (e.g.
-   `yourusername.pythonanywhere.com`) to open it.
-3. You should see the login page. Log in with:
-   - Username: `admin`
-   - Password: `admin123`
+Before the first public launch, set these environment variables in the Web app
+configuration or WSGI environment:
 
-**Immediately go to Setup → Teachers and change the admin password situation**
-by creating real accounts for your staff — the demo admin/teacher logins
-should not stay active once real people are using this. (A dedicated
-"change password" screen isn't built yet — for now, the safest option is to
-delete the demo accounts directly via a Bash console using Python, or ask me
-to add a proper account-management screen before you go live.)
+- `SKIP_DEMO_SEED=1` — prevents demo/sample accounts from being created on a new database.
+- `SESSION_COOKIE_SECURE=1` — sends the login cookie only over HTTPS.
+- `SECRET_KEY` — use a long random value and keep it private. If you already have
+  an existing installation, keep the same secret key so existing sessions and
+  offline device credentials remain valid.
+
+Then:
+
+1. Scroll to the top of the **Web** tab and click **Reload**.
+2. Open the site at `https://yourusername.pythonanywhere.com`.
+3. Create the first real administrator using the project's supported account-management/setup flow.
+4. Do not use demo credentials in a production school.
+
+The application now defaults to Flask debug mode **off** when launched directly;
+production deployments should use the configured WSGI/gunicorn entry point rather
+than the development server.
 
 ---
 

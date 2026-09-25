@@ -12,29 +12,6 @@ INSTANCE_DIR = os.environ.get("DATA_DIR") or os.path.join(os.path.dirname(__file
 DB_PATH = os.path.join(INSTANCE_DIR, "school.db")
 
 
-def production_mode():
-    return bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID") or os.environ.get("FLASK_ENV") == "production")
-
-
-def validate_production_storage():
-    """Fail closed rather than silently creating a new empty production DB."""
-    if not production_mode():
-        return
-    if not os.environ.get("DATA_DIR"):
-        raise RuntimeError("Production deployment requires DATA_DIR on persistent storage (e.g. Railway Volume mounted at /data).")
-    if os.path.abspath(INSTANCE_DIR) != os.path.abspath(os.environ["DATA_DIR"]):
-        raise RuntimeError("DATA_DIR must be the database/storage directory in production.")
-    secret = os.environ.get("SECRET_KEY", "")
-    if len(secret) < 32:
-        raise RuntimeError("Production requires SECRET_KEY with at least 32 characters.")
-    if os.environ.get("SKIP_DEMO_SEED") != "1":
-        raise RuntimeError("Production requires SKIP_DEMO_SEED=1; create the first Super Admin explicitly.")
-    if not os.path.exists(DB_PATH) and os.environ.get("ALLOW_NEW_DATABASE") != "1":
-        raise RuntimeError("Refusing to create a new production database. Set ALLOW_NEW_DATABASE=1 only for the intentional first initialization of an empty persistent volume.")
-
-validate_production_storage()
-
-
 def format_dmy(value):
     """Formats an ISO date ('YYYY-MM-DD') or a SQLite timestamp
     ('YYYY-MM-DD HH:MM:SS') as DD/MM/YYYY, with HH:MM appended for
@@ -1034,7 +1011,7 @@ def migration_036_role_permissions(conn):
     # Seed one assignment from each existing school admin so the new screen
     # does not appear empty on upgraded installations.
     admins = conn.execute("""
-        SELECT u.id, u.school_id, u.role, s.tenant_id
+        SELECT u.id, u.school_id, u.role
         FROM users u JOIN schools s ON s.id=u.school_id
         WHERE u.role='admin'
     """).fetchall()
@@ -1048,7 +1025,7 @@ def migration_036_role_permissions(conn):
                 INSERT INTO role_assignments
                 (user_id, school_id, tenant_id, school_level, role, status, requested_by, approved_by, approved_at, reason)
                 VALUES (?,?,?,?,?,'active',?,?,CURRENT_TIMESTAMP,?)
-            """, (a["id"], a["school_id"], a["tenant_id"], "All", "School Admin",
+            """, (a["id"], a["school_id"], None, "All", "School Admin",
                   a["id"], a["id"], "Migrated from existing School Admin account"))
             aid = cur.lastrowid
             for perm in ("view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users"):
@@ -1057,115 +1034,18 @@ def migration_036_role_permissions(conn):
 
 
 
-
-def migration_role_scope_compat(conn):
-    """Bring older role-assignment tables up to the scoped-RBAC contract.
-
-    Some pre-production builds created role_assignments and
-    role_assignment_permissions before the scoped fields/audit columns were
-    introduced. CREATE TABLE IF NOT EXISTS does not upgrade an existing table,
-    so a production upgrade could boot with a missing column. This migration
-    only adds missing columns/indexes and backfills tenant IDs; it never
-    deletes or rewrites existing assignments or permissions.
-    """
-    if not table_exists(conn, "role_assignments"):
-        # The full RBAC migration should normally have created this table.
-        migration_036_role_permissions(conn)
-
-    role_columns = {
-        "tenant_id": "TEXT",
-        "school_level": "TEXT NOT NULL DEFAULT 'All'",
-        "department": "TEXT",
-        "class_id": "INTEGER",
-        "class_arm": "TEXT",
-        "subject_id": "INTEGER",
-        "status": "TEXT NOT NULL DEFAULT 'active'",
-        "is_temporary": "INTEGER NOT NULL DEFAULT 0",
-        "start_date": "TEXT",
-        "end_date": "TEXT",
-        "requested_by": "INTEGER",
-        "approved_by": "INTEGER",
-        "approved_at": "TEXT",
-        "reason": "TEXT",
-        "created_at": "TEXT",
-        "updated_at": "TEXT",
-    }
-    for column, coltype in role_columns.items():
-        ensure_column(conn, "role_assignments", column, coltype)
-
-    # Existing rows inherit the tenant from their school. Do not change rows
-    # that already have a tenant ID.
-    if table_exists(conn, "schools"):
-        conn.execute("""
-            UPDATE role_assignments
-               SET tenant_id = (
-                   SELECT s.tenant_id FROM schools s
-                   WHERE s.id = role_assignments.school_id
-               )
-             WHERE tenant_id IS NULL
-        """)
-
-    if not table_exists(conn, "role_assignment_permissions"):
-        conn.execute("""
-            CREATE TABLE role_assignment_permissions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                assignment_id INTEGER NOT NULL,
-                permission TEXT NOT NULL,
-                granted INTEGER NOT NULL DEFAULT 1,
-                FOREIGN KEY(assignment_id) REFERENCES role_assignments(id)
-            )
-        """)
-    else:
-        ensure_column(conn, "role_assignment_permissions", "granted", "INTEGER NOT NULL DEFAULT 1")
-
-    if not table_exists(conn, "role_assignment_audit"):
-        conn.execute("""
-            CREATE TABLE role_assignment_audit (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                assignment_id INTEGER,
-                user_id INTEGER NOT NULL,
-                school_id INTEGER NOT NULL,
-                actor_user_id INTEGER,
-                actor_name TEXT,
-                action TEXT NOT NULL,
-                previous_role TEXT,
-                new_role TEXT,
-                previous_scope TEXT,
-                new_scope TEXT,
-                approval_status TEXT,
-                reason TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-    else:
-        audit_columns = {
-            "actor_user_id": "INTEGER",
-            "actor_name": "TEXT",
-            "previous_role": "TEXT",
-            "new_role": "TEXT",
-            "previous_scope": "TEXT",
-            "new_scope": "TEXT",
-            "approval_status": "TEXT",
-            "reason": "TEXT",
-            "created_at": "TEXT",
-        }
-        for column, coltype in audit_columns.items():
-            ensure_column(conn, "role_assignment_audit", column, coltype)
-
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_user ON role_assignments(user_id, status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_school ON role_assignments(school_id, status)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignments_tenant ON role_assignments(tenant_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_class ON role_assignments(school_id, class_id, class_arm)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_subject ON role_assignments(school_id, subject_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_department ON role_assignments(school_id, department)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignment_permissions_assignment ON role_assignment_permissions(assignment_id)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_role_assignment_audit_school ON role_assignment_audit(school_id, created_at)")
-
 def migration_037_scope_indexes(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_class ON role_assignments(school_id, class_id, class_arm)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_subject ON role_assignments(school_id, subject_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_department ON role_assignments(school_id, department)")
     conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < date('now')")
+
+
+def migration_038_parent_portal_indexes(conn):
+    """Indexes supporting parent portal lookups and notification delivery."""
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student_parent ON parent_students(student_id, parent_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_school_role_id ON notifications(school_id, target_role, id)")
+
 
 MIGRATIONS = [
     migration_001_baseline,
@@ -1193,6 +1073,7 @@ MIGRATIONS = [
     migration_023_school_activation,
     migration_036_role_permissions,
     migration_037_scope_indexes,
+    migration_038_parent_portal_indexes,
 ]
 
 
@@ -1414,10 +1295,95 @@ def migration_039_tenant_identifiers(conn):
         conn.execute("UPDATE schools SET tenant_id=?, school_code=? WHERE id=?",
                      (tenant_id, school_code, school["id"]))
         conn.execute("UPDATE users SET tenant_id=? WHERE school_id=?", (tenant_id, school["id"]))
+        if table_exists(conn, "role_assignments"):
+            conn.execute("UPDATE role_assignments SET tenant_id=? WHERE school_id=?", (tenant_id, school["id"]))
 
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_schools_tenant_id ON schools(tenant_id)")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_schools_school_code ON schools(school_code)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id)")
+
+
+
+def migration_040_parent_portal(conn):
+    """Dedicated parent accounts and explicit child links. Parents are kept
+    separate from staff users so the existing users.role CHECK constraint and
+    staff/offline RBAC remain unchanged. Each parent is scoped to one school
+    and may be linked to multiple active students."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            address TEXT,
+            relationship TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_notification_seen_id INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_accounts_school_username ON parent_accounts(school_id, username)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_accounts_school_email ON parent_accounts(school_id, email)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_accounts_school_phone ON parent_accounts(school_id, phone)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            UNIQUE(parent_id, student_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_parent ON parent_students(parent_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id)")
+
+
+def migration_041_parent_teacher_messaging(conn):
+    """Internal parent/teacher conversations scoped to school and child."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()}
+    if "recipient_user_id" not in cols:
+        conn.execute("ALTER TABLE notifications ADD COLUMN recipient_user_id INTEGER")
+    if "recipient_parent_id" not in cols:
+        conn.execute("ALTER TABLE notifications ADD COLUMN recipient_parent_id INTEGER")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_teacher_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            teacher_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(parent_id, student_id, teacher_id),
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id),
+            FOREIGN KEY(student_id) REFERENCES students(id),
+            FOREIGN KEY(teacher_id) REFERENCES users(id)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_teacher_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            sender_type TEXT NOT NULL CHECK(sender_type IN ('parent','teacher')),
+            sender_id INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            read_at TEXT,
+            FOREIGN KEY(conversation_id) REFERENCES parent_teacher_conversations(id),
+            FOREIGN KEY(school_id) REFERENCES schools(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ptc_parent ON parent_teacher_conversations(school_id,parent_id,updated_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ptc_teacher ON parent_teacher_conversations(school_id,teacher_id,updated_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ptm_conversation ON parent_teacher_messages(conversation_id,id)")
 
 
 STEPS = [
@@ -1439,7 +1405,8 @@ STEPS = [
     ("attendance_source", migration_037_attendance_source),
     ("timetable", migration_038_timetable),
     ("tenant_identifiers", migration_039_tenant_identifiers),
-    ("role_scope_compat", migration_role_scope_compat),
+    ("parent_portal", migration_040_parent_portal),
+    ("parent_teacher_messaging", migration_041_parent_teacher_messaging),
 ]
 
 
@@ -1493,10 +1460,6 @@ def run_migrations(conn):
 
 
 def init_db(reset=False):
-    if production_mode():
-        validate_production_storage()
-        if reset:
-            raise RuntimeError("Database reset is disabled in production.")
     os.makedirs(INSTANCE_DIR, exist_ok=True)
     if reset and os.path.exists(DB_PATH):
         os.remove(DB_PATH)
@@ -1891,22 +1854,34 @@ def notification_target_role(role):
     return "admin" if role in ("admin", "sub_admin") else role
 
 
-def get_visible_notifications(conn, role, school_id, limit=50):
+def get_visible_notifications(conn, role, school_id, limit=50, recipient_user_id=None, recipient_parent_id=None):
     target = notification_target_role(role)
+    if role == "parent":
+        recipient = "(n.recipient_parent_id IS NULL OR n.recipient_parent_id=?)"
+        params = (school_id, target, recipient_parent_id, limit)
+    else:
+        recipient = "(n.recipient_user_id IS NULL OR n.recipient_user_id=?)"
+        params = (school_id, target, recipient_user_id, limit)
     return conn.execute(
         "SELECT n.*, s.name as school_name FROM notifications n LEFT JOIN schools s ON s.id=n.school_id "
         "WHERE (n.school_id IS NULL OR n.school_id=?) AND (n.target_role='all' OR n.target_role=?) "
-        "ORDER BY n.id DESC LIMIT ?",
-        (school_id, target, limit),
+        f"AND {recipient} ORDER BY n.id DESC LIMIT ?",
+        params,
     ).fetchall()
 
 
-def get_unread_notification_count(conn, last_seen_id, role, school_id):
+def get_unread_notification_count(conn, last_seen_id, role, school_id, recipient_user_id=None, recipient_parent_id=None):
     target = notification_target_role(role)
+    if role == "parent":
+        recipient = "(recipient_parent_id IS NULL OR recipient_parent_id=?)"
+        params = (last_seen_id or 0, school_id, target, recipient_parent_id)
+    else:
+        recipient = "(recipient_user_id IS NULL OR recipient_user_id=?)"
+        params = (last_seen_id or 0, school_id, target, recipient_user_id)
     row = conn.execute(
         "SELECT COUNT(*) c FROM notifications WHERE id > ? AND (school_id IS NULL OR school_id=?) "
-        "AND (target_role='all' OR target_role=?)",
-        (last_seen_id or 0, school_id, target),
+        "AND (target_role='all' OR target_role=?) AND " + recipient,
+        params,
     ).fetchone()
     return row["c"]
 
