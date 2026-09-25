@@ -59,19 +59,3 @@ credentials keep working. The database upgrades itself to the latest version on 
 Hundreds of schools writing at once, or a need to run more than one server
 process, is the point to move the central database to PostgreSQL. This codebase
 uses SQLite directly (raw SQL, triggers), so that is a real porting project, not a setting.
-
-## Production verification checklist
-
-After deployment, verify:
-
-1. `GET /healthz` returns HTTP 200 and `{"status":"ok"}`.
-2. HTTPS is active and `SESSION_COOKIE_SECURE=1` is set.
-3. `SKIP_DEMO_SEED=1` is set before initializing a new production database.
-4. `DATA_DIR=/data` points to the persistent Railway Volume.
-5. Only one gunicorn worker is configured because the application uses SQLite.
-6. `backup_db.py` is scheduled and `/data/backups/` contains recent verified backups.
-7. A restore test has been performed against a copy of the database before the first live migration.
-
-Do not treat a successful health check as proof that authentication, parent/teacher
-messaging, result publication, or offline synchronization are working; those require
-the end-to-end pilot checks in `PILOT_CHECKLIST.md`.

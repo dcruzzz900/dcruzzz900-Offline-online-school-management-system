@@ -20,7 +20,7 @@ from db import (
     get_db, init_db, grade_for, get_school, INSTANCE_DIR,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
-    seed_school_defaults, upsert_enrollment, log_audit, assign_tenant_identifiers,
+    seed_school_defaults, upsert_enrollment, log_audit,
     get_visible_notifications, get_unread_notification_count,
     recompute_attendance, attendance_percentage, grading_problems, grade_band_problems, parse_arms,
     generate_teacher_comment, generate_principal_comment,
@@ -286,6 +286,24 @@ def healthz():
     resp = jsonify({"status": "ok"})
     resp.headers["Cache-Control"] = "no-store"     # the connectivity monitor needs a LIVE answer
     return resp
+
+
+@app.route("/readyz")
+def readyz():
+    """Readiness probe: verifies that the configured SQLite database is usable."""
+    try:
+        conn = get_db()
+        row = conn.execute("PRAGMA integrity_check").fetchone()
+        verdict = row[0] if row else "unknown"
+        conn.close()
+        if verdict != "ok":
+            return jsonify({"status": "not_ready", "database": "integrity_check_failed"}), 503
+        resp = jsonify({"status": "ready", "database": "ok"})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    except Exception:
+        # Do not expose database paths or SQL details to unauthenticated probes.
+        return jsonify({"status": "not_ready", "database": "unavailable"}), 503
 
 
 @app.route("/csrf-token")
@@ -744,408 +762,15 @@ def inject_unread_notifications():
     if "user_id" in session:
         conn = get_db()
         row = conn.execute("SELECT last_notification_seen_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
-        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, session.get("role"), session.get("school_id"), recipient_user_id=session.get("user_id"))
+        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, session.get("role"), session.get("school_id"))
         conn.close()
     elif "student_id" in session:
         conn = get_db()
         row = conn.execute("SELECT last_notification_seen_id FROM students WHERE id=?", (session["student_id"],)).fetchone()
         count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, "student", session.get("school_id"))
         conn.close()
-    elif "parent_id" in session:
-        conn = get_db()
-        row = conn.execute("SELECT last_notification_seen_id FROM parent_accounts WHERE id=?", (session["parent_id"],)).fetchone()
-        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, "parent", session.get("school_id"), recipient_parent_id=session.get("parent_id"))
-        conn.close()
     return dict(unread_notifications=count)
 
-
-# ---------- parent portal ----------
-
-def parent_login_required(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        if "parent_id" not in session:
-            return redirect(url_for("parent_login"))
-        conn = get_db()
-        parent = conn.execute(
-            "SELECT * FROM parent_accounts WHERE id=? AND school_id=? AND is_active=1",
-            (session["parent_id"], session.get("school_id")),
-        ).fetchone()
-        conn.close()
-        if not parent:
-            session.clear()
-            return redirect(url_for("parent_login"))
-        return f(*args, **kwargs)
-    return wrapped
-
-
-def parent_children(conn, parent_id, school_id):
-    return conn.execute(
-        "SELECT s.*, c.name AS class_name, c.category AS class_category "
-        "FROM parent_students ps JOIN students s ON s.id=ps.student_id "
-        "JOIN classes c ON c.id=s.class_id "
-        "WHERE ps.parent_id=? AND c.school_id=? AND s.is_active=1 "
-        "ORDER BY s.first_name, s.last_name",
-        (parent_id, school_id),
-    ).fetchall()
-
-
-def get_parent_child(conn, parent_id, school_id, student_id=None):
-    children = parent_children(conn, parent_id, school_id)
-    if not children:
-        return None, children
-    if student_id:
-        for child in children:
-            if child["id"] == student_id:
-                return child, children
-    return children[0], children
-
-
-def parent_can_access_student(conn, parent_id, school_id, student_id):
-    return conn.execute(
-        "SELECT 1 FROM parent_students ps JOIN students s ON s.id=ps.student_id "
-        "JOIN classes c ON c.id=s.class_id WHERE ps.parent_id=? AND s.id=? AND c.school_id=? AND s.is_active=1",
-        (parent_id, student_id, school_id),
-    ).fetchone() is not None
-
-
-def parent_current_term_for_child(conn, child):
-    return conn.execute(
-        "SELECT t.*, ss.name AS session_name FROM terms t JOIN sessions ss ON ss.id=t.session_id "
-        "JOIN enrollments e ON e.session_id=t.session_id AND e.student_id=? "
-        "WHERE t.is_published=1 ORDER BY ss.id DESC, t.id DESC LIMIT 1",
-        (child["id"],),
-    ).fetchone()
-
-
-@app.route("/parent/login", methods=["GET", "POST"])
-@rate_limit(max_attempts=10, window_seconds=300)
-def parent_login():
-    if request.method == "POST":
-        identifier = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        conn = get_db()
-        parent = conn.execute(
-            "SELECT * FROM parent_accounts WHERE (username=? OR LOWER(email)=LOWER(?) OR phone=?) AND is_active=1",
-            (identifier, identifier, identifier),
-        ).fetchone()
-        if parent and check_password_hash(parent["password_hash"], password):
-            school = get_school(conn, parent["school_id"])
-            if not school or school["activation_status"] != "active" or school["is_archived"] or school["is_suspended"]:
-                conn.close()
-                flash("This school portal is not currently available.", "error")
-                return render_template("parent_login.html")
-            if g.portal_school and school["id"] != g.portal_school["id"]:
-                conn.close()
-                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
-                return render_template("parent_login.html")
-            session.clear()
-            session.permanent = True
-            session["parent_id"] = parent["id"]
-            session["parent_name"] = parent["name"]
-            session["role"] = "parent"
-            session["name"] = parent["name"]
-            session["school_id"] = parent["school_id"]
-            session["tenant_id"] = school["tenant_id"]
-            session["school_code"] = school["school_code"]
-            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-            conn.close()
-            return redirect(url_for("parent_dashboard"))
-        conn.close()
-        flash("Invalid parent username/email/phone or password.", "error")
-    return render_template("parent_login.html")
-
-
-@app.route("/parent/logout")
-def parent_logout():
-    session.clear()
-    return redirect(url_for("parent_login"))
-
-
-@app.route("/parent/dashboard")
-@parent_login_required
-def parent_dashboard():
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    if not child:
-        conn.close()
-        flash("No active children are linked to this parent account yet.", "error")
-        return render_template("parent_dashboard.html", child=None, children=[], term=None, summary={})
-    term = parent_current_term_for_child(conn, child)
-    summary = {"average": 0, "subjects": 0, "attendance": 0, "present": 0, "absent": 0}
-    recent_results = []
-    if term:
-        data = build_result_data(conn, child["id"], term["id"])
-        subject_rows = data.get("subjects", []) or []
-        totals = [float(r.get("total") or 0) for r in subject_rows if r.get("total") is not None]
-        summary["subjects"] = len(totals)
-        summary["average"] = round(sum(totals) / len(totals), 1) if totals else 0
-        recent_results = subject_rows[:6]
-        att = conn.execute(
-            "SELECT status, COUNT(*) c FROM attendance_records WHERE student_id=? AND term_id=? GROUP BY status",
-            (child["id"], term["id"]),
-        ).fetchall()
-        for r in att:
-            summary["present" if r["status"] == "present" else "absent"] = r["c"]
-        total_att = summary["present"] + summary["absent"]
-        summary["attendance"] = round(summary["present"] * 100 / total_att, 1) if total_att else 0
-    notifications = get_visible_notifications(conn, "parent", session["school_id"], limit=5, recipient_parent_id=session["parent_id"])
-    conn.close()
-    return render_template("parent_dashboard.html", child=child, children=children, term=term,
-                           summary=summary, recent_results=recent_results, notifications=notifications)
-
-
-@app.route("/parent/children")
-@parent_login_required
-def parent_children_page():
-    conn = get_db()
-    children = parent_children(conn, session["parent_id"], session["school_id"])
-    conn.close()
-    return render_template("parent_children.html", children=children)
-
-
-@app.route("/parent/results")
-@parent_login_required
-def parent_results():
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    terms = []
-    data = None
-    selected_term_id = request.args.get("term_id", type=int)
-    if child:
-        terms = conn.execute(
-            "SELECT t.*, ss.name AS session_name FROM terms t JOIN sessions ss ON ss.id=t.session_id "
-            "JOIN enrollments e ON e.session_id=t.session_id AND e.student_id=? WHERE t.is_published=1 "
-            "ORDER BY ss.id DESC, t.id DESC", (child["id"],)
-        ).fetchall()
-        if selected_term_id and any(t["id"] == selected_term_id for t in terms):
-            term_id = selected_term_id
-        else:
-            term_id = terms[0]["id"] if terms else None
-        if term_id:
-            selected_term_id = term_id
-            data = build_result_data(conn, child["id"], term_id)
-    conn.close()
-    return render_template("parent_results.html", child=child, children=children, terms=terms, data=data,
-                           selected_term_id=selected_term_id)
-
-
-@app.route("/parent/results/<int:term_id>/pdf")
-@parent_login_required
-def parent_result_pdf(term_id):
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    if not parent_can_access_student(conn, session["parent_id"], session["school_id"], child_id):
-        conn.close(); return "Forbidden", 403
-    term = conn.execute("SELECT t.*, ss.name AS session_name FROM terms t JOIN sessions ss ON ss.id=t.session_id WHERE t.id=? AND t.is_published=1", (term_id,)).fetchone()
-    enrolled = conn.execute("SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (child_id, term["session_id"] if term else -1)).fetchone() if term else None
-    if not term or not enrolled:
-        conn.close(); return "Not found", 404
-    data = build_result_data(conn, child_id, term_id)
-    school = get_school(conn, session["school_id"])
-    logo_path = os.path.join(INSTANCE_DIR, school["logo_filename"]) if school and school["logo_filename"] else None
-    if not logo_path or not os.path.exists(logo_path): logo_path = None
-    child = conn.execute("SELECT * FROM students WHERE id=?", (child_id,)).fetchone()
-    conn.close()
-    buf = build_result_pdf(data, term, school_name=school["name"] if school else None, logo_path=logo_path,
-                           student_full_name=student_full_name(child), font_choice=school["pdf_font"] if school else "Helvetica")
-    return send_file(buf, as_attachment=True, download_name=f"{child['admission_no']}_{term['name']}_result.pdf", mimetype="application/pdf")
-
-
-@app.route("/parent/attendance")
-@parent_login_required
-def parent_attendance():
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    term_id = request.args.get("term_id", type=int)
-    terms = []
-    records = []
-    summary = {"present":0,"absent":0,"late":0,"percentage":0}
-    if child:
-        terms = conn.execute("SELECT t.*, ss.name session_name FROM terms t JOIN sessions ss ON ss.id=t.session_id JOIN enrollments e ON e.session_id=t.session_id AND e.student_id=? ORDER BY ss.id DESC,t.id DESC", (child["id"],)).fetchall()
-        published = [t for t in terms if t["is_published"]]
-        if not term_id or not any(t["id"] == term_id for t in terms):
-            term_id = published[0]["id"] if published else (terms[0]["id"] if terms else None)
-        if term_id:
-            records = conn.execute("SELECT * FROM attendance_records WHERE student_id=? AND term_id=? ORDER BY date DESC", (child["id"], term_id)).fetchall()
-            summary["present"] = sum(1 for r in records if r["status"] == "present")
-            summary["absent"] = sum(1 for r in records if r["status"] == "absent")
-            total = summary["present"] + summary["absent"]
-            summary["percentage"] = round(summary["present"]*100/total,1) if total else 0
-    conn.close()
-    return render_template("parent_attendance.html", child=child, children=children, terms=terms, records=records, summary=summary, term_id=term_id)
-
-
-@app.route("/parent/timetable")
-@parent_login_required
-def parent_timetable():
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    entries=[]; periods=[]
-    if child:
-        periods = conn.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order,id", (session["school_id"],)).fetchall()
-        entries = conn.execute(
-            "SELECT te.*, tp.name period_name,tp.start_time,tp.end_time,sub.name subject_name,u.name teacher_name "
-            "FROM timetable_entries te JOIN timetable_periods tp ON tp.id=te.period_id "
-            "LEFT JOIN subjects sub ON sub.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id "
-            "WHERE te.school_id=? AND te.class_id=? ORDER BY te.day_of_week,tp.sort_order,tp.id",
-            (session["school_id"], child["class_id"]),
-        ).fetchall()
-    conn.close()
-    return render_template("parent_timetable.html", child=child, children=children, entries=entries, periods=periods)
-
-
-@app.route("/parent/reports")
-@parent_login_required
-def parent_reports():
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    reports=[]
-    if child:
-        reports = conn.execute("SELECT t.id,t.name,t.is_published,ss.name session_name FROM terms t JOIN sessions ss ON ss.id=t.session_id JOIN enrollments e ON e.session_id=t.session_id AND e.student_id=? WHERE t.is_published=1 ORDER BY ss.id DESC,t.id DESC", (child["id"],)).fetchall()
-    conn.close()
-    return render_template("parent_reports.html", child=child, children=children, reports=reports)
-
-
-@app.route("/parent/contact-teacher")
-@parent_login_required
-def parent_contact_teacher():
-    conn=get_db(); child_id=request.args.get("child_id", type=int)
-    child, children=get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    teachers=[]
-    if child:
-        teachers=conn.execute("SELECT DISTINCT u.id,u.name,u.email,u.phone FROM class_subjects cs JOIN users u ON u.id=cs.teacher_id WHERE cs.class_id=? AND u.is_active=1 ORDER BY u.name", (child["class_id"],)).fetchall()
-        form_teacher=conn.execute("SELECT u.id,u.name,u.email,u.phone FROM classes c LEFT JOIN users u ON u.id=c.form_teacher_id WHERE c.id=?", (child["class_id"],)).fetchone()
-        if form_teacher and all(t["id"] != form_teacher["id"] for t in teachers): teachers.insert(0, form_teacher)
-    conn.close()
-    return render_template("parent_contact_teacher.html", child=child, children=children, teachers=teachers)
-
-
-@app.route("/parent/contact-teacher/<int:teacher_id>", methods=["GET", "POST"])
-@parent_login_required
-def parent_teacher_conversation(teacher_id):
-    conn = get_db()
-    child_id = request.args.get("child_id", type=int)
-    child, children = get_parent_child(conn, session["parent_id"], session["school_id"], child_id)
-    teacher = conn.execute("SELECT id,name,email,phone FROM users WHERE id=? AND school_id=? AND role='teacher' AND is_active=1", (teacher_id, session["school_id"])).fetchone()
-    if not child or not teacher:
-        conn.close(); flash("That teacher or child is not available.", "error"); return redirect(url_for("parent_contact_teacher"))
-    allowed = conn.execute("SELECT 1 FROM class_subjects WHERE class_id=? AND teacher_id=? UNION SELECT 1 FROM classes WHERE id=? AND form_teacher_id=?", (child["class_id"], teacher_id, child["class_id"], teacher_id)).fetchone()
-    if not allowed:
-        conn.close(); flash("You can only contact a teacher responsible for this child.", "error"); return redirect(url_for("parent_contact_teacher", child_id=child["id"]))
-    if request.method == "POST":
-        body = request.form.get("message", "").strip()
-        if not body:
-            flash("Please enter a message.", "error")
-        elif len(body) > 4000:
-            flash("Message is too long. Please keep it under 4,000 characters.", "error")
-        else:
-            conv = conn.execute("SELECT * FROM parent_teacher_conversations WHERE school_id=? AND parent_id=? AND student_id=? AND teacher_id=?", (session["school_id"], session["parent_id"], child["id"], teacher_id)).fetchone()
-            if not conv:
-                cur = conn.execute("INSERT INTO parent_teacher_conversations (school_id,parent_id,student_id,teacher_id) VALUES (?,?,?,?)", (session["school_id"],session["parent_id"],child["id"],teacher_id)); conv_id=cur.lastrowid
-            else: conv_id=conv["id"]
-            conn.execute("INSERT INTO parent_teacher_messages (conversation_id,school_id,sender_type,sender_id,body) VALUES (?,?,?,?,?)", (conv_id,session["school_id"],"parent",session["parent_id"],body))
-            conn.execute("UPDATE parent_teacher_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (conv_id,))
-            conn.execute("INSERT INTO notifications (sender_label,school_id,target_role,title,message,recipient_user_id) VALUES (?,?,?,?,?,?)", (session.get("name","Parent"),session["school_id"],"teacher",f"New parent message about {child['first_name']} {child['last_name']}",body[:180],teacher_id))
-            conn.commit(); conn.close(); flash("Message sent to the teacher.", "success"); return redirect(url_for("parent_teacher_conversation", teacher_id=teacher_id, child_id=child["id"]))
-    messages = conn.execute("SELECT * FROM parent_teacher_messages WHERE conversation_id=(SELECT id FROM parent_teacher_conversations WHERE school_id=? AND parent_id=? AND student_id=? AND teacher_id=?) ORDER BY id", (session["school_id"],session["parent_id"],child["id"],teacher_id)).fetchall()
-    conn.close()
-    return render_template("parent_teacher_conversation.html", child=child, children=children, teacher=teacher, messages=messages)
-
-@app.route("/teacher/messages")
-@login_required("teacher")
-def teacher_messages():
-    conn=get_db()
-    conversations=conn.execute("SELECT c.*, s.first_name,s.last_name,cl.name class_name, p.name parent_name, u.name teacher_name, (SELECT body FROM parent_teacher_messages m WHERE m.conversation_id=c.id ORDER BY m.id DESC LIMIT 1) last_message, (SELECT COUNT(*) FROM parent_teacher_messages m WHERE m.conversation_id=c.id AND m.sender_type='parent' AND m.read_at IS NULL) unread_count FROM parent_teacher_conversations c JOIN students s ON s.id=c.student_id JOIN classes cl ON cl.id=s.class_id JOIN parent_accounts p ON p.id=c.parent_id JOIN users u ON u.id=c.teacher_id WHERE c.school_id=? AND c.teacher_id=? ORDER BY c.updated_at DESC", (session["school_id"],session["user_id"])).fetchall()
-    conn.close(); return render_template("teacher_messages.html", conversations=conversations)
-
-@app.route("/teacher/messages/<int:conversation_id>", methods=["GET","POST"])
-@login_required("teacher")
-def teacher_message_thread(conversation_id):
-    conn=get_db()
-    conv=conn.execute("SELECT c.*,s.first_name,s.last_name,cl.name class_name,p.name parent_name FROM parent_teacher_conversations c JOIN students s ON s.id=c.student_id JOIN classes cl ON cl.id=s.class_id JOIN parent_accounts p ON p.id=c.parent_id WHERE c.id=? AND c.school_id=? AND c.teacher_id=?", (conversation_id,session["school_id"],session["user_id"])).fetchone()
-    if not conv:
-        conn.close(); flash("Conversation not found.","error"); return redirect(url_for("teacher_messages"))
-    if request.method=="POST":
-        body=request.form.get("message","").strip()
-        if body and len(body)<=4000:
-            conn.execute("INSERT INTO parent_teacher_messages (conversation_id,school_id,sender_type,sender_id,body) VALUES (?,?,?,?,?)",(conversation_id,session["school_id"],"teacher",session["user_id"],body))
-            conn.execute("UPDATE parent_teacher_conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?",(conversation_id,))
-            conn.execute("INSERT INTO notifications (sender_label,school_id,target_role,title,message,recipient_parent_id) VALUES (?,?,?,?,?,?)",(session.get("name","Teacher"),session["school_id"],"parent",f"Reply from {session.get('name','Teacher')}",body[:180],conv["parent_id"]))
-            conn.commit(); flash("Reply sent to the parent.","success")
-        else: flash("Enter a message up to 4,000 characters.","error")
-    conn.execute("UPDATE parent_teacher_messages SET read_at=CURRENT_TIMESTAMP WHERE conversation_id=? AND sender_type='parent' AND read_at IS NULL",(conversation_id,)); conn.commit()
-    messages=conn.execute("SELECT * FROM parent_teacher_messages WHERE conversation_id=? ORDER BY id",(conversation_id,)).fetchall(); conn.close()
-    return render_template("teacher_message_thread.html",conversation=conv,messages=messages)
-
-@app.route("/parent/notifications")
-@parent_login_required
-def parent_notifications():
-    conn=get_db(); notifications=get_visible_notifications(conn,"parent",session["school_id"], recipient_parent_id=session["parent_id"])
-    if notifications:
-        conn.execute("UPDATE parent_accounts SET last_notification_seen_id=? WHERE id=?", (notifications[0]["id"],session["parent_id"])); conn.commit()
-    conn.close()
-    return render_template("parent_notifications.html", notifications=notifications)
-
-
-@app.route("/parent/settings", methods=["GET","POST"])
-@parent_login_required
-def parent_settings():
-    conn=get_db(); parent=conn.execute("SELECT * FROM parent_accounts WHERE id=?",(session["parent_id"],)).fetchone()
-    if request.method=="POST":
-        name=request.form.get("name","").strip(); email=request.form.get("email","").strip() or None; phone=request.form.get("phone","").strip() or None; address=request.form.get("address","").strip() or None
-        if not name:
-            flash("Name is required.","error")
-        else:
-            try:
-                conn.execute("UPDATE parent_accounts SET name=?,email=?,phone=?,address=? WHERE id=?",(name,email,phone,address,session["parent_id"])); conn.commit(); session["name"]=name; session["parent_name"]=name; flash("Profile updated.","success")
-            except sqlite3.IntegrityError:
-                flash("That email or phone is already in use by another account.","error")
-    parent=conn.execute("SELECT * FROM parent_accounts WHERE id=?",(session["parent_id"],)).fetchone(); children=parent_children(conn,session["parent_id"],session["school_id"]); conn.close()
-    return render_template("parent_settings.html", parent=parent, children=children)
-
-
-@app.route("/parent/settings/password", methods=["POST"])
-@parent_login_required
-def parent_change_password():
-    current=request.form.get("current_password",""); new=request.form.get("new_password",""); confirm=request.form.get("confirm_password","")
-    conn=get_db(); parent=conn.execute("SELECT * FROM parent_accounts WHERE id=?",(session["parent_id"],)).fetchone()
-    if not check_password_hash(parent["password_hash"],current): flash("Your current password is incorrect.","error")
-    elif len(new)<6: flash("New password must be at least 6 characters.","error")
-    elif new!=confirm: flash("New password and confirmation don't match.","error")
-    else: conn.execute("UPDATE parent_accounts SET password_hash=? WHERE id=?",(generate_password_hash(new),session["parent_id"])); conn.commit(); flash("Password updated.","success")
-    conn.close(); return redirect(url_for("parent_settings"))
-
-
-@app.route("/admin/parents/<int:student_id>/account", methods=["POST"])
-@login_required("admin", "sub_admin")
-def create_parent_account(student_id):
-    conn=get_db(); student=student_in_school(conn,student_id)
-    if not student or not (student["parent_phone"] or student["parent_email"] or student["parent_name"]):
-        conn.close(); flash("This student does not have enough guardian information to create a parent account.","error"); return redirect(url_for("admin_parents"))
-    username=request.form.get("username","").strip() or student["parent_email"] or student["parent_phone"] or ("parent"+str(student_id))
-    password=request.form.get("password","")
-    if len(password)<8:
-        conn.close(); flash("Parent password must be at least 8 characters.","error"); return redirect(url_for("parent_profile",student_id=student_id))
-    existing=conn.execute("SELECT * FROM parent_accounts WHERE school_id=? AND (username=? OR (email IS NOT NULL AND email=?) OR (phone IS NOT NULL AND phone=?))",(current_school_id(),username,student["parent_email"],student["parent_phone"])).fetchone()
-    if existing:
-        parent_id=existing["id"]
-        conn.execute("UPDATE parent_accounts SET name=?,email=?,phone=?,relationship=?,is_active=1,password_hash=? WHERE id=?",(student["parent_name"] or existing["name"],student["parent_email"] or existing["email"],student["parent_phone"] or existing["phone"],student["parent_relationship"] or existing["relationship"],generate_password_hash(password),parent_id))
-    else:
-        cur=conn.execute("INSERT INTO parent_accounts (school_id,name,username,password_hash,email,phone,relationship) VALUES (?,?,?,?,?,?,?)",(current_school_id(),student["parent_name"] or "Parent",username,generate_password_hash(password),student["parent_email"],student["parent_phone"],student["parent_relationship"])); parent_id=cur.lastrowid
-    # Explicitly link every active child sharing the same guardian phone/email.
-    if student["parent_phone"]:
-        linked=conn.execute("SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 AND s.parent_phone=?",(current_school_id(),student["parent_phone"])).fetchall()
-    else:
-        linked=conn.execute("SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 AND s.parent_email=?",(current_school_id(),student["parent_email"])).fetchall()
-    for row in linked:
-        conn.execute("INSERT OR IGNORE INTO parent_students (parent_id,student_id) VALUES (?,?)",(parent_id,row["id"]))
-    conn.commit(); conn.close(); flash("Parent portal account created/updated and linked to the guardian's active children.","success"); return redirect(url_for("parent_profile",student_id=student_id))
 
 # ---------- auth ----------
 
@@ -1195,6 +820,8 @@ def login():
             session["tenant_id"] = school["tenant_id"] if school and "tenant_id" in school.keys() else None
             session["school_code"] = school["school_code"] if school and "school_code" in school.keys() else None
             session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
+            if user["role"] == "admin" and "first_login_required" in user.keys() and user["first_login_required"]:
+                return redirect(url_for("admin_first_login"))
             return redirect(url_for("dashboard"))
         conn.close()
         flash("Invalid username/email/phone or password.", "error")
@@ -1296,7 +923,6 @@ def register_school():
             conn.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?,1)", (school_id, "2025/2026"))
             session_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
             conn.execute("INSERT INTO terms (name, session_id, is_active) VALUES ('1st Term', ?, 1)", (session_id,))
-            assign_tenant_identifiers(conn, school_id, school_name)
             conn.commit()
             seed_school_defaults(conn, school_id)
             conn.close()
@@ -1980,7 +1606,7 @@ def remove_my_signature():
 @login_required()
 def notifications_inbox():
     conn = get_db()
-    notifications = get_visible_notifications(conn, session.get("role"), session.get("school_id"), recipient_user_id=session.get("user_id"))
+    notifications = get_visible_notifications(conn, session.get("role"), session.get("school_id"))
     if notifications:
         conn.execute("UPDATE users SET last_notification_seen_id=? WHERE id=?", (notifications[0]["id"], session["user_id"]))
         conn.commit()
@@ -1995,7 +1621,7 @@ def notifications_compose():
         title = request.form.get("title", "").strip()
         message = request.form.get("message", "").strip()
         target_role = request.form.get("target_role", "all")
-        if target_role not in ("all", "teacher", "student", "parent"):
+        if target_role not in ("all", "teacher", "student"):
             target_role = "all"
         if not title or not message:
             flash("Please fill in both a title and a message.", "error")
@@ -2073,6 +1699,138 @@ def delete_account():
     session.clear()
     flash("Your school's account and all its data have been permanently deleted.", "success")
     return redirect(url_for("login"))
+
+
+def school_readiness_checks(conn, school_id):
+    """Return the authoritative pre-live readiness checks for one tenant."""
+    school = get_school(conn, school_id)
+    if not school:
+        return [], False
+    def count(sql, params=(school_id,)):
+        return conn.execute(sql, params).fetchone()["n"]
+    classes = count("SELECT COUNT(*) AS n FROM classes WHERE school_id=?")
+    subjects = count("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?")
+    teachers = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND active=1")
+    students = count("SELECT COUNT(*) AS n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=?")
+    sessions = count("SELECT COUNT(*) AS n FROM sessions WHERE school_id=?")
+    terms = count("SELECT COUNT(*) AS n FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=?")
+    class_subjects = count("SELECT COUNT(*) AS n FROM class_subjects cs JOIN classes c ON c.id=cs.class_id WHERE c.school_id=?")
+    active_roles = count("SELECT COUNT(*) AS n FROM role_assignments WHERE school_id=? AND status='active'") if table_exists(conn, "role_assignments") else 0
+    active_admins = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='admin' AND active=1")
+    grade_bands = count("SELECT COUNT(*) AS n FROM grade_scale WHERE school_id=?")
+    checks = [
+        ("profile", bool((school["name"] or "").strip())),
+        ("identity", bool((school["school_code"] or "").strip()) and bool((school["tenant_id"] or "").strip())),
+        ("activation", (school["activation_status"] or "active") == "active" and not school["is_archived"]),
+        ("sessions", sessions > 0),
+        ("terms", terms > 0),
+        ("classes", classes > 0),
+        ("subjects", subjects > 0),
+        ("class_subjects", class_subjects > 0),
+        ("teachers", teachers > 0),
+        ("roles", active_roles > 0),
+        ("students", students > 0),
+        ("admin", active_admins > 0),
+        ("grading", grade_bands > 0),
+    ]
+    return checks, all(done for _, done in checks)
+
+
+@app.route("/admin/first-login", methods=["GET", "POST"])
+@login_required("admin")
+def admin_first_login():
+    """First-login orientation for newly provisioned School Admins.
+
+    This is deliberately a short gate before the existing non-destructive
+    setup wizard. Existing schools are not forced through it.
+    """
+    conn = get_db()
+    school_id = current_school_id()
+    school = get_school(conn, school_id)
+    user = conn.execute("SELECT * FROM users WHERE id=?", (session.get("user_id"),)).fetchone()
+    if not school or not user:
+        conn.close()
+        session.clear()
+        return redirect(url_for("login"))
+    if not user["first_login_required"]:
+        conn.close()
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        now = datetime.datetime.utcnow().isoformat(timespec="seconds")
+        conn.execute("UPDATE users SET first_login_required=0, first_login_completed_at=? WHERE id=?", (now, user["id"]))
+        conn.execute("UPDATE schools SET onboarding_started_at=COALESCE(onboarding_started_at, ?) WHERE id=?", (now, school_id))
+        log_audit(conn, "admin", user["name"], "first_login_onboarding_started",
+                  details=f"First-login onboarding started for '{school['name']}'", school_id=school_id)
+        conn.commit(); conn.close()
+        return redirect(url_for("admin_setup_wizard"))
+    conn.close()
+    return render_template("admin_first_login.html", school=school, user=user)
+
+
+@app.route("/admin/setup-wizard", methods=["GET", "POST"])
+@login_required("admin", "sub_admin")
+def admin_setup_wizard():
+    """Authoritative school setup checklist and explicit live-readiness gate."""
+    conn = get_db()
+    school_id = current_school_id()
+    school = get_school(conn, school_id)
+    if not school:
+        conn.close()
+        flash("Your school could not be found.", "error")
+        return redirect(url_for("login"))
+
+    checks, ready = school_readiness_checks(conn, school_id)
+    labels = {
+        "profile":"School profile", "identity":"School/Tenant identity", "activation":"School activation",
+        "sessions":"Academic session", "terms":"Academic term", "classes":"Classes and arms",
+        "subjects":"Subjects", "class_subjects":"Class-subject assignments", "teachers":"Active teachers",
+        "roles":"Roles and scopes", "students":"Students", "admin":"Active school administrator",
+        "grading":"Grading configuration",
+    }
+    descriptions = {
+        "profile":"School identity and contact details are configured.",
+        "identity":"Permanent School ID and Tenant ID are present.",
+        "activation":"The school is active and not archived.",
+        "sessions":"At least one academic session exists.", "terms":"At least one academic term exists.",
+        "classes":"At least one class/arm exists.", "subjects":"At least one subject exists.",
+        "class_subjects":"At least one subject is assigned to a class.",
+        "teachers":"At least one active teacher account exists.",
+        "roles":"At least one active role assignment exists.",
+        "students":"At least one student is enrolled.",
+        "admin":"At least one active school administrator exists.",
+        "grading":"At least one grading band exists.",
+    }
+    urls = {
+        "profile":url_for("admin_school"), "identity":url_for("admin_school"), "activation":url_for("admin_school"),
+        "sessions":url_for("admin_terms"), "terms":url_for("admin_terms"), "classes":url_for("admin_classes"),
+        "subjects":url_for("admin_subjects"), "class_subjects":url_for("admin_class_subjects"),
+        "teachers":url_for("admin_teachers"), "roles":url_for("admin_roles"), "students":url_for("admin_students"),
+        "admin":url_for("admin_subadmins"), "grading":url_for("admin_grading"),
+    }
+    if request.method == "POST":
+        if session.get("role") != "admin":
+            conn.close(); flash("Only the School Admin can mark a school ready for live data.", "error")
+            return redirect(url_for("admin_setup_wizard"))
+        if not ready:
+            conn.close(); flash("Complete every required readiness check before marking the school READY FOR LIVE DATA.", "error")
+            return redirect(url_for("admin_setup_wizard"))
+        now = datetime.datetime.utcnow().isoformat(timespec="seconds")
+        conn.execute("UPDATE schools SET readiness_status='ready', ready_at=?, ready_by=?, readiness_version=1 WHERE id=?",
+                     (now, session.get("user_id"), school_id))
+        log_audit(conn, "admin", session.get("user_name") or "School Admin", "school_marked_ready",
+                  details="School passed the required pre-live readiness checks.", school_id=school_id)
+        conn.commit(); conn.close()
+        flash("School marked READY FOR LIVE DATA. Future result publication now requires this readiness state.", "success")
+        return redirect(url_for("admin_setup_wizard"))
+
+    items=[]
+    for key, done in checks:
+        items.append({"key":key,"label":labels[key],"description":descriptions[key],"done":done,"url":urls[key]})
+    completed=sum(1 for x in items if x["done"]); total=len(items); percent=round(completed*100/total) if total else 0
+    status = school["readiness_status"] or "pending"
+    conn.close()
+    return render_template("admin_setup_wizard.html", school=school, checks=items, completed=completed, total=total,
+                           percent=percent, ready=ready, readiness_status=status)
 
 
 # ---------- admin: setup ----------
@@ -2538,12 +2296,8 @@ def admin_parents():
     conn = get_db()
     school_id = current_school_id()
     rows = conn.execute(
-        "SELECT s.id, s.parent_name, s.parent_phone, s.parent_email, s.parent_relationship, "
-        "CASE WHEN pa.id IS NOT NULL AND pa.is_active=1 THEN 1 ELSE 0 END AS portal_active "
+        "SELECT s.id, s.parent_name, s.parent_phone, s.parent_email, s.parent_relationship "
         "FROM students s JOIN classes c ON c.id=s.class_id "
-        "LEFT JOIN parent_accounts pa ON pa.school_id=c.school_id "
-        " AND ((s.parent_phone IS NOT NULL AND pa.phone=s.parent_phone) OR "
-        "      (s.parent_phone IS NULL AND s.parent_email IS NOT NULL AND pa.email=s.parent_email)) "
         "WHERE c.school_id=? AND s.is_active=1 AND (s.parent_phone IS NOT NULL OR s.parent_email IS NOT NULL) "
         "ORDER BY s.parent_name", (school_id,)
     ).fetchall()
@@ -3177,34 +2931,20 @@ def admin_terms():
                 conn.commit()
                 flash("Active term updated.", "success")
         elif action == "publish_term":
+            readiness = conn.execute("SELECT readiness_status FROM schools WHERE id=?", (school_id,)).fetchone()
+            if not readiness or readiness["readiness_status"] != "ready":
+                conn.close()
+                flash("This school is not READY FOR LIVE DATA. Complete the Setup Wizard and have the School Admin mark it ready before publishing results.", "error")
+                return redirect(url_for("admin_setup_wizard"))
             tid = request.form["term_id"]
             owner = conn.execute(
-                "SELECT terms.*, sessions.name AS session_name FROM terms JOIN sessions ON sessions.id=terms.session_id "
+                "SELECT terms.* FROM terms JOIN sessions ON sessions.id=terms.session_id "
                 "WHERE terms.id=? AND sessions.school_id=?", (tid, school_id)
             ).fetchone()
             if owner:
-                was_published = bool(owner["is_published"])
                 conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (tid,))
-                if not was_published:
-                    parents = conn.execute(
-                        "SELECT DISTINCT pa.id FROM parent_accounts pa "
-                        "JOIN parent_students ps ON ps.parent_id=pa.id "
-                        "JOIN enrollments e ON e.student_id=ps.student_id AND e.session_id=? "
-                        "WHERE pa.school_id=? AND pa.is_active=1",
-                        (owner["session_id"], school_id),
-                    ).fetchall()
-                    title = f"{owner['name']} results are now available"
-                    message = (f"Results for {owner['name']} ({owner['session_name']}) have been published. "
-                               "Sign in to the Parent Portal to view subject scores and download the report card.")
-                    school = get_school(conn, school_id)
-                    sender_label = f"School: {school['name']}" if school else "School"
-                    for parent in parents:
-                        conn.execute(
-                            "INSERT INTO notifications (sender_label, school_id, target_role, title, message) VALUES (?,?,?,?,?)",
-                            (sender_label, school_id, "parent", title, message),
-                        )
                 conn.commit()
-                flash("Term published — linked parents have been notified in the Parent Portal.", "success")
+                flash("Term published — results can now be emailed to parents.", "success")
         elif action == "unpublish_term":
             tid = request.form["term_id"]
             owner = conn.execute(
@@ -5856,7 +5596,7 @@ def platform_new_school():
             placeholder_hash = generate_password_hash(secrets.token_urlsafe(32))
             tenant_id = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()["tenant_id"]
             conn.execute(
-                "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role) VALUES (?,?,?,?,?, 'admin')",
+                "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, first_login_required) VALUES (?,?,?,?,?, 'admin', 1)",
                 (school_id, tenant_id, admin_name, admin_username, placeholder_hash),
             )
             code, expires_at = generate_activation_code(conn, school_id, created_by=session.get("platform_admin_name"))
@@ -5886,6 +5626,47 @@ def platform_new_school():
         return redirect(url_for("platform_schools"))
 
     return render_template("platform_new_school.html")
+
+
+@app.route("/platform/schools/<int:school_id>/provisioning")
+@platform_admin_required
+def platform_school_provisioning(school_id):
+    """Show a non-sensitive onboarding/provisioning checklist for one school."""
+    conn = get_db()
+    school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not school:
+        conn.close()
+        flash("School not found.", "error")
+        return redirect(url_for("platform_schools"))
+    admin = conn.execute(
+        "SELECT id, name, username, role FROM users WHERE school_id=? AND role='admin' ORDER BY id LIMIT 1",
+        (school_id,),
+    ).fetchone()
+    role_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM role_assignments WHERE school_id=? AND status='active'",
+        (school_id,),
+    ).fetchone()["n"] if table_exists(conn, "role_assignments") else 0
+    class_count = conn.execute("SELECT COUNT(*) AS n FROM classes WHERE school_id=?", (school_id,)).fetchone()["n"]
+    student_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=?",
+        (school_id,),
+    ).fetchone()["n"]
+    code_status = current_activation_code_status(conn, school_id)
+    checks = {
+        "school_id": bool(school["school_code"]),
+        "tenant_id": bool(school["tenant_id"]),
+        "admin": bool(admin),
+        "activated": school["activation_status"] == "active",
+        "not_suspended": not bool(school["is_suspended"]),
+        "not_archived": not bool(school["is_archived"]),
+        "role_assignment": role_count > 0,
+    }
+    conn.close()
+    return render_template(
+        "platform_school_provisioning.html", school=school, admin=admin,
+        role_count=role_count, class_count=class_count, student_count=student_count,
+        code_status=code_status, checks=checks,
+    )
 
 
 @app.route("/platform/schools/<int:school_id>/regenerate_code", methods=["POST"])
@@ -6011,9 +5792,11 @@ def activate_school():
         session["role"] = user["role"]
         session["position"] = user["position"]
         session["school_id"] = user["school_id"]
+        session["tenant_id"] = school["tenant_id"] if "tenant_id" in school.keys() else None
+        session["school_code"] = school["school_code"] if "school_code" in school.keys() else None
         session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-        flash(f"Welcome! '{school['name']}' is now active — you can finish setting up your school profile.", "success")
-        return redirect(url_for("admin_school"))
+        flash(f"Welcome! '{school['name']}' is now active — let's complete your first-time setup.", "success")
+        return redirect(url_for("admin_first_login"))
 
     return render_template("activate.html")
 
@@ -6172,6 +5955,60 @@ def platform_reset_user_password(user_id):
     conn.close()
     flash(f"Password reset for {user['name']} (username: {user['username']}). New temporary password: {new_password}", "success")
     return redirect(url_for("platform_users"))
+
+
+@app.route("/platform/backups")
+@platform_admin_required
+def platform_backups():
+    """Super Admin backup dashboard. Shows metadata only; never exposes database contents."""
+    import os as _os
+    import sqlite3 as _sqlite3
+    import backup_db as _backup_db
+    dest = _backup_db.db.INSTANCE_DIR + "/backups"
+    _os.makedirs(dest, exist_ok=True)
+    files=[]
+    for name in sorted(_os.listdir(dest), reverse=True):
+        if not (name.startswith("school-") and name.endswith(".db")): continue
+        path=_os.path.join(dest,name)
+        try:
+            size=_os.path.getsize(path)
+            c=_sqlite3.connect(path, timeout=10)
+            integrity=c.execute("PRAGMA integrity_check").fetchone()[0]
+            schools=c.execute("SELECT COUNT(*) FROM schools").fetchone()[0]
+            c.close()
+            status="OK" if integrity=="ok" else "FAILED"
+        except Exception:
+            size=0; schools=0; status="FAILED"
+        files.append({"name":name,"size":size,"schools":schools,"status":status})
+    return render_template("platform_backups.html", backups=files)
+
+
+@app.route("/platform/backups/create", methods=["POST"])
+@platform_admin_required
+def platform_backup_create():
+    import backup_db as _backup_db
+    try:
+        path, schools = _backup_db.make_backup(keep=14)
+        log_audit(get_db(), "platform_admin", session.get("platform_admin_name"), "database_backup_created", details=f"Verified backup created ({schools} schools)")
+        flash("Verified database backup created successfully.", "success")
+    except Exception as exc:
+        flash(f"Backup failed safely: {exc}", "error")
+    return redirect(url_for("platform_backups"))
+
+
+@app.route("/platform/backups/download/<path:name>")
+@platform_admin_required
+def platform_backup_download(name):
+    import os as _os
+    from flask import send_from_directory
+    import backup_db as _backup_db
+    if not (name.startswith("school-") and name.endswith(".db") and _os.path.basename(name)==name):
+        abort(404)
+    dest=_backup_db.db.INSTANCE_DIR + "/backups"
+    path=_os.path.join(dest,name)
+    if not _os.path.isfile(path): abort(404)
+    log_audit(get_db(), "platform_admin", session.get("platform_admin_name"), "database_backup_downloaded", details="Backup file downloaded")
+    return send_from_directory(dest, name, as_attachment=True)
 
 
 @app.route("/platform/audit")
@@ -6411,5 +6248,5 @@ def platform_notifications():
 
 
 if __name__ == "__main__":
-    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)

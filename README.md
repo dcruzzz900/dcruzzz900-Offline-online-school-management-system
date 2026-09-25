@@ -120,6 +120,9 @@ for sideloading/Play Store distribution.
   if you'd like help setting that up.
 
 
+## V18 — Multi-School Pilot Readiness
+Adds a controlled pilot onboarding and go-live workflow for multiple schools, with permanent School/Tenant IDs, activation guidance, tenant-isolation acceptance tests, offline/sync checks, and production safety requirements. See `PILOT_READINESS_V18.md`.
+
 ## V4 — Role & Permissions
 Adds controlled role assignments for Nursery, Primary and Secondary schools.
 Super Admin can assign/revoke roles platform-wide. School Admin can assign/revoke
