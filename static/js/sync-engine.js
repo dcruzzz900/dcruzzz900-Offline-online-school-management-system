@@ -95,6 +95,10 @@ const SyncEngine = (function () {
             const data = await res.json();
             firstGeneratedAt = firstGeneratedAt || data.generated_at;
             if (data.school) {
+                if (data.school.tenant_id && data.school.tenant_id !== (await OfflineDB.getMeta(schoolId, "tenant_id")) && await OfflineDB.getMeta(schoolId, "tenant_id")) {
+                    throw new Error("Tenant mismatch — offline data was not loaded.");
+                }
+                if (data.school.tenant_id) await OfflineDB.setMeta(schoolId, "tenant_id", data.school.tenant_id);
                 await OfflineDB.setMeta(schoolId, "school_profile", data.school);
                 cacheLogo(schoolId, data.school).catch(() => {});
             }

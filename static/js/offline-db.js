@@ -35,13 +35,13 @@ const OfflineDB = (function () {
         "timetable_periods", "timetable_entries",
     ];
     const META_DB_NAME = "srs_offline_meta";
-    const META_VERSION = 1;
+    const META_VERSION = 2;
     // v2 added the "actions" store (deferred internet-only commands, e.g.
     // "email these results once we're back online") — bumping this makes
     // IndexedDB run onupgradeneeded for devices that enrolled before that
     // store existed, so they pick it up next time they open the DB.
     // v6 added "timetable_periods"/"timetable_entries".
-    const SCHOOL_DB_VERSION = 6;
+    const SCHOOL_DB_VERSION = 7;
 
     function openDb(name, version, onUpgrade) {
         return new Promise((resolve, reject) => {
