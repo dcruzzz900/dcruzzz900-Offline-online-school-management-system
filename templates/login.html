@@ -34,14 +34,15 @@
 <script src="{{ url_for('static', filename='js/offline-db.js') }}"></script>
 <script src="{{ url_for('static', filename='js/offline-auth.js') }}"></script>
 <script>
-/* Online login. While the password is still in memory we use it to set up (or
-   renew) this device's offline access, so the password a person types here is
-   also the one that unlocks the offline app later. Nothing is stored in plain
-   text: the offline credential is encrypted with the password (see
-   offline-auth.js). If anything about that fails, login itself carries on. */
+/* Online login must never be redirected into the offline lock screen.
+   Offline enrollment is a best-effort background step after the server has
+   authenticated the user. If enrollment fails, the normal online dashboard
+   remains the destination. This prevents the online -> offline -> online
+   login loop on devices where IndexedDB/service-worker/offline provisioning
+   is unavailable or stale. */
 (function () {
     var form = document.querySelector('form[method="POST"]');
-    if (!form || typeof OfflineAuth === "undefined" || !window.fetch) return;
+    if (!form || !window.fetch) return;
     var button = form.querySelector('button[type="submit"]');
 
     form.addEventListener("submit", function (e) {
@@ -50,24 +51,46 @@
         var password = form.password.value;
         if (button) { button.disabled = true; button.textContent = "Signing in…"; }
         var body = new URLSearchParams(new FormData(form));
+
         fetch(window.location.href, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: body.toString(),
             credentials: "same-origin",
+            redirect: "follow"
         }).then(function (resp) {
-            var landed = new URL(resp.url).pathname;
+            var landed = new URL(resp.url, window.location.origin).pathname;
             if (resp.redirected && landed !== "/login") {
-                if (button) button.textContent = "Preparing offline access…";
-                return OfflineAuth.provisionAfterLogin(username, password)
-                    .catch(function () { /* offline access is a bonus; never block login */ })
-                    .then(function () { window.location.href = resp.url; });
+                /* The server login succeeded. Navigate to the online dashboard
+                   immediately; offline provisioning must never block login. */
+                var destination = resp.url;
+                if (typeof OfflineAuth !== "undefined" && navigator.onLine) {
+                    if (button) button.textContent = "Preparing offline access…";
+                    OfflineAuth.provisionAfterLogin(username, password).catch(function () {
+                        /* Keep online login successful even when offline setup fails. */
+                    }).finally(function () {
+                        window.location.replace(destination);
+                    });
+                    /* Safety timeout: a broken IndexedDB/crypto implementation
+                       must not leave the user stuck on the login screen. */
+                    window.setTimeout(function () { window.location.replace(destination); }, 2500);
+                } else {
+                    window.location.replace(destination);
+                }
+                return;
             }
-            // Wrong password etc.: show the server's page (with its message) as normal.
-            return resp.text().then(function (html) { document.open(); document.write(html); document.close(); });
+            return resp.text().then(function (html) {
+                document.open(); document.write(html); document.close();
+            });
         }).catch(function () {
-            // The request itself failed — the connection dropped. Go to the offline app.
-            window.location.href = "/app";
+            if (button) { button.disabled = false; button.textContent = "Login"; }
+            /* Do not silently send a failed online login to /app. Only the
+               offline app itself should handle offline authentication. */
+            if (!navigator.onLine) {
+                window.location.href = "/app";
+            } else {
+                alert("Unable to reach the server. Please check your connection and try again.");
+            }
         });
     });
 })();
