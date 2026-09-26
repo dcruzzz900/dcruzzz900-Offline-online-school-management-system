@@ -1016,7 +1016,7 @@ def enroll():
         return jsonify({"error": "not_authenticated"}), 401
     conn = get_db()
     try:
-        me = conn.execute("SELECT is_active, username, tenant_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        me = conn.execute("SELECT is_active, username, tenant_id, school_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
         if not me or not me["is_active"]:
             return jsonify({"error": "not_authenticated"}), 401
         body = request.get_json(silent=True) or {}
@@ -1027,6 +1027,7 @@ def enroll():
             device_id=body.get("device_id"),  # re-enrolling the same device keeps its id
         )
         user = conn.execute("SELECT name FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        school = get_school(conn, session["school_id"])
         return jsonify({
             "device_id": cred["device_id"],
             "device_secret": cred["secret"],
@@ -1038,6 +1039,7 @@ def enroll():
                 "role": session["role"],
                 "position": session.get("position"),
                 "school_id": session["school_id"],
+                "school_code": school["school_code"] if school else session.get("school_code"),
                 "tenant_id": me["tenant_id"],
             },
         })
@@ -1078,6 +1080,7 @@ def verify():
                 "role": user["role"],
                 "position": user["position"],
                 "school_id": cred["school_id"],
+                "school_code": school["school_code"] if school else None,
                 "tenant_id": cred["tenant_id"],
             },
         })

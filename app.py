@@ -14,6 +14,8 @@ import secrets
 import time
 import re
 import threading
+import hmac
+import hashlib
 from collections import defaultdict, deque
 
 from db import (
@@ -772,6 +774,112 @@ def inject_unread_notifications():
     return dict(unread_notifications=count)
 
 
+def _iso_utc(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%S") if dt else None
+
+
+def subscription_state(school, now=None):
+    """Return effective subscription state without mutating the database."""
+    now = now or datetime.datetime.utcnow()
+    status = (school["subscription_status"] if "subscription_status" in school.keys() else "legacy") or "legacy"
+    if status == "legacy":
+        return {"status": "legacy", "active": True, "label": "Legacy / Existing", "days_left": None}
+    if status in ("suspended", "cancelled"):
+        return {"status": status, "active": False, "label": status.title(), "days_left": None}
+    end_key = "trial_ends_at" if status == "trial" else "subscription_ends_at"
+    end_raw = school[end_key] if end_key in school.keys() else None
+    end = None
+    if end_raw:
+        try:
+            end = datetime.datetime.fromisoformat(end_raw.replace("Z", ""))
+        except ValueError:
+            end = None
+    grace_raw = school["grace_ends_at"] if "grace_ends_at" in school.keys() else None
+    grace = None
+    if grace_raw:
+        try:
+            grace = datetime.datetime.fromisoformat(grace_raw.replace("Z", ""))
+        except ValueError:
+            grace = None
+    if end and now > end:
+        if grace and now <= grace:
+            days = max(0, (grace.date() - now.date()).days)
+            return {"status": "grace", "active": True, "label": "Grace period", "days_left": days}
+        return {"status": "expired", "active": False, "label": "Expired", "days_left": 0}
+    days = max(0, (end.date() - now.date()).days) if end else None
+    return {"status": status, "active": True, "label": status.replace("_", " ").title(), "days_left": days}
+
+
+
+def subscription_plan_for_school(conn, school):
+    code = (school["subscription_plan"] if "subscription_plan" in school.keys() else "legacy") or "legacy"
+    return conn.execute("SELECT * FROM subscription_plans WHERE code=? AND is_active=1", (code,)).fetchone()
+
+def school_plan_usage(conn, school_id):
+    students = conn.execute("SELECT COUNT(*) AS n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1", (school_id,)).fetchone()["n"]
+    teachers = conn.execute("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1", (school_id,)).fetchone()["n"]
+    return {"students": students, "teachers": teachers}
+
+def plan_limit_state(plan, usage):
+    out = {}
+    for key, col in (("students", "max_students"), ("teachers", "max_teachers")):
+        limit = plan[col] if plan else None
+        used = usage[key]
+        out[key] = {"used": used, "limit": limit, "percent": round((used / limit) * 100, 1) if limit else 0, "exceeded": bool(limit and used >= limit)}
+    return out
+
+def subscription_login_allowed(school):
+    return subscription_state(school)["active"]
+
+
+def plan_limit_check(conn, school_id, resource, additional=1):
+    """Check whether a school may create additional records under its plan.
+    Legacy schools remain unlimited. Existing records are never deleted or
+    modified when a limit is reached.
+    """
+    school = get_school(conn, school_id)
+    if not school:
+        return False, "School not found.", None
+    state = subscription_state(school)
+    if not state["active"]:
+        return False, f"This school's {state['label'].lower()} does not allow new records. Contact the platform administrator.", state
+    plan = subscription_plan_for_school(conn, school)
+    if not plan or resource not in ("students", "teachers"):
+        return True, None, state
+    usage = school_plan_usage(conn, school_id)
+    limit = plan[f"max_{resource}"] if f"max_{resource}" in plan.keys() else None
+    used = usage[resource]
+    if limit is not None and used + additional > limit:
+        return False, f"{resource.title()} limit reached ({used}/{limit}) on the {plan['name']} plan. Contact the platform administrator to upgrade or extend the plan.", state
+    return True, None, state
+
+
+def plan_usage_alerts(conn, school_id):
+    """Return non-blocking usage warnings for the School Admin dashboard."""
+    school = get_school(conn, school_id)
+    if not school:
+        return []
+    plan = subscription_plan_for_school(conn, school)
+    if not plan:
+        return []
+    usage = school_plan_usage(conn, school_id)
+    alerts = []
+    for resource in ("students", "teachers"):
+        limit = plan[f"max_{resource}"] if f"max_{resource}" in plan.keys() else None
+        used = usage[resource]
+        if not limit:
+            continue
+        pct = (used / limit) * 100
+        if used >= limit:
+            alerts.append({"resource": resource.title(), "level": "danger", "used": used, "limit": limit, "percent": 100})
+        elif pct >= 80:
+            alerts.append({"resource": resource.title(), "level": "warning", "used": used, "limit": limit, "percent": round(pct)})
+    state = subscription_state(school)
+    if state["status"] in ("trial", "active", "grace") and state["days_left"] is not None and state["days_left"] <= 14:
+        alerts.append({"resource": "Subscription", "level": "warning", "used": state["days_left"], "limit": None, "percent": None})
+    return alerts
+
+
 # ---------- auth ----------
 
 @app.route("/", methods=["GET"])
@@ -807,6 +915,9 @@ def login():
                 return render_template("login.html")
             if school and school["is_suspended"]:
                 flash("This school's account has been suspended. Contact the platform administrator.", "error")
+                return render_template("login.html")
+            if school and not subscription_login_allowed(school):
+                flash("This school's subscription or trial has expired. Contact the platform administrator.", "error")
                 return render_template("login.html")
             if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
                 flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
@@ -1109,8 +1220,11 @@ def dashboard():
             ).fetchone()["c"],
             "subjects": conn.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?", (school_id,)).fetchone()["c"],
         }
+        alerts = plan_usage_alerts(conn, school_id)
+        school = get_school(conn, school_id)
+        plan = subscription_plan_for_school(conn, school)
         conn.close()
-        return render_template("admin_dashboard.html", term=term, stats=stats)
+        return render_template("admin_dashboard.html", term=term, stats=stats, plan=plan, plan_alerts=alerts)
     else:
         assignments = conn.execute(
             "SELECT cs.*, c.name as class_name, s.name as subject_name FROM class_subjects cs "
@@ -1135,6 +1249,22 @@ def dashboard():
             position_label=POSITION_LABELS.get(session.get("position")),
             result_classes=result_classes, is_form_teacher=is_form_teacher,
         )
+
+
+@app.route("/api/subscription-status")
+@login_required("admin", "sub_admin")
+def api_subscription_status():
+    """Small non-sensitive payload for the unified offline/online UI."""
+    conn = get_db()
+    school_id = current_school_id()
+    school = get_school(conn, school_id)
+    plan = subscription_plan_for_school(conn, school) if school else None
+    usage = school_plan_usage(conn, school_id) if school else {"students": 0, "teachers": 0}
+    state = subscription_state(school) if school else {"status": "unknown", "active": False, "label": "Unknown", "days_left": None}
+    alerts = plan_usage_alerts(conn, school_id) if school else []
+    limits = plan_limit_state(plan, usage) if plan else {}
+    conn.close()
+    return {"ok": True, "state": state, "plan": {"name": plan["name"], "code": plan["code"]} if plan else None, "usage": usage, "limits": limits, "alerts": alerts}
 
 
 # ---------- admin: school profile ----------
@@ -2150,11 +2280,19 @@ def admin_students():
             conn.close()
             flash("You do not have permission to create students in this class scope.", "error")
             return redirect(url_for("admin_students"))
+        allowed, message, _state = plan_limit_check(conn, school_id, "students", 1)
+        if not allowed:
+            if is_offline_sync_request():
+                conn.close()
+                return {"ok": False, "error": message}, 403
+            conn.close()
+            flash(message, "error")
+            return redirect(url_for("admin_students"))
+        class_id = request.form["class_id"]
     elif not require_scoped_permission("view"):
         conn.close()
         flash("You do not have permission to view students.", "error")
         return redirect(url_for("dashboard"))
-        class_id = request.form["class_id"]
         offline_token = request.form.get("offline_token")
         existing_id = offline_sync_existing_id(conn, offline_token)
         if existing_id:
@@ -2506,7 +2644,19 @@ def students_bulk_upload():
         return redirect(url_for("admin_students"))
 
     added, skipped = 0, []
+    allowed, message, _state = plan_limit_check(conn, school_id, "students", 0)
+    if not allowed:
+        conn.close()
+        flash(message, "error")
+        return redirect(url_for("admin_students"))
+    school = get_school(conn, school_id)
+    plan = subscription_plan_for_school(conn, school)
+    current_usage = school_plan_usage(conn, school_id)["students"]
+    student_limit = plan["max_students"] if plan and "max_students" in plan.keys() else None
     for i, row in enumerate(reader, start=2):
+        if student_limit is not None and current_usage + added >= student_limit:
+            skipped.append(f"Row {i}: student plan limit reached ({student_limit})")
+            continue
         adm = (row.get("admission_no") or "").strip()
         fn = (row.get("first_name") or "").strip()
         ln = (row.get("last_name") or "").strip()
@@ -2565,6 +2715,14 @@ def admin_teachers():
         flash("You do not have permission to manage teachers.", "error")
         return redirect(url_for("dashboard"))
     if request.method == "POST":
+        allowed, message, _state = plan_limit_check(conn, school_id, "teachers", 1)
+        if not allowed:
+            if is_offline_sync_request():
+                conn.close()
+                return {"ok": False, "error": message}, 403
+            conn.close()
+            flash(message, "error")
+            return redirect(url_for("admin_teachers"))
         name = request.form["name"].strip()
         username = request.form["username"].strip()
         email = request.form.get("email", "").strip() or None
@@ -5268,6 +5426,9 @@ def student_login():
             if school and school["is_suspended"]:
                 flash("This school's account has been suspended. Contact the platform administrator.", "error")
                 return render_template("student_login.html")
+            if school and not subscription_login_allowed(school):
+                flash("This school's subscription or trial has expired. Contact the platform administrator.", "error")
+                return render_template("student_login.html")
             if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
                 flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
                 return render_template("student_login.html")
@@ -5542,6 +5703,646 @@ def platform_dashboard():
     return render_template("platform_dashboard.html", stats=stats, recent_audit=recent_audit)
 
 
+@app.route("/platform/control-center")
+@platform_admin_required
+def platform_control_center():
+    """Platform-wide non-sensitive health/readiness view for all schools."""
+    conn = get_db()
+    schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
+    rows = []
+    totals = {"ready": 0, "pending": 0, "suspended": 0, "archived": 0, "attention": 0}
+    for school in schools:
+        checks, ready = school_readiness_checks(conn, school["id"])
+        identity = [
+            bool((school["school_code"] or "").strip()),
+            bool((school["tenant_id"] or "").strip()),
+            (conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False),
+            (conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False),
+        ]
+        admin_mismatch = conn.execute(
+            "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)",
+            (school["id"], school["tenant_id"]),
+        ).fetchone()["n"]
+        role_mismatch = 0
+        if table_exists(conn, "role_assignments"):
+            role_mismatch = conn.execute(
+                "SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)",
+                (school["id"], school["tenant_id"]),
+            ).fetchone()["n"]
+        identity_ok = all(identity) and admin_mismatch == 0 and role_mismatch == 0
+        failed_readiness = sum(1 for _, ok in checks if not ok)
+        status = school["readiness_status"] or ("ready" if ready else "pending")
+        archived = bool(school["is_archived"])
+        suspended = bool(school["is_suspended"])
+        attention = (not identity_ok) or failed_readiness > 0 or archived or suspended or school["activation_status"] != "active"
+        if status == "ready": totals["ready"] += 1
+        else: totals["pending"] += 1
+        if suspended: totals["suspended"] += 1
+        if archived: totals["archived"] += 1
+        if attention: totals["attention"] += 1
+        total_checks = len(checks) or 1
+        passed = total_checks - failed_readiness
+        rows.append({
+            "school": school,
+            "ready": ready,
+            "status": status,
+            "identity_ok": identity_ok,
+            "failed_readiness": failed_readiness,
+            "readiness_percent": round(passed * 100 / total_checks),
+            "attention": attention,
+            "admin_mismatch": admin_mismatch,
+            "role_mismatch": role_mismatch,
+        })
+    conn.close()
+    return render_template("platform_control_center.html", rows=rows, totals=totals)
+
+
+@app.route("/platform/plans", methods=["GET", "POST"])
+@platform_admin_required
+def platform_plans():
+    conn = get_db()
+    if request.method == "POST":
+        code = (request.form.get("code") or "").strip().lower()
+        try:
+            row = conn.execute("SELECT id FROM subscription_plans WHERE code=?", (code,)).fetchone()
+            if not row: raise ValueError("Plan not found")
+            price = max(0, float(request.form.get("price_ngn", "0")))
+            billing_days = max(1, min(3650, int(request.form.get("billing_days", "365"))))
+            max_students = max(1, int(request.form.get("max_students", "1")))
+            max_teachers = max(1, int(request.form.get("max_teachers", "1")))
+            max_storage = max(1, int(request.form.get("max_storage_mb", "100")))
+            name = (request.form.get("name") or code.title()).strip()[:80]
+            features = {k: True for k in request.form.getlist("feature")}
+            conn.execute("UPDATE subscription_plans SET name=?,price_ngn=?,billing_days=?,max_students=?,max_teachers=?,max_storage_mb=?,features_json=?,updated_at=CURRENT_TIMESTAMP WHERE code=?", (name,price,billing_days,max_students,max_teachers,max_storage,json.dumps(features),code))
+            conn.commit(); flash(f"Updated {name} plan.", "success")
+        except (ValueError, TypeError) as e:
+            conn.rollback(); flash(f"Plan update failed: {e}", "error")
+        finally:
+            conn.close()
+        return redirect(url_for("platform_plans"))
+    plans = conn.execute("SELECT * FROM subscription_plans ORDER BY CASE code WHEN 'trial' THEN 1 WHEN 'basic' THEN 2 WHEN 'standard' THEN 3 WHEN 'premium' THEN 4 ELSE 5 END, name").fetchall()
+    conn.close()
+    return render_template("platform_plans.html", plans=plans)
+
+
+
+def _gateway_secret(provider):
+    provider = (provider or "").lower()
+    if provider == "paystack":
+        return os.environ.get("PAYSTACK_WEBHOOK_SECRET", "")
+    if provider == "flutterwave":
+        return os.environ.get("FLUTTERWAVE_WEBHOOK_SECRET", "")
+    return ""
+
+def _verify_gateway_signature(provider, raw_body):
+    """Verify provider webhook authenticity without exposing secrets.
+
+    Paystack signs the raw request body with HMAC-SHA512. Flutterwave uses
+    the configured secret hash in the verif-hash header.
+    """
+    secret = _gateway_secret(provider)
+    if not secret:
+        return False, "gateway webhook secret is not configured"
+    if provider == "paystack":
+        supplied = request.headers.get("x-paystack-signature", "")
+        expected = hmac.new(secret.encode(), raw_body, hashlib.sha512).hexdigest()
+        return bool(supplied) and hmac.compare_digest(supplied, expected), "invalid Paystack signature"
+    supplied = request.headers.get("verif-hash", "")
+    return bool(supplied) and hmac.compare_digest(supplied, secret), "invalid Flutterwave verification hash"
+
+def _gateway_payload(provider):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid JSON webhook payload")
+    if provider == "paystack":
+        event_type = str(payload.get("event") or "")[:100]
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        provider_event_id = str(data.get("id") or data.get("reference") or payload.get("id") or data.get("reference") or "")[:150]
+        reference = str(data.get("reference") or "")[:100]
+        status = str(data.get("status") or "")[:50].lower()
+        amount_kobo = data.get("amount")
+        amount_ngn = float(amount_kobo or 0) / 100.0
+        currency = str(data.get("currency") or "NGN")[:10].upper()
+        return event_type, provider_event_id, reference, status, amount_ngn, currency, data
+    event_type = str(payload.get("event") or payload.get("event.type") or "")[:100]
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    provider_event_id = str(data.get("id") or data.get("tx_ref") or data.get("transaction_id") or payload.get("id") or "")[:150]
+    reference = str(data.get("tx_ref") or data.get("flw_ref") or data.get("reference") or "")[:100]
+    status = str(data.get("status") or payload.get("status") or "")[:50].lower()
+    amount_ngn = float(data.get("amount") or 0)
+    currency = str(data.get("currency") or "NGN")[:10].upper()
+    return event_type, provider_event_id, reference, status, amount_ngn, currency, data
+
+def _issue_billing_receipt(conn, payment):
+    existing = conn.execute("SELECT * FROM billing_receipts WHERE payment_id=?", (payment["id"],)).fetchone()
+    if existing:
+        return existing
+    number = "RCT-" + datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3).upper()
+    conn.execute("""INSERT INTO billing_receipts
+        (school_id,invoice_id,payment_id,receipt_number,amount_ngn,currency,provider,payment_reference)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (payment["school_id"], payment["invoice_id"], payment["id"], number, payment["amount_ngn"], payment["currency"], payment["provider"], payment["payment_reference"]))
+    return conn.execute("SELECT * FROM billing_receipts WHERE payment_id=?", (payment["id"],)).fetchone()
+
+def _confirm_billing_payment(conn, payment_id, confirmed_by, provider_event=None):
+    payment = conn.execute("SELECT * FROM billing_payments WHERE id=?", (payment_id,)).fetchone()
+    if not payment:
+        raise ValueError("Payment not found")
+    if payment["status"] == "confirmed":
+        return payment, conn.execute("SELECT * FROM billing_receipts WHERE payment_id=?", (payment_id,)).fetchone(), False
+    invoice = conn.execute("SELECT * FROM billing_invoices WHERE id=?", (payment["invoice_id"],)).fetchone() if payment["invoice_id"] else None
+    if not invoice:
+        raise ValueError("Linked invoice not found")
+    plan = conn.execute("SELECT * FROM subscription_plans WHERE code=? AND is_active=1", (invoice["plan_code"],)).fetchone()
+    if not plan:
+        raise ValueError("The invoice plan is no longer active")
+    if payment["currency"].upper() != "NGN":
+        raise ValueError("Only NGN billing is supported")
+    if abs(float(payment["amount_ngn"]) - float(invoice["amount_ngn"])) > 0.01:
+        raise ValueError("Payment amount does not match the invoice")
+    now = datetime.datetime.utcnow()
+    end = now + datetime.timedelta(days=int(invoice["billing_days"] or plan["billing_days"]))
+    confirmed_by = (confirmed_by or "gateway")[:100]
+    conn.execute("UPDATE billing_payments SET status='confirmed',confirmed_at=?,confirmed_by=? WHERE id=?", (_iso_utc(now), confirmed_by, payment_id))
+    conn.execute("UPDATE billing_invoices SET status='paid',paid_at=?,payment_reference=? WHERE id=?", (_iso_utc(now), payment["payment_reference"], invoice["id"]))
+    conn.execute("UPDATE schools SET subscription_plan=?,subscription_status='active',subscription_started_at=?,subscription_ends_at=?,grace_ends_at=NULL,subscription_reference=? WHERE id=?", (invoice["plan_code"], _iso_utc(now), _iso_utc(end), payment["payment_reference"], payment["school_id"]))
+    payment = conn.execute("SELECT * FROM billing_payments WHERE id=?", (payment_id,)).fetchone()
+    receipt = _issue_billing_receipt(conn, payment)
+    return payment, receipt, True
+
+
+def _process_gateway_webhook(provider):
+    raw = request.get_data(cache=True)
+    ok, reason = _verify_gateway_signature(provider, raw)
+    if not ok:
+        return jsonify({"ok": False, "error": reason}), 401
+    try:
+        event_type, event_id, reference, status, amount, currency, data = _gateway_payload(provider)
+    except (TypeError, ValueError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    if not event_id or not reference:
+        return jsonify({"ok": False, "error": "Webhook is missing a provider event ID or payment reference"}), 400
+    payload_hash = hashlib.sha256(raw).hexdigest()
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT * FROM billing_webhook_events WHERE provider=? AND provider_event_id=?", (provider, event_id)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({"ok": True, "duplicate": True, "status": existing["status"]}), 200
+        conn.execute("INSERT INTO billing_webhook_events(provider,provider_event_id,event_type,payment_reference,payload_hash,status) VALUES (?,?,?,?,?,'received')", (provider,event_id,event_type,reference,payload_hash))
+        if status not in {"success", "successful", "completed"} or (provider == "paystack" and event_type != "charge.success"):
+            conn.execute("UPDATE billing_webhook_events SET status='ignored',processed_at=CURRENT_TIMESTAMP WHERE provider=? AND provider_event_id=?", (provider,event_id))
+            conn.commit(); conn.close()
+            return jsonify({"ok": True, "processed": False, "reason": "non-success event"}), 200
+        invoice = conn.execute("SELECT * FROM billing_invoices WHERE payment_reference=? OR invoice_number=?", (reference, reference)).fetchone()
+        # Paystack references normally belong to the payment record; our hosted checkout reference
+        # can be the invoice number. Accept either, but never activate without a matching invoice.
+        if not invoice:
+            invoice = conn.execute("SELECT * FROM billing_invoices WHERE invoice_number=?", (reference,)).fetchone()
+        if not invoice:
+            raise ValueError("No matching invoice for payment reference")
+        if currency.upper() != "NGN" or abs(float(amount) - float(invoice["amount_ngn"])) > 0.01:
+            raise ValueError("Webhook amount or currency does not match the invoice")
+        payment = conn.execute("SELECT * FROM billing_payments WHERE payment_reference=?", (reference,)).fetchone()
+        if not payment:
+            conn.execute("INSERT INTO billing_payments(school_id,invoice_id,provider,payment_reference,amount_ngn,currency,status,paid_at,raw_metadata) VALUES (?,?,?,?,?,?, 'pending', ?, ?)", (invoice["school_id"],invoice["id"],provider,reference,amount,currency,_iso_utc(datetime.datetime.utcnow()),json.dumps(data, separators=(",",":"))))
+            payment = conn.execute("SELECT * FROM billing_payments WHERE payment_reference=?", (reference,)).fetchone()
+        elif payment["invoice_id"] != invoice["id"] or payment["school_id"] != invoice["school_id"]:
+            raise ValueError("Payment is linked to a different school or invoice")
+        conn.execute("UPDATE billing_payments SET raw_metadata=?,paid_at=? WHERE id=?", (json.dumps(data, separators=(",",":")), _iso_utc(datetime.datetime.utcnow()), payment["id"]))
+        payment, receipt, changed = _confirm_billing_payment(conn, payment["id"], f"{provider}_webhook", provider_event=event_id)
+        conn.execute("UPDATE billing_webhook_events SET status='processed',processed_at=CURRENT_TIMESTAMP WHERE provider=? AND provider_event_id=?", (provider,event_id))
+        log_audit(conn, "gateway", provider, "payment_webhook_confirmed", details=f"Confirmed {reference}; receipt {receipt['receipt_number']}", school_id=invoice["school_id"])
+        conn.commit(); conn.close()
+        return jsonify({"ok": True, "processed": True, "receipt_number": receipt["receipt_number"], "changed": changed}), 200
+    except Exception as exc:
+        conn.execute("UPDATE billing_webhook_events SET status='failed',error_message=?,processed_at=CURRENT_TIMESTAMP WHERE provider=? AND provider_event_id=?", (str(exc)[:500],provider,event_id))
+        conn.commit(); conn.close()
+        return jsonify({"ok": False, "error": "Webhook received but could not be applied"}), 200
+
+
+@app.route("/webhooks/paystack", methods=["POST"])
+def paystack_webhook():
+    return _process_gateway_webhook("paystack")
+
+
+@app.route("/webhooks/flutterwave", methods=["POST"])
+def flutterwave_webhook():
+    return _process_gateway_webhook("flutterwave")
+
+
+
+def _billing_notification_insert(conn, school_id, event_key, notification_type, title, message):
+    """Insert an automated in-app billing notification once per unique event key."""
+    try:
+        cur = conn.execute(
+            "INSERT INTO billing_notification_events(school_id,event_key,notification_type) VALUES (?,?,?)",
+            (school_id, event_key, notification_type),
+        )
+    except sqlite3.IntegrityError:
+        return False
+    conn.execute(
+        "INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",
+        ("Billing System", school_id, "admin", title[:150], message),
+    )
+    return True
+
+
+def _run_billing_notifications(conn, now=None):
+    """Generate tenant-scoped in-app billing reminders.
+
+    This function is idempotent: each school/event combination is recorded once.
+    It never changes subscription state and never deletes billing or school data.
+    """
+    now = now or datetime.datetime.utcnow()
+    schools = conn.execute("SELECT * FROM schools ORDER BY id").fetchall()
+    sent = []
+    for school in schools:
+        school_id = school["id"]
+        state = subscription_state(school, now)
+        status = state.get("status")
+        days = state.get("days_left")
+        if status in ("trial", "active") and days is not None:
+            try:
+                days = int(days)
+            except (TypeError, ValueError):
+                days = None
+            if days in (14, 7, 3, 1):
+                label = "trial" if status == "trial" else "subscription"
+                event_key = f"{label}-expiry-{school['subscription_ends_at'] if 'subscription_ends_at' in school.keys() and school['subscription_ends_at'] else (school['trial_ends_at'] if 'trial_ends_at' in school.keys() else None)}-{days}"
+                title = f"{label.title()} expires in {days} day{'s' if days != 1 else ''}"
+                message = (f"Your {label} for {school['name']} expires in {days} day{'s' if days != 1 else ''}. "
+                           "Open Billing & Subscription to review your plan and renewal options.")
+                if _billing_notification_insert(conn, school_id, event_key, "expiry_reminder", title, message):
+                    sent.append((school_id, "expiry_reminder"))
+        elif status in ("expired", "suspended", "cancelled"):
+            event_key = f"access-status-{status}-{school['subscription_ends_at'] if 'subscription_ends_at' in school.keys() and school['subscription_ends_at'] else (school['trial_ends_at'] if 'trial_ends_at' in school.keys() else None)}"
+            title = "Subscription access requires attention"
+            message = (f"Your school's billing status is {status}. Existing school data is retained. "
+                       "Contact the platform administrator or open Billing & Subscription for details.")
+            if _billing_notification_insert(conn, school_id, event_key, "status_alert", title, message):
+                sent.append((school_id, "status_alert"))
+
+        invoices = conn.execute(
+            "SELECT * FROM billing_invoices WHERE school_id=? AND status='pending' ORDER BY id DESC",
+            (school_id,),
+        ).fetchall()
+        for invoice in invoices:
+            due = invoice["due_at"]
+            if not due:
+                continue
+            try:
+                due_dt = datetime.datetime.fromisoformat(str(due).replace("Z", ""))
+            except ValueError:
+                continue
+            delta = (due_dt - now).total_seconds() / 86400.0
+            if -0.5 <= delta <= 1.5:
+                bucket = "due-today"
+            elif delta < -0.5:
+                bucket = "overdue"
+            elif delta <= 7.5:
+                bucket = "due-soon"
+            else:
+                continue
+            event_key = f"invoice-{invoice['id']}-{bucket}"
+            if bucket == "overdue":
+                title = f"Invoice {invoice['invoice_number']} is overdue"
+                message = f"Invoice {invoice['invoice_number']} for ₦{float(invoice['amount_ngn']):,.2f} is overdue. Review Billing & Subscription for payment instructions."
+            elif bucket == "due-today":
+                title = f"Invoice {invoice['invoice_number']} is due today"
+                message = f"Invoice {invoice['invoice_number']} for ₦{float(invoice['amount_ngn']):,.2f} is due today. Review Billing & Subscription to complete payment."
+            else:
+                title = f"Invoice {invoice['invoice_number']} is due soon"
+                message = f"Invoice {invoice['invoice_number']} for ₦{float(invoice['amount_ngn']):,.2f} is due within 7 days. Review Billing & Subscription to complete payment."
+            if _billing_notification_insert(conn, school_id, event_key, "invoice_reminder", title, message):
+                sent.append((school_id, "invoice_reminder"))
+    return sent
+
+
+def _billing_email_enabled():
+    return os.environ.get("BILLING_EMAIL_NOTIFICATIONS_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _run_billing_email_notifications(conn, now=None):
+    """Deliver newly-created billing notifications by email and retry failures.
+
+    Email delivery is best-effort and never changes subscription/payment state.
+    Only the school's registered administrator email is used.
+    """
+    if not _billing_email_enabled():
+        return {"sent": 0, "failed": 0, "skipped": 0}
+    now = now or datetime.datetime.utcnow()
+    stats = {"sent": 0, "failed": 0, "skipped": 0}
+    rows = conn.execute("""
+        SELECT e.school_id, e.event_key, e.notification_type, n.title, n.message,
+               s.name AS school_name, s.registered_email, s.billing_email_notifications
+        FROM billing_notification_events e
+        JOIN schools s ON s.id=e.school_id
+        JOIN notifications n ON n.school_id=e.school_id AND n.target_role='admin'
+             AND n.title=e.event_key COLLATE NOCASE
+        WHERE 1=0
+    """).fetchall()
+    # The notification table has no event-key foreign key, so match by event creation time
+    # through the deterministic event key and title/message generated below.
+    events = conn.execute("""
+        SELECT e.school_id, e.event_key, e.notification_type, e.created_at,
+               s.name AS school_name, s.registered_email, s.billing_email_notifications
+        FROM billing_notification_events e
+        JOIN schools s ON s.id=e.school_id
+        WHERE COALESCE(s.billing_email_notifications,1)=1
+          AND s.registered_email IS NOT NULL AND TRIM(s.registered_email)<>''
+        ORDER BY e.id ASC
+    """).fetchall()
+    for event in events:
+        school_id = event["school_id"]
+        key = event["event_key"]
+        recipient = event["registered_email"].strip()
+        # Reconstruct the human-readable billing message from the event type/key.
+        if event["notification_type"] == "expiry_reminder":
+            m = re.search(r"-(\d+)$", key)
+            days = int(m.group(1)) if m else None
+            subject = f"Billing reminder – {event['school_name']}"
+            message = (f"Your school account ({event['school_name']}) has a billing item requiring attention."
+                       + (f" Your subscription/trial expires in {days} day{'s' if days != 1 else ''}." if days is not None else "")
+                       + " Please sign in to Billing & Subscription to review renewal options.")
+        elif event["notification_type"] == "invoice_reminder":
+            subject = f"School billing invoice reminder – {event['school_name']}"
+            message = f"Your school account ({event['school_name']}) has a pending billing invoice. Please sign in to Billing & Subscription to review payment instructions."
+        else:
+            subject = f"School subscription status – {event['school_name']}"
+            message = f"Your school account ({event['school_name']}) has a subscription status requiring attention. Existing school data is retained. Please sign in to Billing & Subscription or contact the platform administrator."
+
+        row = conn.execute("SELECT * FROM billing_email_delivery WHERE school_id=? AND event_key=?", (school_id, key)).fetchone()
+        if row and row["status"] == "sent":
+            stats["skipped"] += 1
+            continue
+        if not row:
+            conn.execute("INSERT INTO billing_email_delivery(school_id,event_key,recipient,notification_type,subject,status) VALUES (?,?,?,?,?,'pending')", (school_id,key,recipient,event["notification_type"],subject))
+            row = conn.execute("SELECT * FROM billing_email_delivery WHERE school_id=? AND event_key=?", (school_id,key)).fetchone()
+        else:
+            conn.execute("UPDATE billing_email_delivery SET recipient=?,subject=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (recipient,subject,row["id"]))
+
+        ok, msg = send_platform_email(recipient, subject, message)
+        if ok:
+            conn.execute("UPDATE billing_email_delivery SET status='sent',attempt_count=attempt_count+1,last_error=NULL,sent_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (_iso_utc(now), row["id"]))
+            stats["sent"] += 1
+        else:
+            conn.execute("UPDATE billing_email_delivery SET status='failed',attempt_count=attempt_count+1,last_error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (msg[:500], row["id"]))
+            stats["failed"] += 1
+    return stats
+
+
+@app.route("/internal/billing-notifications", methods=["POST"])
+def internal_billing_notifications():
+    """Cron-safe endpoint for automated in-app and optional email billing reminders; protected by a secret."""
+    expected = os.environ.get("BILLING_NOTIFICATION_CRON_SECRET", "").strip()
+    supplied = request.headers.get("X-Billing-Cron-Secret", "").strip()
+    if not expected or not supplied or not secrets.compare_digest(expected, supplied):
+        return jsonify({"error": "unauthorized"}), 401
+    conn = get_db()
+    try:
+        sent = _run_billing_notifications(conn)
+        email_stats = _run_billing_email_notifications(conn)
+        conn.commit()
+        return jsonify({"ok": True, "notifications_created": len(sent), "email": email_stats})
+    except Exception as exc:
+        conn.rollback()
+        return jsonify({"ok": False, "error": str(exc)[:300]}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/billing")
+@login_required("admin")
+def school_billing_portal():
+    """School Admin's read-only billing portal.
+
+    Billing records are always constrained to the authenticated user's school;
+    no school ID supplied by the browser is trusted for authorization.
+    """
+    school_id = current_school_id()
+    conn = get_db()
+    school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not school:
+        conn.close()
+        session.clear()
+        return redirect(url_for("login"))
+    state = subscription_state(school)
+    plan = subscription_plan_for_school(conn, school)
+    usage = school_plan_usage(conn, school_id)
+    limits = plan_limit_state(plan, usage)
+    invoices = conn.execute(
+        "SELECT * FROM billing_invoices WHERE school_id=? ORDER BY id DESC", (school_id,)
+    ).fetchall()
+    payments = conn.execute(
+        "SELECT p.*, i.invoice_number, i.plan_code FROM billing_payments p "
+        "LEFT JOIN billing_invoices i ON i.id=p.invoice_id "
+        "WHERE p.school_id=? ORDER BY p.id DESC", (school_id,)
+    ).fetchall()
+    receipts = conn.execute(
+        "SELECT r.*, i.invoice_number FROM billing_receipts r "
+        "LEFT JOIN billing_invoices i ON i.id=r.invoice_id "
+        "WHERE r.school_id=? ORDER BY r.id DESC", (school_id,)
+    ).fetchall()
+    email_deliveries = conn.execute(
+        "SELECT event_key, notification_type, recipient, status, attempt_count, last_error, sent_at, created_at "
+        "FROM billing_email_delivery WHERE school_id=? ORDER BY id DESC LIMIT 20", (school_id,)
+    ).fetchall()
+    conn.close()
+    return render_template(
+        "school_billing_portal.html",
+        school=school, state=state, plan=plan, limits=limits,
+        invoices=invoices, payments=payments, receipts=receipts, email_deliveries=email_deliveries,
+    )
+
+
+@app.route("/billing/email-preferences", methods=["POST"])
+@login_required("admin")
+def billing_email_preferences():
+    _check_csrf()
+    school_id = current_school_id()
+    enabled = 1 if request.form.get("billing_email_notifications") else 0
+    conn = get_db()
+    conn.execute("UPDATE schools SET billing_email_notifications=? WHERE id=?", (enabled, school_id))
+    log_audit(conn, session.get("user_id"), "billing_email_preference_changed", details=f"Billing email notifications {'enabled' if enabled else 'disabled'}", school_id=school_id)
+    conn.commit(); conn.close()
+    flash("Billing email notifications updated.", "success")
+    return redirect(url_for("school_billing_portal"))
+
+
+@app.route("/billing/receipt/<int:receipt_id>")
+@login_required("admin")
+def school_billing_receipt(receipt_id):
+    """Printable receipt; receipt must belong to the authenticated school."""
+    school_id = current_school_id()
+    conn = get_db()
+    receipt = conn.execute(
+        "SELECT r.*, i.invoice_number, i.plan_code, i.billing_days "
+        "FROM billing_receipts r LEFT JOIN billing_invoices i ON i.id=r.invoice_id "
+        "WHERE r.id=? AND r.school_id=?", (receipt_id, school_id)
+    ).fetchone()
+    school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+    conn.close()
+    if not receipt or not school:
+        flash("Receipt not found.", "error")
+        return redirect(url_for("school_billing_portal"))
+    return render_template("school_billing_receipt.html", school=school, receipt=receipt)
+
+
+@app.route("/platform/billing")
+@platform_admin_required
+def platform_billing():
+    conn = get_db()
+    invoices = conn.execute("""SELECT i.*, s.name AS school_name, s.school_code
+        FROM billing_invoices i JOIN schools s ON s.id=i.school_id
+        ORDER BY i.id DESC LIMIT 200""").fetchall()
+    payments = conn.execute("""SELECT p.*, s.name AS school_name, s.school_code, i.invoice_number
+        FROM billing_payments p JOIN schools s ON s.id=p.school_id
+        LEFT JOIN billing_invoices i ON i.id=p.invoice_id
+        ORDER BY p.id DESC LIMIT 200""").fetchall()
+    counts = {r["status"]: r["n"] for r in conn.execute("SELECT status, COUNT(*) n FROM billing_invoices GROUP BY status").fetchall()}
+    webhook_counts = {r["status"]: r["n"] for r in conn.execute("SELECT status, COUNT(*) n FROM billing_webhook_events GROUP BY status").fetchall()}
+    receipts = conn.execute("SELECT r.*, s.name AS school_name, i.invoice_number FROM billing_receipts r JOIN schools s ON s.id=r.school_id LEFT JOIN billing_invoices i ON i.id=r.invoice_id ORDER BY r.id DESC LIMIT 100").fetchall()
+    conn.close()
+    return render_template("platform_billing.html", invoices=invoices, payments=payments, counts=counts, webhook_counts=webhook_counts, receipts=receipts)
+
+
+@app.route("/platform/schools/<int:school_id>/billing", methods=["GET", "POST"])
+@platform_admin_required
+def platform_school_billing(school_id):
+    conn = get_db()
+    school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not school:
+        conn.close(); flash("School not found.", "error"); return redirect(url_for("platform_billing"))
+    if request.method == "POST":
+        action = request.form.get("action", "").strip()
+        try:
+            if action == "create_invoice":
+                plan_code = (request.form.get("plan") or "standard").strip().lower()
+                plan = conn.execute("SELECT * FROM subscription_plans WHERE code=? AND is_active=1", (plan_code,)).fetchone()
+                if not plan or plan_code == "trial": raise ValueError("Select an active paid plan")
+                days = max(1, min(3650, int(request.form.get("days") or plan["billing_days"])))
+                invoice_no = "INV-" + datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S") + "-" + secrets.token_hex(3).upper()
+                conn.execute("INSERT INTO billing_invoices (school_id,invoice_number,plan_code,amount_ngn,billing_days,status,due_at,created_by) VALUES (?,?,?,?,?,'pending',?,?)", (school_id, invoice_no, plan_code, float(plan["price_ngn"]), days, _iso_utc(datetime.datetime.utcnow()+datetime.timedelta(days=7)), session.get("platform_admin_name")))
+                event = f"Created invoice {invoice_no}"
+            elif action == "record_payment":
+                invoice_id = int(request.form.get("invoice_id") or 0)
+                invoice = conn.execute("SELECT * FROM billing_invoices WHERE id=? AND school_id=?", (invoice_id, school_id)).fetchone()
+                if not invoice: raise ValueError("Invoice not found")
+                ref = (request.form.get("payment_reference") or "").strip()[:100]
+                if not ref: raise ValueError("Payment reference is required")
+                amount = max(0, float(request.form.get("amount_ngn") or invoice["amount_ngn"]))
+                conn.execute("INSERT INTO billing_payments (school_id,invoice_id,provider,payment_reference,amount_ngn,paid_at,status) VALUES (?,?,?, ?,?,?,'pending')", (school_id, invoice_id, (request.form.get("provider") or "manual").strip()[:40], ref, amount, _iso_utc(datetime.datetime.utcnow())))
+                event = f"Recorded payment reference {ref} as pending"
+            elif action == "confirm_payment":
+                payment_id = int(request.form.get("payment_id") or 0)
+                payment = conn.execute("SELECT * FROM billing_payments WHERE id=? AND school_id=?", (payment_id, school_id)).fetchone()
+                if not payment: raise ValueError("Payment not found")
+                if payment["status"] == "confirmed": raise ValueError("Payment is already confirmed")
+                invoice = conn.execute("SELECT * FROM billing_invoices WHERE id=?", (payment["invoice_id"],)).fetchone() if payment["invoice_id"] else None
+                if not invoice: raise ValueError("Linked invoice not found")
+                plan = conn.execute("SELECT * FROM subscription_plans WHERE code=? AND is_active=1", (invoice["plan_code"],)).fetchone()
+                if not plan: raise ValueError("The invoice plan is no longer active")
+                payment, receipt, changed = _confirm_billing_payment(conn, payment_id, session.get("platform_admin_name"))
+                event = f"Confirmed payment {payment['payment_reference']} and activated {plan['name']} (receipt {receipt['receipt_number']})"
+            else:
+                raise ValueError("Unknown billing action")
+            log_audit(conn, "platform_admin", session.get("platform_admin_name"), "billing_change", details=f"{event} for '{school['name']}'", school_id=school_id)
+            conn.commit(); flash(event + ".", "success")
+        except (ValueError, TypeError, sqlite3.IntegrityError) as e:
+            conn.rollback(); flash(f"Billing action failed: {e}", "error")
+        finally:
+            conn.close()
+        return redirect(url_for("platform_school_billing", school_id=school_id))
+    plans = conn.execute("SELECT * FROM subscription_plans WHERE is_active=1 AND code!='trial' ORDER BY price_ngn").fetchall()
+    invoices = conn.execute("SELECT * FROM billing_invoices WHERE school_id=? ORDER BY id DESC", (school_id,)).fetchall()
+    payments = conn.execute("SELECT p.*, i.invoice_number FROM billing_payments p LEFT JOIN billing_invoices i ON i.id=p.invoice_id WHERE p.school_id=? ORDER BY p.id DESC", (school_id,)).fetchall()
+    state = subscription_state(school)
+    conn.close()
+    return render_template("platform_school_billing.html", school=school, plans=plans, invoices=invoices, payments=payments, state=state)
+
+
+@app.route("/platform/subscriptions")
+@platform_admin_required
+def platform_subscriptions():
+    conn = get_db()
+    schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
+    rows = []
+    counts = {"legacy": 0, "trial": 0, "active": 0, "grace": 0, "expired": 0, "suspended": 0, "cancelled": 0}
+    for school in schools:
+        state = subscription_state(school)
+        counts[state["status"]] = counts.get(state["status"], 0) + 1
+        rows.append({"school": school, "state": state})
+    conn.close()
+    return render_template("platform_subscriptions.html", rows=rows, counts=counts)
+
+
+@app.route("/platform/schools/<int:school_id>/subscription", methods=["GET", "POST"])
+@platform_admin_required
+def platform_school_subscription(school_id):
+    conn = get_db()
+    school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not school:
+        conn.close(); flash("School not found.", "error"); return redirect(url_for("platform_subscriptions"))
+    if request.method == "POST":
+        action = request.form.get("action", "").strip()
+        now = datetime.datetime.utcnow()
+        try:
+            if action == "start_trial":
+                days = max(1, min(365, int(request.form.get("days", "30"))))
+                end = now + datetime.timedelta(days=days)
+                conn.execute("UPDATE schools SET subscription_plan='trial', subscription_status='trial', trial_started_at=?, trial_ends_at=?, subscription_started_at=NULL, subscription_ends_at=NULL, grace_ends_at=NULL WHERE id=?", (_iso_utc(now), _iso_utc(end), school_id))
+                event = f"Started {days}-day trial"
+            elif action == "activate":
+                plan = (request.form.get("plan") or "standard").strip().lower()[:50]
+                plan_row = conn.execute("SELECT * FROM subscription_plans WHERE code=? AND is_active=1", (plan,)).fetchone()
+                if not plan_row or plan == "trial": raise ValueError("Select an active paid plan")
+                days = max(1, min(3650, int(request.form.get("days") or plan_row["billing_days"])))
+                end = now + datetime.timedelta(days=days)
+                conn.execute("UPDATE schools SET subscription_plan=?, subscription_status='active', subscription_started_at=?, subscription_ends_at=?, grace_ends_at=NULL WHERE id=?", (plan, _iso_utc(now), _iso_utc(end), school_id))
+                event = f"Activated {plan_row['name']} subscription for {days} days"
+            elif action == "extend":
+                days = max(1, min(3650, int(request.form.get("days", "30"))))
+                state = subscription_state(school)
+                base_raw = school["subscription_ends_at"] if "subscription_ends_at" in school.keys() else None
+                if state["status"] == "trial": base_raw = school["trial_ends_at"]
+                base = now
+                if base_raw:
+                    try: base = max(now, datetime.datetime.fromisoformat(base_raw.replace("Z", "")))
+                    except ValueError: pass
+                end = base + datetime.timedelta(days=days)
+                field = "trial_ends_at" if state["status"] == "trial" else "subscription_ends_at"
+                conn.execute(f"UPDATE schools SET {field}=? WHERE id=?", (_iso_utc(end), school_id))
+                event = f"Extended {state['label']} by {days} days"
+            elif action == "grace":
+                days = max(1, min(90, int(request.form.get("days", "7"))))
+                end = now + datetime.timedelta(days=days)
+                conn.execute("UPDATE schools SET grace_ends_at=? WHERE id=?", (_iso_utc(end), school_id))
+                event = f"Granted {days}-day grace period"
+            elif action == "suspend":
+                conn.execute("UPDATE schools SET subscription_status='suspended' WHERE id=?", (school_id,)); event = "Suspended subscription"
+            elif action == "cancel":
+                conn.execute("UPDATE schools SET subscription_status='cancelled' WHERE id=?", (school_id,)); event = "Cancelled subscription"
+            elif action == "legacy":
+                conn.execute("UPDATE schools SET subscription_plan='legacy', subscription_status='legacy', grace_ends_at=NULL WHERE id=?", (school_id,)); event = "Restored legacy access"
+            else:
+                raise ValueError("Unknown subscription action")
+            log_audit(conn, "platform_admin", session.get("platform_admin_name"), "subscription_change", details=f"{event} for '{school['name']}'", school_id=school_id)
+            conn.commit(); flash(f"{event} for {school['name']}.", "success")
+        except (ValueError, TypeError) as e:
+            conn.rollback(); flash(f"Subscription change failed: {e}", "error")
+        finally:
+            conn.close()
+        return redirect(url_for("platform_school_subscription", school_id=school_id))
+    state = subscription_state(school)
+    plan = subscription_plan_for_school(conn, school)
+    usage = school_plan_usage(conn, school_id)
+    limits = plan_limit_state(plan, usage)
+    plans = conn.execute("SELECT * FROM subscription_plans WHERE is_active=1 AND code != 'trial' ORDER BY price_ngn").fetchall()
+    conn.close()
+    return render_template("platform_school_subscription.html", school=school, state=state, plan=plan, usage=usage, limits=limits, plans=plans)
+
+
 @app.route("/platform/schools")
 @platform_admin_required
 def platform_schools():
@@ -5580,9 +6381,11 @@ def platform_new_school():
 
         conn = get_db()
         try:
+            trial_start = datetime.datetime.utcnow()
+            trial_end = trial_start + datetime.timedelta(days=30)
             cur = conn.execute(
-                "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code) VALUES (?,?, 'pending', ?, ?)",
-                (school_name, registered_email, "TEN-" + secrets.token_hex(4).upper(), re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL"),
+                "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code, subscription_plan, subscription_status, trial_started_at, trial_ends_at) VALUES (?,?, 'pending', ?, ?, 'trial', 'trial', ?, ?)",
+                (school_name, registered_email, "TEN-" + secrets.token_hex(4).upper(), re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL", _iso_utc(trial_start), _iso_utc(trial_end)),
             )
             school_id = cur.lastrowid
             # Resolve any school-code collision deterministically.
@@ -5626,6 +6429,39 @@ def platform_new_school():
         return redirect(url_for("platform_schools"))
 
     return render_template("platform_new_school.html")
+
+
+@app.route("/platform/schools/<int:school_id>/verification")
+@platform_admin_required
+def platform_school_verification(school_id):
+    """Platform-only tenant identity and readiness verification for one school."""
+    conn = get_db()
+    school = get_school(conn, school_id)
+    if not school:
+        conn.close()
+        flash("School not found.", "error")
+        return redirect(url_for("platform_schools"))
+
+    checks, ready = school_readiness_checks(conn, school_id)
+    identity_checks = []
+    identity_checks.append(("School has a permanent School ID", bool((school["school_code"] or "").strip())))
+    identity_checks.append(("School has a permanent Tenant ID", bool((school["tenant_id"] or "").strip())))
+    identity_checks.append(("School ID is unique", conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False))
+    identity_checks.append(("Tenant ID is unique", conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False))
+    identity_checks.append(("School Admin users carry the same Tenant ID", conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)", (school_id, school["tenant_id"])).fetchone()["n"] == 0))
+    role_mismatch = 0
+    if table_exists(conn, "role_assignments"):
+        role_mismatch = conn.execute("SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)", (school_id, school["tenant_id"])).fetchone()["n"]
+    identity_checks.append(("Role assignments carry the same Tenant ID", role_mismatch == 0))
+    data_counts = {
+        "students": conn.execute("SELECT COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=?", (school_id,)).fetchone()["n"],
+        "teachers": conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher'", (school_id,)).fetchone()["n"],
+        "classes": conn.execute("SELECT COUNT(*) n FROM classes WHERE school_id=?", (school_id,)).fetchone()["n"],
+        "subjects": conn.execute("SELECT COUNT(*) n FROM subjects WHERE school_id=?", (school_id,)).fetchone()["n"],
+        "sessions": conn.execute("SELECT COUNT(*) n FROM sessions WHERE school_id=?", (school_id,)).fetchone()["n"],
+    }
+    conn.close()
+    return render_template("platform_school_verification.html", school=school, readiness_checks=checks, readiness_ready=ready, identity_checks=identity_checks, data_counts=data_counts)
 
 
 @app.route("/platform/schools/<int:school_id>/provisioning")

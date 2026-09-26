@@ -1344,6 +1344,175 @@ def migration_040_school_readiness(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_schools_readiness ON schools(readiness_status)")
 
 
+def migration_041_school_subscription(conn):
+    """Add non-payment subscription/trial lifecycle fields per school.
+    Existing schools default to legacy so migration never changes their access.
+    """
+    for column, coltype in [
+        ("subscription_plan", "TEXT NOT NULL DEFAULT 'legacy'"),
+        ("subscription_status", "TEXT NOT NULL DEFAULT 'legacy'"),
+        ("trial_started_at", "TEXT"),
+        ("trial_ends_at", "TEXT"),
+        ("subscription_started_at", "TEXT"),
+        ("subscription_ends_at", "TEXT"),
+        ("grace_ends_at", "TEXT"),
+        ("subscription_reference", "TEXT"),
+    ]:
+        ensure_column(conn, "schools", column, coltype)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_schools_subscription_status ON schools(subscription_status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_schools_trial_ends ON schools(trial_ends_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_schools_subscription_ends ON schools(subscription_ends_at)")
+
+
+def migration_042_subscription_plans(conn):
+    """Create configurable platform subscription plans. Existing school access is untouched."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS subscription_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        price_ngn REAL NOT NULL DEFAULT 0,
+        billing_days INTEGER NOT NULL DEFAULT 365,
+        max_students INTEGER,
+        max_teachers INTEGER,
+        max_storage_mb INTEGER,
+        features_json TEXT NOT NULL DEFAULT '{}',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    plans = [
+        ('trial','30-Day Trial',0,30,100,10,500,'{"results":true,"attendance":true,"materials":true,"timetable":true,"reports":true}'),
+        ('basic','Basic',15000,365,500,30,2000,'{"results":true,"attendance":true,"materials":true,"timetable":true,"reports":true}'),
+        ('standard','Standard',30000,365,1500,75,5000,'{"results":true,"attendance":true,"materials":true,"timetable":true,"reports":true,"offline_sync":true}'),
+        ('premium','Premium',60000,365,5000,250,15000,'{"results":true,"attendance":true,"materials":true,"timetable":true,"reports":true,"offline_sync":true,"ai":true,"advanced_reports":true}')
+    ]
+    for row in plans:
+        conn.execute("""INSERT OR IGNORE INTO subscription_plans
+            (code,name,price_ngn,billing_days,max_students,max_teachers,max_storage_mb,features_json)
+            VALUES (?,?,?,?,?,?,?,?)""", row)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(is_active)")
+
+
+def migration_043_billing_payments(conn):
+    """Create non-gateway billing records. No payment is considered successful until explicitly confirmed."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        invoice_number TEXT UNIQUE NOT NULL,
+        plan_code TEXT NOT NULL,
+        amount_ngn REAL NOT NULL DEFAULT 0,
+        billing_days INTEGER NOT NULL DEFAULT 365,
+        status TEXT NOT NULL DEFAULT 'pending',
+        issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        due_at TEXT,
+        paid_at TEXT,
+        payment_reference TEXT,
+        notes TEXT,
+        created_by TEXT,
+        FOREIGN KEY(school_id) REFERENCES schools(id)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        invoice_id INTEGER,
+        provider TEXT NOT NULL DEFAULT 'manual',
+        payment_reference TEXT NOT NULL,
+        amount_ngn REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'NGN',
+        status TEXT NOT NULL DEFAULT 'pending',
+        paid_at TEXT,
+        confirmed_at TEXT,
+        confirmed_by TEXT,
+        raw_metadata TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id)
+    )""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_payments_reference ON billing_payments(payment_reference)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_invoices_school ON billing_invoices(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_invoices_status ON billing_invoices(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_payments_school ON billing_payments(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_payments_status ON billing_payments(status)")
+
+
+def migration_044_payment_gateway_webhooks(conn):
+    """Add gateway webhook idempotency and receipt records.
+
+    Webhook rows are immutable processing records; a repeated provider event
+    must never create a second payment or renew a school twice.
+    """
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_webhook_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        provider_event_id TEXT NOT NULL,
+        event_type TEXT,
+        payment_reference TEXT,
+        payload_hash TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'received',
+        error_message TEXT,
+        received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        processed_at TEXT
+    )""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_webhook_event ON billing_webhook_events(provider, provider_event_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_webhook_reference ON billing_webhook_events(payment_reference)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        invoice_id INTEGER,
+        payment_id INTEGER NOT NULL UNIQUE,
+        receipt_number TEXT UNIQUE NOT NULL,
+        amount_ngn REAL NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'NGN',
+        provider TEXT NOT NULL DEFAULT 'manual',
+        payment_reference TEXT NOT NULL,
+        issued_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id),
+        FOREIGN KEY(payment_id) REFERENCES billing_payments(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_receipts_school ON billing_receipts(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_receipts_invoice ON billing_receipts(invoice_id)")
+
+
+def migration_044_billing_notification_tracking(conn):
+    """Track automated billing notifications so each reminder is sent once per billing event/day."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_notification_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        event_key TEXT NOT NULL,
+        notification_type TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(school_id, event_key),
+        FOREIGN KEY(school_id) REFERENCES schools(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_notification_school ON billing_notification_events(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_notification_type ON billing_notification_events(notification_type)")
+
+
+def migration_045_billing_email_notifications(conn):
+    """Track opt-in billing email delivery and retries without changing subscription state."""
+    ensure_column(conn, "schools", "billing_email_notifications", "INTEGER DEFAULT 1")
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_email_delivery (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        event_key TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        notification_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        sent_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(school_id, event_key),
+        FOREIGN KEY(school_id) REFERENCES schools(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_email_school ON billing_email_delivery(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_email_status ON billing_email_delivery(status)")
+
+
+
 STEPS = [
     ("offline_sync", migration_024_offline_sync),
     ("deferred_actions", migration_025_deferred_actions),
@@ -1365,6 +1534,12 @@ STEPS = [
     ("tenant_identifiers", migration_039_tenant_identifiers),
     ("role_scope_compat", migration_role_scope_compat),
     ("school_readiness", migration_040_school_readiness),
+    ("school_subscription", migration_041_school_subscription),
+    ("subscription_plans", migration_042_subscription_plans),
+    ("billing_payments", migration_043_billing_payments),
+    ("billing_notification_tracking", migration_044_billing_notification_tracking),
+    ("billing_email_notifications", migration_045_billing_email_notifications),
+    ("payment_gateway_webhooks", migration_044_payment_gateway_webhooks),
 ]
 
 
