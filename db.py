@@ -1619,7 +1619,99 @@ def migration_047_billing_financial_audit(conn):
         BEGIN SELECT RAISE(ABORT, 'Report download records are immutable'); END""")
 
 
-STEPS = [
+
+def migration_048_ai_layer(conn):
+    """AI layer configuration, consent, draft outputs and audit records.
+    All records are explicitly tenant-scoped; AI is disabled by default."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS school_ai_settings (
+            school_id INTEGER PRIMARY KEY,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            process_student_data INTEGER NOT NULL DEFAULT 0,
+            result_analysis INTEGER NOT NULL DEFAULT 1,
+            teacher_comments INTEGER NOT NULL DEFAULT 1,
+            principal_comments INTEGER NOT NULL DEFAULT 1,
+            performance_alerts INTEGER NOT NULL DEFAULT 1,
+            ai_tutor INTEGER NOT NULL DEFAULT 1,
+            learning_materials INTEGER NOT NULL DEFAULT 1,
+            result_assistant INTEGER NOT NULL DEFAULT 0,
+            retention_days INTEGER NOT NULL DEFAULT 365,
+            privacy_notice_version TEXT NOT NULL DEFAULT '1.0',
+            updated_by INTEGER,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS student_ai_consent (
+            student_id INTEGER PRIMARY KEY,
+            school_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','granted','withdrawn')),
+            granted_by_type TEXT,
+            granted_by_id INTEGER,
+            policy_version TEXT,
+            granted_at TEXT,
+            withdrawn_at TEXT,
+            notes TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_consent_school_status ON student_ai_consent(school_id,status)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ai_outputs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            feature TEXT NOT NULL,
+            student_id INTEGER,
+            term_id INTEGER,
+            class_id INTEGER,
+            subject_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','rejected')),
+            output_text TEXT NOT NULL,
+            generated_by INTEGER,
+            reviewed_by INTEGER,
+            reviewed_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_outputs_school_feature ON ai_outputs(school_id,feature,created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_outputs_student ON ai_outputs(school_id,student_id,term_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ai_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            user_id INTEGER,
+            feature TEXT NOT NULL,
+            student_id INTEGER,
+            consent_status TEXT,
+            data_scope TEXT,
+            action TEXT NOT NULL,
+            request_summary TEXT,
+            output_summary TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_audit_school_time ON ai_audit_log(school_id,created_at)")
+    schools=conn.execute("SELECT id FROM schools").fetchall()
+    for row in schools:
+        conn.execute("INSERT OR IGNORE INTO school_ai_settings(school_id) VALUES (?)",(row["id"],))
+
+
+def migration_049_school_theme(conn):
+    """Dashboard theme tokens are per-school and safe to change without affecting data."""
+    for col, typ in [
+        ("theme_preset", "TEXT NOT NULL DEFAULT 'default'"),
+        ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1f6feb'"),
+        ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0b3b75'"),
+        ("dashboard_accent_color", "TEXT NOT NULL DEFAULT '#7c4dff'"),
+        ("dashboard_sidebar_style", "TEXT NOT NULL DEFAULT 'dark'"),
+        ("dashboard_header_style", "TEXT NOT NULL DEFAULT 'solid'"),
+        ("school_tagline", "TEXT"),
+    ]:
+        ensure_column(conn, "schools", col, typ)
+
+
+STEPS = [    ("ai_layer", migration_048_ai_layer),
+    ("school_theme", migration_049_school_theme),
     ("offline_sync", migration_024_offline_sync),
     ("deferred_actions", migration_025_deferred_actions),
     ("sync_triggers", migration_026_sync_triggers),

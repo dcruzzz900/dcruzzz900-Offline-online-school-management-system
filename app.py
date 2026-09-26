@@ -38,6 +38,10 @@ from email_utils import send_email, send_platform_email
 from reports import build_csv, build_xlsx
 from sync_api import sync_bp
 from security_audit import run_security_audit
+from ai.provider import generate as ai_provider_generate, configured as ai_provider_configured
+from ai.result_analysis import analyze_student, compare as compare_analysis
+from ai.comments import teacher_comment as ai_teacher_comment, principal_comment as ai_principal_comment
+from ai.tutor import local_tutor_answer
 
 ALLOWED_LOGO_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
@@ -751,12 +755,23 @@ def inject_school_settings():
                 school_date_format=school["date_format"] or "dmy",
                 result_accent_color=school["result_accent_color"] or "#1f3a5f",
                 result_header_layout=school["result_header_layout"] or "logo-left",
+                theme_preset=school["theme_preset"] or "default",
+                dashboard_primary_color=school["dashboard_primary_color"] or "#1f6feb",
+                dashboard_secondary_color=school["dashboard_secondary_color"] or "#0b3b75",
+                dashboard_accent_color=school["dashboard_accent_color"] or "#7c4dff",
+                dashboard_sidebar_style=school["dashboard_sidebar_style"] or "dark",
+                dashboard_header_style=school["dashboard_header_style"] or "solid",
+                school_tagline=school["school_tagline"] or "Better Data. Brighter Futures.",
             )
     return dict(school_name="School Result System", school_logo_url=None, school_logo_align="center",
                 school_name_align="center",
                 cumulative_enabled=False, web_font_css=WEB_FONTS["system"]["css"], web_font_google=None,
                 school_timezone="Africa/Lagos", school_date_format="dmy",
-                result_accent_color="#1f3a5f", result_header_layout="logo-left")
+                result_accent_color="#1f3a5f", result_header_layout="logo-left",
+                theme_preset="default", dashboard_primary_color="#1f6feb",
+                dashboard_secondary_color="#0b3b75", dashboard_accent_color="#7c4dff",
+                dashboard_sidebar_style="dark", dashboard_header_style="solid",
+                school_tagline="Better Data. Brighter Futures.")
 
 
 @app.context_processor
@@ -894,6 +909,7 @@ def login():
     if request.method == "POST":
         identifier = request.form["username"].strip()
         password = request.form["password"]
+        requested_school_code = request.form.get("school_code", "").strip()
         conn = get_db()
         user = conn.execute(
             "SELECT * FROM users WHERE username=? "
@@ -907,6 +923,10 @@ def login():
                 flash("This account has been deactivated. Contact your school admin.", "error")
                 return render_template("login.html")
             school = get_school(conn, user["school_id"])
+            if requested_school_code and school and requested_school_code.lower() not in {str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower()}:
+                conn.close()
+                flash("That School ID / Tenant ID does not match this account.", "error")
+                return render_template("login.html")
             conn.close()
             if school and school["activation_status"] != "active":
                 flash("This school hasn't been activated yet. Enter your activation code on the Activate School page.", "error")
@@ -7487,6 +7507,187 @@ def platform_notifications():
     conn.close()
     return render_template("platform_notifications.html", schools=schools, sent=sent)
 
+
+# ---------- AI layer / architecture UI ----------
+def _ai_settings(conn, sid):
+    row=conn.execute("SELECT * FROM school_ai_settings WHERE school_id=?",(sid,)).fetchone()
+    if not row:
+        conn.execute("INSERT INTO school_ai_settings(school_id) VALUES (?)",(sid,)); conn.commit(); row=conn.execute("SELECT * FROM school_ai_settings WHERE school_id=?",(sid,)).fetchone()
+    return row
+
+def _ai_consent(conn, student_id):
+    r=conn.execute("SELECT status FROM student_ai_consent WHERE student_id=? AND school_id=?",(student_id,current_school_id())).fetchone()
+    return (r["status"]=="granted" if r else False),(r["status"] if r else "pending")
+
+def _ai_log(conn,feature,action,student_id=None,consent_status=None,scope="minimal",request_summary="",output_summary=""):
+    conn.execute("INSERT INTO ai_audit_log(school_id,user_id,feature,student_id,consent_status,data_scope,action,request_summary,output_summary) VALUES (?,?,?,?,?,?,?,?,?)",(current_school_id(),session.get("user_id"),feature,student_id,consent_status,scope,action,request_summary[:500],output_summary[:1000])); conn.commit()
+
+
+def _ai_teacher_allowed(conn, student_id):
+    if session.get("role") != "teacher": return True
+    row=conn.execute("SELECT class_id FROM students WHERE id=?",(student_id,)).fetchone()
+    return bool(row and can_view_class_results(conn,session.get("role"),session.get("position"),session["user_id"],row["class_id"]))
+
+def _ai_rows(conn,student_id,term_id):
+    return conn.execute("SELECT sc.*,sub.name subject_name FROM scores sc JOIN subjects sub ON sub.id=sc.subject_id JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.student_id=? AND sc.term_id=? AND c.school_id=?",(student_id,term_id,current_school_id())).fetchall()
+
+def _att(conn,student_id,term_id):
+    r=conn.execute("SELECT COUNT(*) n,SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) p FROM attendance_records WHERE student_id=? AND term_id=?",(student_id,term_id)).fetchone(); return (r["p"] or 0)/(r["n"] or 1)*100 if r["n"] else None
+
+def _prev_term(conn,term):
+    return conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.session_id=? AND t.id<? ORDER BY t.id DESC LIMIT 1",(term["session_id"],term["id"])).fetchone() if term else None
+
+@app.route("/ai")
+@login_required("admin","sub_admin","teacher")
+def ai_command_center():
+    conn=get_db(); sid=current_school_id(); term=current_term(conn); settings=_ai_settings(conn,sid); recent=conn.execute("SELECT * FROM ai_outputs WHERE school_id=? ORDER BY id DESC LIMIT 8",(sid,)).fetchall(); conn.close()
+    return render_template("ai_command_center.html",ai_settings=settings,term=term,recent=recent,provider_configured=ai_provider_configured())
+
+@app.route("/ai/settings",methods=["GET","POST"])
+@login_required("admin","sub_admin")
+def ai_settings_page():
+    conn=get_db(); sid=current_school_id(); settings=_ai_settings(conn,sid)
+    if request.method=="POST":
+        names=["result_analysis","teacher_comments","principal_comments","performance_alerts","ai_tutor","learning_materials","result_assistant"]; vals=[1 if request.form.get(n) else 0 for n in names]
+        try: retention=max(30,min(int(request.form.get("retention_days") or 365),3650))
+        except ValueError: retention=365
+        conn.execute("UPDATE school_ai_settings SET enabled=?,process_student_data=?,result_analysis=?,teacher_comments=?,principal_comments=?,performance_alerts=?,ai_tutor=?,learning_materials=?,result_assistant=?,retention_days=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE school_id=?",(1 if request.form.get("enabled") else 0,1 if request.form.get("process_student_data") else 0,*vals,retention,session["user_id"],sid)); _ai_log(conn,"privacy","settings_updated",scope="school"); conn.close(); flash("AI privacy settings saved.","success"); return redirect(url_for("ai_settings_page"))
+    cons=conn.execute("SELECT status,COUNT(*) c FROM student_ai_consent WHERE school_id=? GROUP BY status",(sid,)).fetchall(); audit=conn.execute("SELECT * FROM ai_audit_log WHERE school_id=? ORDER BY id DESC LIMIT 25",(sid,)).fetchall(); conn.close(); return render_template("ai_privacy.html",ai_settings=settings,consent_counts={r["status"]:r["c"] for r in cons},audit=audit,provider_configured=ai_provider_configured())
+
+@app.route("/ai/consent",methods=["GET","POST"])
+@login_required("admin","sub_admin")
+def ai_consent():
+    conn=get_db(); sid=current_school_id()
+    if request.method=="POST":
+        student_id=request.form.get("student_id",type=int); status=request.form.get("status","pending"); status=status if status in ("pending","granted","withdrawn") else "pending"
+        ok=conn.execute("SELECT st.id FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(student_id,sid)).fetchone()
+        if ok:
+            conn.execute("INSERT INTO student_ai_consent(student_id,school_id,status,granted_by_type,granted_by_id,policy_version,granted_at,withdrawn_at) VALUES (?,?,?,?,?,?,CASE WHEN ?='granted' THEN CURRENT_TIMESTAMP END,CASE WHEN ?='withdrawn' THEN CURRENT_TIMESTAMP END) ON CONFLICT(student_id) DO UPDATE SET status=excluded.status,granted_by_type=excluded.granted_by_type,granted_by_id=excluded.granted_by_id,policy_version=excluded.policy_version,granted_at=excluded.granted_at,withdrawn_at=excluded.withdrawn_at",(student_id,sid,status,"school_admin",session["user_id"],"1.0",status,status)); _ai_log(conn,"privacy","consent_changed",student_id,status,scope="student",consent_status=status); flash("Consent status updated.","success")
+        conn.close(); return redirect(url_for("ai_consent"))
+    students=conn.execute("SELECT st.id,st.first_name,st.last_name,c.name class_name,COALESCE(a.status,'pending') consent_status FROM students st JOIN classes c ON c.id=st.class_id LEFT JOIN student_ai_consent a ON a.student_id=st.id AND a.school_id=? WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name",(sid,sid)).fetchall(); conn.close(); return render_template("ai_consent.html",students=students)
+
+@app.route("/ai/result-analysis")
+@login_required("admin","sub_admin","teacher")
+def ai_result_analysis():
+    conn=get_db(); sid=current_school_id(); students=conn.execute("SELECT st.id,st.first_name,st.last_name,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name",(sid,)).fetchall(); terms=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? ORDER BY t.id DESC",(sid,)).fetchall(); conn.close(); return render_template("ai_result_analysis.html",students=students,terms=terms)
+
+@app.route("/ai/analyze",methods=["POST"])
+@login_required("admin","sub_admin","teacher")
+def ai_analyze():
+    conn=get_db(); sid=current_school_id(); student_id=request.form.get("student_id",type=int); term=resolve_term(conn,request.form.get("term_id",type=int)); student=conn.execute("SELECT st.*,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(student_id,sid)).fetchone(); settings=_ai_settings(conn,sid); allowed,cs=_ai_consent(conn,student_id)
+    if not student or not term: conn.close(); flash("Student or term not found.","error"); return redirect(url_for("ai_command_center"))
+    if session.get("role")=="teacher" and not can_view_class_results(conn,session.get("role"),session.get("position"),session["user_id"],student["class_id"]): conn.close(); flash("You are not authorized for this student.","error"); return redirect(url_for("ai_command_center"))
+    if not(settings["enabled"] and settings["process_student_data"] and settings["result_analysis"] and allowed): _ai_log(conn,"result_analysis","blocked",student_id,cs,scope="student",request_summary="Blocked by settings/consent"); conn.close(); flash("Enable AI processing and grant the required student consent first.","error"); return redirect(url_for("ai_command_center"))
+    rows=_ai_rows(conn,student_id,term["id"]); prev=_prev_term(conn,term); old=_ai_rows(conn,student_id,prev["id"]) if prev else []; analysis=compare_analysis(rows,old); att=_att(conn,student_id,term["id"]); text=f"Overall performance: {analysis['average']:.1f}%. Trend: {analysis['trend']}. Strengths: {', '.join(analysis['strengths']) or 'None above 60% yet'}. Areas for support: {', '.join(analysis['weaknesses']) or 'No subject below 50%'}."+(f" Attendance: {att:.0f}%." if att is not None else "")
+    out=conn.execute("INSERT INTO ai_outputs(school_id,feature,student_id,term_id,class_id,status,output_text,generated_by) VALUES (?,?,?,?,?,?,?,?)",(sid,"result_analysis",student_id,term["id"],student["class_id"],"draft",text,session["user_id"])); _ai_log(conn,"result_analysis","generated",student_id,cs,scope="student",request_summary=f"Term {term['id']}",output_summary=text); conn.close(); return redirect(url_for("ai_output_detail",output_id=out.lastrowid))
+
+@app.route("/ai/output/<int:output_id>")
+@login_required("admin","sub_admin","teacher")
+def ai_output_detail(output_id):
+    conn=get_db(); out=conn.execute("SELECT * FROM ai_outputs WHERE id=? AND school_id=?",(output_id,current_school_id())).fetchone(); student=conn.execute("SELECT st.*,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(out["student_id"],current_school_id())).fetchone() if out and out["student_id"] else None; conn.close()
+    if not out: flash("AI output not found.","error"); return redirect(url_for("ai_command_center"))
+    if out["student_id"] and not _ai_teacher_allowed(conn,out["student_id"]): flash("You are not authorized to view this AI output.","error"); return redirect(url_for("ai_command_center"))
+    return render_template("ai_output.html",output=out,student=student)
+
+@app.route("/ai/output/<int:output_id>/review",methods=["POST"])
+@login_required("admin","sub_admin","teacher")
+def ai_output_review(output_id):
+    action=request.form.get("action"); action=action if action in ("approved","rejected") else "rejected"; conn=get_db(); out=conn.execute("SELECT * FROM ai_outputs WHERE id=? AND school_id=?",(output_id,current_school_id())).fetchone()
+    if not out: conn.close(); flash("AI output not found.","error"); return redirect(url_for("ai_command_center"))
+    if out["student_id"] and not _ai_teacher_allowed(conn,out["student_id"]): conn.close(); flash("You are not authorized to review this AI output.","error"); return redirect(url_for("ai_command_center"))
+    text=request.form.get("output_text","").strip() or out["output_text"]; conn.execute("UPDATE ai_outputs SET output_text=?,status=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",(text,action,session["user_id"],output_id)); _ai_log(conn,out["feature"],f"output_{action}",out["student_id"],None,scope="student",request_summary=f"Review {output_id}",output_summary=text); conn.close(); flash("AI draft reviewed.","success"); return redirect(url_for("ai_output_detail",output_id=output_id))
+
+@app.route("/ai/comments",methods=["GET","POST"])
+@login_required("admin","sub_admin","teacher")
+def ai_comments():
+    conn=get_db(); sid=current_school_id(); term=current_term(conn); students=conn.execute("SELECT st.id,st.first_name,st.last_name,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name",(sid,)).fetchall()
+    if request.method=="POST":
+        student_id=request.form.get("student_id",type=int); kind=request.form.get("kind","teacher"); settings=_ai_settings(conn,sid); feature="teacher_comments" if kind=="teacher" else "principal_comments"; consent,cs=_ai_consent(conn,student_id); student=conn.execute("SELECT st.*,c.form_teacher_id FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(student_id,sid)).fetchone()
+        if not student or not term or not(settings["enabled"] and settings["process_student_data"] and settings[feature] and consent): flash("AI comments require AI to be enabled and student consent to be granted.","error")
+        elif not _ai_teacher_allowed(conn,student_id): flash("You are not authorized for this student.","error")
+        else:
+            prev=_prev_term(conn,term); analysis=compare_analysis(_ai_rows(conn,student_id,term["id"]),_ai_rows(conn,student_id,prev["id"]) if prev else []); att=_att(conn,student_id,term["id"]); name=f"{student['first_name']} {student['last_name']}"; text=ai_teacher_comment(name,analysis,att) if kind=="teacher" else ai_principal_comment(name,analysis,att); out=conn.execute("INSERT INTO ai_outputs(school_id,feature,student_id,term_id,class_id,status,output_text,generated_by) VALUES (?,?,?,?,?,?,?,?)",(sid,feature,student_id,term["id"],student["class_id"],"draft",text,session["user_id"])); _ai_log(conn,feature,"generated",student_id,cs,scope="student",request_summary=f"Generate {kind} comment",output_summary=text); conn.close(); return redirect(url_for("ai_output_detail",output_id=out.lastrowid))
+    conn.close(); return render_template("ai_comments.html",students=students,term=term)
+
+@app.route("/ai/alerts")
+@login_required("admin","sub_admin","teacher")
+def ai_alerts():
+    conn=get_db(); sid=current_school_id(); term=current_term(conn); alerts=[]
+    if term:
+        q="SELECT st.id,st.first_name,st.last_name,c.name class_name,AVG(sc.ca1+sc.ca2+sc.exam) avg_score FROM students st JOIN classes c ON c.id=st.class_id LEFT JOIN scores sc ON sc.student_id=st.id AND sc.term_id=? WHERE c.school_id=? AND st.is_active=1"; params=[term["id"],sid]
+        if session.get("role")=="teacher" and not can_view_all_results(session.get("role"),session.get("position")):
+            ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); ids=[] if ids == "all" else ids; q += (" AND c.id IN ("+",".join("?"*len(ids))+")" if ids else " AND 1=0"); params += ids
+        rows=conn.execute(q+" GROUP BY st.id",tuple(params)).fetchall(); prev=_prev_term(conn,term)
+        for r in rows:
+            if r["avg_score"] is None: continue
+            reasons=[]
+            if r["avg_score"]<40: reasons.append("Average below 40%")
+            if prev:
+                p=conn.execute("SELECT AVG(ca1+ca2+exam) avg FROM scores WHERE student_id=? AND term_id=?",(r["id"],prev["id"])).fetchone()["avg"]
+                if p is not None and r["avg_score"]-p<=-10: reasons.append(f"Down {abs(r['avg_score']-p):.1f} points")
+            att=_att(conn,r["id"],term["id"]);
+            if att is not None and att<75: reasons.append(f"Attendance {att:.0f}%")
+            if reasons: alerts.append({"student":r,"reasons":reasons})
+    conn.close(); return render_template("ai_alerts.html",alerts=alerts,term=term)
+
+@app.route("/ai/result-assistant",methods=["GET","POST"])
+@login_required("admin","sub_admin","teacher")
+def ai_result_assistant():
+    conn=get_db(); sid=current_school_id(); term=current_term(conn); query=""; answer=None
+    if request.method=="POST":
+        query=request.form.get("query","").strip(); q=query.lower()
+        if not term: answer=["No active term is configured."]
+        elif "below 40" in q and "mathematics" in q:
+            base="SELECT st.first_name,st.last_name,c.name class_name,(sc.ca1+sc.ca2+sc.exam) score FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE c.school_id=? AND sc.term_id=? AND lower(sub.name)='mathematics' AND (sc.ca1+sc.ca2+sc.exam)<40"; params=[sid,term["id"]]
+            if session.get("role")=="teacher" and not can_view_all_results(session.get("role"),session.get("position")):
+                ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); ids=[] if ids == "all" else ids; base += (" AND c.id IN ("+",".join("?"*len(ids))+")" if ids else " AND 1=0"); params += ids
+            rows=conn.execute(base+" ORDER BY score",tuple(params)).fetchall(); answer=[f"{r['first_name']} {r['last_name']} ({r['class_name']}) — {r['score']:.1f}%" for r in rows] or ["No students matched that condition."]
+        elif "poor" in q and "subject" in q:
+            base="SELECT sub.name subject_name,AVG(sc.ca1+sc.ca2+sc.exam) avg_score FROM scores sc JOIN subjects sub ON sub.id=sc.subject_id JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?"; params=[sid,term["id"]]
+            if session.get("role")=="teacher" and not can_view_all_results(session.get("role"),session.get("position")):
+                ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); ids=[] if ids == "all" else ids; base += (" AND c.id IN ("+",".join("?"*len(ids))+")" if ids else " AND 1=0"); params += ids
+            rows=conn.execute(base+" GROUP BY sub.id ORDER BY avg_score LIMIT 10",tuple(params)).fetchall(); answer=[f"{r['subject_name']} — {r['avg_score']:.1f}% average" for r in rows]
+        elif "declining" in q:
+            prev=_prev_term(conn,term); answer=["There is no previous term to compare."] if not prev else ["Use the Performance Alerts view for declining students."]
+        else: answer=["Try: Which subjects performed poorly?","Who scored below 40 in Mathematics?","Which students have declining performance?"]
+        _ai_log(conn,"result_assistant","query",scope="school",request_summary=query,output_summary="; ".join(answer))
+    conn.close(); return render_template("ai_result_assistant.html",query=query,answer=answer,term=term)
+
+@app.route("/ai/learning-materials",methods=["GET","POST"])
+@login_required("admin","sub_admin","teacher")
+def ai_learning_materials():
+    material=None
+    if request.method=="POST":
+        subject=request.form.get("subject","General").strip(); topic=request.form.get("topic","").strip(); level=request.form.get("level","Secondary").strip()
+        if topic: material={"subject":subject,"topic":topic,"level":level,"notes":f"{topic}: key concepts, definitions and worked examples for {level} learners.","questions":[f"Define {topic}.",f"Give two examples of {topic}.",f"Explain one real-world application of {topic}."],"answers":["Use a clear definition and explain it in your own words.","Give two accurate examples and show the relevant steps.","Connect the concept to a practical situation."]}
+    return render_template("ai_learning_materials.html",material=material)
+
+@app.route("/student/ai-tutor",methods=["GET","POST"])
+def student_ai_tutor():
+    if "student_id" not in session: return redirect(url_for("student_login"))
+    conn=get_db(); settings=_ai_settings(conn,session.get("school_id")); answer=None; question=""; subject="Mathematics"
+    if request.method=="POST":
+        question=request.form.get("question","").strip(); subject=request.form.get("subject","Mathematics").strip()
+        if not(settings["enabled"] and settings["ai_tutor"]): flash("AI Tutor is disabled by your school administrator.","error")
+        else:
+            answer,_=ai_provider_generate("You are a safe educational tutor. Never expose student records.",f"Subject: {subject}\nQuestion: {question}",max_tokens=600)
+            if not answer: answer=local_tutor_answer(subject,question)
+    conn.close(); return render_template("ai_tutor.html",answer=answer,question=question,subject=subject,enabled=bool(settings["enabled"] and settings["ai_tutor"]))
+
+@app.route("/admin/theme",methods=["GET","POST"])
+@login_required("admin","sub_admin")
+def admin_theme():
+    conn=get_db(); sid=current_school_id(); school=conn.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone(); presets={"default":("#1f6feb","#0b3b75","#7c4dff"),"green":("#138a55","#0b4f36","#16a085"),"purple":("#6d3fc0","#3b1f70","#9c6cff"),"teal":("#0f8b8d","#075e60","#ff8a34"),"orange":("#e67e22","#8a3e0a","#f4b942"),"dark":("#1d2633","#0d1420","#5c8dff"),"custom":("#1f6feb","#0b3b75","#7c4dff")}
+    if request.method=="POST":
+        preset=request.form.get("theme_preset","default"); primary,secondary,accent=presets.get(preset,(request.form.get("dashboard_primary_color","#1f6feb"),request.form.get("dashboard_secondary_color","#0b3b75"),request.form.get("dashboard_accent_color","#7c4dff")));
+        if preset=="custom": primary=request.form.get("dashboard_primary_color","#1f6feb"); secondary=request.form.get("dashboard_secondary_color","#0b3b75"); accent=request.form.get("dashboard_accent_color","#7c4dff")
+        import re as _re
+        primary=primary if _re.fullmatch(r"#[0-9a-fA-F]{6}",primary) else "#1f6feb"; secondary=secondary if _re.fullmatch(r"#[0-9a-fA-F]{6}",secondary) else "#0b3b75"; accent=accent if _re.fullmatch(r"#[0-9a-fA-F]{6}",accent) else "#7c4dff"
+        result_accent=request.form.get("result_accent_color", school["result_accent_color"] or "#1f3a5f"); result_header=request.form.get("result_header_layout", school["result_header_layout"] or "logo-left")
+        if not _re.fullmatch(r"#[0-9a-fA-F]{6}",result_accent): result_accent="#1f3a5f"
+        if result_header not in ("logo-left","logo-top-center","logo-right","no-logo"): result_header="logo-left"
+        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,school_tagline=?,result_accent_color=?,result_header_layout=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),request.form.get("school_tagline","").strip()[:120],result_accent,result_header,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
+    conn.close(); return render_template("theme_branding.html",school=school,presets=presets)
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"
