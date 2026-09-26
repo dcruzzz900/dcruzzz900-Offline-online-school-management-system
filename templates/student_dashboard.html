@@ -1,30 +1,5 @@
-{% extends "base.html" %}
-{% block title %}My Results{% endblock %}
-{% block content %}
-<h1>Welcome, {{ student_full_name(student) }}</h1>
-
-{% include "partials/datetime_card.html" %}
-
-<div class="card">
-    <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
-    <p><b>Class / Arm:</b> {{ class_row.name }}</p>
-</div>
-
-<div class="card">
-    <h3>Your Published Results</h3>
-    {% if published_terms %}
-    <table>
-        <tr><th>Session</th><th>Term</th><th>Action</th></tr>
-        {% for t in published_terms %}
-        <tr>
-            <td>{{ t.session_name }}</td>
-            <td>{{ t.name }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('student_result', term_id=t.id) }}">View Result</a></td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p style="color:#999;">No results have been published yet. Check back once your school publishes a term's results.</p>
-    {% endif %}
-</div>
+{% extends "base.html" %}{% block title %}Student Dashboard{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">STUDENT PORTAL</div><h1>Welcome, {{ student_full_name(student) }}</h1><p>{{ class_row.name }} · Admission No. {{ student.admission_no }}</p></div><a class="btn" href="{{ url_for('student_ai_tutor') }}">✦ Ask AI Tutor</a></div>
+<div class="grid-2"><div class="card"><h3>My Profile</h3><p><b>Class:</b> {{ class_row.name }}</p><p><b>Admission No.:</b> {{ student.admission_no }}</p></div><div class="card"><h3>Learning Support</h3><p class="muted">Ask questions in Mathematics, English, Physics, Chemistry, Biology, Economics, Government or Literature.</p><a class="btn" href="{{ url_for('student_ai_tutor') }}">Open AI Tutor</a></div></div>
+<div class="card"><h3>Published Results</h3>{% if published_terms %}<table><tr><th>Session</th><th>Term</th><th>Action</th></tr>{% for t in published_terms %}<tr><td>{{ t.session_name }}</td><td>{{ t.name }}</td><td><a class="btn btn-small" href="{{ url_for('student_result',term_id=t.id) }}">View Result</a></td></tr>{% endfor %}</table>{% else %}<p class="muted">No results have been published yet.</p>{% endif %}</div>
 {% endblock %}
