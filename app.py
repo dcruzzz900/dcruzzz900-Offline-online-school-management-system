@@ -5833,6 +5833,17 @@ def _gateway_payload(provider):
     currency = str(data.get("currency") or "NGN")[:10].upper()
     return event_type, provider_event_id, reference, status, amount_ngn, currency, data
 
+
+
+def _financial_audit(conn, event_type, actor_type, actor_name=None, school_id=None, payment_id=None, invoice_id=None, reference=None, details=None):
+    """Append-only financial audit event. Never edits or deletes prior events."""
+    conn.execute(
+        """INSERT INTO billing_financial_audit
+        (event_type,actor_type,actor_name,school_id,payment_id,invoice_id,reference,details)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (event_type, actor_type, actor_name, school_id, payment_id, invoice_id, reference, details),
+    )
+
 def _issue_billing_receipt(conn, payment):
     existing = conn.execute("SELECT * FROM billing_receipts WHERE payment_id=?", (payment["id"],)).fetchone()
     if existing:
@@ -5868,6 +5879,7 @@ def _confirm_billing_payment(conn, payment_id, confirmed_by, provider_event=None
     conn.execute("UPDATE schools SET subscription_plan=?,subscription_status='active',subscription_started_at=?,subscription_ends_at=?,grace_ends_at=NULL,subscription_reference=? WHERE id=?", (invoice["plan_code"], _iso_utc(now), _iso_utc(end), payment["payment_reference"], payment["school_id"]))
     payment = conn.execute("SELECT * FROM billing_payments WHERE id=?", (payment_id,)).fetchone()
     receipt = _issue_billing_receipt(conn, payment)
+    _financial_audit(conn, "payment_confirmed", "platform_or_gateway", confirmed_by, payment["school_id"], payment_id, invoice["id"], payment["payment_reference"], f"Receipt {receipt["receipt_number"]}; provider={payment["provider"]}")
     return payment, receipt, True
 
 
@@ -6092,22 +6104,71 @@ def _run_billing_email_notifications(conn, now=None):
     return stats
 
 
+def _acquire_billing_job_lock(conn, job_name="billing_notifications", stale_minutes=30):
+    """Acquire a short-lived database lock so duplicate cron invocations cannot overlap."""
+    now = datetime.datetime.utcnow()
+    stale_before = now - datetime.timedelta(minutes=stale_minutes)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        active = conn.execute(
+            "SELECT id, started_at FROM billing_job_runs WHERE job_name=? AND status='running' ORDER BY id DESC LIMIT 1",
+            (job_name,),
+        ).fetchone()
+        if active:
+            try:
+                started = datetime.datetime.fromisoformat(str(active["started_at"]).replace("Z", ""))
+            except ValueError:
+                started = now
+            if started > stale_before:
+                conn.rollback()
+                return None
+            conn.execute("UPDATE billing_job_runs SET status='stale', finished_at=? WHERE id=?", (_iso_utc(now), active["id"]))
+        cur = conn.execute("INSERT INTO billing_job_runs(job_name,started_at,status) VALUES (?,?, 'running')", (job_name, _iso_utc(now)))
+        run_id = cur.lastrowid
+        conn.commit()
+        return run_id
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+
+
+def _finish_billing_job(conn, run_id, status, result=None, error_message=None):
+    conn.execute(
+        "UPDATE billing_job_runs SET status=?, finished_at=?, result_json=?, error_message=? WHERE id=?",
+        (status, _iso_utc(datetime.datetime.utcnow()), json.dumps(result or {}, separators=(",", ":")), (error_message or "")[:1000] or None, run_id),
+    )
+    conn.commit()
+
+
 @app.route("/internal/billing-notifications", methods=["POST"])
 def internal_billing_notifications():
-    """Cron-safe endpoint for automated in-app and optional email billing reminders; protected by a secret."""
+    """Cron-safe endpoint for automated billing reminders; protected and overlap-safe."""
     expected = os.environ.get("BILLING_NOTIFICATION_CRON_SECRET", "").strip()
     supplied = request.headers.get("X-Billing-Cron-Secret", "").strip()
     if not expected or not supplied or not secrets.compare_digest(expected, supplied):
         return jsonify({"error": "unauthorized"}), 401
     conn = get_db()
+    run_id = None
     try:
+        run_id = _acquire_billing_job_lock(conn)
+        if run_id is None:
+            return jsonify({"ok": True, "skipped": True, "reason": "billing job already running"}), 202
         sent = _run_billing_notifications(conn)
         email_stats = _run_billing_email_notifications(conn)
-        conn.commit()
-        return jsonify({"ok": True, "notifications_created": len(sent), "email": email_stats})
+        result = {"notifications_created": len(sent), "email": email_stats}
+        _finish_billing_job(conn, run_id, "completed", result=result)
+        return jsonify({"ok": True, "run_id": run_id, **result})
     except Exception as exc:
         conn.rollback()
-        return jsonify({"ok": False, "error": str(exc)[:300]}), 500
+        if run_id is not None:
+            try:
+                _finish_billing_job(conn, run_id, "failed", error_message=str(exc))
+            except Exception:
+                pass
+        return jsonify({"ok": False, "error": str(exc)[:300], "run_id": run_id}), 500
     finally:
         conn.close()
 
@@ -6189,6 +6250,301 @@ def school_billing_receipt(receipt_id):
     return render_template("school_billing_receipt.html", school=school, receipt=receipt)
 
 
+@app.route("/platform/billing-analytics")
+@platform_admin_required
+def platform_billing_analytics():
+    """Aggregated Super Admin billing analytics. No student-level data is exposed."""
+    conn = get_db()
+    now = datetime.datetime.utcnow()
+    # Confirmed payments are the revenue source; pending/failed transactions are excluded.
+    total_confirmed = conn.execute(
+        "SELECT COALESCE(SUM(amount_ngn),0) AS total FROM billing_payments WHERE status='confirmed'"
+    ).fetchone()["total"]
+    confirmed_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM billing_payments WHERE status='confirmed'"
+    ).fetchone()["n"]
+    pending_amount = conn.execute(
+        "SELECT COALESCE(SUM(amount_ngn),0) AS total FROM billing_payments WHERE status='pending'"
+    ).fetchone()["total"]
+    overdue_amount = conn.execute(
+        "SELECT COALESCE(SUM(amount_ngn),0) AS total FROM billing_invoices WHERE status='pending' AND due_at IS NOT NULL AND due_at < ?",
+        (_iso_utc(now),),
+    ).fetchone()["total"]
+    invoice_total = conn.execute("SELECT COUNT(*) AS n FROM billing_invoices").fetchone()["n"]
+    paid_invoice_count = conn.execute(
+        "SELECT COUNT(DISTINCT invoice_id) AS n FROM billing_payments WHERE status='confirmed' AND invoice_id IS NOT NULL"
+    ).fetchone()["n"]
+    collection_rate = (paid_invoice_count / invoice_total * 100.0) if invoice_total else 0.0
+
+    monthly_rows = conn.execute("""
+        SELECT substr(COALESCE(p.paid_at, p.created_at),1,7) AS month,
+               COALESCE(SUM(p.amount_ngn),0) AS revenue,
+               COUNT(*) AS payments
+        FROM billing_payments p
+        WHERE p.status='confirmed'
+          AND COALESCE(p.paid_at, p.created_at) >= ?
+        GROUP BY substr(COALESCE(p.paid_at, p.created_at),1,7)
+        ORDER BY month ASC
+    """, (_iso_utc(now - datetime.timedelta(days=365)),)).fetchall()
+    monthly = {r["month"]: {"revenue": float(r["revenue"] or 0), "payments": int(r["payments"] or 0)} for r in monthly_rows}
+    months = []
+    cursor = datetime.datetime(now.year, now.month, 1)
+    for _ in range(12):
+        key = cursor.strftime("%Y-%m")
+        months.append({"month": key, **monthly.get(key, {"revenue": 0.0, "payments": 0})})
+        cursor = (cursor.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    months.reverse()
+
+    plan_rows = conn.execute("""
+        SELECT COALESCE(NULLIF(subscription_plan,''),'legacy') AS plan,
+               COUNT(*) AS schools
+        FROM schools
+        WHERE is_archived=0
+        GROUP BY COALESCE(NULLIF(subscription_plan,''),'legacy')
+        ORDER BY schools DESC, plan ASC
+    """).fetchall()
+    status_rows = conn.execute("""
+        SELECT COALESCE(subscription_status,'unknown') AS status, COUNT(*) AS schools
+        FROM schools WHERE is_archived=0
+        GROUP BY COALESCE(subscription_status,'unknown')
+        ORDER BY schools DESC
+    """).fetchall()
+    top_revenue = conn.execute("""
+        SELECT s.id, s.name, s.school_code,
+               COALESCE(SUM(CASE WHEN p.status='confirmed' THEN p.amount_ngn ELSE 0 END),0) AS revenue,
+               COUNT(CASE WHEN p.status='confirmed' THEN 1 END) AS payments
+        FROM schools s LEFT JOIN billing_payments p ON p.school_id=s.id
+        WHERE s.is_archived=0
+        GROUP BY s.id, s.name, s.school_code
+        ORDER BY revenue DESC, s.name ASC LIMIT 20
+    """).fetchall()
+    recent_confirmed = conn.execute("""
+        SELECT p.payment_reference, p.amount_ngn, p.paid_at, p.provider,
+               s.name AS school_name, s.school_code, i.invoice_number
+        FROM billing_payments p JOIN schools s ON s.id=p.school_id
+        LEFT JOIN billing_invoices i ON i.id=p.invoice_id
+        WHERE p.status='confirmed'
+        ORDER BY COALESCE(p.paid_at,p.created_at) DESC LIMIT 25
+    """).fetchall()
+    conn.close()
+    return render_template(
+        "platform_billing_analytics.html",
+        total_confirmed=float(total_confirmed or 0), confirmed_count=int(confirmed_count or 0),
+        pending_amount=float(pending_amount or 0), overdue_amount=float(overdue_amount or 0),
+        invoice_total=int(invoice_total or 0), paid_invoice_count=int(paid_invoice_count or 0),
+        collection_rate=collection_rate, months=months, plan_rows=plan_rows,
+        status_rows=status_rows, top_revenue=top_revenue, recent_confirmed=recent_confirmed,
+    )
+
+
+
+def _billing_report_date_range():
+    """Return an inclusive UTC date range for Super Admin billing exports."""
+    today = datetime.datetime.utcnow().date()
+    start_raw = (request.args.get("start") or "").strip()
+    end_raw = (request.args.get("end") or "").strip()
+    try:
+        start = datetime.date.fromisoformat(start_raw) if start_raw else today.replace(day=1)
+    except ValueError:
+        start = today.replace(day=1)
+    try:
+        end = datetime.date.fromisoformat(end_raw) if end_raw else today
+    except ValueError:
+        end = today
+    if end < start:
+        start, end = end, start
+    return start, end
+
+
+def _billing_export_response(title, headers, rows, fmt, filename):
+    if fmt == "xlsx":
+        payload = build_xlsx(title, headers, rows)
+        return send_file(payload, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                         as_attachment=True, download_name=filename)
+    payload = build_csv(headers, rows)
+    return send_file(payload, mimetype="text/csv", as_attachment=True, download_name=filename)
+
+
+@app.route("/platform/billing-reports")
+@platform_admin_required
+def platform_billing_reports():
+    """Super Admin financial reporting hub. Reports contain billing data only."""
+    start, end = _billing_report_date_range()
+    return render_template("platform_billing_reports.html", start=start.isoformat(), end=end.isoformat())
+
+
+@app.route("/platform/billing-reports/<report_name>")
+@platform_admin_required
+def platform_billing_report_export(report_name):
+    """Export billing financial reports as CSV or XLSX for the selected date range."""
+    start, end = _billing_report_date_range()
+    fmt = (request.args.get("format") or "csv").lower()
+    if fmt not in {"csv", "xlsx"}:
+        fmt = "csv"
+    start_iso = start.isoformat() + " 00:00:00"
+    end_iso = (end + datetime.timedelta(days=1)).isoformat() + " 00:00:00"
+    conn = get_db()
+
+    if report_name == "payments":
+        headers = ["Payment ID", "School", "School ID", "Invoice", "Provider", "Payment Reference", "Amount NGN", "Currency", "Status", "Paid At", "Confirmed At"]
+        rows = conn.execute("""
+            SELECT p.id, s.name, s.school_code, COALESCE(i.invoice_number,''), p.provider,
+                   p.payment_reference, p.amount_ngn, p.currency, p.status, p.paid_at, p.confirmed_at
+            FROM billing_payments p JOIN schools s ON s.id=p.school_id
+            LEFT JOIN billing_invoices i ON i.id=p.invoice_id
+            WHERE COALESCE(p.paid_at,p.created_at) >= ? AND COALESCE(p.paid_at,p.created_at) < ?
+            ORDER BY COALESCE(p.paid_at,p.created_at) DESC
+        """, (start_iso, end_iso)).fetchall()
+        rows = [tuple(r) for r in rows]
+        title, filename = "Payments", f"billing_payments_{start}_{end}.{fmt}"
+    elif report_name == "invoices":
+        headers = ["Invoice ID", "Invoice Number", "School", "School ID", "Plan", "Amount NGN", "Billing Days", "Status", "Issued At", "Due At", "Paid At", "Payment Reference"]
+        rows = conn.execute("""
+            SELECT i.id, i.invoice_number, s.name, s.school_code, i.plan_code, i.amount_ngn,
+                   i.billing_days, i.status, i.issued_at, i.due_at, i.paid_at, COALESCE(i.payment_reference,'')
+            FROM billing_invoices i JOIN schools s ON s.id=i.school_id
+            WHERE i.issued_at >= ? AND i.issued_at < ?
+            ORDER BY i.issued_at DESC
+        """, (start_iso, end_iso)).fetchall()
+        rows = [tuple(r) for r in rows]
+        title, filename = "Invoices", f"billing_invoices_{start}_{end}.{fmt}"
+    elif report_name == "revenue":
+        headers = ["Month", "Confirmed Revenue NGN", "Confirmed Payments", "Paid Invoices"]
+        rows = conn.execute("""
+            SELECT substr(COALESCE(p.paid_at,p.confirmed_at,p.created_at),1,7) AS month,
+                   COALESCE(SUM(p.amount_ngn),0), COUNT(*), COUNT(DISTINCT p.invoice_id)
+            FROM billing_payments p
+            WHERE p.status='confirmed'
+              AND COALESCE(p.paid_at,p.confirmed_at,p.created_at) >= ?
+              AND COALESCE(p.paid_at,p.confirmed_at,p.created_at) < ?
+            GROUP BY month ORDER BY month ASC
+        """, (start_iso, end_iso)).fetchall()
+        rows = [tuple(r) for r in rows]
+        title, filename = "Revenue Summary", f"billing_revenue_{start}_{end}.{fmt}"
+    elif report_name == "renewals":
+        headers = ["School", "School ID", "Plan", "Subscription Status", "Start", "Expiry", "Days Remaining", "Confirmed Revenue NGN"]
+        rows = conn.execute("""
+            SELECT s.name, s.school_code, COALESCE(s.subscription_plan,'legacy'),
+                   COALESCE(s.subscription_status,'unknown'), s.subscription_start, s.subscription_end,
+                   CASE WHEN s.subscription_end IS NULL THEN NULL
+                        ELSE CAST(julianday(substr(s.subscription_end,1,10)) - julianday(?) AS INTEGER) END,
+                   COALESCE((SELECT SUM(p.amount_ngn) FROM billing_payments p
+                             WHERE p.school_id=s.id AND p.status='confirmed'
+                               AND COALESCE(p.paid_at,p.confirmed_at,p.created_at) >= ?
+                               AND COALESCE(p.paid_at,p.confirmed_at,p.created_at) < ?),0)
+            FROM schools s
+            WHERE s.is_archived=0
+            ORDER BY s.name ASC
+        """, (datetime.datetime.utcnow().date().isoformat(), start_iso, end_iso)).fetchall()
+        rows = [tuple(r) for r in rows]
+        title, filename = "Subscription Renewals", f"billing_renewals_{start}_{end}.{fmt}"
+    else:
+        conn.close()
+        return jsonify({"error": "Unknown billing report."}), 404
+
+    conn.execute("INSERT INTO billing_report_downloads(actor_type,actor_name,report_name,format,start_date,end_date,row_count) VALUES (?,?,?,?,?,?,?)", ("platform_admin", session.get("platform_admin_name"), report_name, fmt, start.isoformat(), end.isoformat(), len(rows)))
+    _financial_audit(conn, "report_exported", "platform_admin", session.get("platform_admin_name"), None, None, None, report_name, f"format={fmt}; start={start.isoformat()}; end={end.isoformat()}; rows={len(rows)}")
+    conn.commit()
+    conn.close()
+    return _billing_export_response(title, headers, rows, fmt, filename)
+
+
+@app.route("/platform/billing-audit")
+@platform_admin_required
+def platform_billing_audit():
+    """Read-only Super Admin financial audit trail."""
+    conn = get_db()
+    events = conn.execute("""
+        SELECT a.*, s.name AS school_name, s.school_code
+        FROM billing_financial_audit a
+        LEFT JOIN schools s ON s.id=a.school_id
+        ORDER BY a.id DESC LIMIT 300
+    """).fetchall()
+    history = conn.execute("""
+        SELECT h.*, s.name AS school_name, s.school_code
+        FROM billing_payment_history h
+        LEFT JOIN schools s ON s.id=h.school_id
+        ORDER BY h.id DESC LIMIT 200
+    """).fetchall()
+    downloads = conn.execute("SELECT * FROM billing_report_downloads ORDER BY id DESC LIMIT 100").fetchall()
+    conn.close()
+    return render_template("platform_billing_audit.html", events=events, history=history, downloads=downloads)
+
+
+@app.route("/platform/billing-operations")
+@platform_admin_required
+def platform_billing_operations():
+    """Super Admin operational billing health dashboard; no school-level secrets or student records."""
+    conn = get_db()
+    now = datetime.datetime.utcnow()
+    now_iso = _iso_utc(now)
+    horizon_iso = _iso_utc(now + datetime.timedelta(days=14))
+
+    invoice_counts = {r["status"]: r["n"] for r in conn.execute(
+        "SELECT status, COUNT(*) n FROM billing_invoices GROUP BY status"
+    ).fetchall()}
+    payment_counts = {r["status"]: r["n"] for r in conn.execute(
+        "SELECT status, COUNT(*) n FROM billing_payments GROUP BY status"
+    ).fetchall()}
+    email_counts = {r["status"]: r["n"] for r in conn.execute(
+        "SELECT status, COUNT(*) n FROM billing_email_delivery GROUP BY status"
+    ).fetchall()}
+
+    overdue_invoices = conn.execute("""
+        SELECT i.*, s.name AS school_name, s.school_code
+        FROM billing_invoices i JOIN schools s ON s.id=i.school_id
+        WHERE i.status='pending' AND i.due_at IS NOT NULL AND i.due_at < ?
+        ORDER BY i.due_at ASC LIMIT 100
+    """, (now_iso,)).fetchall()
+
+    expiring = conn.execute("""
+        SELECT id, name, school_code, tenant_id, subscription_plan, subscription_status,
+               trial_ends_at, subscription_ends_at, grace_ends_at
+        FROM schools
+        WHERE is_archived=0 AND subscription_status IN ('trial','active')
+          AND COALESCE(subscription_ends_at, trial_ends_at) IS NOT NULL
+          AND COALESCE(subscription_ends_at, trial_ends_at) >= ?
+          AND COALESCE(subscription_ends_at, trial_ends_at) <= ?
+        ORDER BY COALESCE(subscription_ends_at, trial_ends_at) ASC LIMIT 100
+    """, (now_iso, horizon_iso)).fetchall()
+
+    failed_emails = conn.execute("""
+        SELECT e.*, s.name AS school_name, s.school_code
+        FROM billing_email_delivery e JOIN schools s ON s.id=e.school_id
+        WHERE e.status='failed'
+        ORDER BY e.updated_at DESC LIMIT 100
+    """).fetchall()
+
+    recent_payments = conn.execute("""
+        SELECT p.*, s.name AS school_name, s.school_code, i.invoice_number
+        FROM billing_payments p JOIN schools s ON s.id=p.school_id
+        LEFT JOIN billing_invoices i ON i.id=p.invoice_id
+        ORDER BY p.id DESC LIMIT 50
+    """).fetchall()
+
+    job_runs = conn.execute("""
+        SELECT * FROM billing_job_runs
+        WHERE job_name='billing_notifications'
+        ORDER BY id DESC LIMIT 25
+    """).fetchall()
+    latest_job = job_runs[0] if job_runs else None
+
+    attention = {
+        "overdue_invoices": len(overdue_invoices),
+        "expiring_subscriptions": len(expiring),
+        "failed_emails": len(failed_emails),
+        "failed_payments": payment_counts.get('failed', 0),
+        "job_failures": sum(1 for r in job_runs if r["status"] == "failed"),
+    }
+    conn.close()
+    return render_template(
+        "platform_billing_operations.html",
+        invoice_counts=invoice_counts, payment_counts=payment_counts, email_counts=email_counts,
+        overdue_invoices=overdue_invoices, expiring=expiring, failed_emails=failed_emails,
+        recent_payments=recent_payments, job_runs=job_runs, latest_job=latest_job, attention=attention,
+    )
+
+
 @app.route("/platform/billing")
 @platform_admin_required
 def platform_billing():
@@ -6248,6 +6604,7 @@ def platform_school_billing(school_id):
             else:
                 raise ValueError("Unknown billing action")
             log_audit(conn, "platform_admin", session.get("platform_admin_name"), "billing_change", details=f"{event} for '{school['name']}'", school_id=school_id)
+            _financial_audit(conn, "billing_action", "platform_admin", session.get("platform_admin_name"), school_id, payment_id if action == "confirm_payment" else None, invoice_id if action in ("create_invoice", "record_payment") else None, ref if action == "record_payment" else None, event)
             conn.commit(); flash(event + ".", "success")
         except (ValueError, TypeError, sqlite3.IntegrityError) as e:
             conn.rollback(); flash(f"Billing action failed: {e}", "error")

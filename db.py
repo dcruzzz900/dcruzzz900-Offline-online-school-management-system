@@ -1510,6 +1510,115 @@ def migration_045_billing_email_notifications(conn):
 
 
 
+def migration_046_billing_job_runs(conn):
+    """Track scheduled billing-job runs and prevent overlapping executions."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_job_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_name TEXT NOT NULL,
+        started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        finished_at TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        result_json TEXT,
+        error_message TEXT
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_job_runs_name_started ON billing_job_runs(job_name, started_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_job_runs_status ON billing_job_runs(status)")
+
+
+
+def migration_047_billing_financial_audit(conn):
+    """Append-only financial audit trail for billing operations and exports."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_financial_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        actor_type TEXT NOT NULL,
+        actor_name TEXT,
+        school_id INTEGER,
+        payment_id INTEGER,
+        invoice_id INTEGER,
+        reference TEXT,
+        details TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id),
+        FOREIGN KEY(payment_id) REFERENCES billing_payments(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_fin_audit_created ON billing_financial_audit(created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_fin_audit_school ON billing_financial_audit(school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_fin_audit_payment ON billing_financial_audit(payment_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_fin_audit_invoice ON billing_financial_audit(invoice_id)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_financial_audit_no_update
+        BEFORE UPDATE ON billing_financial_audit
+        BEGIN SELECT RAISE(ABORT, 'Financial audit records are immutable'); END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_financial_audit_no_delete
+        BEFORE DELETE ON billing_financial_audit
+        BEGIN SELECT RAISE(ABORT, 'Financial audit records are immutable'); END""")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_payment_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER NOT NULL,
+        school_id INTEGER NOT NULL,
+        invoice_id INTEGER,
+        action TEXT NOT NULL,
+        old_status TEXT,
+        new_status TEXT,
+        old_amount_ngn REAL,
+        new_amount_ngn REAL,
+        old_reference TEXT,
+        new_reference TEXT,
+        actor TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(payment_id) REFERENCES billing_payments(id),
+        FOREIGN KEY(school_id) REFERENCES schools(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_payment_history_payment ON billing_payment_history(payment_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_payment_history_school ON billing_payment_history(school_id, created_at)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_payment_history_no_update
+        BEFORE UPDATE ON billing_payment_history
+        BEGIN SELECT RAISE(ABORT, 'Payment history records are immutable'); END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_payment_history_no_delete
+        BEFORE DELETE ON billing_payment_history
+        BEGIN SELECT RAISE(ABORT, 'Payment history records are immutable'); END""")
+
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_payment_insert_history
+        AFTER INSERT ON billing_payments
+        BEGIN
+            INSERT INTO billing_payment_history(payment_id,school_id,invoice_id,action,old_status,new_status,new_amount_ngn,new_reference,actor)
+            VALUES (NEW.id,NEW.school_id,NEW.invoice_id,'created',NULL,NEW.status,NEW.amount_ngn,NEW.payment_reference,COALESCE(NEW.confirmed_by,'system'));
+        END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_payment_update_history
+        AFTER UPDATE OF status,amount_ngn,payment_reference,provider,invoice_id ON billing_payments
+        WHEN OLD.status IS NOT NEW.status OR OLD.amount_ngn IS NOT NEW.amount_ngn OR OLD.payment_reference IS NOT NEW.payment_reference OR OLD.invoice_id IS NOT NEW.invoice_id
+        BEGIN
+            INSERT INTO billing_payment_history(payment_id,school_id,invoice_id,action,old_status,new_status,old_amount_ngn,new_amount_ngn,old_reference,new_reference,actor)
+            VALUES (NEW.id,NEW.school_id,NEW.invoice_id,
+                    CASE WHEN OLD.status IS NOT NEW.status AND NEW.status='confirmed' THEN 'confirmed'
+                         WHEN OLD.status IS NOT NEW.status AND NEW.status IN ('reversed','refunded','cancelled') THEN 'status_changed'
+                         ELSE 'changed' END,
+                    OLD.status,NEW.status,OLD.amount_ngn,NEW.amount_ngn,OLD.payment_reference,NEW.payment_reference,COALESCE(NEW.confirmed_by,'system'));
+        END""")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_report_downloads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor_type TEXT NOT NULL,
+        actor_name TEXT,
+        report_name TEXT NOT NULL,
+        format TEXT NOT NULL,
+        start_date TEXT,
+        end_date TEXT,
+        row_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_report_downloads_created ON billing_report_downloads(created_at)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_report_downloads_no_update
+        BEFORE UPDATE ON billing_report_downloads
+        BEGIN SELECT RAISE(ABORT, 'Report download records are immutable'); END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_billing_report_downloads_no_delete
+        BEFORE DELETE ON billing_report_downloads
+        BEGIN SELECT RAISE(ABORT, 'Report download records are immutable'); END""")
+
+
 STEPS = [
     ("offline_sync", migration_024_offline_sync),
     ("deferred_actions", migration_025_deferred_actions),
@@ -1539,7 +1648,9 @@ STEPS = [
     ("billing_payments", migration_043_billing_payments),
     ("billing_notification_tracking", migration_044_billing_notification_tracking),
     ("billing_email_notifications", migration_045_billing_email_notifications),
+    ("billing_job_runs", migration_046_billing_job_runs),
     ("payment_gateway_webhooks", migration_044_payment_gateway_webhooks),
+    ("billing_financial_audit", migration_047_billing_financial_audit),
 ]
 
 
