@@ -37,6 +37,7 @@ from pdf_utils import build_broadsheet_pdf, build_result_pdf, build_class_result
 from email_utils import send_email, send_platform_email
 from reports import build_csv, build_xlsx
 from sync_api import sync_bp
+from security_audit import run_security_audit
 
 ALLOWED_LOGO_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
@@ -7217,6 +7218,13 @@ def platform_audit():
     return render_template("platform_audit.html", logs=logs)
 
 
+@app.route("/platform/security-audit")
+@platform_admin_required
+def platform_security_audit():
+    conn = get_db()
+    report = run_security_audit(conn)
+    conn.close()
+    return render_template("platform_security_audit.html", report=report)
 
 
 @app.route("/admin/roles/<int:assignment_id>/scope", methods=["POST"])
