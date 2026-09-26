@@ -345,7 +345,17 @@
         const label = await termLabel();
         const [students, classes, users, subjects] = await Promise.all(
             ["students", "classes", "users", "subjects"].map((e) => OfflineDB.getAll(schoolId, e)));
+        const schoolName = (profile && profile.name) || "School Results";
+        const schoolCode = session.user.school_code || session.user.school_id || "—";
+        const tenantId = session.user.tenant_id || "—";
         const body = el(`<div>
+            <div class="card" style="border-left:4px solid #1d6b3a;">
+                <h3 style="margin-top:0;">School Identity</h3>
+                <p style="margin:.25rem 0;"><strong>${esc(schoolName)}</strong></p>
+                <p style="margin:.25rem 0;">School ID: <code>${esc(schoolCode)}</code></p>
+                <p style="margin:.25rem 0;">Tenant ID: <code>${esc(tenantId)}</code></p>
+                <small style="color:#666;">Your session is restricted to this school's tenant. The same identity is used for online access and background synchronization.</small>
+            </div>
             ${label ? `<p class="badge">Active: ${esc(label)}</p>` : `<p class="flash flash-error">No active term set. Set one up under Terms (needs internet).</p>`}
             ${datetimeCardHtml()}
             <div class="stat-grid">
