@@ -1533,9 +1533,49 @@ def result_design_preview():
 @login_required()
 def settings_hub():
     conn = get_db()
-    me = conn.execute("SELECT email, phone FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    me = conn.execute("SELECT username, email, phone FROM users WHERE id=?", (session["user_id"],)).fetchone()
     conn.close()
     return render_template("settings_hub.html", me=me)
+
+
+@app.route("/account/username", methods=["POST"])
+@login_required()
+def update_my_username():
+    new_username = request.form.get("new_username", "").strip()
+    current_password = request.form.get("current_password", "")
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
+
+    if not check_password_hash(user["password_hash"], current_password):
+        conn.close()
+        flash("Your current password is incorrect.", "error")
+        return redirect(url_for("settings_hub"))
+    if len(new_username) < 3:
+        conn.close()
+        flash("Username must be at least 3 characters.", "error")
+        return redirect(url_for("settings_hub"))
+    if " " in new_username:
+        conn.close()
+        flash("Username can't contain spaces.", "error")
+        return redirect(url_for("settings_hub"))
+    if new_username == user["username"]:
+        conn.close()
+        flash("That's already your username.", "error")
+        return redirect(url_for("settings_hub"))
+    if conn.execute("SELECT 1 FROM users WHERE username=? AND id!=?", (new_username, session["user_id"])).fetchone():
+        conn.close()
+        flash("That username is already taken — please choose another.", "error")
+        return redirect(url_for("settings_hub"))
+
+    old_username = user["username"]
+    conn.execute("UPDATE users SET username=? WHERE id=?", (new_username, session["user_id"]))
+    log_audit(conn, "user", user["name"], "username_changed",
+              details=f"'{old_username}' -> '{new_username}'", school_id=user["school_id"] if "school_id" in user.keys() else None)
+    conn.commit()
+    conn.close()
+    flash("Username updated. Use your new username next time you log in.", "success")
+    return redirect(url_for("settings_hub"))
 
 
 @app.route("/account/contact", methods=["POST"])
