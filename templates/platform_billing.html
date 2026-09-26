@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Billing & Payments{% endblock %}
 {% block content %}
-<div class="dashboard-header"><div><h1>Billing & Payments</h1><p class="badge">Invoices, payment references, confirmations and renewal history</p></div></div>
+<div class="dashboard-header"><div><h1>Billing & Payments</h1><p class="badge">Invoices, payment references, confirmations and renewal history</p> <a class="btn btn-small" href="{{ url_for('platform_billing_reports') }}">Financial Reports</a></div></div><div style="margin-top:10px"><a class="btn btn-small" href="{{ url_for('platform_billing_operations') }}">Open Billing Operations</a> <a class="btn btn-small" href="{{ url_for('platform_billing_analytics') }}">Billing Analytics</a></div></div>
 <div class="stat-grid">
   <div class="stat-box"><div class="num">{{ counts.get('pending',0) }}</div><div class="label">Pending invoices</div></div>
   <div class="stat-box"><div class="num">{{ counts.get('paid',0) }}</div><div class="label">Paid invoices</div></div>
