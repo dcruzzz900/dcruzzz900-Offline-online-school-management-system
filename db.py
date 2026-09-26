@@ -1102,9 +1102,6 @@ MIGRATIONS = [
     migration_021_school_subdomain,
     migration_022_result_date_toggle,
     migration_023_school_activation,
-    migration_036_role_permissions,
-    migration_037_scope_indexes,
-    migration_038_first_login_onboarding,
 ]
 
 
@@ -1532,6 +1529,9 @@ STEPS = [
     ("attendance_source", migration_037_attendance_source),
     ("timetable", migration_038_timetable),
     ("tenant_identifiers", migration_039_tenant_identifiers),
+    ("role_permissions", migration_036_role_permissions),
+    ("scope_indexes", migration_037_scope_indexes),
+    ("first_login_onboarding", migration_038_first_login_onboarding),
     ("role_scope_compat", migration_role_scope_compat),
     ("school_readiness", migration_040_school_readiness),
     ("school_subscription", migration_041_school_subscription),
@@ -1608,7 +1608,7 @@ def _pre_migration_backup():
     it across deployments.  No application data is modified by this function.
     """
     os.makedirs(_migration_backup_path(), exist_ok=True)
-    stamp = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    stamp = _dt.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     target = os.path.join(_migration_backup_path(), f"pre-migration-{stamp}.db")
     src = sqlite3.connect(DB_PATH, timeout=60)
     dst = sqlite3.connect(target, timeout=60)
