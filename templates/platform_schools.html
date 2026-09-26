@@ -82,6 +82,8 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-small" type="submit">Force Logout All Users</button>
                     </form>
+                    <a class="btn btn-small" href="{{ url_for('platform_school_verification', school_id=s.id) }}">Verify School / Tenant</a>
+                    <a class="btn btn-small" href="{{ url_for('platform_school_provisioning', school_id=s.id) }}">Provisioning</a>
                     <a class="btn btn-small" href="{{ url_for('platform_users', school_id=s.id) }}">Reset a User's Password</a>
                     <button class="btn btn-small" style="background:#b3261e;" type="button"
                             onclick="document.getElementById('delete_{{ s.id }}').classList.toggle('hidden-row')">Delete</button>
