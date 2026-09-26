@@ -6,6 +6,20 @@
 <div class="card">
     <h3>Your Account</h3>
     <a class="btn" href="{{ url_for('change_password') }}">Change Password</a>
+
+    <p style="font-size:0.9rem; color:#666; margin-top:1rem;">
+        Your current username is <b>{{ me.username }}</b>. Changing it takes effect
+        immediately — use the new username next time you log in.
+    </p>
+    <form method="POST" action="{{ url_for('update_my_username') }}" style="max-width:320px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>New Username</label>
+        <input type="text" name="new_username" placeholder="{{ me.username }}" required>
+        <label>Current Password</label>
+        <input type="password" name="current_password" autocomplete="current-password" required>
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Change Username</button>
+    </form>
+
     <p style="font-size:0.9rem; color:#666; margin-top:1rem;">
         Add an email or phone number so you can also log in with either of them,
         in addition to your username.
