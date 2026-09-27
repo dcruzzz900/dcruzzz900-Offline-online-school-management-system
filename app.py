@@ -7335,7 +7335,8 @@ def platform_schools():
         "(SELECT COUNT(*) FROM users u WHERE u.school_id=s.id AND u.role IN ('admin','sub_admin')) as admin_count, "
         "(SELECT COUNT(*) FROM users u WHERE u.school_id=s.id AND u.role='teacher') as teacher_count, "
         "(SELECT COUNT(*) FROM classes c WHERE c.school_id=s.id) as class_count, "
-        "(SELECT COUNT(*) FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=s.id AND st.is_active=1) as student_count "
+        "(SELECT COUNT(*) FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=s.id AND st.is_active=1) as student_count, "
+        "(SELECT ac.code FROM activation_codes ac WHERE ac.school_id=s.id ORDER BY ac.id DESC LIMIT 1) as activation_code "
         "FROM schools s ORDER BY s.name"
     ).fetchall()
     code_status = {s["id"]: current_activation_code_status(conn, s["id"]) for s in schools}
@@ -7366,18 +7367,31 @@ def platform_new_school():
         try:
             trial_start = datetime.datetime.utcnow()
             trial_end = trial_start + datetime.timedelta(days=30)
-            cur = conn.execute(
-                "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code, subscription_plan, subscription_status, trial_started_at, trial_ends_at) VALUES (?,?, 'pending', ?, ?, 'trial', 'trial', ?, ?)",
-                (school_name, registered_email, "TEN-" + secrets.token_hex(4).upper(), re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL", _iso_utc(trial_start), _iso_utc(trial_end)),
-            )
-            school_id = cur.lastrowid
-            # Resolve any school-code collision deterministically.
+            # Generate a collision-safe permanent School ID *before* the INSERT.
+            # The previous implementation inserted the base school_code first, so
+            # a UNIQUE constraint could fail before the collision-repair UPDATE ran.
+            tenant_id = "TEN-" + secrets.token_hex(6).upper()
+            while conn.execute("SELECT 1 FROM schools WHERE tenant_id=?", (tenant_id,)).fetchone():
+                tenant_id = "TEN-" + secrets.token_hex(6).upper()
+
             code_base = re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL"
             code = code_base
             n = 2
-            while conn.execute("SELECT 1 FROM schools WHERE school_code=? AND id<>?", (code, school_id)).fetchone():
-                suffix = str(n); code = code_base[:max(1, 20-len(suffix))] + suffix; n += 1
-            conn.execute("UPDATE schools SET school_code=? WHERE id=?", (code, school_id))
+            while conn.execute("SELECT 1 FROM schools WHERE school_code=?", (code,)).fetchone():
+                suffix = str(n)
+                code = code_base[:max(1, 18-len(suffix))] + suffix
+                n += 1
+                if n > 100000:
+                    code = code_base[:10] + "-" + secrets.token_hex(4).upper()
+                    while conn.execute("SELECT 1 FROM schools WHERE school_code=?", (code,)).fetchone():
+                        code = code_base[:10] + "-" + secrets.token_hex(4).upper()
+                    break
+
+            cur = conn.execute(
+                "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code, subscription_plan, subscription_status, trial_started_at, trial_ends_at) VALUES (?,?, 'pending', ?, ?, 'trial', 'trial', ?, ?)",
+                (school_name, registered_email, tenant_id, code, _iso_utc(trial_start), _iso_utc(trial_end)),
+            )
+            school_id = cur.lastrowid
             # No usable password yet — the School Admin sets a real one during activation.
             placeholder_hash = generate_password_hash(secrets.token_urlsafe(32))
             tenant_id = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()["tenant_id"]
@@ -7500,7 +7514,14 @@ def platform_regenerate_code(school_id):
             "and invalidates any previous code.",
         )
     conn.close()
-    flash("A new activation code was generated and sent through the configured delivery channel." if sent else "A new activation code was generated, but delivery is not configured.", "success" if sent else "error")
+    if sent:
+        flash(f"Activation code generated and sent successfully. Super Admin can also view the current code in the Schools / Activation Requests screens: {code}", "success")
+    else:
+        # Delivery configuration is optional. The Super Admin is authorized to
+        # view the newly generated code in the protected platform screens, so
+        # missing email/SMS/WhatsApp configuration must not make regeneration
+        # look like a failed operation.
+        flash(f"Activation code generated successfully. Delivery is not configured, so use the protected Super Admin screen to view the code: {code}", "success")
     return redirect(url_for("platform_schools"))
 
 
@@ -7619,7 +7640,8 @@ def platform_schools_export():
         "(SELECT COUNT(*) FROM users u WHERE u.school_id=s.id AND u.role IN ('admin','sub_admin')) as admin_count, "
         "(SELECT COUNT(*) FROM users u WHERE u.school_id=s.id AND u.role='teacher') as teacher_count, "
         "(SELECT COUNT(*) FROM classes c WHERE c.school_id=s.id) as class_count, "
-        "(SELECT COUNT(*) FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=s.id AND st.is_active=1) as student_count "
+        "(SELECT COUNT(*) FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=s.id AND st.is_active=1) as student_count, "
+        "(SELECT ac.code FROM activation_codes ac WHERE ac.school_id=s.id ORDER BY ac.id DESC LIMIT 1) as activation_code "
         "FROM schools s ORDER BY s.name"
     ).fetchall()
     conn.close()
@@ -8352,7 +8374,15 @@ def timetable_generate():
 @app.route("/platform/activation-requests")
 @platform_admin_required
 def platform_activation_requests():
-    conn=get_db(); rows=conn.execute("SELECT r.*,s.name school_name,s.school_code,s.tenant_id,s.registered_email,s.registered_phone FROM platform_activation_requests r JOIN schools s ON s.id=r.school_id ORDER BY r.id DESC LIMIT 200").fetchall(); conn.close(); return render_template('platform_activation_requests.html',requests=rows)
+    conn=get_db(); rows=conn.execute("""
+        SELECT r.*, s.name school_name, s.school_code, s.tenant_id, s.registered_email, s.registered_phone,
+               ac.code activation_code, ac.expires_at activation_code_expires_at, ac.status activation_code_status,
+               ac.used_at activation_code_used_at, ac.invalidated activation_code_invalidated
+        FROM platform_activation_requests r
+        JOIN schools s ON s.id=r.school_id
+        LEFT JOIN activation_codes ac ON ac.id=(SELECT id FROM activation_codes WHERE school_id=s.id ORDER BY id DESC LIMIT 1)
+        ORDER BY r.id DESC LIMIT 200
+    """).fetchall(); conn.close(); return render_template('platform_activation_requests.html',requests=rows)
 
 @app.route("/platform/schools/<int:school_id>/approve-activation",methods=["POST"])
 @platform_admin_required
@@ -8363,8 +8393,13 @@ def platform_approve_activation(school_id):
     conn.execute("UPDATE platform_activation_requests SET status='approved',approved_by=?,approved_at=CURRENT_TIMESTAMP,activation_code_delivery_status='pending' WHERE school_id=? AND status='pending'",(session.get('platform_admin_name'),school_id))
     sent,msg=(False,'No registered email on file.')
     if school['registered_email']: sent,msg=send_platform_email(school['registered_email'],f"School activation approved — {school['name']}",f"Your school activation has been approved.\n\nActivation code: {code}\nExpires: {format_dmy(expires)}\n\nEnter this code on the secure Activate School page. The code is single-use and must not be shared publicly.")
-    delivery='email' if sent else 'not_configured'; conn.execute("UPDATE platform_activation_requests SET activation_code_delivery_channel=?,activation_code_delivery_status=?,activation_code_sent_at=CURRENT_TIMESTAMP WHERE school_id=? AND status='approved'",(delivery,'sent' if sent else 'failed',school_id))
-    log_audit(conn,'platform_admin',session.get('platform_admin_name'),'school_activation_approved',details=f"Approved activation for {school['name']}; delivery={delivery}",school_id=school_id); conn.commit(); conn.close(); flash('Activation approved and the activation code has been sent.' if sent else 'Activation approved, but delivery is not configured.','success' if sent else 'error'); return redirect(url_for('platform_activation_requests'))
+    delivery='email' if sent else 'not_configured'; conn.execute("UPDATE platform_activation_requests SET activation_code_delivery_channel=?,activation_code_delivery_status=?,activation_code_sent_at=CURRENT_TIMESTAMP WHERE school_id=? AND status='approved'",(delivery,'sent' if sent else 'not_configured',school_id))
+    log_audit(conn,'platform_admin',session.get('platform_admin_name'),'school_activation_approved',details=f"Approved activation for {school['name']}; delivery={delivery}",school_id=school_id); conn.commit(); conn.close()
+    if sent:
+        flash(f"Activation approved and the code was sent. Current activation code: {code}", 'success')
+    else:
+        flash(f"Activation approved. Delivery is not configured; the protected Super Admin screen shows the activation code: {code}", 'success')
+    return redirect(url_for('platform_activation_requests'))
 
 
 @app.route("/platform/notifications/inbox")
