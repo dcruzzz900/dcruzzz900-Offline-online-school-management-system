@@ -11,7 +11,7 @@
     <table>
         <tr>
             <th>ID</th><th>School ID</th><th>Tenant ID</th><th>School</th><th>Registered Email</th><th>Activation</th><th>Account</th>
-            <th>Code</th><th>Registered</th><th>Activated</th><th>Actions</th>
+            <th>Activation Code</th><th>Registered</th><th>Activated</th><th>Actions</th>
         </tr>
         {% for s in schools %}
         <tr>
@@ -37,7 +37,8 @@
                 {% endif %}
             </td>
             <td style="font-size:0.85rem;">
-                {{ {'none': '—', 'valid': 'Valid', 'used': 'Used', 'expired': 'Expired', 'invalidated': 'Invalidated'}[code_status.get(s.id, 'none')] }}
+                <strong>{{ s.activation_code or '—' }}</strong><br>
+                <small>{{ {'none': 'No code', 'valid': 'Valid', 'used': 'Used', 'expired': 'Expired', 'invalidated': 'Invalidated'}[code_status.get(s.id, 'none')] }}</small>
             </td>
             <td style="font-size:0.85rem;">{{ s.created_at|dmy }}</td>
             <td style="font-size:0.85rem;">{{ s.activated_at|dmy if s.activated_at else '—' }}</td>
