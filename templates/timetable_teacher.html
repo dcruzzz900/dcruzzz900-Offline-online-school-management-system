@@ -17,40 +17,9 @@
 {% if not periods %}
 <div class="card"><p>No periods have been set up yet.</p></div>
 {% else %}
-<div class="card" style="overflow-x:auto;">
-    <table class="timetable-grid">
-        <tr>
-            <th>Period</th>
-            {% for idx, day in days %}<th>{{ day }}</th>{% endfor %}
-        </tr>
-        {% for p in periods %}
-        <tr>
-            <td style="white-space:nowrap;">
-                <b>{{ p.name }}</b>
-                {% if p.start_time or p.end_time %}<br><span style="font-size:0.75rem; color:#666;">{{ p.start_time or '?' }}–{{ p.end_time or '?' }}</span>{% endif %}
-            </td>
-            {% if p.is_break %}
-            <td colspan="{{ days|length }}" style="text-align:center; background:#f5f0e0; font-style:italic;">{{ p.name }}</td>
-            {% else %}
-                {% for idx, day in days %}
-                {% set cell = grid.get((idx, p.id)) %}
-                <td>
-                    {% if cell %}
-                    <b>{{ cell.subject_name or '—' }}</b><br>
-                    <span style="font-size:0.8rem;">{{ cell.class_name }}</span>
-                    {% if cell.room %}<br><span style="font-size:0.75rem; color:#666;">Room: {{ cell.room }}</span>{% endif %}
-                    {% else %}
-                    <span style="color:#bbb;">—</span>
-                    {% endif %}
-                </td>
-                {% endfor %}
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </table>
-</div>
+<div class="no-print" style="margin-bottom:.75rem;"><a class="btn btn-small {% if view=='horizontal' %}btn-gold{% endif %}" href="{{ url_for('timetable_teacher',teacher_id=teacher.id,view='horizontal') }}">Horizontal</a> <a class="btn btn-small {% if view=='vertical' %}btn-gold{% endif %}" href="{{ url_for('timetable_teacher',teacher_id=teacher.id,view='vertical') }}">Vertical</a></div>
+{% if view=='horizontal' %}<div class="card" style="overflow-x:auto;"><table class="timetable-grid"><tr><th>Period</th>{% for idx,day in days %}<th>{{ day }}</th>{% endfor %}</tr>{% for p in periods %}<tr><td><b>{{ p.name }}</b>{% if p.start_time or p.end_time %}<br><span style="font-size:.75rem">{{ p.start_time or '?' }}–{{ p.end_time or '?' }}</span>{% endif %}</td>{% for idx,day in days %}{% set cell=grid.get((idx,p.id)) %}<td>{% if cell %}<b>{{ cell.subject_name or '—' }}</b><br>{{ cell.class_name }}{% else %}—{% endif %}</td>{% endfor %}</tr>{% endfor %}</table></div>{% else %}<div class="card"><table class="timetable-grid"><tr><th>Day</th><th>Period</th><th>Subject</th><th>Class</th></tr>{% for idx,day in days %}{% for p in periods %}{% set cell=grid.get((idx,p.id)) %}{% if cell %}<tr><td>{{ day }}</td><td>{{ p.name }}</td><td><b>{{ cell.subject_name }}</b></td><td>{{ cell.class_name }}</td></tr>{% endif %}{% endfor %}{% endfor %}</table></div>{% endif %}
 {% endif %}
-
 <style>
 .timetable-grid { width:100%; border-collapse:collapse; }
 .timetable-grid th, .timetable-grid td { border:1px solid #ddd; padding:0.4rem; vertical-align:top; }

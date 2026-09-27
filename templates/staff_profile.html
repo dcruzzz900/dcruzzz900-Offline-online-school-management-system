@@ -36,7 +36,7 @@
     <h3>Update Photo</h3>
     <form method="POST" action="{{ url_for('upload_my_photo') }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif">
+        <input type="file" name="photo" data-max-bytes="512000" data-size-message="Passport image must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
         <button class="btn" type="submit" style="margin-top:0.5rem;">Upload Photo</button>
     </form>
 </div>
@@ -70,7 +70,7 @@
     <form method="POST" action="{{ url_for('upload_my_signature') }}" enctype="multipart/form-data" style="margin-top:0.75rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>{{ 'Replace Signature' if staff.signature_filename else 'Upload Signature' }} (PNG with a transparent background works best)</label>
-        <input type="file" name="signature" accept=".png,.jpg,.jpeg,.gif">
+        <input type="file" name="signature" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
         <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
     </form>
 </div>

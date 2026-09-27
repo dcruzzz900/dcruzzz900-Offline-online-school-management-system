@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Welcome Back · My School Hub{% endblock %}
 {% block content %}
-<div class="hub-auth-screen">
+<div class="hub-auth-screen school-auth-page" data-auth-branding-root style="--auth-bg-image:{% if auth_logo_url %}url('{{ auth_logo_url }}'){% else %}none{% endif %};--auth-opacity:{{ auth_logo_opacity if auth_branding else 0 }};--auth-position:{{ '10% center' if auth_logo_position=='left' else ('90% center' if auth_logo_position=='right' else '50% center') }};">
   <section class="hub-welcome-card" aria-label="My School Hub welcome">
     <div class="hub-hero">
-      <div class="hub-brand"><div class="hub-logo">◆</div><div><strong>My School Hub</strong><span>LEARN · GROW · SUCCEED</span></div></div>
+      <div class="hub-brand"><img data-auth-school-logo class="school-auth-brand-logo small{% if not auth_logo_url %} auth-branding-hidden{% endif %}" src="{{ auth_logo_url or '' }}" alt="School logo"><div><strong data-auth-school-name>{{ auth_school_name if auth_branding and auth_show_school_name else "My School Hub" }}</strong><span>LEARN · GROW · SUCCEED</span></div></div>
       <div class="hub-welcome-copy">
         <div class="hub-eyebrow">SECURE SCHOOL PORTAL</div>
         <h1>Welcome Back</h1>
@@ -35,13 +35,13 @@
 <div class="hub-login-overlay" id="hubLoginOverlay" aria-hidden="true">
   <div class="hub-login-dialog" role="dialog" aria-modal="true" aria-labelledby="hubLoginTitle">
     <button class="hub-close" type="button" id="hubLoginClose" aria-label="Close login">×</button>
-    <div class="hub-dialog-brand"><div class="hub-logo small">◆</div><div><strong>My School Hub</strong><span>Secure portal access</span></div></div>
+    <div class="hub-dialog-brand"><img data-auth-school-logo class="school-auth-brand-logo small{% if not auth_logo_url %} auth-branding-hidden{% endif %}" src="{{ auth_logo_url or '' }}" alt="School logo"><div><strong data-auth-school-name>{{ auth_school_name if auth_branding and auth_show_school_name else "My School Hub" }}</strong><span>Secure portal access</span></div></div>
     <div class="hub-login-heading"><span id="hubLoginIcon">◉</span><div><div class="hub-eyebrow">PORTAL LOGIN</div><h2 id="hubLoginTitle">Admin Login</h2><p id="hubLoginDescription">Sign in to manage your school.</p></div></div>
     <div class="tenant-chip">🔐 School data is isolated by tenant</div>
     <form method="POST" action="{{ url_for('login') }}" id="hubLoginForm">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="portal_role" id="hubPortalRole" value="{{ selected_portal or 'admin' }}">
-      <label>School ID / Tenant ID <span class="optional">optional</span><input name="school_code" placeholder="Enter School ID or Tenant ID"></label>
+      <label>School ID / Tenant ID <span class="optional">optional</span><input name="school_code" value="{{ request.form.get('school_code', '') }}" placeholder="Enter School ID or Tenant ID"></label>
       <label>Username, Email or Phone<input name="username" required autocomplete="username"></label>
       <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
       <button class="hub-primary-btn" type="submit">Login <span>→</span></button>

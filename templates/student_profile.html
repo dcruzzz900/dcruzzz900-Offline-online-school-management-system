@@ -38,7 +38,7 @@
     <p style="font-size:0.9rem; color:#666;">Optional. Requires an internet connection to upload.</p>
     <form method="POST" action="{{ url_for('upload_student_photo', student_id=student.id) }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" required>
+        <input type="file" name="photo" data-max-bytes="512000" data-size-message="Passport image must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif" required><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
         <button class="btn btn-small" type="submit">{% if student.photo_filename %}Replace Photo{% else %}Upload Photo{% endif %}</button>
     </form>
     {% if student.photo_filename %}

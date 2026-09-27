@@ -60,14 +60,14 @@
         <select name="kind">
             {% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
         </select>
-        <label>File (PDF, Word, PowerPoint or image)</label>
-        <input type="file" name="file">
+        <label>File (PDF, DOC/DOCX, PPT/PPTX or image) — maximum 1 MB</label>
+        <input type="file" name="file" data-max-bytes="1048576" data-size-message="Learning material must not exceed 1 MB." accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif">
         <label>...or a link (e.g. a YouTube video) instead of a file</label>
         <input type="url" name="external_url" placeholder="https://...">
         <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
     </form>
     <p style="font-size:0.8rem; color:#999; margin-top:0.5rem;">
-        Uploads are limited to 20MB. For videos, paste a link instead of uploading the file.
+        Learning material uploads are limited to <b>1 MB</b>. Accepted: PDF, Word, PowerPoint and common image formats. For videos, paste a link instead.
     </p>
 </div>
 {% endif %}
