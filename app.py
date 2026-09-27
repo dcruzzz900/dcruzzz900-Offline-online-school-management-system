@@ -440,6 +440,38 @@ def portal_logo(school_id):
 
 # ---------- helpers ----------
 
+def _table_exists_safe(conn, name):
+    return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone())
+
+def parent_login_required(f):
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if "parent_id" not in session:
+            return redirect(url_for("login"))
+        conn = get_db()
+        parent = conn.execute("SELECT * FROM parent_accounts WHERE id=? AND school_id=?", (session["parent_id"], session.get("school_id"))).fetchone()
+        conn.close()
+        if not parent or not parent["is_active"]:
+            session.clear(); flash("This parent account is no longer active.", "error"); return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return wrapped
+
+def parent_child(conn, parent_id, student_id):
+    return conn.execute(
+        "SELECT s.*, c.name AS class_name, c.school_id FROM parent_students ps "
+        "JOIN students s ON s.id=ps.student_id JOIN classes c ON c.id=s.class_id "
+        "WHERE ps.parent_id=? AND ps.school_id=? AND s.id=? AND s.is_active=1",
+        (parent_id, current_school_id(), student_id),
+    ).fetchone()
+
+def parent_children(conn, parent_id):
+    return conn.execute(
+        "SELECT s.*, c.name AS class_name FROM parent_students ps "
+        "JOIN students s ON s.id=ps.student_id JOIN classes c ON c.id=s.class_id "
+        "WHERE ps.parent_id=? AND ps.school_id=? AND s.is_active=1 ORDER BY s.first_name, s.last_name",
+        (parent_id, current_school_id()),
+    ).fetchall()
+
 def login_required(*roles):
     def decorator(f):
         @wraps(f)
@@ -787,6 +819,11 @@ def inject_unread_notifications():
         row = conn.execute("SELECT last_notification_seen_id FROM students WHERE id=?", (session["student_id"],)).fetchone()
         count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, "student", session.get("school_id"))
         conn.close()
+    elif "parent_id" in session:
+        conn = get_db()
+        row = conn.execute("SELECT last_notification_seen_id FROM parent_accounts WHERE id=?", (session["parent_id"],)).fetchone()
+        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, "parent", session.get("school_id"))
+        conn.close()
     return dict(unread_notifications=count)
 
 
@@ -900,6 +937,8 @@ def plan_usage_alerts(conn, school_id):
 
 @app.route("/", methods=["GET"])
 def index():
+    if "parent_id" in session:
+        return redirect(url_for("parent_dashboard"))
     return redirect(url_for("dashboard") if "user_id" in session else url_for("login"))
 
 
@@ -911,6 +950,35 @@ def login():
         password = request.form["password"]
         requested_school_code = request.form.get("school_code", "").strip()
         conn = get_db()
+        parent = conn.execute(
+            "SELECT * FROM parent_accounts WHERE (username=? OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))",
+            (identifier, identifier, identifier),
+        ).fetchone() if _table_exists_safe(conn, "parent_accounts") else None
+        if parent and check_password_hash(parent["password_hash"], password):
+            school = get_school(conn, parent["school_id"])
+            if not parent["is_active"]:
+                conn.close()
+                flash("This parent account has been deactivated. Contact the school administrator.", "error")
+                return render_template("login.html")
+            if requested_school_code and school and requested_school_code.lower() not in {str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower()}:
+                conn.close(); flash("That School ID / Tenant ID does not match this account.", "error"); return render_template("login.html")
+            conn.close()
+            if school and school["activation_status"] != "active":
+                flash("This school hasn't been activated yet.", "error"); return render_template("login.html")
+            if school and school["is_archived"]:
+                flash("This school's account has been archived.", "error"); return render_template("login.html")
+            if school and school["is_suspended"]:
+                flash("This school's account has been suspended.", "error"); return render_template("login.html")
+            if school and not subscription_login_allowed(school):
+                flash("This school's subscription or trial has expired.", "error"); return render_template("login.html")
+            if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
+                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error"); return render_template("login.html")
+            session.clear(); session.permanent=True
+            session["parent_id"] = parent["id"]; session["name"] = parent["name"]; session["role"] = "parent"
+            session["school_id"] = parent["school_id"]; session["tenant_id"] = school["tenant_id"] if school and "tenant_id" in school.keys() else None
+            session["school_code"] = school["school_code"] if school and "school_code" in school.keys() else None
+            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
+            return redirect(url_for("parent_dashboard"))
         user = conn.execute(
             "SELECT * FROM users WHERE username=? "
             "OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) "
@@ -1812,7 +1880,7 @@ def notifications_compose():
         title = request.form.get("title", "").strip()
         message = request.form.get("message", "").strip()
         target_role = request.form.get("target_role", "all")
-        if target_role not in ("all", "teacher", "student"):
+        if target_role not in ("all", "teacher", "student", "parent"):
             target_role = "all"
         if not title or not message:
             flash("Please fill in both a title and a message.", "error")
@@ -2500,19 +2568,221 @@ def admin_parents():
         "WHERE c.school_id=? AND s.is_active=1 AND (s.parent_phone IS NOT NULL OR s.parent_email IS NOT NULL) "
         "ORDER BY s.parent_name", (school_id,)
     ).fetchall()
-    conn.close()
     # Group by the same key parent_profile() uses (phone, falling back to email),
-    # keeping only the first student id seen for each guardian as the entry point.
+    # and attach the dedicated portal account when one exists.
     seen = {}
     guardians = []
     for r in rows:
-        key = r["parent_phone"] or r["parent_email"]
+        key = r["parent_phone"] or r["parent_email"] or (r["parent_name"] or f"student-{r['id']}")
         if key in seen:
             continue
         seen[key] = True
-        guardians.append(r)
+        account = conn.execute("SELECT id,username,is_active FROM parent_accounts WHERE school_id=? AND ((phone IS NOT NULL AND phone=?) OR (email IS NOT NULL AND LOWER(email)=LOWER(?))) LIMIT 1", (school_id,r["parent_phone"],r["parent_email"])).fetchone()
+        guardians.append(dict(r, account=account))
+    conn.close()
     return render_template("admin_parents.html", guardians=guardians)
 
+
+
+@app.route("/admin/parents/create", methods=["POST"])
+@login_required("admin", "sub_admin")
+def admin_parent_create():
+    conn = get_db(); school_id = current_school_id()
+    student_id = request.form.get("student_id", type=int)
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip() or None
+    phone = request.form.get("phone", "").strip() or None
+    student = conn.execute("SELECT s.*, c.school_id FROM students s JOIN classes c ON c.id=s.class_id WHERE s.id=? AND c.school_id=? AND s.is_active=1", (student_id, school_id)).fetchone()
+    if not student:
+        conn.close(); flash("Student/guardian record not found.", "error"); return redirect(url_for("admin_parents"))
+    name = name or student["parent_name"] or "Parent"
+    username = username or ((phone or email or f"parent{student_id}").replace(" ", "").replace("+", ""))
+    if not password or len(password) < 6:
+        conn.close(); flash("Parent password must be at least 6 characters.", "error"); return redirect(url_for("admin_parents"))
+    existing = conn.execute("SELECT id FROM parent_accounts WHERE school_id=? AND username=?", (school_id, username)).fetchone()
+    if existing:
+        conn.close(); flash("That parent username already exists in this school.", "error"); return redirect(url_for("admin_parents"))
+    cur = conn.execute("INSERT INTO parent_accounts (school_id,name,username,email,phone,password_hash) VALUES (?,?,?,?,?,?)", (school_id,name,username,email,phone,generate_password_hash(password)))
+    parent_id = cur.lastrowid
+    # Link all active children that share this guardian's phone/email/name, without crossing tenants.
+    if phone or email:
+        rows = conn.execute("SELECT s.id FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 AND ((? IS NOT NULL AND s.parent_phone=?) OR (? IS NOT NULL AND LOWER(s.parent_email)=LOWER(?)))", (school_id, phone, phone, email, email)).fetchall()
+    else:
+        rows = [(student_id,)]
+    if not rows: rows = [(student_id,)]
+    for r in rows:
+        conn.execute("INSERT OR IGNORE INTO parent_students(parent_id,student_id,school_id) VALUES (?,?,?)", (parent_id, r[0], school_id))
+    conn.commit(); conn.close()
+    flash(f"Parent portal account created for {name}. Username: {username}", "success")
+    return redirect(url_for("admin_parents"))
+
+@app.route("/admin/parents/<int:parent_id>/reset", methods=["POST"])
+@login_required("admin", "sub_admin")
+def admin_parent_reset(parent_id):
+    password = request.form.get("password", "")
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "error"); return redirect(url_for("admin_parents"))
+    conn = get_db(); row = conn.execute("SELECT id,name FROM parent_accounts WHERE id=? AND school_id=?", (parent_id,current_school_id())).fetchone()
+    if not row:
+        conn.close(); flash("Parent account not found.", "error"); return redirect(url_for("admin_parents"))
+    conn.execute("UPDATE parent_accounts SET password_hash=? WHERE id=?", (generate_password_hash(password), parent_id)); conn.commit(); conn.close()
+    flash(f"Password reset for {row['name']}.", "success"); return redirect(url_for("admin_parents"))
+
+@app.route("/admin/parents/<int:parent_id>/toggle", methods=["POST"])
+@login_required("admin", "sub_admin")
+def admin_parent_toggle(parent_id):
+    conn=get_db(); row=conn.execute("SELECT id,is_active,name FROM parent_accounts WHERE id=? AND school_id=?", (parent_id,current_school_id())).fetchone()
+    if not row:
+        conn.close(); flash("Parent account not found.","error"); return redirect(url_for("admin_parents"))
+    conn.execute("UPDATE parent_accounts SET is_active=? WHERE id=?", (0 if row["is_active"] else 1,parent_id)); conn.commit(); conn.close()
+    flash(f"Parent account {'activated' if not row['is_active'] else 'deactivated'}.","success"); return redirect(url_for("admin_parents"))
+
+@app.route("/parent/ai-consent/<int:student_id>",methods=["GET","POST"])
+@parent_login_required
+def parent_ai_consent(student_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    if not child:
+        conn.close(); flash("You do not have access to this student.","error"); return redirect(url_for("parent_children_page"))
+    settings=_ai_settings(conn,current_school_id())
+    if request.method=="POST":
+        action=request.form.get("action")
+        if action in ("granted","withdrawn"):
+            conn.execute("INSERT INTO student_ai_consent(student_id,school_id,status,granted_by_type,granted_by_id,policy_version,granted_at,withdrawn_at) VALUES (?,?,?,?,?,?,CASE WHEN ?='granted' THEN CURRENT_TIMESTAMP END,CASE WHEN ?='withdrawn' THEN CURRENT_TIMESTAMP END) ON CONFLICT(student_id) DO UPDATE SET status=excluded.status,granted_by_type=excluded.granted_by_type,granted_by_id=excluded.granted_by_id,policy_version=excluded.policy_version,granted_at=excluded.granted_at,withdrawn_at=excluded.withdrawn_at",(student_id,current_school_id(),action,"parent_guardian",session["parent_id"],settings["privacy_notice_version"],action,action))
+            conn.execute("INSERT INTO parent_consent_events(school_id,parent_id,student_id,action,policy_version) VALUES (?,?,?,?,?)",(current_school_id(),session["parent_id"],student_id,action,settings["privacy_notice_version"]))
+            _ai_log(conn,"privacy","parent_consent_changed",student_id,action,scope="student",request_summary=f"Parent {session['parent_id']} changed consent",output_summary="")
+            conn.commit(); flash("AI consent updated.","success")
+    row=conn.execute("SELECT status,policy_version,granted_at,withdrawn_at FROM student_ai_consent WHERE student_id=? AND school_id=?",(student_id,current_school_id())).fetchone(); conn.close()
+    return render_template("parent_ai_consent.html",child=child,consent=row,policy_version=settings["privacy_notice_version"])
+
+@app.route("/parent/logout")
+def parent_logout():
+    session.clear(); return redirect(url_for("login"))
+
+@app.route("/parent/dashboard")
+@parent_login_required
+def parent_dashboard():
+    conn=get_db(); children=parent_children(conn,session["parent_id"])
+    cards=[]
+    for child in children:
+        term=current_term(conn)
+        analysis=None
+        if term:
+            try:
+                analysis_rows=conn.execute("SELECT sc.ca1,sc.ca2,sc.exam,sc.ca3,sub.name subject_name FROM scores sc JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.student_id=? AND sc.term_id=?",(child["id"],term["id"])).fetchall()
+                analysis=analyze_student(analysis_rows)
+            except Exception: analysis=None
+        cards.append({"student":child,"analysis":analysis})
+    conn.close(); return render_template("parent_dashboard.html",children=children,cards=cards)
+
+@app.route("/parent/children")
+@parent_login_required
+def parent_children_page():
+    conn=get_db(); children=parent_children(conn,session["parent_id"]); conn.close()
+    return render_template("parent_children.html",children=children)
+
+@app.route("/parent/children/<int:student_id>")
+@parent_login_required
+def parent_child_detail(student_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    if not child:
+        conn.close(); flash("You do not have access to this student.","error"); return redirect(url_for("parent_children_page"))
+    terms=conn.execute("SELECT t.*, s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? AND t.is_published=1 ORDER BY s.id DESC,t.id DESC",(current_school_id(),)).fetchall()
+    teachers=conn.execute("SELECT DISTINCT u.id,u.name,u.email,u.phone FROM users u JOIN class_subjects cs ON cs.teacher_id=u.id WHERE cs.class_id=? AND u.school_id=? AND u.role='teacher' AND COALESCE(u.is_active,1)=1 UNION SELECT u.id,u.name,u.email,u.phone FROM users u JOIN classes c ON c.form_teacher_id=u.id WHERE c.id=? AND u.school_id=? AND u.role='teacher'",(child["class_id"],current_school_id(),child["class_id"],current_school_id())).fetchall()
+    conn.close(); return render_template("parent_child_detail.html",child=child,terms=terms,teachers=teachers)
+
+@app.route("/parent/children/<int:student_id>/result/<int:term_id>")
+@parent_login_required
+def parent_result(student_id,term_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
+    if not child or not term:
+        conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
+    data=build_result_data(conn,student_id,term_id); conn.close()
+    return render_template("parent_result.html",child=child,term=term,student_full_name=student_full_name,**data)
+
+@app.route("/parent/children/<int:student_id>/result/<int:term_id>/pdf")
+@parent_login_required
+def parent_result_pdf(student_id,term_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
+    if not child or not term:
+        conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
+    data=build_result_data(conn,student_id,term_id); school=get_school(conn,current_school_id()); logo_path=None
+    if school and school["logo_filename"]:
+        candidate=os.path.join(INSTANCE_DIR,school["logo_filename"])
+        if os.path.exists(candidate): logo_path=candidate
+    conn.close(); buf=build_result_pdf(data,term,school_name=school["name"],logo_path=logo_path,student_full_name=student_full_name,font_choice=school["pdf_font"],accent_color=school["result_accent_color"] or "#1f3a5f",name_align=school["name_align"])
+    return send_file(buf,mimetype="application/pdf",as_attachment=True,download_name=f"result_{child['admission_no']}_{term['name']}.pdf".replace(" ","_").replace("/","-"))
+
+@app.route("/parent/children/<int:student_id>/attendance")
+@parent_login_required
+def parent_attendance(student_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    if not child: conn.close(); flash("You do not have access to this student.","error"); return redirect(url_for("parent_children_page"))
+    rows=conn.execute("SELECT t.id,t.name,t.is_published, COUNT(ar.id) days_opened, SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) present, SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END) absent FROM terms t JOIN sessions se ON se.id=t.session_id LEFT JOIN attendance_records ar ON ar.term_id=t.id AND ar.student_id=? WHERE se.school_id=? GROUP BY t.id ORDER BY se.id DESC,t.id DESC",(student_id,current_school_id())).fetchall()
+    conn.close(); return render_template("parent_attendance.html",child=child,rows=rows)
+
+@app.route("/parent/children/<int:student_id>/timetable")
+@parent_login_required
+def parent_timetable(student_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    if not child: conn.close(); flash("You do not have access to this student.","error"); return redirect(url_for("parent_children_page"))
+    periods=conn.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order,id",(current_school_id(),)).fetchall()
+    entries=conn.execute("SELECT te.*,p.name period_name,p.start_time,p.end_time,s.name subject_name,u.name teacher_name FROM timetable_entries te JOIN timetable_periods p ON p.id=te.period_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id WHERE te.class_id=? ORDER BY te.day_of_week,p.sort_order,p.id",(child["class_id"],)).fetchall()
+    conn.close(); return render_template("parent_timetable.html",child=child,periods=periods,entries=entries,days=list(enumerate(DAY_NAMES)))
+
+@app.route("/parent/notifications")
+@parent_login_required
+def parent_notifications():
+    conn=get_db(); row=conn.execute("SELECT last_notification_seen_id FROM parent_accounts WHERE id=?",(session["parent_id"],)).fetchone(); notifications=get_visible_notifications(conn,"parent",current_school_id(),100)
+    if notifications: conn.execute("UPDATE parent_accounts SET last_notification_seen_id=? WHERE id=?",(notifications[0]["id"],session["parent_id"])); conn.commit()
+    conn.close(); return render_template("parent_notifications.html",notifications=notifications)
+
+@app.route("/parent/messages/<int:student_id>/<int:teacher_id>",methods=["GET","POST"])
+@parent_login_required
+def parent_message_thread(student_id,teacher_id):
+    conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
+    teacher=conn.execute("SELECT u.* FROM users u WHERE u.id=? AND u.school_id=? AND u.role='teacher' AND COALESCE(u.is_active,1)=1 AND (EXISTS(SELECT 1 FROM class_subjects cs WHERE cs.teacher_id=u.id AND cs.class_id=?) OR EXISTS(SELECT 1 FROM classes c WHERE c.form_teacher_id=u.id AND c.id=?))",(teacher_id,current_school_id(),child["class_id"] if child else -1,child["class_id"] if child else -1)).fetchone() if child else None
+    if not child or not teacher:
+        conn.close(); flash("That teacher is not authorized for this child.","error"); return redirect(url_for("parent_children_page"))
+    if request.method=="POST":
+        body=request.form.get("body","").strip()
+        if not body or len(body)>4000: flash("Message must contain 1–4000 characters.","error")
+        else:
+            conn.execute("INSERT INTO parent_teacher_messages(school_id,parent_id,teacher_id,student_id,body,sender_type) VALUES (?,?,?,?,?,'parent')",(current_school_id(),session["parent_id"],teacher_id,student_id,body))
+            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",(session.get("name","Parent"),current_school_id(),"teacher","New parent message",f"A parent sent you a message about {student_full_name(child)}."))
+            conn.commit(); flash("Message sent.","success")
+    messages=conn.execute("SELECT * FROM parent_teacher_messages WHERE school_id=? AND parent_id=? AND teacher_id=? AND student_id=? ORDER BY id",(current_school_id(),session["parent_id"],teacher_id,student_id)).fetchall()
+    conn.execute("UPDATE parent_teacher_messages SET is_read=1 WHERE school_id=? AND parent_id=? AND teacher_id=? AND student_id=? AND sender_type='teacher'",(current_school_id(),session["parent_id"],teacher_id,student_id)); conn.commit(); conn.close()
+    return render_template("parent_message_thread.html",child=child,teacher=teacher,messages=messages)
+
+@app.route("/teacher/parent-messages")
+@login_required("admin","sub_admin","teacher")
+def teacher_parent_messages():
+    conn=get_db(); school_id=current_school_id(); teacher_id=session["user_id"]
+    threads=conn.execute("SELECT m.parent_id,m.student_id,m.teacher_id,MAX(m.id) latest_id,MAX(m.created_at) latest_at,p.name parent_name,s.first_name||' '||s.last_name student_name,c.name class_name,SUM(CASE WHEN m.sender_type='parent' AND m.is_read=0 THEN 1 ELSE 0 END) unread FROM parent_teacher_messages m JOIN parent_accounts p ON p.id=m.parent_id JOIN students s ON s.id=m.student_id JOIN classes c ON c.id=s.class_id WHERE m.school_id=? AND m.teacher_id=? GROUP BY m.parent_id,m.student_id,m.teacher_id ORDER BY latest_id DESC",(school_id,teacher_id)).fetchall()
+    conn.close(); return render_template("teacher_parent_messages.html",threads=threads)
+
+@app.route("/teacher/parent-messages/<int:parent_id>/<int:student_id>",methods=["GET","POST"])
+@login_required("admin","sub_admin","teacher")
+def teacher_parent_thread(parent_id,student_id):
+    conn=get_db(); school_id=current_school_id(); teacher_id=session["user_id"]
+    child=conn.execute("SELECT s.*,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE s.id=? AND c.school_id=?",(student_id,school_id)).fetchone()
+    parent=conn.execute("SELECT p.* FROM parent_accounts p JOIN parent_students ps ON ps.parent_id=p.id WHERE p.id=? AND ps.student_id=? AND p.school_id=?",(parent_id,student_id,school_id)).fetchone()
+    authorized=bool(child and parent and (conn.execute("SELECT 1 FROM class_subjects WHERE teacher_id=? AND class_id=?",(teacher_id,child["class_id"])).fetchone() or conn.execute("SELECT 1 FROM classes WHERE id=? AND form_teacher_id=?",(child["class_id"],teacher_id)).fetchone() or session.get("role") in ("admin","sub_admin")))
+    if not authorized:
+        conn.close(); flash("You are not authorized to access this conversation.","error"); return redirect(url_for("teacher_parent_messages"))
+    if request.method=="POST":
+        body=request.form.get("body","").strip()
+        if body and len(body)<=4000:
+            conn.execute("INSERT INTO parent_teacher_messages(school_id,parent_id,teacher_id,student_id,body,sender_type,is_read) VALUES (?,?,?,?,?,'teacher',1)",(school_id,parent_id,teacher_id,student_id,body))
+            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",(session.get("name","Teacher"),school_id,"parent","Teacher replied",f"Your teacher replied about {student_full_name(child)}."))
+            conn.commit(); flash("Reply sent.","success")
+    messages=conn.execute("SELECT * FROM parent_teacher_messages WHERE school_id=? AND parent_id=? AND teacher_id=? AND student_id=? ORDER BY id",(school_id,parent_id,teacher_id,student_id)).fetchall()
+    conn.execute("UPDATE parent_teacher_messages SET is_read=1 WHERE school_id=? AND parent_id=? AND teacher_id=? AND student_id=? AND sender_type='parent'",(school_id,parent_id,teacher_id,student_id)); conn.commit(); conn.close()
+    return render_template("teacher_parent_thread.html",parent=parent,child=child,messages=messages)
 
 
 @app.route("/students/<int:student_id>/profile")
@@ -7477,7 +7747,7 @@ def platform_notifications():
         title = request.form.get("title", "").strip()
         message = request.form.get("message", "").strip()
         target_role = request.form.get("target_role", "all")
-        if target_role not in ("all", "admin", "teacher", "student"):
+        if target_role not in ("all", "admin", "teacher", "student", "parent"):
             target_role = "all"
         school_id = request.form.get("school_id") or None  # blank = all schools
 
@@ -7578,15 +7848,21 @@ def ai_analyze():
     if not student or not term: conn.close(); flash("Student or term not found.","error"); return redirect(url_for("ai_command_center"))
     if session.get("role")=="teacher" and not can_view_class_results(conn,session.get("role"),session.get("position"),session["user_id"],student["class_id"]): conn.close(); flash("You are not authorized for this student.","error"); return redirect(url_for("ai_command_center"))
     if not(settings["enabled"] and settings["process_student_data"] and settings["result_analysis"] and allowed): _ai_log(conn,"result_analysis","blocked",student_id,cs,scope="student",request_summary="Blocked by settings/consent"); conn.close(); flash("Enable AI processing and grant the required student consent first.","error"); return redirect(url_for("ai_command_center"))
-    rows=_ai_rows(conn,student_id,term["id"]); prev=_prev_term(conn,term); old=_ai_rows(conn,student_id,prev["id"]) if prev else []; analysis=compare_analysis(rows,old); att=_att(conn,student_id,term["id"]); text=f"Overall performance: {analysis['average']:.1f}%. Trend: {analysis['trend']}. Strengths: {', '.join(analysis['strengths']) or 'None above 60% yet'}. Areas for support: {', '.join(analysis['weaknesses']) or 'No subject below 50%'}."+(f" Attendance: {att:.0f}%." if att is not None else "")
+    rows=_ai_rows(conn,student_id,term["id"]); prev=_prev_term(conn,term); old=_ai_rows(conn,student_id,prev["id"]) if prev else []; analysis=compare_analysis(rows,old); att=_att(conn,student_id,term["id"])
+    facts={"student_ref":str(student_id),"term":term["id"],"average":round(analysis["average"],1),"trend":analysis["trend"],"strengths":analysis["strengths"],"support_areas":analysis["weaknesses"],"attendance":round(att,1) if att is not None else None}
+    provider_text,_=ai_provider_generate("You are a school performance analyst. Use only the supplied facts. Do not infer diagnoses, promotion, exclusion, discipline or sensitive traits. Produce a concise factual analysis with strengths, support areas and trend. Do not include the student's name or invent facts.",json.dumps(facts),max_tokens=450)
+    text=provider_text or f"Overall performance: {analysis['average']:.1f}%. Trend: {analysis['trend']}. Strengths: {', '.join(analysis['strengths']) or 'None above 60% yet'}. Areas for support: {', '.join(analysis['weaknesses']) or 'No subject below 50%'}."+(f" Attendance: {att:.0f}%." if att is not None else "")
     out=conn.execute("INSERT INTO ai_outputs(school_id,feature,student_id,term_id,class_id,status,output_text,generated_by) VALUES (?,?,?,?,?,?,?,?)",(sid,"result_analysis",student_id,term["id"],student["class_id"],"draft",text,session["user_id"])); _ai_log(conn,"result_analysis","generated",student_id,cs,scope="student",request_summary=f"Term {term['id']}",output_summary=text); conn.close(); return redirect(url_for("ai_output_detail",output_id=out.lastrowid))
 
 @app.route("/ai/output/<int:output_id>")
 @login_required("admin","sub_admin","teacher")
 def ai_output_detail(output_id):
     conn=get_db(); out=conn.execute("SELECT * FROM ai_outputs WHERE id=? AND school_id=?",(output_id,current_school_id())).fetchone(); student=conn.execute("SELECT st.*,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(out["student_id"],current_school_id())).fetchone() if out and out["student_id"] else None; conn.close()
-    if not out: flash("AI output not found.","error"); return redirect(url_for("ai_command_center"))
-    if out["student_id"] and not _ai_teacher_allowed(conn,out["student_id"]): flash("You are not authorized to view this AI output.","error"); return redirect(url_for("ai_command_center"))
+    if not out:
+        conn.close(); flash("AI output not found.","error"); return redirect(url_for("ai_command_center"))
+    if out["student_id"] and not _ai_teacher_allowed(conn,out["student_id"]):
+        conn.close(); flash("You are not authorized to view this AI output.","error"); return redirect(url_for("ai_command_center"))
+    conn.close()
     return render_template("ai_output.html",output=out,student=student)
 
 @app.route("/ai/output/<int:output_id>/review",methods=["POST"])
@@ -7606,7 +7882,11 @@ def ai_comments():
         if not student or not term or not(settings["enabled"] and settings["process_student_data"] and settings[feature] and consent): flash("AI comments require AI to be enabled and student consent to be granted.","error")
         elif not _ai_teacher_allowed(conn,student_id): flash("You are not authorized for this student.","error")
         else:
-            prev=_prev_term(conn,term); analysis=compare_analysis(_ai_rows(conn,student_id,term["id"]),_ai_rows(conn,student_id,prev["id"]) if prev else []); att=_att(conn,student_id,term["id"]); name=f"{student['first_name']} {student['last_name']}"; text=ai_teacher_comment(name,analysis,att) if kind=="teacher" else ai_principal_comment(name,analysis,att); out=conn.execute("INSERT INTO ai_outputs(school_id,feature,student_id,term_id,class_id,status,output_text,generated_by) VALUES (?,?,?,?,?,?,?,?)",(sid,feature,student_id,term["id"],student["class_id"],"draft",text,session["user_id"])); _ai_log(conn,feature,"generated",student_id,cs,scope="student",request_summary=f"Generate {kind} comment",output_summary=text); conn.close(); return redirect(url_for("ai_output_detail",output_id=out.lastrowid))
+            prev=_prev_term(conn,term); analysis=compare_analysis(_ai_rows(conn,student_id,term["id"]),_ai_rows(conn,student_id,prev["id"]) if prev else []); att=_att(conn,student_id,term["id"]); name=f"{student['first_name']} {student['last_name']}"
+            facts={"student_ref":str(student_id),"average":round(analysis["average"],1),"trend":analysis["trend"],"strengths":analysis["strengths"],"support_areas":analysis["weaknesses"],"attendance":round(att,1) if att is not None else None}
+            role_text="teacher" if kind=="teacher" else "principal"
+            provider_text,_=ai_provider_generate("You are a school report-writing assistant. Draft one professional, supportive comment for a student using only the supplied academic facts. Do not mention AI, diagnoses, promotion or exclusion. Do not include a name or invent facts. Return only the comment.",json.dumps({"comment_type":role_text,"facts":facts}),max_tokens=250)
+            text=provider_text or (ai_teacher_comment(name,analysis,att) if kind=="teacher" else ai_principal_comment(name,analysis,att)); out=conn.execute("INSERT INTO ai_outputs(school_id,feature,student_id,term_id,class_id,status,output_text,generated_by) VALUES (?,?,?,?,?,?,?,?)",(sid,feature,student_id,term["id"],student["class_id"],"draft",text,session["user_id"])); _ai_log(conn,feature,"generated",student_id,cs,scope="student",request_summary=f"Generate {kind} comment",output_summary=text); conn.close(); return redirect(url_for("ai_output_detail",output_id=out.lastrowid))
     conn.close(); return render_template("ai_comments.html",students=students,term=term)
 
 @app.route("/ai/alerts")
@@ -7636,21 +7916,47 @@ def ai_result_assistant():
     conn=get_db(); sid=current_school_id(); term=current_term(conn); query=""; answer=None
     if request.method=="POST":
         query=request.form.get("query","").strip(); q=query.lower()
-        if not term: answer=["No active term is configured."]
-        elif "below 40" in q and "mathematics" in q:
-            base="SELECT st.first_name,st.last_name,c.name class_name,(sc.ca1+sc.ca2+sc.exam) score FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE c.school_id=? AND sc.term_id=? AND lower(sub.name)='mathematics' AND (sc.ca1+sc.ca2+sc.exam)<40"; params=[sid,term["id"]]
+        if not term:
+            answer=["No active term is configured."]
+        else:
+            allowed_ids=None
             if session.get("role")=="teacher" and not can_view_all_results(session.get("role"),session.get("position")):
-                ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); ids=[] if ids == "all" else ids; base += (" AND c.id IN ("+",".join("?"*len(ids))+")" if ids else " AND 1=0"); params += ids
-            rows=conn.execute(base+" ORDER BY score",tuple(params)).fetchall(); answer=[f"{r['first_name']} {r['last_name']} ({r['class_name']}) — {r['score']:.1f}%" for r in rows] or ["No students matched that condition."]
-        elif "poor" in q and "subject" in q:
-            base="SELECT sub.name subject_name,AVG(sc.ca1+sc.ca2+sc.exam) avg_score FROM scores sc JOIN subjects sub ON sub.id=sc.subject_id JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?"; params=[sid,term["id"]]
-            if session.get("role")=="teacher" and not can_view_all_results(session.get("role"),session.get("position")):
-                ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); ids=[] if ids == "all" else ids; base += (" AND c.id IN ("+",".join("?"*len(ids))+")" if ids else " AND 1=0"); params += ids
-            rows=conn.execute(base+" GROUP BY sub.id ORDER BY avg_score LIMIT 10",tuple(params)).fetchall(); answer=[f"{r['subject_name']} — {r['avg_score']:.1f}% average" for r in rows]
-        elif "declining" in q:
-            prev=_prev_term(conn,term); answer=["There is no previous term to compare."] if not prev else ["Use the Performance Alerts view for declining students."]
-        else: answer=["Try: Which subjects performed poorly?","Who scored below 40 in Mathematics?","Which students have declining performance?"]
-        _ai_log(conn,"result_assistant","query",scope="school",request_summary=query,output_summary="; ".join(answer))
+                allowed_ids=get_accessible_class_ids(conn,session.get("role"),session.get("position"),session["user_id"]); allowed_ids=[] if allowed_ids=="all" else allowed_ids
+            def class_filter(alias="c"):
+                if allowed_ids is None: return "",[]
+                return ((" AND %s.id IN (%s)"%(alias,",".join("?"*len(allowed_ids)))) if allowed_ids else " AND 1=0", list(allowed_ids))
+            cf,cp=class_filter()
+            if "below" in q and ("40" in q or "threshold" in q):
+                import re as _re
+                m=_re.search(r"below\s+(\d+(?:\.\d+)?)",q); threshold=float(m.group(1)) if m else 40.0
+                subject="mathematics" if "mathematics" in q or "math" in q else None
+                sql="SELECT st.first_name,st.last_name,c.name class_name,sub.name subject_name,(sc.ca1+sc.ca2+sc.exam) score FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE c.school_id=? AND sc.term_id=? AND (sc.ca1+sc.ca2+sc.exam)<?"; params=[sid,term["id"],threshold]
+                if subject: sql+=" AND lower(sub.name)=?"; params.append(subject)
+                sql+=cf+" ORDER BY score"; params+=cp; rows=conn.execute(sql,tuple(params)).fetchall()
+                answer=[f"{r['first_name']} {r['last_name']} ({r['class_name']}) — {r['subject_name']}: {r['score']:.1f}%" for r in rows] or [f"No students scored below {threshold:g}% for that query."]
+            elif "poor" in q and "subject" in q:
+                sql="SELECT sub.name subject_name,AVG(sc.ca1+sc.ca2+sc.exam) avg_score FROM scores sc JOIN subjects sub ON sub.id=sc.subject_id JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?"; params=[sid,term["id"]]; sql+=cf+" GROUP BY sub.id ORDER BY avg_score LIMIT 10"; params+=cp; rows=conn.execute(sql,tuple(params)).fetchall(); answer=[f"{r['subject_name']} — {r['avg_score']:.1f}% average" for r in rows] or ["No subject results are available."]
+            elif "class" in q and "improv" in q:
+                prev=_prev_term(conn,term)
+                if not prev: answer=["There is no previous term to compare."]
+                else:
+                    sql="SELECT c.name class_name,AVG(sc.ca1+sc.ca2+sc.exam) current_avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?"; params=[sid,term["id"]]; sql+=cf+" GROUP BY c.id"; params+=cp; current=conn.execute(sql,tuple(params)).fetchall(); answer=[]
+                    for r in current:
+                        pr=conn.execute("SELECT AVG(sc.ca1+sc.ca2+sc.exam) avg FROM scores sc JOIN students st ON st.id=sc.student_id WHERE st.class_id=(SELECT id FROM classes WHERE school_id=? AND name=? LIMIT 1) AND sc.term_id=?",(sid,r["class_name"],prev["id"])).fetchone()["avg"]
+                        if pr is not None: answer.append(f"{r['class_name']} — {r['current_avg']-pr:+.1f} points ({r['current_avg']:.1f}% vs {pr:.1f}%).")
+                    answer=answer or ["No comparable class data is available."]
+            elif "declin" in q or "drop" in q:
+                prev=_prev_term(conn,term)
+                if not prev: answer=["There is no previous term to compare."]
+                else:
+                    sql="SELECT st.id,st.first_name,st.last_name,c.name class_name,AVG(sc.ca1+sc.ca2+sc.exam) current_avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?"; params=[sid,term["id"]]; sql+=cf+" GROUP BY st.id"; params+=cp; rows=conn.execute(sql,tuple(params)).fetchall(); answer=[]
+                    for r in rows:
+                        pr=conn.execute("SELECT AVG(ca1+ca2+exam) avg FROM scores WHERE student_id=? AND term_id=?",(r["id"],prev["id"])).fetchone()["avg"]
+                        if pr is not None and r["current_avg"]-pr<=-10: answer.append(f"{r['first_name']} {r['last_name']} ({r['class_name']}) — down {pr-r['current_avg']:.1f} points.")
+                    answer=answer or ["No students met the current decline threshold of 10 points."]
+            else:
+                answer=["Try: Which subjects performed poorly?","Which classes improved?","Who scored below 40 in Mathematics?","Which students have declining performance?"]
+            _ai_log(conn,"result_assistant","query",scope="school",request_summary=query,output_summary="; ".join(answer))
     conn.close(); return render_template("ai_result_assistant.html",query=query,answer=answer,term=term)
 
 @app.route("/ai/learning-materials",methods=["GET","POST"])
@@ -7659,7 +7965,10 @@ def ai_learning_materials():
     material=None
     if request.method=="POST":
         subject=request.form.get("subject","General").strip(); topic=request.form.get("topic","").strip(); level=request.form.get("level","Secondary").strip()
-        if topic: material={"subject":subject,"topic":topic,"level":level,"notes":f"{topic}: key concepts, definitions and worked examples for {level} learners.","questions":[f"Define {topic}.",f"Give two examples of {topic}.",f"Explain one real-world application of {topic}."],"answers":["Use a clear definition and explain it in your own words.","Give two accurate examples and show the relevant steps.","Connect the concept to a practical situation."]}
+        if topic:
+            prompt=json.dumps({"subject":subject,"topic":topic,"level":level,"requirements":["lesson notes","worked examples","5 revision questions","5 MCQs with answers","brief explanations"]})
+            generated,_=ai_provider_generate("You are an educational content assistant. Create age-appropriate school learning material. Do not include unsafe or sensitive content. Return structured plain text with headings, examples, revision questions, MCQs, answers and explanations.",prompt,max_tokens=1200)
+            material={"subject":subject,"topic":topic,"level":level,"notes":generated or f"{topic}: key concepts, definitions and worked examples for {level} learners.","questions":[],"answers":[]}
     return render_template("ai_learning_materials.html",material=material)
 
 @app.route("/student/ai-tutor",methods=["GET","POST"])

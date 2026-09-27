@@ -33,3 +33,6 @@ If these are absent, the application still provides deterministic local analysis
 ## Human control
 
 The AI layer never directly changes marks, grades, attendance, promotion status or finalized results. AI comments and recommendations are stored as drafts until an authorized staff member reviews and approves them.
+
+## v41 Parent Portal consolidation
+The AI layer now sits alongside a dedicated tenant-scoped Parent Portal. Parent accounts are separate from staff RBAC; parent-child links, published results, attendance, timetable and parent/teacher conversations are scoped by school. Parent login is available through the unified login screen.

@@ -1786,6 +1786,20 @@ def run_migrations(conn):
         _adopt_legacy_steps(conn, version)
     done = {r["name"] for r in conn.execute("SELECT name FROM schema_steps")}
     for name, fn in STEPS:
+        # A prior deployment can have recorded a step as complete while its
+        # table was later lost (for example, a partial restore or an interrupted
+        # SQLite migration).  Critical parent-portal tables must be repaired
+        # from the idempotent migration rather than trusting schema_steps alone.
+        if name == "parent_portal" and (
+            not table_exists(conn, "parent_accounts")
+            or not table_exists(conn, "parent_students")
+            or not table_exists(conn, "parent_teacher_messages")
+            or not table_exists(conn, "parent_consent_events")
+        ):
+            fn(conn)
+            conn.execute("INSERT OR IGNORE INTO schema_steps (name) VALUES (?)", (name,))
+            conn.commit()
+            continue
         if name not in done:
             fn(conn)
             conn.execute("INSERT INTO schema_steps (name) VALUES (?)", (name,))
@@ -2499,3 +2513,76 @@ def student_full_name(student):
     return " ".join(p for p in parts if p)
 
 
+
+# v41 Parent Portal
+
+def migration_050_parent_portal(conn):
+    """Dedicated parent accounts, explicit parent-child links and scoped conversations.
+    Parent accounts are deliberately separate from staff users so existing RBAC is untouched.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            username TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            password_hash TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            last_notification_seen_id INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            UNIQUE(school_id, username)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_students (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            UNIQUE(parent_id, student_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_parent ON parent_students(parent_id, school_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_students_student ON parent_students(student_id, school_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_teacher_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            parent_id INTEGER NOT NULL,
+            teacher_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            sender_type TEXT NOT NULL CHECK(sender_type IN ('parent','teacher')),
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id) ON DELETE CASCADE,
+            FOREIGN KEY(teacher_id) REFERENCES users(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_messages_thread ON parent_teacher_messages(school_id,parent_id,teacher_id,student_id,created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_parent_messages_teacher ON parent_teacher_messages(school_id,teacher_id,is_read)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parent_consent_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            parent_id INTEGER NOT NULL,
+            student_id INTEGER NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('granted','withdrawn')),
+            policy_version TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            FOREIGN KEY(parent_id) REFERENCES parent_accounts(id),
+            FOREIGN KEY(student_id) REFERENCES students(id)
+        )
+    """)
+
+STEPS.append(("parent_portal", migration_050_parent_portal))
