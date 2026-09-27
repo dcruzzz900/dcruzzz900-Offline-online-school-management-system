@@ -2128,6 +2128,70 @@ def verify_activation_code(conn, school_id, submitted_code):
     return True, "ok"
 
 
+SIGNUP_CODE_EXPIRY_DAYS = 14
+
+
+def generate_signup_code(conn, code_type, school_id, created_by=None, class_id=None, student_id=None, max_usage=1, expiry_days=SIGNUP_CODE_EXPIRY_DAYS):
+    """Issues a new tenant-scoped signup code (staff / student / parent_link).
+    Unlike the single-slot activation code, several signup codes can be
+    active for a school at once, so existing codes are left untouched."""
+    school = get_school(conn, school_id)
+    tenant_id = school["tenant_id"] if school else None
+    expires_at = (_dt.datetime.utcnow() + _dt.timedelta(days=expiry_days)).isoformat(timespec="seconds")
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I ambiguity
+    while True:
+        code = "".join(_secrets.choice(alphabet) for _ in range(8))
+        if not conn.execute("SELECT 1 FROM signup_codes WHERE code=?", (code,)).fetchone():
+            break
+    conn.execute(
+        "INSERT INTO signup_codes (code, code_type, school_id, tenant_id, class_id, student_id, created_by, expires_at, max_usage, usage_count, status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,0,'active')",
+        (code, code_type, school_id, tenant_id, class_id, student_id, created_by, expires_at, max_usage),
+    )
+    return code, expires_at
+
+
+def verify_signup_code(conn, code, code_type, consume=False, school_id=None, class_id=None, student_id=None):
+    """Looks up a signup code by code+type and checks it's usable. Returns
+    (row, message) — row is the signup_codes record on success, or None with
+    an explanation on failure. Pass consume=True to record a use (and flip
+    status to 'exhausted' once max_usage is reached) after the caller has
+    finished acting on the code."""
+    code = (code or "").strip()
+    if not code:
+        return None, "Enter a signup code."
+    row = conn.execute(
+        "SELECT * FROM signup_codes WHERE code=? AND code_type=?", (code, code_type)
+    ).fetchone()
+    if not row:
+        return None, "Invalid signup code."
+    if school_id is not None and row["school_id"] != school_id:
+        return None, "Invalid signup code."
+    now = _dt.datetime.utcnow().isoformat(timespec="seconds")
+    if row["status"] == "revoked":
+        return None, "This signup code has been revoked."
+    if row["status"] == "suspended":
+        return None, "This signup code is currently suspended."
+    if row["expires_at"] and row["expires_at"] < now:
+        if row["status"] == "active":
+            conn.execute("UPDATE signup_codes SET status='expired' WHERE id=?", (row["id"],))
+        return None, "This signup code has expired."
+    if row["usage_count"] >= row["max_usage"]:
+        if row["status"] == "active":
+            conn.execute("UPDATE signup_codes SET status='exhausted' WHERE id=?", (row["id"],))
+        return None, "This signup code has already been used."
+    if row["status"] != "active":
+        return None, "This signup code is no longer active."
+    if consume:
+        new_count = row["usage_count"] + 1
+        new_status = "exhausted" if new_count >= row["max_usage"] else "active"
+        conn.execute(
+            "UPDATE signup_codes SET usage_count=?, status=?, last_used_at=? WHERE id=?",
+            (new_count, new_status, now, row["id"]),
+        )
+    return row, "ok"
+
+
 def get_school(conn, school_id):
     return conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
 
