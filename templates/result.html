@@ -1,176 +1,31 @@
 {% extends "base.html" %}
-{% block title %}Terminal Result{% endblock %}
+{% block title %}{{ student_full_name(student) }} · Result{% endblock %}
 {% block content %}
-<div class="result-page" style="--result-accent: {{ result_accent_color or '#1f3a5f' }};">
-<div class="report-header result-header-{{ result_header_layout or 'logo-left' }}">
-    {% if result_header_layout != 'no-logo' and school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0; text-align:{{ school_name_align or 'center' }}; color:var(--result-accent);">{{ school_name }}</h2>
-    <h1 style="border-bottom-color:var(--result-accent);">Terminal Report Sheet</h1>
-    <p>{{ term.session_name }} &mdash; {{ term.name }}</p>
-    {% if result_date %}<p style="font-size:0.85rem; color:#666;">Date: {{ result_date }}</p>{% endif %}
-</div>
-
-<div class="no-print" style="margin-bottom:1rem;">
-    <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
-        <label style="display:inline; font-weight:normal;">Term:</label>
-        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
-            {% for t in all_terms %}
-            <option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
-            {% endfor %}
-        </select>
-    </form>
-    <a class="btn" href="{{ url_for('result_pdf', student_id=student.id, term_id=term.id) }}">⬇ Download PDF</a>
-    <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
-    {% if cumulative_enabled %}
-    <a class="btn" href="{{ url_for('cumulative_result', student_id=student.id) }}">📊 Annual / Cumulative Result</a>
-    {% endif %}
-    {% if not term.is_active %}
-    <span style="font-size:0.85rem; color:#999;">Viewing a past term — switch to the active term to email results.</span>
-    {% elif not term.is_published %}
-    <span style="font-size:0.85rem; color:#999;">Results for this term aren't published yet — emailing is disabled until an admin publishes them (Setup → Terms).</span>
-    {% elif student.parent_email %}
-    <form method="POST" action="{{ url_for('email_result', student_id=student.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn" type="submit">✉ Email to Parent</button>
-    </form>
-    {% else %}
-    <span style="font-size:0.85rem; color:#999;">No parent email on file — add one from Setup → Students to enable emailing.</span>
-    {% endif %}
-</div>
-
-<div class="card">
-    <div class="grid-2">
-        <div>
-            <p><b>Name:</b> {{ student_full_name(student) }}</p>
-            <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
-            <p><b>Class / Arm:</b> {{ class_row.name }}</p>
-            {% if class_row.category %}<p><b>Category:</b> {{ class_row.category }}</p>{% endif %}
-            <p><b>Date of Birth:</b> {{ student.date_of_birth|dmy if student.date_of_birth else '—' }}</p>
-        </div>
-        <div>
-            <p><b>Total Score:</b> {{ total }}</p>
-            <p><b>Average:</b> {{ average }}</p>
-            <p><b>Position:</b> {{ position }} of {{ class_size }}</p>
-            <p><b>Number of Subjects Written:</b> {{ subjects_written }} of {{ subjects|length }}</p>
-        </div>
+<div class="screen-shell">
+  <div class="page-heading">
+    <div><div class="eyebrow">ACADEMIC RECORD</div><h1>Terminal Result</h1><p>{{ term.session_name }} · {{ term.name }} · {{ class_row.name }}</p></div>
+    <div class="action-row no-print"><a class="btn btn-secondary" href="{{ url_for('classes_list') }}">← Results</a><a class="btn" href="{{ url_for('result_pdf', student_id=student.id, term_id=term.id) }}">Download PDF</a><button class="btn btn-gold" onclick="window.print()">Print</button></div>
+  </div>
+  <div class="result-hero card">
+    <div class="student-identity">
+      <div class="student-avatar">{{ (student_full_name(student) or 'S')[0]|upper }}</div>
+      <div><span class="status-badge success">Published</span><h2>{{ student_full_name(student) }}</h2><p>{{ student.admission_no }} · {{ class_row.name }}</p></div>
     </div>
-</div>
-
-<div class="card">
-    <h3>Academic Performance</h3>
-    <table class="result-table">
-        <tr><th>Subject</th><th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr>
-        {% for s in subjects %}
-        <tr>
-            <td>{{ s.name }}</td><td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td>
-            <td>{{ s.total }}</td><td>{{ s.grade }}</td><td>{{ s.remark }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</div>
-
-{% if ratings %}
-<div class="card">
-    <h3>Psychomotor / Affective Skills</h3>
-    <table>
-        <tr><th>Trait</th><th>Category</th><th>Rating (1-5)</th></tr>
-        {% for r in ratings %}
-        <tr><td>{{ r.name }}</td><td>{{ r.category|title }}</td><td>{{ r.rating }}</td></tr>
-        {% endfor %}
-    </table>
-</div>
-{% endif %}
-
-<div class="card">
-    <h3>Attendance &amp; Comments</h3>
-    <p><b>Days School Opened:</b> {{ info.days_school_opened if info else '—' }} &nbsp;
-       <b>Present:</b> {{ info.days_present if info else '—' }} &nbsp;
-       <b>Absent:</b> {{ info.days_absent if info else '—' }}</p>
-
-    <p><b>Teacher's Comment:</b><br>
-        {% if info and info.teacher_comment %}{{ info.teacher_comment }}
-        {% else %}<span class="comment-blank">&nbsp;</span>{% endif %}
-    </p>
-    <p class="signature-line">
-        {% if teacher_signature_user %}
-        <span><img src="{{ url_for('staff_signature', user_id=teacher_signature_user.id) }}" alt="Teacher's signature" style="max-height:42px; vertical-align:middle;"> <span style="font-size:0.8rem; color:#666;">({{ teacher_signature_user.name }})</span></span>
-        {% else %}
-        <span>Teacher's Signature: __________________</span>
-        {% endif %}
-        <span>Date: {{ info.teacher_signed_date|dmy if info and info.teacher_signed_date else '__________________' }}</span>
-    </p>
-
-    <p><b>Principal's Comment:</b><br>
-        {% if info and info.principal_comment %}{{ info.principal_comment }}
-        {% else %}<span class="comment-blank">&nbsp;</span>{% endif %}
-    </p>
-    <p class="signature-line">
-        {% if principal_signature_user %}
-        <span><img src="{{ url_for('staff_signature', user_id=principal_signature_user.id) }}" alt="Principal's signature" style="max-height:42px; vertical-align:middle;"> <span style="font-size:0.8rem; color:#666;">({{ principal_signature_user.name }})</span></span>
-        {% else %}
-        <span>Principal's Signature: __________________</span>
-        {% endif %}
-        <span>Date: {{ info.principal_signed_date|dmy if info and info.principal_signed_date else '__________________' }}</span>
-    </p>
-</div>
-
-<div class="card no-print">
-    <h3>Update Attendance, Comments &amp; Skill Ratings</h3>
-    <form method="POST" action="{{ url_for('result_extra', student_id=student.id) }}"
-          data-offline="true" data-offline-label="Update Comments/Attendance">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="term_id" value="{{ term.id }}">
-        <div class="grid-2">
-            <div>
-                <label>Days School Opened</label>
-                <input type="number" name="days_school_opened" value="{{ info.days_school_opened if info else 0 }}">
-                <label>Days Present</label>
-                <input type="number" name="days_present" value="{{ info.days_present if info else 0 }}">
-                <label>Days Absent</label>
-                <input type="number" name="days_absent" value="{{ info.days_absent if info else 0 }}">
-                <p style="font-size:0.8rem; color:#999;">Present + Absent cannot be more than Days School Opened.</p>
-            </div>
-            <div>
-                <label>Teacher's Comment</label>
-                <textarea name="teacher_comment" rows="2">{{ info.teacher_comment if info else '' }}</textarea>
-                <label>Teacher Signed Date</label>
-                <input type="date" name="teacher_signed_date" value="{{ info.teacher_signed_date if info else '' }}">
-                <label>Principal's Comment</label>
-                <textarea name="principal_comment" rows="2">{{ info.principal_comment if info else '' }}</textarea>
-                <label>Principal Signed Date</label>
-                <input type="date" name="principal_signed_date" value="{{ info.principal_signed_date if info else '' }}">
-            </div>
-        </div>
-
-        <h4>Skill Ratings (1 = Needs Improvement, 5 = Excellent)</h4>
-        <div class="grid-2">
-            {% for trait in all_traits %}
-            <div>
-                <label>{{ trait.name }} ({{ trait.category|title }})</label>
-                <select name="trait_{{ trait.id }}">
-                    <option value="">-- not rated --</option>
-                    {% for n in range(1,6) %}
-                    <option value="{{ n }}"
-                        {% for r in ratings %}{% if r.name == trait.name and r.rating == n %}selected{% endif %}{% endfor %}>
-                        {{ n }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% endfor %}
-        </div>
-        <button class="btn" type="submit">Save Details</button>
-    </form>
-</div>
-<style>
-.comment-blank { display: inline-block; border-bottom: 1px solid #999; width: 100%; height: 1.5em; }
-.signature-line { display: flex; justify-content: space-between; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; }
-.result-table th { background: var(--result-accent, #1f3a5f); color: #fff; }
-.result-header-logo-top-center { text-align: center; }
-.result-header-logo-top-center .report-logo { display: block; margin: 0 auto 0.4rem; }
-.result-header-logo-right { text-align: right; }
-.result-header-logo-right .report-logo { float: right; margin-left: 0.75rem; }
-.result-header-logo-left .report-logo { float: left; margin-right: 0.75rem; }
-</style>
+    <div class="result-metrics"><div><span>Average</span><strong>{{ average }}</strong></div><div><span>Position</span><strong>{{ position }}/{{ class_size }}</strong></div><div><span>Subjects</span><strong>{{ subjects_written }}/{{ subjects|length }}</strong></div></div>
+  </div>
+  <div class="result-toolbar card no-print"><form method="GET"><label>Term<select name="term_id" onchange="this.form.submit()">{% for t in all_terms %}<option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} · Active{% endif %}</option>{% endfor %}</select></label></form>{% if cumulative_enabled %}<a class="btn btn-secondary" href="{{ url_for('cumulative_result', student_id=student.id) }}">View cumulative result</a>{% endif %}</div>
+  <div class="card result-sheet-card" style="--result-accent: {{ result_accent_color or '#1f3a5f' }};">
+    <div class="report-header result-header-{{ result_header_layout or 'logo-left' }}">
+      {% if result_header_layout != 'no-logo' and school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo">{% endif %}
+      <div><h2>{{ school_name }}</h2><h1>Terminal Report Sheet</h1><p>{{ term.session_name }} — {{ term.name }}</p>{% if result_date %}<small>{{ result_date }}</small>{% endif %}</div>
+    </div>
+    <div class="result-profile-grid"><div><span>Student</span><b>{{ student_full_name(student) }}</b></div><div><span>Admission No.</span><b>{{ student.admission_no }}</b></div><div><span>Class / Arm</span><b>{{ class_row.name }}</b></div><div><span>Total Score</span><b>{{ total }}</b></div></div>
+    <div class="section-title"><h3>Academic Performance</h3><span class="muted">{{ subjects_written }} subjects recorded</span></div>
+    <div class="table-wrap"><table class="result-table"><thead><tr><th>Subject</th><th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>{% for s in subjects %}<tr><td><b>{{ s.name }}</b></td><td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td><td><span class="grade-pill">{{ s.grade }}</span></td><td>{{ s.remark }}</td></tr>{% endfor %}</tbody></table></div>
+    {% if ratings %}<div class="result-section"><div class="section-title"><h3>Psychomotor & Affective Skills</h3></div><div class="table-wrap"><table><thead><tr><th>Trait</th><th>Category</th><th>Rating</th></tr></thead><tbody>{% for r in ratings %}<tr><td>{{ r.name }}</td><td>{{ r.category|title }}</td><td>{{ r.rating }}/5</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+    <div class="result-section"><div class="section-title"><h3>Attendance & Comments</h3></div><div class="attendance-strip"><div><span>Opened</span><b>{{ info.days_school_opened if info else '—' }}</b></div><div><span>Present</span><b>{{ info.days_present if info else '—' }}</b></div><div><span>Absent</span><b>{{ info.days_absent if info else '—' }}</b></div></div><div class="comments-grid"><div><span>Teacher's Comment</span><p>{{ info.teacher_comment if info and info.teacher_comment else 'No comment recorded.' }}</p></div><div><span>Principal's Comment</span><p>{{ info.principal_comment if info and info.principal_comment else 'No comment recorded.' }}</p></div></div></div>
+  </div>
+  {% if session.get('role') in ['admin','sub_admin','teacher'] %}
+  <div class="card no-print result-editor"><div class="section-title"><div><div class="eyebrow">AUTHORIZED EDITING</div><h3>Update Result Details</h3></div><span class="status-badge">Offline-ready</span></div><form method="POST" action="{{ url_for('result_extra', student_id=student.id) }}" data-offline="true"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="term_id" value="{{ term.id }}"><div class="form-grid"><label>Days School Opened<input type="number" name="days_school_opened" value="{{ info.days_school_opened if info else 0 }}"></label><label>Days Present<input type="number" name="days_present" value="{{ info.days_present if info else 0 }}"></label><label>Days Absent<input type="number" name="days_absent" value="{{ info.days_absent if info else 0 }}"></label><label>Teacher Signed Date<input type="date" name="teacher_signed_date" value="{{ info.teacher_signed_date if info else '' }}"></label></div><div class="form-grid"><label>Teacher's Comment<textarea name="teacher_comment" rows="3">{{ info.teacher_comment if info else '' }}</textarea></label><label>Principal's Comment<textarea name="principal_comment" rows="3">{{ info.principal_comment if info else '' }}</textarea></label></div><button class="btn">Save Details</button></form></div>{% endif %}
 </div>
 {% endblock %}
