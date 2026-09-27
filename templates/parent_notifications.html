@@ -1,3 +1,4 @@
-{% extends "base.html" %}{% block title %}Notifications{% endblock %}{% block content %}
-<div class="page-head"><div><h1>Notifications</h1><p>School announcements, academic updates and important reminders.</p></div></div><div class="notification-list card">{% for n in notifications %}<article class="activity-row"><div class="activity-icon">♢</div><div><strong>{{ n.title }}</strong><p>{{ n.message }}</p><small>{{ n.created_at }}</small></div></article>{% else %}<div class="empty-state"><h2>You're all caught up</h2><p>No notifications are available.</p></div>{% endfor %}</div>
+{% extends "base.html" %}{% block title %}Notifications · Parent Portal{% endblock %}{% block content %}
+<div class="page-head"><div><span class="eyebrow">Parent Portal</span><h1>Notifications</h1><p>School and teacher updates for your account.</p></div></div>
+<div class="notification-list">{% for n in notifications %}<article class="notification-card"><span>{{ n.created_at }}</span><h3>{{ n.title }}</h3><p>{{ n.message }}</p></article>{% else %}<div class="empty-state">No notifications yet.</div>{% endfor %}</div>
 {% endblock %}
