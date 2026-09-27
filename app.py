@@ -29,6 +29,7 @@ from db import (
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
     verify_activation_code, revoke_device_credentials_for_user, revoke_device_credentials_for_school,
+    generate_signup_code, verify_signup_code,
     TIMEZONE_CHOICES, RESULT_HEADER_LAYOUTS,
 )
 import datetime
@@ -234,22 +235,18 @@ def active_role_assignments(conn, user_id, school_id):
 
 def user_has_permission(conn, user_id, school_id, permission, school_level=None, class_id=None, subject_id=None):
     rows = active_role_assignments(conn, user_id, school_id)
+    matched=[]
     for ra in rows:
-        if school_level and ra["school_level"] not in ("All", school_level):
-            continue
-        if class_id and ra["class_id"] and int(ra["class_id"]) != int(class_id):
-            continue
-        if subject_id and ra["subject_id"] and int(ra["subject_id"]) != int(subject_id):
-            continue
-        p = conn.execute(
-            "SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",
-            (ra["id"], permission)
-        ).fetchone()
-        if p:
-            return True
-    # Legacy admin/sub-admin remain functional while assignments are being adopted.
-    if permission == "view" and session.get("role") in ("admin","sub_admin","teacher"):
-        return True
+        if school_level and ra["school_level"] not in ("All", school_level): continue
+        if class_id and ra["class_id"] and int(ra["class_id"]) != int(class_id): continue
+        if subject_id and ra["subject_id"] and int(ra["subject_id"]) != int(subject_id): continue
+        matched.append(ra)
+    # Explicit DENY always overrides ALLOW.
+    for ra in matched:
+        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=0 LIMIT 1",(ra["id"],permission)).fetchone(): return False
+    for ra in matched:
+        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",(ra["id"],permission)).fetchone(): return True
+    if permission == "view" and session.get("role") in ("admin","sub_admin","teacher"): return True
     return session.get("role") == "admin"
 
 def role_scope_label(row):
@@ -264,20 +261,25 @@ def role_scope_label(row):
 
 # ---------- Scoped authorization helpers ----------
 def can_access_scope(user_id, school_id, permission, school_level=None, department=None, class_id=None, class_arm=None, subject_id=None):
-    """Server-side scope check; client-supplied tenant IDs are never trusted."""
+    """Server-side scope check; tenant/client IDs are never trusted."""
     conn=get_db()
-    if school_id != current_school_id() and session.get("role") != "admin":
-        conn.close(); return False
-    if session.get("role") == "admin":
-        conn.close(); return True
-    for a in active_role_assignments(conn,user_id,school_id):
+    if school_id != current_school_id() and session.get("role") != "admin": conn.close(); return False
+    assignments=active_role_assignments(conn,user_id,school_id)
+    for a in assignments:
         if school_level and a["school_level"] not in ("All",school_level): continue
         if department and a["department"] and a["department"] != department: continue
         if class_id and a["class_id"] and int(a["class_id"]) != int(class_id): continue
         if class_arm and a["class_arm"] and a["class_arm"] != class_arm: continue
         if subject_id and a["subject_id"] and int(a["subject_id"]) != int(subject_id): continue
-        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",(a["id"],permission)).fetchone():
-            conn.close(); return True
+        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=0 LIMIT 1",(a["id"],permission)).fetchone(): conn.close(); return False
+    if session.get("role") == "admin" and not assignments: conn.close(); return True
+    for a in assignments:
+        if school_level and a["school_level"] not in ("All",school_level): continue
+        if department and a["department"] and a["department"] != department: continue
+        if class_id and a["class_id"] and int(a["class_id"]) != int(class_id): continue
+        if class_arm and a["class_arm"] and a["class_arm"] != class_arm: continue
+        if subject_id and a["subject_id"] and int(a["subject_id"]) != int(subject_id): continue
+        if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=1 LIMIT 1",(a["id"],permission)).fetchone(): conn.close(); return True
     conn.close(); return False
 
 def require_scoped_permission(permission, school_level=None, department=None, class_id=None, class_arm=None, subject_id=None):
@@ -460,7 +462,7 @@ def parent_child(conn, parent_id, student_id):
     return conn.execute(
         "SELECT s.*, c.name AS class_name, c.school_id FROM parent_students ps "
         "JOIN students s ON s.id=ps.student_id JOIN classes c ON c.id=s.class_id "
-        "WHERE ps.parent_id=? AND ps.school_id=? AND s.id=? AND s.is_active=1",
+        "WHERE ps.parent_id=? AND ps.school_id=? AND ps.status='verified' AND s.id=? AND s.is_active=1",
         (parent_id, current_school_id(), student_id),
     ).fetchone()
 
@@ -468,7 +470,7 @@ def parent_children(conn, parent_id):
     return conn.execute(
         "SELECT s.*, c.name AS class_name FROM parent_students ps "
         "JOIN students s ON s.id=ps.student_id JOIN classes c ON c.id=s.class_id "
-        "WHERE ps.parent_id=? AND ps.school_id=? AND s.is_active=1 ORDER BY s.first_name, s.last_name",
+        "WHERE ps.parent_id=? AND ps.school_id=? AND ps.status='verified' AND s.is_active=1 ORDER BY s.first_name, s.last_name",
         (parent_id, current_school_id()),
     ).fetchall()
 
@@ -481,12 +483,16 @@ def login_required(*roles):
             # A session must not outlive its account: if an admin deactivated
             # or deleted this user since they logged in, end it now.
             _conn = get_db()
-            _u = _conn.execute("SELECT is_active FROM users WHERE id=?", (session["user_id"],)).fetchone()
+            _u = _conn.execute("SELECT is_active,school_id,tenant_id FROM users WHERE id=?",(session["user_id"],)).fetchone()
+            _school=_conn.execute("SELECT id,tenant_id,activation_status,is_suspended,is_archived FROM schools WHERE id=?",(session.get("school_id"),)).fetchone()
+            tenant_ok=bool(_u and _school and _u["school_id"]==_school["id"] and _u["tenant_id"]==_school["tenant_id"] and session.get("tenant_id")==_school["tenant_id"])
             _conn.close()
             if _u is None or not _u["is_active"]:
                 session.clear()
                 flash("This account is no longer active. Contact your school admin.", "error")
                 return redirect(url_for("login"))
+            if not tenant_ok: session.clear(); flash("Your tenant session is invalid. Please sign in again.","error"); return redirect(url_for("login"))
+            if not _school or _school["activation_status"]!="active" or _school["is_suspended"] or _school["is_archived"]: session.clear(); flash("This school is not currently available.","error"); return redirect(url_for("login"))
             if roles and session.get("role") not in roles:
                 flash("You don't have access to that page.", "error")
                 return redirect(url_for("dashboard"))
@@ -497,6 +503,23 @@ def login_required(*roles):
 
 def current_school_id():
     return session.get("school_id")
+
+def current_tenant_id():
+    return session.get("tenant_id")
+
+def validate_password_policy(password, username=None):
+    errors=[]
+    if not password or len(password)<8 or len(password)>128: errors.append("Password must be 8–128 characters.")
+    if password and not re.search(r"[A-Z]", password): errors.append("Password must contain an uppercase letter.")
+    if password and not re.search(r"[a-z]", password): errors.append("Password must contain a lowercase letter.")
+    if password and not re.search(r"\d", password): errors.append("Password must contain a number.")
+    if password and not re.search(r"[^A-Za-z0-9]", password): errors.append("Password must contain a special character.")
+    if username and password and username.lower() in password.lower(): errors.append("Password must not contain your username.")
+    return errors
+
+def _security_audit_event(conn, action, details, school_id=None):
+    try: log_audit(conn, session.get("role", "system"), session.get("name", "System"), action, details=details, school_id=school_id)
+    except Exception: pass
 
 
 def offline_sync_existing_id(conn, token):
@@ -942,6 +965,13 @@ def index():
     return redirect(url_for("dashboard") if "user_id" in session else url_for("login"))
 
 
+@app.route("/admin/login")
+def admin_login(): return render_template("login.html", selected_portal="admin")
+@app.route("/staff/login")
+def staff_login(): return render_template("login.html", selected_portal="staff")
+@app.route("/parent/login")
+def parent_login(): return render_template("login.html", selected_portal="parent")
+
 @app.route("/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def login():
@@ -973,6 +1003,11 @@ def login():
                 flash("This school's subscription or trial has expired.", "error"); return render_template("login.html")
             if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
                 flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error"); return render_template("login.html")
+            verified_count=conn.execute("SELECT COUNT(*) AS n FROM parent_students WHERE parent_id=? AND school_id=? AND status='verified'",(parent["id"],parent["school_id"])).fetchone()["n"]
+            conn.close()
+            if verified_count == 0:
+                flash("Your parent account has no verified child relationship yet. Please complete child verification with the school.","error")
+                return render_template("login.html")
             session.clear(); session.permanent=True
             session["parent_id"] = parent["id"]; session["name"] = parent["name"]; session["role"] = "parent"
             session["school_id"] = parent["school_id"]; session["tenant_id"] = school["tenant_id"] if school and "tenant_id" in school.keys() else None
@@ -1022,6 +1057,8 @@ def login():
             session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
             if user["role"] == "admin" and "first_login_required" in user.keys() and user["first_login_required"]:
                 return redirect(url_for("admin_first_login"))
+            if user["role"] == "teacher" and "first_login_required" in user.keys() and user["first_login_required"]:
+                return redirect(url_for("staff_onboarding"))
             return redirect(url_for("dashboard"))
         conn.close()
         flash("Invalid username/email/phone or password.", "error")
@@ -1082,138 +1119,106 @@ POSITION_CHOICES = [
 @app.route("/register-school", methods=["GET", "POST"])
 @rate_limit(max_attempts=5, window_seconds=3600)
 def register_school():
-    if request.method == "POST":
-        school_name = request.form.get("school_name", "").strip()
-        registered_email = request.form.get("registered_email", "").strip()
-        name = request.form.get("name", "").strip()
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        confirm = request.form.get("confirm_password", "")
-        security_question = request.form.get("security_question", "")
-        security_answer = request.form.get("security_answer", "").strip()
-
-        errors = []
-        if not school_name or not name or not username or not password:
-            errors.append("Please fill in the school name, your name, username, and password.")
-        if not registered_email or "@" not in registered_email or "." not in registered_email.split("@")[-1]:
-            errors.append("Please provide a valid email address for the school.")
-        if len(password) < 6:
-            errors.append("Password must be at least 6 characters.")
-        if password != confirm:
-            errors.append("Password and confirmation don't match.")
-        if security_question not in SECURITY_QUESTIONS or not security_answer:
-            errors.append("Please choose a security question and answer, for password recovery later.")
-
+    if request.method=="POST":
+        school_name=request.form.get("school_name","").strip(); email=request.form.get("registered_email","").strip(); admin_name=request.form.get("admin_name","").strip(); username=request.form.get("admin_username","").strip()
+        errors=[]
+        if not school_name: errors.append("School name is required.")
+        if not email or "@" not in email: errors.append("Enter a valid school email address.")
+        if not admin_name: errors.append("Administrator name is required.")
+        if len(username)<4 or len(username)>30 or not re.fullmatch(r"[A-Za-z0-9_.]+",username): errors.append("Username must be 4–30 characters using letters, numbers, underscore or period.")
         if errors:
-            for e in errors:
-                flash(e, "error")
-            return render_template("register_school.html", security_questions=SECURITY_QUESTIONS)
-
-        conn = get_db()
+            for e in errors: flash(e,"error")
+            return render_template("register_school.html")
+        conn=get_db()
         try:
-            cur = conn.execute("INSERT INTO schools (name, registered_email) VALUES (?,?)",
-                                (school_name, registered_email))
-            school_id = cur.lastrowid
-            conn.execute(
-                "INSERT INTO users (school_id, name, username, password_hash, role, security_question, security_answer_hash) "
-                "VALUES (?,?,?,?, 'admin', ?, ?)",
-                (school_id, name, username, generate_password_hash(password),
-                 security_question, generate_password_hash(security_answer.lower())),
-            )
-            conn.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?,1)", (school_id, "2025/2026"))
-            session_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-            conn.execute("INSERT INTO terms (name, session_id, is_active) VALUES ('1st Term', ?, 1)", (session_id,))
-            conn.commit()
-            seed_school_defaults(conn, school_id)
-            conn.close()
-            flash(f"'{school_name}' has been created! Log in with your new admin account below.", "success")
-            return redirect(url_for("login"))
-        except sqlite3.IntegrityError as e:
-            conn.rollback()
-            conn.close()
-            if "users.username" in str(e):
-                flash("That username is already taken — please choose another.", "error")
-            else:
-                flash(f"Couldn't create your school: {e}", "error")
-        except Exception as e:
-            conn.rollback()
-            conn.close()
-            flash(f"Something went wrong creating your school: {e}", "error")
-
-    return render_template("register_school.html", security_questions=SECURITY_QUESTIONS)
+            tenant="TEN-"+secrets.token_hex(6).upper(); base=re.sub(r"[^A-Za-z0-9]+","",school_name.upper())[:18] or "SCHOOL"; code=base; n=2
+            while conn.execute("SELECT 1 FROM schools WHERE school_code=? OR tenant_id=?",(code,tenant)).fetchone(): code=base[:16]+str(n); n+=1
+            sid=conn.execute("INSERT INTO schools(name,registered_email,activation_status,tenant_id,school_code) VALUES(?,?,?,?,?)",(school_name,email,"pending",tenant,code)).lastrowid
+            conn.execute("INSERT INTO users(school_id,tenant_id,name,username,password_hash,role,first_login_required) VALUES(?,?,?,?,?,'admin',1)",(sid,tenant,admin_name,username,generate_password_hash(secrets.token_urlsafe(24))))
+            seed_school_defaults(conn,sid); _security_audit_event(conn,"school_activation_request",f"Requested school activation for {school_name}",sid); conn.commit(); conn.close(); flash(f"Activation requested. School ID: {code}. Tenant ID: {tenant}. An authorized Super Admin must issue the activation code.","success"); return redirect(url_for("activate_school"))
+        except sqlite3.IntegrityError:
+            conn.rollback(); conn.close(); flash("That administrator username is already in use.","error")
+    return render_template("register_school.html")
 
 
 @app.route("/register", methods=["GET", "POST"])
 @rate_limit(max_attempts=5, window_seconds=3600)
 def register():
-    conn = get_db()
-    schools = conn.execute("SELECT id, name FROM schools ORDER BY name").fetchall()
-
-    if request.method == "POST":
-        school_id = request.form.get("school_id", "")
-        school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
-        signup_enabled = bool(school and school["staff_signup_code"])
-
-        name = request.form.get("name", "").strip()
-        username = request.form.get("username", "").strip()
-        email = request.form.get("email", "").strip() or None
-        phone = request.form.get("phone", "").strip() or None
-        password = request.form.get("password", "")
-        confirm = request.form.get("confirm_password", "")
-        position = request.form.get("position", "")
-        signup_code = request.form.get("signup_code", "")
-        security_question = request.form.get("security_question", "")
-        security_answer = request.form.get("security_answer", "").strip()
-
-        errors = []
-        if not school:
-            errors.append("Please choose your school.")
-        elif not signup_enabled:
-            errors.append("Staff registration is currently turned off for that school. Ask your admin to enable it from School Profile.")
-        elif signup_code != school["staff_signup_code"]:
-            errors.append("That staff signup code is incorrect. Ask your admin for the current code.")
-
-        if not name or not username or not password:
-            errors.append("Please fill in your name, username, and password.")
-        if position not in dict(POSITION_CHOICES):
-            errors.append("Please choose your position.")
-        if len(password) < 6:
-            errors.append("Password must be at least 6 characters.")
-        if password != confirm:
-            errors.append("Password and confirmation don't match.")
-        if security_question not in SECURITY_QUESTIONS or not security_answer:
-            errors.append("Please choose a security question and provide an answer — this is how you'll recover your account if you forget your password.")
-        if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
-            errors.append("That email is already registered to another account.")
-        if phone and conn.execute("SELECT 1 FROM users WHERE phone=?", (phone,)).fetchone():
-            errors.append("That phone number is already registered to another account.")
-
+    conn=get_db()
+    if request.method=="POST":
+        username=request.form.get("username","").strip(); code=request.form.get("signup_code","").strip(); first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); other=request.form.get("other_names","").strip(); password=request.form.get("password",""); confirm=request.form.get("confirm_password","")
+        errors=[]
+        if len(username)<4 or len(username)>30 or not re.fullmatch(r"[A-Za-z0-9_.]+",username): errors.append("Username must be 4–30 characters using letters, numbers, underscore or period.")
+        if not first: errors.append("First name is required.")
+        if not last: errors.append("Surname is required.")
+        errors += validate_password_policy(password,username)
+        if password!=confirm: errors.append("Password and confirmation don't match.")
+        row,msg=verify_signup_code(conn,code,"staff",consume=False)
+        if not row: errors.append(msg)
+        elif conn.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)",(username,)).fetchone(): errors.append("This username is already in use.")
         if errors:
-            for e in errors:
-                flash(e, "error")
-        else:
-            try:
-                conn.execute(
-                    "INSERT INTO users (school_id, name, username, email, phone, password_hash, role, position, security_question, security_answer_hash) "
-                    "VALUES (?,?,?,?,?,?,'teacher',?,?,?)",
-                    (
-                        school["id"], name, username, email, phone, generate_password_hash(password), position,
-                        security_question, generate_password_hash(security_answer.lower()),
-                    ),
-                )
-                conn.commit()
-                conn.close()
-                flash("Your login has been created. You can now sign in below.", "success")
-                return redirect(url_for("login"))
-            except Exception:
-                flash("That username is already taken — please choose another.", "error")
+            for e in errors: flash(e,"error")
+            conn.close(); return render_template("register.html")
+        try:
+            full=" ".join(x for x in (first,last,other) if x)
+            conn.execute("INSERT INTO users(school_id,tenant_id,name,username,password_hash,role,first_login_required) VALUES(?,?,?,?,?,'teacher',1)",(row["school_id"],row["tenant_id"],full,username,generate_password_hash(password)))
+            verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True); _security_audit_event(conn,"staff_signup",f"Staff account created via signup code for {username}",row["school_id"]); conn.commit(); conn.close(); flash("Staff account created. Complete your staff profile after signing in.","success"); return redirect(url_for("login"))
+        except sqlite3.IntegrityError:
+            conn.rollback(); conn.close(); flash("We could not complete your registration. Please try again.","error")
+    conn.close(); return render_template("register.html")
 
-    conn.close()
-    return render_template(
-        "register.html", schools=schools,
-        position_choices=POSITION_CHOICES, security_questions=SECURITY_QUESTIONS,
-    )
 
+@app.route("/register/student", methods=["GET","POST"])
+@rate_limit(max_attempts=5, window_seconds=3600)
+def register_student():
+    conn=get_db()
+    if request.method=="POST":
+        code=request.form.get("signup_code","").strip(); first=request.form.get("first_name","").strip(); last=request.form.get("last_name","").strip(); other=request.form.get("other_names","").strip(); username=request.form.get("username","").strip(); password=request.form.get("password",""); confirm=request.form.get("confirm_password","")
+        errors=[]
+        if not first: errors.append("First name is required.")
+        if not last: errors.append("Surname is required.")
+        if len(username)<4: errors.append("Username must be at least 4 characters.")
+        errors += validate_password_policy(password,username)
+        if password!=confirm: errors.append("Password and confirmation don't match.")
+        row,msg=verify_signup_code(conn,code,"student",consume=False)
+        if not row: errors.append(msg)
+        elif row["class_id"] is None: errors.append("This code is not assigned to a class/arm.")
+        elif conn.execute("SELECT 1 FROM students WHERE LOWER(username)=LOWER(?)",(username,)).fetchone(): errors.append("This username is already in use.")
+        if errors:
+            for e in errors: flash(e,"error")
+            conn.close(); return render_template("register_student.html")
+        try:
+            adm=request.form.get("admission_no","").strip() or username
+            cur=conn.execute("INSERT INTO students(admission_no,first_name,last_name,other_names,class_id,username,password_hash,is_active,tenant_id) VALUES(?,?,?,?,?,?,?,1,?)",(adm,first,last,other or None,row["class_id"],username,generate_password_hash(password),row["tenant_id"]))
+            upsert_enrollment(conn,cur.lastrowid,row["class_id"]); verify_signup_code(conn,code,"student",school_id=row["school_id"],class_id=row["class_id"],consume=True); _security_audit_event(conn,"student_signup",f"Student account created via class/arm code for {username}",row["school_id"]); conn.commit(); conn.close(); flash("Student account created. You can now sign in.","success"); return redirect(url_for("student_login"))
+        except Exception:
+            conn.rollback(); conn.close(); flash("We could not complete your registration. Please check the signup code and details.","error")
+    conn.close(); return render_template("register_student.html")
+
+@app.route("/register/parent", methods=["GET","POST"])
+@rate_limit(max_attempts=5, window_seconds=3600)
+def register_parent():
+    conn=get_db()
+    if request.method=="POST":
+        first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); phone=request.form.get("phone","").strip(); email=request.form.get("email","").strip() or None; username=request.form.get("username","").strip() or None; password=request.form.get("password",""); confirm=request.form.get("confirm_password",""); code=request.form.get("link_code","").strip()
+        errors=[]
+        if not first: errors.append("First name is required.")
+        if not last: errors.append("Surname is required.")
+        if not phone: errors.append("Phone is required.")
+        if not email and not username: errors.append("Email or username is required.")
+        errors += validate_password_policy(password,username or email or "")
+        if password!=confirm: errors.append("Password and confirmation don't match.")
+        row,msg=verify_signup_code(conn,code,"parent_link",consume=False)
+        if not row: errors.append(msg)
+        if errors:
+            for e in errors: flash(e,"error")
+            conn.close(); return render_template("register_parent.html")
+        try:
+            ident=username or email; cur=conn.execute("INSERT INTO parent_accounts(school_id,tenant_id,name,username,email,phone,password_hash,is_active) VALUES(?,?,?,?,?,?,?,1)",(row["school_id"],row["tenant_id"],f"{first} {last}",ident,email,phone,generate_password_hash(password))); pid=cur.lastrowid
+            conn.execute("INSERT INTO parent_students(parent_id,student_id,school_id,tenant_id,status) VALUES(?,?,?,?,'pending')",(pid,row["student_id"],row["school_id"],row["tenant_id"])); verify_signup_code(conn,code,"parent_link",school_id=row["school_id"],student_id=row["student_id"],consume=True); _security_audit_event(conn,"parent_signup","Parent account created with pending child link",row["school_id"]); conn.commit(); conn.close(); flash("Parent account created. Your child link must be verified by the school.","success"); return redirect(url_for("login"))
+        except Exception:
+            conn.rollback(); conn.close(); flash("We could not complete your registration. Please try again.","error")
+    conn.close(); return render_template("register_parent.html")
 
 @app.route("/recover", methods=["GET", "POST"])
 @rate_limit(max_attempts=5, window_seconds=600)
@@ -1995,6 +2000,22 @@ def school_readiness_checks(conn, school_id):
     return checks, all(done for _, done in checks)
 
 
+@app.route("/staff/onboarding", methods=["GET","POST"])
+@login_required("teacher")
+def staff_onboarding():
+    conn=get_db(); uid=session["user_id"]; user=conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?",(uid,current_school_id(),current_tenant_id())).fetchone()
+    if not user: conn.close(); session.clear(); return redirect(url_for("login"))
+    if request.method=="POST":
+        first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); other=request.form.get("other_names","").strip()
+        if not first or not last: flash("First name and surname are required.","error")
+        else:
+            vals={"name":" ".join(x for x in (first,last,other) if x),"email":request.form.get("email","").strip() or None,"phone":request.form.get("phone","").strip() or None,"first_login_required":0,"first_login_completed_at":datetime.datetime.utcnow().isoformat(timespec="seconds")}
+            for col in ("address","date_of_birth","gender","qualifications"):
+                if col in user.keys(): vals[col]=request.form.get(col,"").strip() or None
+            conn.execute(f"UPDATE users SET {', '.join(k+'=?' for k in vals)} WHERE id=?",list(vals.values())+[uid]); conn.commit(); conn.close(); flash("Staff profile saved.","success"); return redirect(url_for("dashboard"))
+    conn.close(); return render_template("staff_onboarding.html",user=user)
+
+
 @app.route("/admin/first-login", methods=["GET", "POST"])
 @login_required("admin")
 def admin_first_login():
@@ -2395,6 +2416,29 @@ def delete_class_subject(cs_id):
     return redirect(url_for("admin_class_subjects"))
 
 
+@app.route("/admin/signup-codes",methods=["GET","POST"])
+@login_required("admin","sub_admin","teacher")
+def signup_codes():
+    conn=get_db(); sid=current_school_id(); role=session.get("role")
+    if request.method=="POST":
+        typ=request.form.get("code_type"); class_id=request.form.get("class_id") or None; student_id=request.form.get("student_id") or None; allowed=typ in ("staff","student","parent_link")
+        if typ in ("staff","parent_link") and role not in ("admin","sub_admin"): allowed=False
+        if typ=="student" and role=="teacher" and (not class_id or int(class_id) not in form_teacher_class_ids(conn,session["user_id"])): allowed=False
+        if not allowed: flash("You don't have permission to create that code.","error")
+        else:
+            try:
+                code,expires=generate_signup_code(conn,typ,sid,session.get("user_id"),int(class_id) if class_id else None,int(student_id) if student_id else None,max_usage=int(request.form.get("max_usage",1) or 1)); conn.commit(); flash(f"Secure code created: {code} (expires {format_dmy(expires)}).","success")
+            except Exception: conn.rollback(); flash("Could not create the signup code.","error")
+    codes=conn.execute("SELECT sc.*,c.name class_name,s.first_name,s.last_name FROM signup_codes sc LEFT JOIN classes c ON c.id=sc.class_id LEFT JOIN students s ON s.id=sc.student_id WHERE sc.school_id=? ORDER BY sc.id DESC",(sid,)).fetchall(); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); students=conn.execute("SELECT st.id,st.first_name,st.last_name,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name",(sid,)).fetchall(); conn.close(); return render_template("admin_signup_codes.html",codes=codes,classes=classes,students=students)
+
+@app.route("/admin/signup-codes/<int:code_id>/revoke",methods=["POST"])
+@login_required("admin","sub_admin","teacher")
+def revoke_signup_code(code_id):
+    conn=get_db(); row=conn.execute("SELECT * FROM signup_codes WHERE id=? AND school_id=?",(code_id,current_school_id())).fetchone()
+    if not row: conn.close(); flash("Signup code not found.","error"); return redirect(url_for("signup_codes"))
+    if session.get("role") not in ("admin","sub_admin") and row["class_id"] not in form_teacher_class_ids(conn,session["user_id"]): conn.close(); flash("You don't have permission to revoke this code.","error"); return redirect(url_for("signup_codes"))
+    conn.execute("UPDATE signup_codes SET status='revoked',revoked_at=CURRENT_TIMESTAMP,revoked_by=? WHERE id=?",(session.get("user_id"),code_id)); conn.commit(); conn.close(); flash("Signup code revoked.","success"); return redirect(url_for("signup_codes"))
+
 @app.route("/admin/students", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_students():
@@ -2604,7 +2648,7 @@ def admin_parent_create():
     existing = conn.execute("SELECT id FROM parent_accounts WHERE school_id=? AND username=?", (school_id, username)).fetchone()
     if existing:
         conn.close(); flash("That parent username already exists in this school.", "error"); return redirect(url_for("admin_parents"))
-    cur = conn.execute("INSERT INTO parent_accounts (school_id,name,username,email,phone,password_hash) VALUES (?,?,?,?,?,?)", (school_id,name,username,email,phone,generate_password_hash(password)))
+    cur = conn.execute("INSERT INTO parent_accounts (school_id,tenant_id,name,username,email,phone,password_hash) VALUES (?,?,?,?,?,?,?)", (school_id,current_tenant_id(),name,username,email,phone,generate_password_hash(password)))
     parent_id = cur.lastrowid
     # Link all active children that share this guardian's phone/email/name, without crossing tenants.
     if phone or email:
@@ -2638,6 +2682,40 @@ def admin_parent_toggle(parent_id):
         conn.close(); flash("Parent account not found.","error"); return redirect(url_for("admin_parents"))
     conn.execute("UPDATE parent_accounts SET is_active=? WHERE id=?", (0 if row["is_active"] else 1,parent_id)); conn.commit(); conn.close()
     flash(f"Parent account {'activated' if not row['is_active'] else 'deactivated'}.","success"); return redirect(url_for("admin_parents"))
+
+@app.route("/admin/parents/links")
+@login_required("admin","sub_admin")
+def admin_parent_links():
+    conn=get_db(); rows=conn.execute("SELECT ps.*,p.name parent_name,p.username,s.first_name,s.last_name,c.name class_name FROM parent_students ps JOIN parent_accounts p ON p.id=ps.parent_id JOIN students s ON s.id=ps.student_id JOIN classes c ON c.id=s.class_id WHERE ps.school_id=? ORDER BY ps.status,p.name",(current_school_id(),)).fetchall(); conn.close(); return render_template("admin_parent_links.html",links=rows)
+
+@app.route("/admin/parents/links/<int:link_id>/<action>",methods=["POST"])
+@login_required("admin","sub_admin")
+def admin_parent_link_action(link_id,action):
+    if action not in ("verify","reject","suspend","revoke"): flash("Invalid relationship action.","error"); return redirect(url_for("admin_parent_links"))
+    conn=get_db(); row=conn.execute("SELECT * FROM parent_students WHERE id=? AND school_id=?",(link_id,current_school_id())).fetchone()
+    if not row: conn.close(); flash("Parent-child relationship not found.","error"); return redirect(url_for("admin_parent_links"))
+    status={"verify":"verified","reject":"rejected","suspend":"suspended","revoke":"revoked"}[action]; conn.execute("UPDATE parent_students SET status=?,verified_at=CASE WHEN ?='verified' THEN CURRENT_TIMESTAMP ELSE verified_at END,verified_by=CASE WHEN ?='verified' THEN ? ELSE verified_by END,revoked_at=CASE WHEN ? IN ('revoke','suspend') THEN CURRENT_TIMESTAMP ELSE revoked_at END WHERE id=?",(status,status,status,session.get("user_id"),status,link_id)); _security_audit_event(conn,"parent_link_changed",f"Parent-child link {link_id}: {status}",current_school_id()); conn.commit(); conn.close(); flash(f"Parent-child relationship {status}.","success"); return redirect(url_for("admin_parent_links"))
+
+@app.route("/parent/link-child",methods=["GET","POST"])
+@parent_login_required
+def parent_link_child():
+    conn=get_db(); pid=session["parent_id"]
+    if request.method=="POST":
+        code=request.form.get("link_code","").strip(); row,msg=verify_signup_code(conn,code,"parent_link",school_id=current_school_id(),consume=False)
+        if not row: flash(msg,"error")
+        else:
+            ex=conn.execute("SELECT id,status FROM parent_students WHERE parent_id=? AND student_id=? AND school_id=?",(pid,row["student_id"],current_school_id())).fetchone()
+            if ex and ex["status"] in ("verified","pending"): flash("This student is already linked to your account.","info")
+            else:
+                conn.execute("INSERT INTO parent_students(parent_id,student_id,school_id,tenant_id,status) VALUES(?,?,?,?, 'pending') ON CONFLICT(parent_id,student_id) DO UPDATE SET status='pending',revoked_at=NULL",(pid,row["student_id"],current_school_id(),current_tenant_id())); verify_signup_code(conn,code,"parent_link",school_id=current_school_id(),student_id=row["student_id"],consume=True); conn.commit(); flash("Child link submitted for school verification.","success")
+    conn.close(); return render_template("parent_link_child.html")
+
+@app.route("/parent/children/<int:student_id>/remove",methods=["POST"])
+@parent_login_required
+def parent_remove_child(student_id):
+    conn=get_db(); row=conn.execute("SELECT id FROM parent_students WHERE parent_id=? AND student_id=? AND school_id=?",(session["parent_id"],student_id,current_school_id())).fetchone()
+    if not row: conn.close(); flash("This child is not linked to your account.","error"); return redirect(url_for("parent_children_page"))
+    conn.execute("UPDATE parent_students SET status='revoked',revoked_at=CURRENT_TIMESTAMP WHERE id=?",(row["id"],)); conn.commit(); conn.close(); flash("Child relationship removed. Student records were preserved.","success"); return redirect(url_for("parent_children_page"))
 
 @app.route("/parent/ai-consent/<int:student_id>",methods=["GET","POST"])
 @parent_login_required
@@ -5767,6 +5845,8 @@ def student_login():
             session["student_id"] = student["id"]
             session["role"] = "student"
             session["school_id"] = school["id"] if school else None
+            session["tenant_id"] = school["tenant_id"] if school else None
+            session["school_code"] = school["school_code"] if school else None
             session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
             return redirect(url_for("student_dashboard"))
         conn.close()

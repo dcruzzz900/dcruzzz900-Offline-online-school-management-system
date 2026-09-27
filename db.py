@@ -1696,6 +1696,30 @@ def migration_048_ai_layer(conn):
         conn.execute("INSERT OR IGNORE INTO school_ai_settings(school_id) VALUES (?)",(row["id"],))
 
 
+
+def migration_051_registration_security_spec(conn):
+    if table_exists(conn,"activation_codes"):
+        for col,typ in [("max_usage","INTEGER DEFAULT 1"),("usage_count","INTEGER DEFAULT 0"),("status","TEXT DEFAULT 'active'"),("revoked_at","TEXT"),("revoked_by","INTEGER")]: ensure_column(conn,"activation_codes",col,typ)
+        conn.execute("UPDATE activation_codes SET usage_count=CASE WHEN used_at IS NOT NULL THEN 1 ELSE 0 END WHERE usage_count IS NULL")
+    for col,typ in [("address","TEXT"),("date_of_birth","TEXT"),("gender","TEXT"),("qualifications","TEXT"),("phone2","TEXT")]:
+        if table_exists(conn,"users"): ensure_column(conn,"users",col,typ)
+    direct=["users","classes","subjects","sessions","grading_config","grade_scale","skill_traits","materials","staff_attendance","attendance_records","timetable_periods","timetable_entries","role_assignments","notifications","device_credentials","sync_conflicts","sync_log","deferred_actions","student_term_info","parent_accounts","parent_students","parent_teacher_messages","parent_consent_events","school_ai_settings","student_ai_consent","ai_outputs","ai_audit_log"]
+    for table in direct:
+        if table_exists(conn,table) and "school_id" in column_names(conn,table):
+            ensure_column(conn,table,"tenant_id","TEXT"); conn.execute(f"UPDATE {table} SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id={table}.school_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute(f"CREATE TRIGGER IF NOT EXISTS trg_{table}_tenant_stamp AFTER INSERT ON {table} FOR EACH ROW WHEN NEW.tenant_id IS NULL OR NEW.tenant_id='' BEGIN UPDATE {table} SET tenant_id=(SELECT tenant_id FROM schools WHERE id=NEW.school_id) WHERE rowid=NEW.rowid; END")
+    if table_exists(conn,"students"):
+        ensure_column(conn,"students","tenant_id","TEXT"); conn.execute("UPDATE students SET tenant_id=(SELECT s.tenant_id FROM classes c JOIN schools s ON s.id=c.school_id WHERE c.id=students.class_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute("CREATE TRIGGER IF NOT EXISTS trg_students_tenant_stamp AFTER INSERT ON students FOR EACH ROW WHEN NEW.tenant_id IS NULL OR NEW.tenant_id='' BEGIN UPDATE students SET tenant_id=(SELECT s.tenant_id FROM classes c JOIN schools s ON s.id=c.school_id WHERE c.id=NEW.class_id) WHERE rowid=NEW.rowid; END")
+    if table_exists(conn,"scores"):
+        ensure_column(conn,"scores","tenant_id","TEXT"); conn.execute("UPDATE scores SET tenant_id=(SELECT s.tenant_id FROM students st JOIN classes c ON c.id=st.class_id JOIN schools s ON s.id=c.school_id WHERE st.id=scores.student_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute("CREATE TRIGGER IF NOT EXISTS trg_scores_tenant_stamp AFTER INSERT ON scores FOR EACH ROW WHEN NEW.tenant_id IS NULL OR NEW.tenant_id='' BEGIN UPDATE scores SET tenant_id=(SELECT s.tenant_id FROM students st JOIN classes c ON c.id=st.class_id JOIN schools s ON s.id=c.school_id WHERE st.id=NEW.student_id) WHERE rowid=NEW.rowid; END")
+    if table_exists(conn,"enrollments"):
+        ensure_column(conn,"enrollments","tenant_id","TEXT"); conn.execute("UPDATE enrollments SET tenant_id=(SELECT s.tenant_id FROM classes c JOIN schools s ON s.id=c.school_id WHERE c.id=enrollments.class_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute("CREATE TRIGGER IF NOT EXISTS trg_enrollments_tenant_stamp AFTER INSERT ON enrollments FOR EACH ROW WHEN NEW.tenant_id IS NULL OR NEW.tenant_id='' BEGIN UPDATE enrollments SET tenant_id=(SELECT s.tenant_id FROM classes c JOIN schools s ON s.id=c.school_id WHERE c.id=NEW.class_id) WHERE rowid=NEW.rowid; END")
+    if table_exists(conn,"score_history"):
+        ensure_column(conn,"score_history","tenant_id","TEXT"); conn.execute("UPDATE score_history SET tenant_id=(SELECT s.tenant_id FROM students st JOIN classes c ON c.id=st.class_id JOIN schools s ON s.id=c.school_id WHERE st.id=score_history.student_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute("CREATE TRIGGER IF NOT EXISTS trg_score_history_tenant_stamp AFTER INSERT ON score_history FOR EACH ROW WHEN NEW.tenant_id IS NULL OR NEW.tenant_id='' BEGIN UPDATE score_history SET tenant_id=(SELECT s.tenant_id FROM students st JOIN classes c ON c.id=st.class_id JOIN schools s ON s.id=c.school_id WHERE st.id=NEW.student_id) WHERE rowid=NEW.rowid; END")
+    conn.execute("""CREATE TABLE IF NOT EXISTS signup_codes (id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT NOT NULL UNIQUE,code_type TEXT NOT NULL CHECK(code_type IN ('staff','student','parent_link')),school_id INTEGER NOT NULL,tenant_id TEXT NOT NULL,class_id INTEGER,student_id INTEGER,created_by INTEGER,created_at TEXT DEFAULT CURRENT_TIMESTAMP,expires_at TEXT,max_usage INTEGER DEFAULT 1,usage_count INTEGER DEFAULT 0,status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','expired','exhausted','revoked','suspended')),last_used_at TEXT,revoked_at TEXT,revoked_by INTEGER,FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_codes_school_type ON signup_codes(school_id,code_type,status)")
+    if table_exists(conn,"parent_students"):
+        ensure_column(conn,"parent_students","tenant_id","TEXT"); ensure_column(conn,"parent_students","status","TEXT NOT NULL DEFAULT 'pending'"); ensure_column(conn,"parent_students","verified_at","TEXT"); ensure_column(conn,"parent_students","verified_by","INTEGER"); ensure_column(conn,"parent_students","revoked_at","TEXT"); conn.execute("UPDATE parent_students SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=parent_students.school_id) WHERE tenant_id IS NULL OR tenant_id='' "); conn.execute("UPDATE parent_students SET status='verified' WHERE status IS NULL OR status='' ")
+
 def migration_049_school_theme(conn):
     """Dashboard theme tokens are per-school and safe to change without affecting data."""
     for col, typ in [
@@ -2062,7 +2086,7 @@ def generate_activation_code(conn, school_id, created_by=None, expiry_hours=ACTI
     code = f"{_secrets.randbelow(1000000):06d}"
     expires_at = (_dt.datetime.utcnow() + _dt.timedelta(hours=expiry_hours)).isoformat(timespec="seconds")
     conn.execute(
-        "INSERT INTO activation_codes (school_id, code, expires_at, created_by) VALUES (?,?,?,?)",
+        "INSERT INTO activation_codes (school_id, code, expires_at, created_by, max_usage, usage_count, status) VALUES (?,?,?,?,1,0,'active')",
         (school_id, code, expires_at, created_by),
     )
     return code, expires_at
@@ -2089,7 +2113,7 @@ def current_activation_code_status(conn, school_id):
 def verify_activation_code(conn, school_id, submitted_code):
     """Single-use, time-limited, school-specific check. Returns (ok, reason)."""
     row = conn.execute(
-        "SELECT * FROM activation_codes WHERE school_id=? AND used_at IS NULL AND invalidated=0 "
+        "SELECT * FROM activation_codes WHERE school_id=? AND used_at IS NULL AND invalidated=0 AND COALESCE(status,'active')='active' AND COALESCE(usage_count,0)<COALESCE(max_usage,1) "
         "ORDER BY id DESC LIMIT 1",
         (school_id,),
     ).fetchone()
@@ -2099,7 +2123,7 @@ def verify_activation_code(conn, school_id, submitted_code):
         return False, "This activation code has expired. Ask the Super Admin to regenerate it."
     if submitted_code.strip() != row["code"]:
         return False, "Incorrect activation code."
-    conn.execute("UPDATE activation_codes SET used_at=? WHERE id=?",
+    conn.execute("UPDATE activation_codes SET used_at=?,usage_count=1,status='exhausted' WHERE id=?",
                  (_dt.datetime.utcnow().isoformat(timespec="seconds"), row["id"]))
     return True, "ok"
 
@@ -2524,6 +2548,7 @@ def migration_050_parent_portal(conn):
         CREATE TABLE IF NOT EXISTS parent_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
             name TEXT NOT NULL,
             username TEXT NOT NULL,
             email TEXT,
@@ -2542,6 +2567,11 @@ def migration_050_parent_portal(conn):
             parent_id INTEGER NOT NULL,
             student_id INTEGER NOT NULL,
             school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            verified_at TEXT,
+            verified_by INTEGER,
+            revoked_at TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(parent_id) REFERENCES parent_accounts(id) ON DELETE CASCADE,
             FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE,
@@ -2586,3 +2616,5 @@ def migration_050_parent_portal(conn):
     """)
 
 STEPS.append(("parent_portal", migration_050_parent_portal))
+
+STEPS.append(("registration_security_v52_finalize", migration_051_registration_security_spec))
