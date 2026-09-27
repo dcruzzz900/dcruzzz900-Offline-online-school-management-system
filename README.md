@@ -128,3 +128,7 @@ Adds controlled role assignments for Nursery, Primary and Secondary schools.
 Super Admin can assign/revoke roles platform-wide. School Admin can assign/revoke
 school roles except School Admin itself. Assignments carry school/tenant and level
 scope, and role changes are written to a dedicated audit table.
+
+## v52 Production Candidate
+
+See `FINAL_RELEASE_CHECKLIST.md` and `RELEASE_NOTES_V52.md` before deploying to Railway.

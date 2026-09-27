@@ -7857,9 +7857,10 @@ def ai_analyze():
 @app.route("/ai/output/<int:output_id>")
 @login_required("admin","sub_admin","teacher")
 def ai_output_detail(output_id):
-    conn=get_db(); out=conn.execute("SELECT * FROM ai_outputs WHERE id=? AND school_id=?",(output_id,current_school_id())).fetchone(); student=conn.execute("SELECT st.*,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(out["student_id"],current_school_id())).fetchone() if out and out["student_id"] else None; conn.close()
+    conn=get_db(); out=conn.execute("SELECT * FROM ai_outputs WHERE id=? AND school_id=?",(output_id,current_school_id())).fetchone();
     if not out:
         conn.close(); flash("AI output not found.","error"); return redirect(url_for("ai_command_center"))
+    student=conn.execute("SELECT st.*,c.name class_name FROM students st JOIN classes c ON c.id=st.class_id WHERE st.id=? AND c.school_id=?",(out["student_id"],current_school_id())).fetchone() if out["student_id"] else None
     if out["student_id"] and not _ai_teacher_allowed(conn,out["student_id"]):
         conn.close(); flash("You are not authorized to view this AI output.","error"); return redirect(url_for("ai_command_center"))
     conn.close()
@@ -7956,20 +7957,26 @@ def ai_result_assistant():
                     answer=answer or ["No students met the current decline threshold of 10 points."]
             else:
                 answer=["Try: Which subjects performed poorly?","Which classes improved?","Who scored below 40 in Mathematics?","Which students have declining performance?"]
-            _ai_log(conn,"result_assistant","query",scope="school",request_summary=query,output_summary="; ".join(answer))
+            # Keep audit logs useful without storing the user's full natural-language query.
+            query_category=("threshold" if "below" in q else "subject_performance" if "poor" in q and "subject" in q else "class_improvement" if "class" in q and "improv" in q else "decline" if ("declin" in q or "drop" in q) else "unsupported")
+            _ai_log(conn,"result_assistant","query",scope="school",request_summary=f"category={query_category}",output_summary="; ".join(answer)[:1500])
     conn.close(); return render_template("ai_result_assistant.html",query=query,answer=answer,term=term)
 
 @app.route("/ai/learning-materials",methods=["GET","POST"])
 @login_required("admin","sub_admin","teacher")
 def ai_learning_materials():
-    material=None
+    conn=get_db(); sid=current_school_id(); settings=_ai_settings(conn,sid); material=None
     if request.method=="POST":
         subject=request.form.get("subject","General").strip(); topic=request.form.get("topic","").strip(); level=request.form.get("level","Secondary").strip()
-        if topic:
+        if not (settings["enabled"] and settings["learning_materials"]):
+            flash("AI Learning Materials is disabled by your school administrator.","error")
+        elif topic:
             prompt=json.dumps({"subject":subject,"topic":topic,"level":level,"requirements":["lesson notes","worked examples","5 revision questions","5 MCQs with answers","brief explanations"]})
             generated,_=ai_provider_generate("You are an educational content assistant. Create age-appropriate school learning material. Do not include unsafe or sensitive content. Return structured plain text with headings, examples, revision questions, MCQs, answers and explanations.",prompt,max_tokens=1200)
-            material={"subject":subject,"topic":topic,"level":level,"notes":generated or f"{topic}: key concepts, definitions and worked examples for {level} learners.","questions":[],"answers":[]}
-    return render_template("ai_learning_materials.html",material=material)
+            text=generated or f"{topic}: key concepts, definitions and worked examples for {level} learners."
+            material={"subject":subject,"topic":topic,"level":level,"notes":text,"questions":[],"answers":[]}
+            _ai_log(conn,"learning_materials","generated",scope="school",request_summary=f"{subject} / {topic} / {level}",output_summary=text[:1000])
+    conn.close(); return render_template("ai_learning_materials.html",material=material,enabled=bool(settings["enabled"] and settings["learning_materials"]))
 
 @app.route("/student/ai-tutor",methods=["GET","POST"])
 def student_ai_tutor():
