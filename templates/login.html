@@ -1,175 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Welcome Back · My School Hub{% endblock %}
 {% block content %}
-<div class="auth-page auth-landing" id="authPage">
-  <section class="auth-hero" id="welcomePanel" aria-labelledby="welcomeTitle">
-    <div class="auth-hero-inner">
-      <div class="brand auth-brand">
-        <div class="brand-mark">◆</div>
-        <div><b>My School Hub</b><small>One secure hub for your school</small></div>
-      </div>
-
-      <div class="welcome-copy">
-        <span class="eyebrow auth-eyebrow">School Results Management</span>
-        <h1 id="welcomeTitle">Welcome Back</h1>
-        <p>Choose your portal to continue. Your login screen will appear after you select an action.</p>
-      </div>
-
-      <div class="role-cards" aria-label="Choose your portal">
-        <button type="button" class="portal-choice" data-role="admin" aria-controls="loginPanel">
-          <span class="role-icon">◉</span><b>Admin</b><small>Manage school, users, results and settings</small>
-        </button>
-        <button type="button" class="portal-choice" data-role="staff" aria-controls="loginPanel">
-          <span class="role-icon">♙</span><b>Staff</b><small>Teaching, attendance, results and resources</small>
-        </button>
-        <button type="button" class="portal-choice" data-role="student" aria-controls="loginPanel">
-          <span class="role-icon">🎓</span><b>Student</b><small>Results, attendance and learning</small>
-        </button>
-        <button type="button" class="portal-choice" data-role="parent" aria-controls="loginPanel">
-          <span class="role-icon">👥</span><b>Parent</b><small>Monitor your verified children</small>
-        </button>
-      </div>
-
-      <div class="auth-links" aria-label="Registration options">
-        <a class="register-link" href="{{ url_for('register_school') }}">🏫 New School Signup</a>
-        <a class="register-link" href="{{ url_for('register') }}">👤 Staff Signup</a>
-        <a class="register-link" href="{{ url_for('register_student') }}">🎓 Student Signup</a>
-        <a class="register-link" href="{{ url_for('register_parent') }}">👥 Parent Signup</a>
+<div class="hub-auth-screen">
+  <section class="hub-welcome-card" aria-label="My School Hub welcome">
+    <div class="hub-hero">
+      <div class="hub-brand"><div class="hub-logo">◆</div><div><strong>My School Hub</strong><span>LEARN · GROW · SUCCEED</span></div></div>
+      <div class="hub-welcome-copy">
+        <div class="hub-eyebrow">SECURE SCHOOL PORTAL</div>
+        <h1>Welcome Back</h1>
+        <p>Choose your portal and sign in securely.</p>
       </div>
     </div>
-  </section>
-
-  <section class="auth-card auth-login-panel" id="loginPanel" aria-labelledby="loginTitle" aria-hidden="true">
-    <button type="button" class="welcome-back-btn" id="backToWelcome" aria-label="Back to Welcome Back screen">← Back</button>
-    <div class="auth-logo">
-      <div class="brand-mark">◆</div>
-      <div><b>{{ portal_school.name if portal_school else 'My School Hub' }}</b><small>{{ school_tagline }}</small></div>
-    </div>
-    <span class="eyebrow auth-panel-eyebrow" id="portalLabel">Secure Portal</span>
-    <h2 id="loginTitle">Login to Your Account</h2>
-    <p id="loginDescription">Select a portal from Welcome Back to continue.</p>
-
-    <div class="tenant-chip">🔐 School data is isolated by tenant</div>
-
-    <div id="credentialLogin">
-      <form method="POST" id="credentialForm">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="portal_role" id="portalRole" value="staff">
-        <label>School ID / Tenant ID <span class="optional">optional</span>
-          <input name="school_code" placeholder="School ID or Tenant ID">
-        </label>
-        <label>Username, Email or Phone
-          <input name="username" id="usernameField" required autofocus>
-        </label>
-        <label>Password
-          <input type="password" name="password" required>
-        </label>
-        <button class="btn auth-submit" type="submit" id="loginButton">Login →</button>
-      </form>
-    </div>
-
-    <div id="dedicatedPortal" class="dedicated-portal" hidden>
-      <div class="dedicated-icon" id="dedicatedIcon">🎓</div>
-      <h3 id="dedicatedTitle">Student Portal</h3>
-      <p id="dedicatedDescription">Students use the dedicated student portal for secure access to results, attendance and learning.</p>
-      <a class="btn auth-submit" id="dedicatedLink" href="{{ url_for('student_login') }}">Continue to Student Login →</a>
-    </div>
-
-    <div class="login-footer-links">
-      <a class="secondary-action" href="{{ url_for('student_login') }}">Student Login →</a>
-      <a class="secondary-action" href="{{ url_for('parent_login') }}">Parent Login →</a>
-      <a class="secondary-action" href="{{ url_for('activate_school') }}">Activate Your School →</a>
+    <div class="hub-content">
+      <div class="hub-role-grid">
+        <button class="hub-role-card admin" type="button" data-role="admin"><span class="hub-role-icon">◉</span><span><strong>Admin</strong><small>Manage your school, staff and settings.</small></span><b>→</b></button>
+        <button class="hub-role-card staff" type="button" data-role="staff"><span class="hub-role-icon">♙</span><span><strong>Staff</strong><small>Access your work and school resources.</small></span><b>→</b></button>
+        <button class="hub-role-card student" type="button" data-role="student"><span class="hub-role-icon">🎓</span><span><strong>Student</strong><small>View your results, attendance and learning.</small></span><b>→</b></button>
+        <button class="hub-role-card parent" type="button" data-role="parent"><span class="hub-role-icon">👥</span><span><strong>Parent</strong><small>Stay connected with your child's progress.</small></span><b>→</b></button>
+      </div>
+      <div class="hub-register-panel">
+        <div><strong>New or Need to Register?</strong><span>Get started with your school or create your account.</span></div>
+        <div class="hub-register-grid">
+          <a href="{{ url_for('register_school') }}"><span>🏫</span><strong>New School Signup</strong><b>→</b></a>
+          <a href="{{ url_for('register') }}"><span>👤</span><strong>Staff Signup</strong><b>→</b></a>
+          <a href="{{ url_for('register_student') }}"><span>🎓</span><strong>Student Signup</strong><b>→</b></a>
+          <a href="{{ url_for('register_parent') }}"><span>👥</span><strong>Parent Signup</strong><b>→</b></a>
+        </div>
+      </div>
+      <div class="hub-footer"><span></span><strong>A Smarter Way to Manage Your School</strong><span></span></div>
     </div>
   </section>
 </div>
 
+<div class="hub-login-overlay" id="hubLoginOverlay" aria-hidden="true">
+  <div class="hub-login-dialog" role="dialog" aria-modal="true" aria-labelledby="hubLoginTitle">
+    <button class="hub-close" type="button" id="hubLoginClose" aria-label="Close login">×</button>
+    <div class="hub-dialog-brand"><div class="hub-logo small">◆</div><div><strong>My School Hub</strong><span>Secure portal access</span></div></div>
+    <div class="hub-login-heading"><span id="hubLoginIcon">◉</span><div><div class="hub-eyebrow">PORTAL LOGIN</div><h2 id="hubLoginTitle">Admin Login</h2><p id="hubLoginDescription">Sign in to manage your school.</p></div></div>
+    <div class="tenant-chip">🔐 School data is isolated by tenant</div>
+    <form method="POST" action="{{ url_for('login') }}" id="hubLoginForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="portal_role" id="hubPortalRole" value="{{ selected_portal or 'admin' }}">
+      <label>School ID / Tenant ID <span class="optional">optional</span><input name="school_code" placeholder="Enter School ID or Tenant ID"></label>
+      <label>Username, Email or Phone<input name="username" required autocomplete="username"></label>
+      <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+      <button class="hub-primary-btn" type="submit">Login <span>→</span></button>
+    </form>
+    <div class="hub-dialog-links"><a href="{{ url_for('register') }}">Need an account?</a><a href="{{ url_for('activate_school') }}">Activate Your School →</a></div>
+  </div>
+</div>
 <script>
-(function () {
-  const page = document.getElementById('authPage');
-  const panel = document.getElementById('loginPanel');
-  const roleButtons = document.querySelectorAll('.portal-choice');
-  const back = document.getElementById('backToWelcome');
-  const roleInput = document.getElementById('portalRole');
-  const portalLabel = document.getElementById('portalLabel');
-  const title = document.getElementById('loginTitle');
-  const description = document.getElementById('loginDescription');
-  const credentialLogin = document.getElementById('credentialLogin');
-  const dedicatedPortal = document.getElementById('dedicatedPortal');
-  const dedicatedIcon = document.getElementById('dedicatedIcon');
-  const dedicatedTitle = document.getElementById('dedicatedTitle');
-  const dedicatedDescription = document.getElementById('dedicatedDescription');
-  const dedicatedLink = document.getElementById('dedicatedLink');
-  const username = document.getElementById('usernameField');
-
-  const portalData = {
-    admin: {
-      label: 'Admin Portal',
-      title: 'Admin Login',
-      description: 'Sign in to manage your school, users, results, settings and administration.',
-      credential: true
-    },
-    staff: {
-      label: 'Staff Portal',
-      title: 'Staff Login',
-      description: 'Sign in to teaching, attendance, results, resources and staff tools.',
-      credential: true
-    },
-    student: {
-      label: 'Student Portal',
-      title: 'Student Portal',
-      description: 'Continue to the dedicated student portal for results, attendance and learning.',
-      credential: false,
-      icon: '🎓',
-      link: '{{ url_for("student_login") }}',
-      linkText: 'Continue to Student Login →'
-    },
-    parent: {
-      label: 'Parent Portal',
-      title: 'Parent Portal',
-      description: 'Continue to the dedicated parent portal to monitor your verified children.',
-      credential: false,
-      icon: '👥',
-      link: '{{ url_for("parent_login") }}',
-      linkText: 'Continue to Parent Login →'
-    }
-  };
-
-  function openPortal(role) {
-    const data = portalData[role] || portalData.staff;
-    roleButtons.forEach(btn => btn.classList.toggle('selected', btn.dataset.role === role));
-    page.classList.add('show-login');
-    panel.setAttribute('aria-hidden', 'false');
-    roleInput.value = role;
-    portalLabel.textContent = data.label;
-    title.textContent = data.title;
-    description.textContent = data.description;
-
-    if (data.credential) {
-      credentialLogin.hidden = false;
-      dedicatedPortal.hidden = true;
-      setTimeout(() => username && username.focus(), 250);
-    } else {
-      credentialLogin.hidden = true;
-      dedicatedPortal.hidden = false;
-      dedicatedIcon.textContent = data.icon;
-      dedicatedTitle.textContent = data.title;
-      dedicatedDescription.textContent = data.description;
-      dedicatedLink.href = data.link;
-      dedicatedLink.textContent = data.linkText;
-    }
-    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
-  function closePortal() {
-    page.classList.remove('show-login');
-    panel.setAttribute('aria-hidden', 'true');
-    roleButtons.forEach(btn => btn.classList.remove('selected'));
-  }
-
-  roleButtons.forEach(btn => btn.addEventListener('click', () => openPortal(btn.dataset.role)));
-  back.addEventListener('click', closePortal);
-  const serverRole = {{ (selected_portal or '')|tojson }};
-  if (serverRole && portalData[serverRole]) openPortal(serverRole);
+(function(){
+ const overlay=document.getElementById('hubLoginOverlay'), close=document.getElementById('hubLoginClose'), roleInput=document.getElementById('hubPortalRole'), title=document.getElementById('hubLoginTitle'), desc=document.getElementById('hubLoginDescription'), icon=document.getElementById('hubLoginIcon');
+ const data={admin:['Admin Login','Sign in to manage your school.','◉'],staff:['Staff Login','Sign in to access teaching, attendance and school resources.','♙'],parent:['Parent Login','Sign in to monitor your verified children.','👥']};
+ function openRole(role){
+   if(role==='student'){window.location.href='{{ url_for("student_login") }}';return;}
+   const d=data[role]||data.admin; roleInput.value=role; title.textContent=d[0]; desc.textContent=d[1]; icon.textContent=d[2]; overlay.classList.add('is-open'); overlay.setAttribute('aria-hidden','false'); setTimeout(()=>overlay.querySelector('input[name="username"]')?.focus(),80); document.body.classList.add('modal-open');
+ }
+ document.querySelectorAll('[data-role]').forEach(b=>b.addEventListener('click',()=>openRole(b.dataset.role)));
+ function closeModal(){overlay.classList.remove('is-open');overlay.setAttribute('aria-hidden','true');document.body.classList.remove('modal-open');}
+ close.addEventListener('click',closeModal); overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();}); document.addEventListener('keydown',e=>{if(e.key==='Escape'&&overlay.classList.contains('is-open'))closeModal();});
+ {% if selected_portal in ['admin','staff','parent'] %}openRole('{{ selected_portal }}');{% endif %}
 })();
 </script>
 {% endblock %}
