@@ -14,7 +14,11 @@ def test_uiux_static_audit_passes():
     refs = set()
     for p in (ROOT / 'templates').rglob('*.html'):
         refs.update(re.findall(r"url_for\(\s*['\"]([^'\"]+)", p.read_text(encoding='utf-8')))
-    assert sorted(r for r in refs if r not in endpoints and r != 'static') == []
+    # V38–V47 billing finalization routes live in a registered Flask blueprint.
+    blueprint = (ROOT / 'billing_finalization.py').read_text(encoding='utf-8')
+    blueprint_endpoints = set(re.findall(r'def ([A-Za-z_][A-Za-z0-9_]*)\(', blueprint))
+    refs = {r for r in refs if r not in endpoints and r != 'static' and not (r.startswith('billing_finalization.') and r.split('.',1)[1] in blueprint_endpoints)}
+    assert sorted(refs) == []
 
 def test_railway_start_command_is_gunicorn():
     text=(ROOT/'railway.json').read_text()
