@@ -59,7 +59,7 @@ STAFF_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "staff_photos")
 SIGNATURES_DIR = os.path.join(INSTANCE_DIR, "signatures")
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20MB upload limit (logo/CSV/materials)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # hard request ceiling; individual upload limits are enforced below
 
 # Trust one reverse-proxy hop for the real client IP (X-Forwarded-For),
 # since PythonAnywhere — and most hosts — put the app behind a proxy.
@@ -104,6 +104,8 @@ app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
 # directly (python app.py) or imported by a production server (e.g. the
 # WSGI file on PythonAnywhere, or gunicorn).
 init_db()
+from billing_finalization import billing_finalization_bp
+app.register_blueprint(billing_finalization_bp)
 
 
 # ---------- CSRF protection ----------
@@ -187,6 +189,24 @@ def _security_headers(response):
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
+
+# ---------- strict per-file upload limits ----------
+UPLOAD_LIMITS = {"passport": 500 * 1024, "signature": 500 * 1024, "learning_material": 1 * 1024 * 1024}
+
+def _file_size_bytes(file_storage):
+    if not file_storage or not getattr(file_storage, "filename", ""):
+        return 0
+    try:
+        pos = file_storage.stream.tell(); file_storage.stream.seek(0, os.SEEK_END); size = file_storage.stream.tell(); file_storage.stream.seek(pos); return int(size)
+    except Exception:
+        return 0
+
+def _reject_oversize(file_storage, kind):
+    limit = UPLOAD_LIMITS[kind]; size = _file_size_bytes(file_storage)
+    if size > limit:
+        label = {"passport":"Passport image", "signature":"Signature", "learning_material":"Learning material"}[kind]
+        return f"{label} must not exceed {'500 KB' if limit == 500 * 1024 else '1 MB'}."
+    return None
 
 # ---------- safe production error responses ----------
 @app.errorhandler(413)
@@ -407,9 +427,118 @@ def _load_portal_school():
         conn.close()
 
 
+def _public_auth_school(conn=None):
+    """Resolve the school used for public authentication branding.
+
+    The browser may supply a School ID/Tenant ID or a school-issued signup
+    code only as a selector. The actual branding record is always loaded from
+    the server-side schools table. A hostname/subdomain takes precedence.
+    Once authenticated, the session's school_id is the authoritative source.
+    """
+    if g.get("portal_school") is not None:
+        return g.portal_school
+    own_conn = conn is None
+    conn = conn or get_db()
+    try:
+        sid = session.get("school_id")
+        if sid:
+            school = conn.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
+            if school:
+                return school
+
+        school_code = (request.values.get("school_code") or "").strip()
+        if school_code:
+            return conn.execute(
+                "SELECT * FROM schools WHERE LOWER(school_code)=LOWER(?) OR LOWER(tenant_id)=LOWER(?) OR LOWER(school_id_public)=LOWER(?) LIMIT 1",
+                (school_code, school_code, school_code),
+            ).fetchone()
+
+        signup_code = (request.values.get("signup_code") or "").strip()
+        if signup_code and _table_exists_safe(conn, "signup_codes"):
+            row = conn.execute(
+                "SELECT sc.school_id FROM signup_codes sc JOIN schools s ON s.id=sc.school_id "
+                "WHERE sc.code=? AND sc.status='active' AND s.activation_status='active' "
+                "AND (sc.expires_at IS NULL OR sc.expires_at>CURRENT_TIMESTAMP) "
+                "AND COALESCE(sc.usage_count,0)<COALESCE(sc.max_usage,1) LIMIT 1",
+                (signup_code,),
+            ).fetchone()
+            if row:
+                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
+
+        recovery_user_id = session.get("recovery_user_id") or session.get("recovery_verified_user_id")
+        if recovery_user_id and _table_exists_safe(conn, "users"):
+            row = conn.execute("SELECT school_id FROM users WHERE id=?", (recovery_user_id,)).fetchone()
+            if row:
+                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
+
+        username = (request.values.get("username") or "").strip()
+        if username and _table_exists_safe(conn, "users"):
+            row = conn.execute("SELECT school_id FROM users WHERE username=? LIMIT 1", (username,)).fetchone()
+            if row:
+                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
+        return None
+    finally:
+        if own_conn:
+            conn.close()
+
+
+def _auth_branding_payload(school):
+    if not school:
+        return {
+            "school_name": "My School Hub", "logo_url": None, "branding": False,
+            "opacity": 0.0, "position": "center", "background_style": "plain",
+            "show_name": True,
+        }
+    logo = school["logo_filename"] if "logo_filename" in school.keys() else None
+    enabled = bool(school["auth_branding_enabled"] if "auth_branding_enabled" in school.keys() else 1)
+    active = str(school["activation_status"] or "").lower() == "active"
+    branding = bool(enabled and active and logo)
+    return {
+        "school_id": school["id"],
+        "school_name": school["name"],
+        "logo_url": url_for("portal_logo", school_id=school["id"]) if branding else None,
+        "branding": branding,
+        "opacity": float(school["auth_logo_opacity"] if "auth_logo_opacity" in school.keys() and school["auth_logo_opacity"] is not None else 0.10),
+        "position": school["auth_logo_position"] if "auth_logo_position" in school.keys() else "center",
+        "background_style": school["auth_background_style"] if "auth_background_style" in school.keys() else "watermark",
+        "show_name": bool(school["auth_show_school_name"] if "auth_show_school_name" in school.keys() else 1),
+    }
+
+
+@app.route("/auth/branding")
+def auth_branding():
+    conn = get_db()
+    school = _public_auth_school(conn)
+    payload = _auth_branding_payload(school)
+    conn.close()
+    return jsonify(payload)
+
+
 @app.context_processor
 def inject_portal_school():
     return dict(portal_school=g.get("portal_school"))
+
+
+@app.context_processor
+def inject_auth_branding():
+    # Keep public auth pages school-aware without making school branding global.
+    try:
+        school = _public_auth_school()
+        payload = _auth_branding_payload(school)
+        return dict(
+            auth_school=school,
+            auth_school_name=payload.get("school_name"),
+            auth_logo_url=payload.get("logo_url"),
+            auth_branding=payload.get("branding", False),
+            auth_logo_opacity=payload.get("opacity", 0.0),
+            auth_logo_position=payload.get("position", "center"),
+            auth_background_style=payload.get("background_style", "plain"),
+            auth_show_school_name=payload.get("show_name", True),
+        )
+    except Exception:
+        return dict(auth_school=None, auth_school_name="My School Hub", auth_logo_url=None,
+                    auth_branding=False, auth_logo_opacity=0.0, auth_logo_position="center",
+                    auth_background_style="plain", auth_show_school_name=True)
 
 
 @app.before_request
@@ -435,9 +564,13 @@ def portal_logo(school_id):
     conn = get_db()
     school = get_school(conn, school_id)
     conn.close()
-    if not school or not school["logo_filename"]:
+    if (not school or not school["logo_filename"] or
+        str(school["activation_status"] or "").lower() != "active" or
+        bool(school["is_archived"] if "is_archived" in school.keys() else 0)):
         return "", 404
-    return send_from_directory(INSTANCE_DIR, school["logo_filename"])
+    response = send_from_directory(INSTANCE_DIR, school["logo_filename"])
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 
 # ---------- helpers ----------
@@ -1136,7 +1269,7 @@ POSITION_CHOICES = [
 @rate_limit(max_attempts=5, window_seconds=3600)
 def register_school():
     if request.method=="POST":
-        school_name=request.form.get("school_name","").strip(); email=request.form.get("registered_email","").strip(); admin_name=request.form.get("admin_name","").strip(); username=request.form.get("admin_username","").strip()
+        school_name=request.form.get("school_name","").strip(); email=request.form.get("registered_email","").strip(); phone=request.form.get("registered_phone","").strip(); admin_name=request.form.get("admin_name","").strip(); username=request.form.get("admin_username","").strip()
         errors=[]
         if not school_name: errors.append("School name is required.")
         if not email or "@" not in email: errors.append("Enter a valid school email address.")
@@ -1149,9 +1282,11 @@ def register_school():
         try:
             tenant="TEN-"+secrets.token_hex(6).upper(); base=re.sub(r"[^A-Za-z0-9]+","",school_name.upper())[:18] or "SCHOOL"; code=base; n=2
             while conn.execute("SELECT 1 FROM schools WHERE school_code=? OR tenant_id=?",(code,tenant)).fetchone(): code=base[:16]+str(n); n+=1
-            sid=conn.execute("INSERT INTO schools(name,registered_email,activation_status,tenant_id,school_code) VALUES(?,?,?,?,?)",(school_name,email,"pending",tenant,code)).lastrowid
+            sid=conn.execute("INSERT INTO schools(name,registered_email,registered_phone,activation_status,tenant_id,school_code) VALUES(?,?,?,?,?,?)",(school_name,email,phone or None,"pending",tenant,code)).lastrowid
             conn.execute("INSERT INTO users(school_id,tenant_id,name,username,password_hash,role,first_login_required) VALUES(?,?,?,?,?,'admin',1)",(sid,tenant,admin_name,username,generate_password_hash(secrets.token_urlsafe(24))))
-            seed_school_defaults(conn,sid); _security_audit_event(conn,"school_activation_request",f"Requested school activation for {school_name}",sid); conn.commit(); conn.close(); flash(f"Activation requested. School ID: {code}. Tenant ID: {tenant}. An authorized Super Admin must issue the activation code.","success"); return redirect(url_for("activate_school"))
+            conn.execute("INSERT INTO platform_activation_requests(school_id,status) VALUES (?, 'pending')",(sid,))
+            conn.execute("INSERT INTO platform_notifications(title,message,school_id) VALUES (?,?,?)",("New school activation request",f"{school_name} registered. School ID: {code}. Tenant ID: {tenant}. Email: {email}. Phone: {phone or 'Not provided'}.",sid))
+            seed_school_defaults(conn,sid); _security_audit_event(conn,"school_activation_request",f"Requested school activation for {school_name}",sid); conn.commit(); conn.close(); flash("School registration submitted. Your school is pending activation. You will be notified when an authorized reviewer approves it and sends the activation code.","success"); return redirect(url_for("activate_school"))
         except sqlite3.IntegrityError:
             conn.rollback(); conn.close(); flash("That administrator username is already in use.","error")
     return render_template("register_school.html")
@@ -1186,6 +1321,7 @@ def register():
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id) VALUES(?,?,?,?,?,?,?,?)",(uid,"staff","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id()))
             verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True)
             security_event(conn,"STAFF_SIGNUP_COMPLETED",details="Staff account created using school-issued signup code",resource_type="user",resource_id=uid,school_id=row["school_id"],tenant_id=row["tenant_id"])
+            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",row["school_id"],"admin","New staff signup",f"{full} created a staff account and completed signup."))
             conn.commit(); conn.close(); flash("Staff account created. Complete your staff profile after signing in.","success"); return redirect(url_for("login"))
         except sqlite3.IntegrityError:
             conn.rollback(); conn.close(); flash("We could not complete your registration. Please try again.","error")
@@ -1226,6 +1362,7 @@ def register_student():
             verify_signup_code(conn,code,"student",school_id=row["school_id"],class_id=row["class_id"],consume=True)
             conn.execute("INSERT INTO signups(signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id,notes) VALUES(?,?,?,?,?,?,?,?)",("student","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id(),f"Existing student record {student['id']} claimed"))
             security_event(conn,"STUDENT_ACCOUNT_CREATED",details="Existing student record claimed; no duplicate academic record created",resource_type="student",resource_id=student["id"],school_id=row["school_id"],tenant_id=row["tenant_id"])
+            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",row["school_id"],"admin","New student account activation",f"{student['first_name']} {student['last_name']} activated a student account."))
             conn.commit(); conn.close()
             flash("Student account created. Your existing school record has been linked.","success")
             return redirect(url_for("student_login"))
@@ -1273,6 +1410,7 @@ def register_parent():
         try:
             ident=username or email
             cur=conn.execute("INSERT INTO parent_accounts(school_id,tenant_id,name,username,email,phone,password_hash,is_active,account_status,signup_status) VALUES(?,?,?,?,?,?,?,1,'active','pending')",(school_id,tenant_id,f"{first} {last}",ident,email,phone,generate_password_hash(password)))
+            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",school_id,"admin","New parent signup",f"{first} {last} submitted a parent signup request."))
             pid=cur.lastrowid
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,school_id,tenant_id,request_id,notes) VALUES(NULL,'parent','pending',?,?,?,?)",(school_id,tenant_id,request_id(),f"Parent account {pid} awaiting child verification"))
             security_event(conn,"PARENT_ACCOUNT_CREATED",details="Parent account created; no child data exposed until verified link exists",resource_type="parent",resource_id=pid,school_id=school_id,tenant_id=tenant_id)
@@ -1533,6 +1671,23 @@ def admin_school():
         result_header_layout = request.form.get("result_header_layout", "logo-left")
         if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
             result_header_layout = "logo-left"
+        try:
+            auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
+        except (TypeError, ValueError):
+            auth_logo_opacity = 0.10
+        auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
+        auth_logo_position = request.form.get("auth_logo_position", "center")
+        if auth_logo_position not in ("left", "center", "right"):
+            auth_logo_position = "center"
+        auth_background_style = request.form.get("auth_background_style", "watermark")
+        if auth_background_style not in ("watermark", "soft", "plain"):
+            auth_background_style = "watermark"
+        auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
+        auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
+        show_form_teacher_name = 1 if request.form.get("show_form_teacher_name") else 0
+        show_form_teacher_signature = 1 if request.form.get("show_form_teacher_signature") else 0
+        show_principal_name = 1 if request.form.get("show_principal_name") else 0
+        show_principal_signature = 1 if request.form.get("show_principal_signature") else 0
         auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
         auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
         show_result_date = 1 if request.form.get("show_result_date") else 0
@@ -1549,11 +1704,16 @@ def admin_school():
                 "UPDATE schools SET name=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
                 "result_accent_color=?, result_header_layout=?, "
                 "auto_teacher_comment=?, auto_principal_comment=?, "
-                "web_font=?, pdf_font=?, show_result_date=? WHERE id=?",
+                "web_font=?, pdf_font=?, show_result_date=?, "
+                "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
+                "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
+                "show_principal_name=?, show_principal_signature=? WHERE id=?",
                 (name, logo_align, name_align, timezone, date_format,
                  result_accent_color, result_header_layout,
                  auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
-                 show_result_date, school_id),
+                 show_result_date, auth_logo_opacity, auth_logo_position,
+                 auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
+                 show_principal_name, show_principal_signature, school_id),
             )
             conn.commit()
             flash("School profile updated.", "success")
@@ -1850,6 +2010,9 @@ def upload_my_photo():
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("staff_profile", user_id=user_id))
+    size_error = _reject_oversize(file, "passport")
+    if size_error:
+        conn.close(); flash(size_error, "error"); return redirect(url_for("staff_profile", user_id=user_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ALLOWED_LOGO_EXTENSIONS:
         conn.close()
@@ -1880,6 +2043,9 @@ def upload_my_signature():
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("staff_profile", user_id=user_id))
+    size_error = _reject_oversize(file, "signature")
+    if size_error:
+        conn.close(); flash(size_error, "error"); return redirect(url_for("staff_profile", user_id=user_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ALLOWED_LOGO_EXTENSIONS:
         conn.close()
@@ -2516,97 +2682,42 @@ def revoke_signup_code(code_id):
 @app.route("/admin/students", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_students():
-    conn = get_db()
-    school_id = current_school_id()
-    if request.method == "POST":
-        try:
-            _student_class_scope = int(request.form.get("class_id"))
-        except (TypeError, ValueError):
-            _student_class_scope = None
-        if not require_scoped_permission("create", class_id=_student_class_scope):
-            conn.close()
-            flash("You do not have permission to create students in this class scope.", "error")
-            return redirect(url_for("admin_students"))
-        allowed, message, _state = plan_limit_check(conn, school_id, "students", 1)
+    conn=get_db(); school_id=current_school_id()
+    if request.method=="POST":
+        try: class_id=int(request.form.get("class_id"))
+        except (TypeError,ValueError): class_id=None
+        if not class_id or not class_in_school(conn,class_id):
+            conn.close(); flash("Please select a valid class/arm.","error"); return redirect(url_for("admin_students"))
+        if not require_scoped_permission("create",class_id=class_id):
+            conn.close(); flash("You do not have permission to create students in this class scope.","error"); return redirect(url_for("admin_students"))
+        allowed,message,_=plan_limit_check(conn,school_id,"students",1)
         if not allowed:
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": message}, 403
-            conn.close()
-            flash(message, "error")
-            return redirect(url_for("admin_students"))
-        class_id = request.form["class_id"]
-    elif not require_scoped_permission("view"):
-        conn.close()
-        flash("You do not have permission to view students.", "error")
-        return redirect(url_for("dashboard"))
-        offline_token = request.form.get("offline_token")
-        existing_id = offline_sync_existing_id(conn, offline_token)
-        if existing_id:
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": True, "id": existing_id}
-            flash(f"Student '{request.form['first_name']} {request.form['last_name']}' added.", "success")
-        elif not class_in_school(conn, class_id):
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": "Class not found — it may not have synced yet."}, 409
-            flash("Class not found.", "error")
+            conn.close(); flash(message,"error"); return redirect(url_for("admin_students"))
+        admission=request.form.get("admission_no","").strip(); first=request.form.get("first_name","").strip(); last=request.form.get("last_name","").strip(); errors=[]
+        if not admission: errors.append("Admission No. / Register No. is required.")
+        if not first: errors.append("First name is required.")
+        if not last: errors.append("Last name is required.")
+        if request.form.get("gender") not in ("M","F"): errors.append("Gender is required.")
+        if conn.execute("SELECT 1 FROM students WHERE class_id=? AND admission_no=?",(class_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already in use in this class.")
+        if errors:
+            for e in errors: flash(e,"error")
         else:
             try:
-                cur = conn.execute(
-                    "INSERT INTO students (admission_no, first_name, last_name, other_names, "
-                    "gender, class_id, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship, "
-                    "status, phone) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        request.form["admission_no"].strip(),
-                        request.form["first_name"].strip(),
-                        request.form["last_name"].strip(),
-                        request.form.get("other_names", "").strip() or None,
-                        request.form["gender"],
-                        class_id,
-                        request.form.get("date_of_birth", "").strip() or None,
-                        request.form.get("religion", "").strip() or None,
-                        request.form.get("parent_name", "").strip() or None,
-                        request.form.get("parent_address", "").strip() or None,
-                        request.form.get("parent_email", "").strip() or None,
-                        request.form.get("parent_phone", "").strip() or None,
-                        request.form.get("parent_relationship", "").strip() or None,
-                        request.form.get("status", "Active") if request.form.get("status") in
-                            ("Active", "Graduated", "Transferred", "Withdrawn", "Suspended") else "Active",
-                        request.form.get("phone", "").strip() or None,
-                    ),
-                )
-                upsert_enrollment(conn, cur.lastrowid, class_id)
-                conn.commit()
-                offline_sync_remember(conn, offline_token, "student", cur.lastrowid)
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": True, "id": cur.lastrowid}
-                flash(f"Student '{request.form['first_name']} {request.form['last_name']}' added.", "success")
+                tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
+                cur=conn.execute("INSERT INTO students (school_id,tenant_id,admission_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,parent_name,parent_address,parent_email,parent_phone,parent_relationship,status,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,admission,first,last,request.form.get("other_names","").strip() or None,request.form.get("gender"),class_id,request.form.get("date_of_birth","").strip() or None,request.form.get("religion","").strip() or None,request.form.get("parent_name","").strip() or None,request.form.get("parent_address","").strip() or None,request.form.get("parent_email","").strip() or None,request.form.get("parent_phone","").strip() or None,request.form.get("parent_relationship","").strip() or None,request.form.get("status","Active") if request.form.get("status") in ("Active","Graduated","Transferred","Withdrawn","Suspended") else "Active",request.form.get("phone","").strip() or None))
+                upsert_enrollment(conn,cur.lastrowid,class_id); conn.commit(); offline_sync_remember(conn,request.form.get("offline_token"),"student",cur.lastrowid)
+                if is_offline_sync_request(): conn.close(); return {"ok":True,"id":cur.lastrowid}
+                flash(f"Student '{first} {last}' added successfully.","success")
+            except sqlite3.IntegrityError:
+                conn.rollback(); flash("That Admission No. / Register No. is already in use in this class.","error")
             except Exception:
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": False, "error": "That Admission No. / Register No. is already in use in this class."}, 409
-                flash("That Admission No. / Register No. is already in use in this class.", "error")
-    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
-    class_filter = request.args.get("class_id")
-    if class_filter:
-        students = conn.execute(
-            "SELECT s.*, c.name as class_name FROM students s JOIN classes c ON c.id=s.class_id "
-            "WHERE s.class_id=? AND c.school_id=? AND s.is_active=1 ORDER BY s.last_name", (class_filter, school_id)
-        ).fetchall()
-    else:
-        students = conn.execute(
-            "SELECT s.*, c.name as class_name FROM students s JOIN classes c ON c.id=s.class_id "
-            "WHERE c.school_id=? AND s.is_active=1 ORDER BY c.name, s.last_name", (school_id,)
-        ).fetchall()
-    conn.close()
-    return render_template(
-        "admin_students.html", classes=classes, students=students, class_filter=class_filter,
-        student_full_name=student_full_name,
-    )
+                conn.rollback(); app.logger.exception("Student creation failed"); flash("Student could not be saved. Please review the form and try again.","error")
+    elif not require_scoped_permission("view"):
+        conn.close(); flash("You do not have permission to view students.","error"); return redirect(url_for("dashboard"))
+    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); class_filter=request.args.get("class_id",type=int)
+    if class_filter: students=conn.execute("SELECT s.*,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE s.class_id=? AND c.school_id=? AND s.is_active=1 ORDER BY s.last_name",(class_filter,school_id)).fetchall()
+    else: students=conn.execute("SELECT s.*,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 ORDER BY c.name,s.last_name",(school_id,)).fetchall()
+    conn.close(); return render_template("admin_students.html",classes=classes,students=students,class_filter=class_filter,student_full_name=student_full_name)
 
 
 @app.route("/admin/students/<int:student_id>/delete", methods=["POST"])
@@ -2781,7 +2892,7 @@ def parent_link_child():
             ex=conn.execute("SELECT id,status FROM parent_students WHERE parent_id=? AND student_id=? AND school_id=?",(pid,row["student_id"],current_school_id())).fetchone()
             if ex and ex["status"] in ("verified","pending"): flash("This student is already linked to your account.","info")
             else:
-                conn.execute("INSERT INTO parent_students(parent_id,student_id,school_id,tenant_id,status) VALUES(?,?,?,?, 'pending') ON CONFLICT(parent_id,student_id) DO UPDATE SET status='pending',revoked_at=NULL",(pid,row["student_id"],current_school_id(),current_tenant_id())); verify_signup_code(conn,code,"parent_link",school_id=current_school_id(),student_id=row["student_id"],consume=True); conn.commit(); flash("Child link submitted for school verification.","success")
+                conn.execute("INSERT INTO parent_students(parent_id,student_id,school_id,tenant_id,status) VALUES(?,?,?,?, 'pending') ON CONFLICT(parent_id,student_id) DO UPDATE SET status='pending',revoked_at=NULL",(pid,row["student_id"],current_school_id(),current_tenant_id())); conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",current_school_id(),"admin","Parent-child linking request","A parent submitted a child-linking request that requires school verification.")); verify_signup_code(conn,code,"parent_link",school_id=current_school_id(),student_id=row["student_id"],consume=True); conn.commit(); flash("Child link submitted for school verification.","success")
     conn.close(); return render_template("parent_link_child.html")
 
 @app.route("/parent/children/<int:student_id>/remove",methods=["POST"])
@@ -2996,6 +3107,9 @@ def upload_student_photo(student_id):
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("student_profile", student_id=student_id))
+    size_error = _reject_oversize(file, "passport")
+    if size_error:
+        conn.close(); flash(size_error, "error"); return redirect(url_for("student_profile", student_id=student_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if ext not in ALLOWED_LOGO_EXTENSIONS:
         conn.close()
@@ -3211,9 +3325,9 @@ def admin_teachers():
         email = request.form.get("email", "").strip() or None
         phone = request.form.get("phone", "").strip() or None
         password = request.form["password"]
-        position = request.form.get("position") or None
-        if position and position not in dict(POSITION_CHOICES):
-            position = None
+        rbac_role=request.form.get("rbac_role","Teacher").strip()
+        if rbac_role not in ROLE_CATALOG: rbac_role="Teacher"
+        position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
         offline_token = request.form.get("offline_token")
         existing_id = offline_sync_existing_id(conn, offline_token)
         if existing_id:
@@ -3233,10 +3347,10 @@ def admin_teachers():
             flash("That phone number is already in use by another account.", "error")
         else:
             try:
-                cur = conn.execute(
-                    "INSERT INTO users (school_id, name, username, email, phone, password_hash, role, position) VALUES (?,?,?,?,?,?, 'teacher', ?)",
-                    (school_id, name, username, email, phone, generate_password_hash(password), position),
-                )
+                tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
+                cur=conn.execute("INSERT INTO users (school_id,tenant_id,name,username,email,phone,password_hash,role,position,rbac_role) VALUES (?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,name,username,email,phone,generate_password_hash(password),"teacher",position,rbac_role))
+                ra=conn.execute("INSERT INTO role_assignments(user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at) VALUES (?,?,?,'All',?,'active',?,?,CURRENT_TIMESTAMP)",(cur.lastrowid,school_id,tenant,rbac_role,session.get("user_id"),session.get("user_id"))).lastrowid
+                for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra,perm))
                 conn.commit()
                 offline_sync_remember(conn, offline_token, "teacher", cur.lastrowid)
                 if is_offline_sync_request():
@@ -3250,7 +3364,7 @@ def admin_teachers():
                 flash("That username is already taken.", "error")
     teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (school_id,)).fetchall()
     conn.close()
-    return render_template("admin_teachers.html", teachers=teachers, position_choices=POSITION_CHOICES, position_labels=POSITION_LABELS)
+    return render_template("admin_teachers.html", teachers=teachers, rbac_roles=sorted(ROLE_CATALOG), position_labels=POSITION_LABELS)
 
 
 @app.route("/admin/teachers/<int:teacher_id>/contact", methods=["POST"])
@@ -3313,15 +3427,17 @@ def set_teacher_position(teacher_id):
         conn.close()
         flash("Teacher not found.", "error")
         return redirect(url_for("admin_teachers"))
-    position = request.form.get("position") or None
-    if position and position not in dict(POSITION_CHOICES):
-        conn.close()
-        flash("Not a valid position.", "error")
-        return redirect(url_for("admin_teachers"))
-    conn.execute("UPDATE users SET position=? WHERE id=?", (position, teacher_id))
-    conn.commit()
-    conn.close()
-    flash("Position updated.", "success")
+    rbac_role=request.form.get("rbac_role","Teacher").strip()
+    if rbac_role not in ROLE_CATALOG:
+        conn.close(); flash("Not a valid RBAC role.","error"); return redirect(url_for("admin_teachers"))
+    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
+    conn.execute("UPDATE users SET rbac_role=?,position=? WHERE id=?",(rbac_role,position,teacher_id))
+    ra=conn.execute("SELECT id FROM role_assignments WHERE user_id=? AND school_id=? AND status='active' ORDER BY id DESC LIMIT 1",(teacher_id,current_school_id())).fetchone()
+    if ra:
+        conn.execute("UPDATE role_assignments SET role=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(rbac_role,ra["id"]))
+        conn.execute("DELETE FROM role_assignment_permissions WHERE assignment_id=?",(ra["id"],))
+        for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra["id"],perm))
+    conn.commit(); conn.close(); flash("RBAC role updated.","success")
     return redirect(url_for("admin_teachers"))
 
 
@@ -3584,6 +3700,7 @@ def admin_terms():
             ).fetchone()
             if owner:
                 conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (tid,))
+                conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",(session.get("name","Administrator"),school_id,"admin","Result publication","A term's results were published and are now available to authorized users."))
                 conn.commit()
                 flash("Term published — results can now be emailed to parents.", "success")
         elif action == "unpublish_term":
@@ -3918,10 +4035,9 @@ def timetable_teacher(teacher_id):
         "WHERE te.teacher_id=?", (teacher_id,)
     ).fetchall()
     grid = {(e["day_of_week"], e["period_id"]): e for e in entries}
+    view=request.args.get("view","horizontal") if request.args.get("view") in ("horizontal","vertical") else "horizontal"
     conn.close()
-    return render_template(
-        "timetable_teacher.html", teacher=teacher, periods=periods, grid=grid, days=list(enumerate(DAY_NAMES)),
-    )
+    return render_template("timetable_teacher.html", teacher=teacher, periods=periods, grid=grid, days=list(enumerate(DAY_NAMES)), view=view)
 
 
 @app.route("/my-class")
@@ -4881,8 +4997,18 @@ def build_result_data(conn, student_id, term_id):
             return row
         return None
 
-    teacher_signature_user = _signature_user("teacher_signed_by")
-    principal_signature_user = _signature_user("principal_signed_by")
+    if info and ("teacher_signed_by" not in info.keys() or not info["teacher_signed_by"]):
+        fallback=conn.execute("SELECT u.id,u.name,u.signature_filename,u.use_digital_signature FROM users u JOIN classes c ON c.form_teacher_id=u.id WHERE c.id=? AND u.school_id=? AND u.role='teacher'",(historical_class_id,school_id)).fetchone()
+        if fallback:
+            info=dict(info); info["teacher_signed_by"]=fallback["id"]
+    if info and ("principal_signed_by" not in info.keys() or not info["principal_signed_by"]):
+        fallback=conn.execute("SELECT u.id,u.name,u.signature_filename,u.use_digital_signature FROM users u WHERE u.school_id=? AND u.role='teacher' AND (u.rbac_role IN ('Principal','Head Teacher') OR u.position IN ('principal')) AND COALESCE(u.is_active,1)=1 ORDER BY u.id LIMIT 1",(school_id,)).fetchone()
+        if fallback:
+            info=dict(info); info["principal_signed_by"]=fallback["id"]
+    teacher_signature_user = _signature_user("teacher_signed_by") if (not school or school["show_form_teacher_signature"] if "show_form_teacher_signature" in school.keys() else True) else None
+    principal_signature_user = _signature_user("principal_signed_by") if (not school or school["show_principal_signature"] if "show_principal_signature" in school.keys() else True) else None
+    teacher_name = teacher_signature_user["name"] if teacher_signature_user and (not school or school["show_form_teacher_name"] if "show_form_teacher_name" in school.keys() else True) else None
+    principal_name = principal_signature_user["name"] if principal_signature_user and (not school or school["show_principal_name"] if "show_principal_name" in school.keys() else True) else None
 
     return {
         "student": student, "class_row": class_row, "subjects": subject_details,
@@ -4896,6 +5022,13 @@ def build_result_data(conn, student_id, term_id):
         "result_date": format_dmy(datetime.date.today().isoformat()) if school and school["show_result_date"] else None,
         "teacher_signature_user": teacher_signature_user,
         "principal_signature_user": principal_signature_user,
+        "teacher_signature_path": os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"]) if teacher_signature_user else None,
+        "principal_signature_path": os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"]) if principal_signature_user else None,
+        "teacher_name": teacher_name, "principal_name": principal_name,
+        "show_form_teacher_name": bool(school["show_form_teacher_name"]) if school and "show_form_teacher_name" in school.keys() else True,
+        "show_form_teacher_signature": bool(school["show_form_teacher_signature"]) if school and "show_form_teacher_signature" in school.keys() else True,
+        "show_principal_name": bool(school["show_principal_name"]) if school and "show_principal_name" in school.keys() else True,
+        "show_principal_signature": bool(school["show_principal_signature"]) if school and "show_principal_signature" in school.keys() else True,
     }
 
 
@@ -5358,6 +5491,9 @@ def materials():
                     conn.close()
                     flash("File type not supported. Upload a PDF, Word, PowerPoint or image file — for videos, paste a link instead.", "error")
                     return redirect(url_for("materials"))
+                size_error = _reject_oversize(file, "learning_material")
+                if size_error:
+                    conn.close(); flash(size_error, "error"); return redirect(url_for("materials", session_id=session_id, class_id=class_id, subject_id=subject_id))
                 school_dir = os.path.join(MATERIALS_DIR, str(school_id))
                 os.makedirs(school_dir, exist_ok=True)
                 original_filename = secure_filename(file.filename)
@@ -5892,6 +6028,7 @@ def student_login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
+        requested_school_code = request.form.get("school_code", "").strip()
         conn = get_db()
         student = conn.execute(
             "SELECT * FROM students WHERE is_active=1 AND (username=? OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))", (username,username,username)
@@ -5899,6 +6036,10 @@ def student_login():
         if student and student["password_hash"] and check_password_hash(student["password_hash"], password):
             class_row = conn.execute("SELECT school_id FROM classes WHERE id=?", (student["class_id"],)).fetchone()
             school = get_school(conn, class_row["school_id"]) if class_row else None
+            if requested_school_code and school and requested_school_code.lower() not in {str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower(), str(school["school_id_public"] or "").lower()}:
+                conn.close()
+                flash("That School ID / Tenant ID does not match this student account.", "error")
+                return render_template("student_login.html")
             conn.close()
             if school and school["activation_status"] != "active":
                 flash("This school hasn't been activated yet.", "error")
@@ -7257,18 +7398,9 @@ def platform_new_school():
                 flash(f"Couldn't create the school: {e}", "error")
             return render_template("platform_new_school.html")
 
-        sent, msg = send_platform_email(
-            registered_email, f"Activate {school_name} on School Result System",
-            f"Your school has been onboarded.\n\nActivation code: {code}\n"
-            f"This code expires {format_dmy(expires_at)} and can only be used once.\n\n"
-            f"Visit the Activate School page and enter this code (with admin username '{admin_username}') "
-            "to finish setting up your account.",
-        )
         conn.close()
-        flash(f"'{school_name}' onboarded. Activation code: {code} (expires {format_dmy(expires_at)}).", "success")
-        if not sent:
-            flash(f"Couldn't email the code automatically ({msg}) — share the code above with the school directly.", "error")
-        return redirect(url_for("platform_schools"))
+        flash(f"'{school_name}' created and placed in pending activation.", "success")
+        return redirect(url_for("platform_activation_requests"))
 
     return render_template("platform_new_school.html")
 
@@ -7368,9 +7500,7 @@ def platform_regenerate_code(school_id):
             "and invalidates any previous code.",
         )
     conn.close()
-    flash(f"New activation code: {code} (expires {format_dmy(expires_at)}).", "success")
-    if not sent:
-        flash(f"Couldn't email the code automatically ({msg}) — share the code above with the school directly.", "error")
+    flash("A new activation code was generated and sent through the configured delivery channel." if sent else "A new activation code was generated, but delivery is not configured.", "success" if sent else "error")
     return redirect(url_for("platform_schools"))
 
 
@@ -8156,8 +8286,92 @@ def admin_theme():
         result_accent=request.form.get("result_accent_color", school["result_accent_color"] or "#1f3a5f"); result_header=request.form.get("result_header_layout", school["result_header_layout"] or "logo-left")
         if not _re.fullmatch(r"#[0-9a-fA-F]{6}",result_accent): result_accent="#1f3a5f"
         if result_header not in ("logo-left","logo-top-center","logo-right","no-logo"): result_header="logo-left"
-        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,school_tagline=?,result_accent_color=?,result_header_layout=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),request.form.get("school_tagline","").strip()[:120],result_accent,result_header,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
+        try: auth_logo_opacity=max(0.03,min(0.35,float(request.form.get("auth_logo_opacity","0.10"))))
+        except (TypeError,ValueError): auth_logo_opacity=0.10
+        auth_logo_position=request.form.get("auth_logo_position","center") if request.form.get("auth_logo_position","center") in ("left","center","right") else "center"
+        auth_background_style=request.form.get("auth_background_style","watermark") if request.form.get("auth_background_style","watermark") in ("watermark","soft","plain") else "watermark"
+        auth_show_school_name=1 if request.form.get("auth_show_school_name","1") == "1" else 0
+        auth_branding_enabled=1 if request.form.get("auth_branding_enabled","1") == "1" else 0
+        show_form_teacher_name=1 if request.form.get("show_form_teacher_name","1") == "1" else 0
+        show_form_teacher_signature=1 if request.form.get("show_form_teacher_signature","1") == "1" else 0
+        show_principal_name=1 if request.form.get("show_principal_name","1") == "1" else 0
+        show_principal_signature=1 if request.form.get("show_principal_signature","1") == "1" else 0
+        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,school_tagline=?,result_accent_color=?,result_header_layout=?,auth_logo_opacity=?,auth_logo_position=?,auth_background_style=?,auth_show_school_name=?,auth_branding_enabled=?,show_form_teacher_name=?,show_form_teacher_signature=?,show_principal_name=?,show_principal_signature=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),request.form.get("school_tagline","").strip()[:120],result_accent,result_header,auth_logo_opacity,auth_logo_position,auth_background_style,auth_show_school_name,auth_branding_enabled,show_form_teacher_name,show_form_teacher_signature,show_principal_name,show_principal_signature,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
     conn.close(); return render_template("theme_branding.html",school=school,presets=presets)
+
+
+@app.route("/school-dashboard")
+@login_required("admin","sub_admin")
+def school_dashboard_alias(): return redirect(url_for("dashboard"))
+
+@app.route("/school-setup")
+@login_required("admin","sub_admin")
+def school_setup_alias(): return redirect(url_for("admin_setup_wizard"))
+
+@app.route("/reports/analytics")
+@login_required("admin","sub_admin")
+def reports_analytics():
+    conn=get_db(); sid=current_school_id(); term=resolve_term(conn,request.args.get("term_id",type=int)) or current_term(conn); class_id=request.args.get("class_id",type=int); subject_id=request.args.get("subject_id",type=int)
+    if class_id and not class_in_school(conn,class_id): class_id=None
+    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); terms=all_terms_for_school(conn)
+    students=conn.execute("SELECT COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1",(sid,)).fetchone()["n"]; teachers=conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1",(sid,)).fetchone()["n"]
+    class_rows=[]; subject_rows=[]; grade_rows=[]; attendance_summary={"present":0,"absent":0,"opened":0}; result_summary={"published":0,"pending":0}
+    if term:
+        params=[term["id"],sid]; q="SELECT c.name,AVG(sc.ca1+sc.ca2+sc.exam) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=?"
+        if class_id:q+=" AND c.id=?";params.append(class_id)
+        q+=" GROUP BY c.id,c.name ORDER BY avg DESC"; class_rows=conn.execute(q,params).fetchall()
+        params=[term["id"],sid]; q="SELECT sub.name,AVG(sc.ca1+sc.ca2+sc.exam) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.term_id=? AND c.school_id=?"
+        if class_id:q+=" AND c.id=?";params.append(class_id)
+        if subject_id:q+=" AND sub.id=?";params.append(subject_id)
+        q+=" GROUP BY sub.id,sub.name ORDER BY avg DESC"; subject_rows=conn.execute(q,params).fetchall()
+        grade_rows=conn.execute("SELECT CASE WHEN (ca1+ca2+exam)>=70 THEN 'A' WHEN (ca1+ca2+exam)>=60 THEN 'B' WHEN (ca1+ca2+exam)>=50 THEN 'C' WHEN (ca1+ca2+exam)>=45 THEN 'D' WHEN (ca1+ca2+exam)>=40 THEN 'E' ELSE 'F' END grade,COUNT(*) n FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? GROUP BY grade ORDER BY grade",(term["id"],sid)).fetchall()
+        ar=conn.execute("SELECT COALESCE(SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END),0) present,COALESCE(SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END),0) absent,COUNT(DISTINCT ar.date) opened FROM attendance_records ar JOIN students st ON st.id=ar.student_id JOIN classes c ON c.id=st.class_id WHERE ar.term_id=? AND c.school_id=?",(term["id"],sid)).fetchone(); attendance_summary=dict(ar)
+        pubs=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=? AND t.is_published=1",(sid,)).fetchone()["n"]; allpub=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=?",(sid,)).fetchone()["n"]; result_summary={"published":pubs,"pending":max(0,allpub-pubs)}
+    conn.close(); return render_template("reports_analytics.html",students=students,teachers=teachers,classes=classes,subjects=subjects,terms=terms,term=term,class_id=class_id,subject_id=subject_id,class_rows=class_rows,subject_rows=subject_rows,grade_rows=grade_rows,attendance_summary=attendance_summary,result_summary=result_summary)
+
+@app.route("/timetable/generate",methods=["GET","POST"])
+@login_required("admin","sub_admin")
+def timetable_generate():
+    conn=get_db(); sid=current_school_id(); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); periods=conn.execute("SELECT * FROM timetable_periods WHERE school_id=? AND is_break=0 ORDER BY sort_order,id",(sid,)).fetchall(); assignments=conn.execute("SELECT cs.class_id,cs.subject_id,cs.teacher_id,s.name subject_name,u.name teacher_name FROM class_subjects cs JOIN subjects s ON s.id=cs.subject_id LEFT JOIN users u ON u.id=cs.teacher_id JOIN classes c ON c.id=cs.class_id WHERE c.school_id=? ORDER BY cs.class_id,cs.id",(sid,)).fetchall()
+    if request.method=='POST':
+        days=max(1,min(6,int(request.form.get('days','5') or 5))); conn.execute("DELETE FROM timetable_entries WHERE school_id=?",(sid,)); teacher_slots=set(); created=0; conflicts=[]
+        for c in classes:
+            slots=[(d,p['id']) for d in range(days) for p in periods]; used=set(); cursor=0
+            for a in [x for x in assignments if x['class_id']==c['id']]:
+                count=max(0,min(20,int(request.form.get(f"count_{a['class_id']}_{a['subject_id']}",1) or 1))); placed=0
+                while placed<count and cursor<len(slots):
+                    d,pid=slots[cursor]; cursor+=1; tkey=(a['teacher_id'],d,pid)
+                    if (d,pid) in used or (a['teacher_id'] and tkey in teacher_slots): continue
+                    conn.execute("INSERT INTO timetable_entries(school_id,class_id,day_of_week,period_id,subject_id,teacher_id) VALUES(?,?,?,?,?,?)",(sid,c['id'],d,pid,a['subject_id'],a['teacher_id'])); used.add((d,pid));
+                    if a['teacher_id']: teacher_slots.add(tkey)
+                    placed+=1; created+=1
+                if placed<count: conflicts.append(f"{c['name']} — {a['subject_name']}: {count-placed} not placed")
+        conn.commit(); conn.close(); flash(f"Timetable generated with {created} period(s)." + (" Review: "+"; ".join(conflicts[:5]) if conflicts else ""),"success" if not conflicts else "error"); return redirect(url_for('timetable_hub'))
+    conn.close(); return render_template('timetable_generate.html',classes=classes,periods=periods,assignments=assignments)
+
+@app.route("/platform/activation-requests")
+@platform_admin_required
+def platform_activation_requests():
+    conn=get_db(); rows=conn.execute("SELECT r.*,s.name school_name,s.school_code,s.tenant_id,s.registered_email,s.registered_phone FROM platform_activation_requests r JOIN schools s ON s.id=r.school_id ORDER BY r.id DESC LIMIT 200").fetchall(); conn.close(); return render_template('platform_activation_requests.html',requests=rows)
+
+@app.route("/platform/schools/<int:school_id>/approve-activation",methods=["POST"])
+@platform_admin_required
+def platform_approve_activation(school_id):
+    conn=get_db(); school=get_school(conn,school_id)
+    if not school or school['activation_status']!='pending': conn.close(); flash('School activation request is not pending.','error'); return redirect(url_for('platform_schools'))
+    code,expires=generate_activation_code(conn,school_id,created_by=session.get('platform_admin_name'))
+    conn.execute("UPDATE platform_activation_requests SET status='approved',approved_by=?,approved_at=CURRENT_TIMESTAMP,activation_code_delivery_status='pending' WHERE school_id=? AND status='pending'",(session.get('platform_admin_name'),school_id))
+    sent,msg=(False,'No registered email on file.')
+    if school['registered_email']: sent,msg=send_platform_email(school['registered_email'],f"School activation approved — {school['name']}",f"Your school activation has been approved.\n\nActivation code: {code}\nExpires: {format_dmy(expires)}\n\nEnter this code on the secure Activate School page. The code is single-use and must not be shared publicly.")
+    delivery='email' if sent else 'not_configured'; conn.execute("UPDATE platform_activation_requests SET activation_code_delivery_channel=?,activation_code_delivery_status=?,activation_code_sent_at=CURRENT_TIMESTAMP WHERE school_id=? AND status='approved'",(delivery,'sent' if sent else 'failed',school_id))
+    log_audit(conn,'platform_admin',session.get('platform_admin_name'),'school_activation_approved',details=f"Approved activation for {school['name']}; delivery={delivery}",school_id=school_id); conn.commit(); conn.close(); flash('Activation approved and the activation code has been sent.' if sent else 'Activation approved, but delivery is not configured.','success' if sent else 'error'); return redirect(url_for('platform_activation_requests'))
+
+
+@app.route("/platform/notifications/inbox")
+@platform_admin_required
+def platform_notification_inbox():
+    conn=get_db(); rows=conn.execute("SELECT n.*,s.name school_name FROM platform_notifications n LEFT JOIN schools s ON s.id=n.school_id ORDER BY n.id DESC LIMIT 200").fetchall(); conn.close(); return render_template("platform_notification_inbox.html",notifications=rows)
+
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"

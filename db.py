@@ -1734,6 +1734,69 @@ def migration_049_school_theme(conn):
         ensure_column(conn, "schools", col, typ)
 
 
+def migration_053_billing_finalization(conn):
+    """V38-V47 additive financial finalization tables."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_reconciliation_exceptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exception_key TEXT UNIQUE NOT NULL,
+        exception_type TEXT NOT NULL,
+        payment_id INTEGER,
+        invoice_id INTEGER,
+        reference TEXT,
+        details TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open',
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        review_note TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(payment_id) REFERENCES billing_payments(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_recon_status ON billing_reconciliation_exceptions(status)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_recon_payment ON billing_reconciliation_exceptions(payment_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_recon_invoice ON billing_reconciliation_exceptions(invoice_id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_adjustments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        payment_id INTEGER NOT NULL,
+        invoice_id INTEGER,
+        adjustment_type TEXT NOT NULL,
+        amount_ngn REAL NOT NULL,
+        status TEXT NOT NULL DEFAULT 'requested',
+        reason TEXT NOT NULL,
+        reference TEXT UNIQUE NOT NULL,
+        requested_by TEXT,
+        approved_by TEXT,
+        rejected_by TEXT,
+        processed_by TEXT,
+        requested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        approved_at TEXT,
+        rejected_at TEXT,
+        processed_at TEXT,
+        external_reference TEXT,
+        FOREIGN KEY(school_id) REFERENCES schools(id),
+        FOREIGN KEY(payment_id) REFERENCES billing_payments(id),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_adjustments_payment ON billing_adjustments(payment_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_adjustments_status ON billing_adjustments(status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS billing_renewal_recovery (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL,
+        school_id INTEGER NOT NULL,
+        attempt_no INTEGER NOT NULL DEFAULT 1,
+        next_attempt_at TEXT,
+        status TEXT NOT NULL DEFAULT 'queued',
+        last_message TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(invoice_id,attempt_no),
+        FOREIGN KEY(invoice_id) REFERENCES billing_invoices(id),
+        FOREIGN KEY(school_id) REFERENCES schools(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_recovery_status ON billing_renewal_recovery(status,next_attempt_at)")
+
+
 STEPS = [    ("ai_layer", migration_048_ai_layer),
     ("school_theme", migration_049_school_theme),
     ("offline_sync", migration_024_offline_sync),
@@ -1767,6 +1830,7 @@ STEPS = [    ("ai_layer", migration_048_ai_layer),
     ("billing_job_runs", migration_046_billing_job_runs),
     ("payment_gateway_webhooks", migration_044_payment_gateway_webhooks),
     ("billing_financial_audit", migration_047_billing_financial_audit),
+    ("billing_finalization", migration_053_billing_finalization),
 ]
 
 
@@ -2732,3 +2796,57 @@ STEPS.append(("parent_portal", migration_050_parent_portal))
 
 STEPS.append(("registration_security_v52_finalize", migration_051_registration_security_spec))
 STEPS.append(("auth_signup_audit_v52", migration_052_auth_signup_audit_spec))
+
+
+def migration_053_school_auth_branding(conn):
+    """Per-school authentication branding controls.
+
+    Branding is intentionally stored on the school tenant and never accepted
+    as a trusted client-supplied filename or tenant identity.
+    """
+    if not table_exists(conn, "schools"):
+        return
+    for col, typ in [
+        ("auth_logo_opacity", "REAL NOT NULL DEFAULT 0.10"),
+        ("auth_logo_position", "TEXT NOT NULL DEFAULT 'center'"),
+        ("auth_background_style", "TEXT NOT NULL DEFAULT 'watermark'"),
+        ("auth_show_school_name", "INTEGER NOT NULL DEFAULT 1"),
+        ("auth_branding_enabled", "INTEGER NOT NULL DEFAULT 1"),
+    ]:
+        ensure_column(conn, "schools", col, typ)
+    conn.execute("UPDATE schools SET auth_logo_opacity=MIN(MAX(COALESCE(auth_logo_opacity,0.10),0.03),0.35)")
+    conn.execute("UPDATE schools SET auth_logo_position=CASE WHEN auth_logo_position IN ('left','center','right') THEN auth_logo_position ELSE 'center' END")
+    conn.execute("UPDATE schools SET auth_background_style=CASE WHEN auth_background_style IN ('watermark','soft','plain') THEN auth_background_style ELSE 'watermark' END")
+    conn.execute("UPDATE schools SET auth_show_school_name=CASE WHEN auth_show_school_name IN (0,1) THEN auth_show_school_name ELSE 1 END")
+    conn.execute("UPDATE schools SET auth_branding_enabled=CASE WHEN auth_branding_enabled IN (0,1) THEN auth_branding_enabled ELSE 1 END")
+
+
+STEPS.append(("school_auth_branding_v52", migration_053_school_auth_branding))
+
+def migration_054_system_enhancements(conn):
+    """V52 required system enhancements: upload limits, activation approvals,
+    tenant-stamped students, result signature/name toggles and RBAC role labels."""
+    if table_exists(conn,"schools"):
+        for col,typ in [("registered_phone","TEXT"),("show_form_teacher_name","INTEGER DEFAULT 1"),("show_form_teacher_signature","INTEGER DEFAULT 1"),("show_principal_name","INTEGER DEFAULT 1"),("show_principal_signature","INTEGER DEFAULT 1")]: ensure_column(conn,"schools",col,typ)
+    if table_exists(conn,"users"):
+        ensure_column(conn,"users","rbac_role","TEXT")
+        conn.execute("UPDATE users SET rbac_role=CASE position WHEN 'principal' THEN 'Principal' WHEN 'vice_principal' THEN 'Vice Principal' WHEN 'exam_officer' THEN 'Examination/Result Officer' WHEN 'form_teacher' THEN 'Form Teacher' WHEN 'subject_teacher' THEN 'Subject Teacher' ELSE 'Teacher' END WHERE role='teacher' AND (rbac_role IS NULL OR rbac_role='')")
+    if table_exists(conn,"students"):
+        ensure_column(conn,"students","school_id","INTEGER"); ensure_column(conn,"students","tenant_id","TEXT")
+        conn.execute("UPDATE students SET school_id=(SELECT school_id FROM classes WHERE classes.id=students.class_id) WHERE school_id IS NULL")
+        conn.execute("UPDATE students SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=students.school_id) WHERE tenant_id IS NULL OR tenant_id='' ")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_students_tenant_school ON students(school_id,tenant_id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS platform_activation_requests(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+        submitted_at TEXT DEFAULT CURRENT_TIMESTAMP, approved_by TEXT, approved_at TEXT,
+        activation_code_delivery_channel TEXT, activation_code_delivery_status TEXT, activation_code_sent_at TEXT,
+        FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_platform_activation_requests_status ON platform_activation_requests(status,submitted_at)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS platform_notifications(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, message TEXT NOT NULL,
+        school_id INTEGER, read_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_platform_notifications_created ON platform_notifications(created_at DESC)")
+
+STEPS.append(("system_enhancements_v52", migration_054_system_enhancements))
+

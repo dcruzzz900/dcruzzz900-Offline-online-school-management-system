@@ -218,52 +218,52 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements.append(Paragraph(f"<b>Teacher's Comment:</b> {teacher_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     teacher_date = format_dmy(info["teacher_signed_date"]) if info and info["teacher_signed_date"] else "________________"
-    if teacher_signature and teacher_signature.get("path") and os.path.exists(teacher_signature["path"]):
-        try:
-            from PIL import Image as PILImage
-            with PILImage.open(teacher_signature["path"]) as im:
-                im.load()
-                w, h = im.size
-            sig_h = 1.1 * cm
-            sig_w = sig_h * (w / h)
-            elements.append(Image(teacher_signature["path"], width=sig_w, height=sig_h))
-        except Exception:
-            elements.append(Paragraph("Teacher's Signature: ________________________________", normal))
-        elements.append(Paragraph(f"Date: {teacher_date}", normal))
-    else:
-        elements.append(Paragraph(
-            f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}",
-            normal,
-        ))
+    if data.get("teacher_name") and data.get("show_form_teacher_name", True):
+        elements.append(Paragraph(f"<b>Form Teacher:</b> {data['teacher_name']}", normal))
+    if data.get("show_form_teacher_signature", True):
+        if teacher_signature and teacher_signature.get("path") and os.path.exists(teacher_signature["path"]):
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(teacher_signature["path"]) as im:
+                    im.load(); w, h = im.size
+                sig_h = 1.1 * cm; sig_w = sig_h * (w / h)
+                elements.append(Image(teacher_signature["path"], width=sig_w, height=sig_h))
+            except Exception:
+                elements.append(Paragraph("Teacher's Signature: ________________________________", normal))
+            elements.append(Paragraph(f"Date: {teacher_date}", normal))
+        else:
+            elements.append(Paragraph(f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}", normal))
     elements.append(Spacer(1, 0.6 * cm))
 
     principal_comment = info["principal_comment"] if info and info["principal_comment"] else "_" * 70
     elements.append(Paragraph(f"<b>Principal's Comment:</b> {principal_comment}", normal))
     elements.append(Spacer(1, 0.3 * cm))
     principal_date = format_dmy(info["principal_signed_date"]) if info and info["principal_signed_date"] else "________________"
-    if principal_signature and principal_signature.get("path") and os.path.exists(principal_signature["path"]):
-        try:
-            from PIL import Image as PILImage
-            with PILImage.open(principal_signature["path"]) as im:
-                im.load()
-                w, h = im.size
-            sig_h = 1.1 * cm
-            sig_w = sig_h * (w / h)
-            elements.append(Image(principal_signature["path"], width=sig_w, height=sig_h))
-        except Exception:
-            elements.append(Paragraph("Principal's Signature: ________________________________", normal))
-        elements.append(Paragraph(f"Date: {principal_date}", normal))
-    else:
-        elements.append(Paragraph(
-            f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}",
-            normal,
-        ))
+    if data.get("principal_name") and data.get("show_principal_name", True):
+        elements.append(Paragraph(f"<b>Principal:</b> {data['principal_name']}", normal))
+    if data.get("show_principal_signature", True):
+        if principal_signature and principal_signature.get("path") and os.path.exists(principal_signature["path"]):
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(principal_signature["path"]) as im:
+                    im.load(); w, h = im.size
+                sig_h = 1.1 * cm; sig_w = sig_h * (w / h)
+                elements.append(Image(principal_signature["path"], width=sig_w, height=sig_h))
+            except Exception:
+                elements.append(Paragraph("Principal's Signature: ________________________________", normal))
+            elements.append(Paragraph(f"Date: {principal_date}", normal))
+        else:
+            elements.append(Paragraph(f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}", normal))
 
     return elements
 
 
 def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
                       accent_color="#1f3a5f", name_align=None, teacher_signature=None, principal_signature=None):
+    if teacher_signature is None and data.get("teacher_signature_path"):
+        teacher_signature = {"path": data.get("teacher_signature_path"), "name": data.get("teacher_name")}
+    if principal_signature is None and data.get("principal_signature_path"):
+        principal_signature = {"path": data.get("principal_signature_path"), "name": data.get("principal_name")}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
     styles = getSampleStyleSheet()

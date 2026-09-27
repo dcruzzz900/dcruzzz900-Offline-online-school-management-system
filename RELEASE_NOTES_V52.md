@@ -18,3 +18,10 @@ Validation performed in the packaging environment:
 - ZIP integrity: passed
 
 The final live deployment still requires runtime/browser QA against the project's actual dependency environment.
+
+## V52 School-Branded Authentication
+
+Added tenant-aware authentication branding with school logo watermarking,
+per-school opacity/position/style controls, secure school lookup, dynamic
+signup-code branding, student school-code validation, cache-safe logo updates,
+and branded recovery/activation screens.

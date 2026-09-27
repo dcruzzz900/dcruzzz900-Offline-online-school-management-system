@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS schools (
     activated_at TEXT,
     is_archived INTEGER DEFAULT 0,
     force_logout_at TEXT,
+    auth_logo_opacity REAL NOT NULL DEFAULT 0.10,
+    auth_logo_position TEXT NOT NULL DEFAULT 'center',
+    auth_background_style TEXT NOT NULL DEFAULT 'watermark',
+    auth_show_school_name INTEGER NOT NULL DEFAULT 1,
+    auth_branding_enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
