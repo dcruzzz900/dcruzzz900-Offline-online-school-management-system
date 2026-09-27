@@ -2128,70 +2128,6 @@ def verify_activation_code(conn, school_id, submitted_code):
     return True, "ok"
 
 
-SIGNUP_CODE_EXPIRY_DAYS = 14
-
-
-def generate_signup_code(conn, code_type, school_id, created_by=None, class_id=None, student_id=None, max_usage=1, expiry_days=SIGNUP_CODE_EXPIRY_DAYS):
-    """Issues a new tenant-scoped signup code (staff / student / parent_link).
-    Unlike the single-slot activation code, several signup codes can be
-    active for a school at once, so existing codes are left untouched."""
-    school = get_school(conn, school_id)
-    tenant_id = school["tenant_id"] if school else None
-    expires_at = (_dt.datetime.utcnow() + _dt.timedelta(days=expiry_days)).isoformat(timespec="seconds")
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I ambiguity
-    while True:
-        code = "".join(_secrets.choice(alphabet) for _ in range(8))
-        if not conn.execute("SELECT 1 FROM signup_codes WHERE code=?", (code,)).fetchone():
-            break
-    conn.execute(
-        "INSERT INTO signup_codes (code, code_type, school_id, tenant_id, class_id, student_id, created_by, expires_at, max_usage, usage_count, status) "
-        "VALUES (?,?,?,?,?,?,?,?,?,0,'active')",
-        (code, code_type, school_id, tenant_id, class_id, student_id, created_by, expires_at, max_usage),
-    )
-    return code, expires_at
-
-
-def verify_signup_code(conn, code, code_type, consume=False, school_id=None, class_id=None, student_id=None):
-    """Looks up a signup code by code+type and checks it's usable. Returns
-    (row, message) — row is the signup_codes record on success, or None with
-    an explanation on failure. Pass consume=True to record a use (and flip
-    status to 'exhausted' once max_usage is reached) after the caller has
-    finished acting on the code."""
-    code = (code or "").strip()
-    if not code:
-        return None, "Enter a signup code."
-    row = conn.execute(
-        "SELECT * FROM signup_codes WHERE code=? AND code_type=?", (code, code_type)
-    ).fetchone()
-    if not row:
-        return None, "Invalid signup code."
-    if school_id is not None and row["school_id"] != school_id:
-        return None, "Invalid signup code."
-    now = _dt.datetime.utcnow().isoformat(timespec="seconds")
-    if row["status"] == "revoked":
-        return None, "This signup code has been revoked."
-    if row["status"] == "suspended":
-        return None, "This signup code is currently suspended."
-    if row["expires_at"] and row["expires_at"] < now:
-        if row["status"] == "active":
-            conn.execute("UPDATE signup_codes SET status='expired' WHERE id=?", (row["id"],))
-        return None, "This signup code has expired."
-    if row["usage_count"] >= row["max_usage"]:
-        if row["status"] == "active":
-            conn.execute("UPDATE signup_codes SET status='exhausted' WHERE id=?", (row["id"],))
-        return None, "This signup code has already been used."
-    if row["status"] != "active":
-        return None, "This signup code is no longer active."
-    if consume:
-        new_count = row["usage_count"] + 1
-        new_status = "exhausted" if new_count >= row["max_usage"] else "active"
-        conn.execute(
-            "UPDATE signup_codes SET usage_count=?, status=?, last_used_at=? WHERE id=?",
-            (new_count, new_status, now, row["id"]),
-        )
-    return row, "ok"
-
-
 def get_school(conn, school_id):
     return conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
 
@@ -2602,6 +2538,119 @@ def student_full_name(student):
 
 
 
+# V52 registration/security helpers
+SIGNUP_CODE_TTL_HOURS = 72
+
+def generate_signup_code(conn, code_type, school_id, created_by=None, class_id=None, student_id=None, max_usage=1, expires_hours=SIGNUP_CODE_TTL_HOURS):
+    school = conn.execute("SELECT id, tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not school:
+        raise ValueError("School not found")
+    max_usage = max(1, min(int(max_usage or 1), 1000))
+    code = _secrets.token_urlsafe(9).replace('-', '').replace('_', '').upper()[:12]
+    while conn.execute("SELECT 1 FROM signup_codes WHERE code=?", (code,)).fetchone():
+        code = _secrets.token_urlsafe(9).replace('-', '').replace('_', '').upper()[:12]
+    session_id = None
+    if class_id:
+        row = conn.execute("SELECT school_id FROM classes WHERE id=?", (class_id,)).fetchone()
+        if not row or row['school_id'] != school_id:
+            raise ValueError("Class does not belong to this school")
+        s = conn.execute("SELECT id FROM sessions WHERE school_id=? AND is_active=1 ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
+        session_id = s['id'] if s else None
+    expires = (_dt.datetime.utcnow() + _dt.timedelta(hours=expires_hours)).isoformat(timespec='seconds')
+    conn.execute("INSERT INTO signup_codes(code,code_type,school_id,tenant_id,class_id,student_id,created_by,expires_at,max_usage,usage_count,status,session_id) VALUES(?,?,?,?,?,?,?,?,?,0,'active',?)",
+                 (code, code_type, school_id, school['tenant_id'], class_id, student_id, created_by, expires, max_usage, session_id))
+    return code, expires
+
+def verify_signup_code(conn, code, code_type, school_id=None, class_id=None, student_id=None, consume=False):
+    if not code:
+        return None, "This signup code is required."
+    row = conn.execute("SELECT * FROM signup_codes WHERE code=? AND code_type=?", (code, code_type)).fetchone()
+    if not row:
+        return None, "This signup code is invalid or expired."
+    now = _dt.datetime.utcnow().isoformat(timespec='seconds')
+    if row['status'] != 'active':
+        return None, "This signup code is invalid or expired."
+    if row['expires_at'] and row['expires_at'] < now:
+        conn.execute("UPDATE signup_codes SET status='expired' WHERE id=?", (row['id'],))
+        return None, "This signup code is invalid or expired."
+    if int(row['usage_count'] or 0) >= int(row['max_usage'] or 1):
+        conn.execute("UPDATE signup_codes SET status='exhausted' WHERE id=?", (row['id'],))
+        return None, "This signup code has reached its registration limit."
+    if school_id is not None and row['school_id'] != school_id:
+        return None, "This signup code is invalid for this school."
+    if class_id is not None and row['class_id'] != class_id:
+        return None, "This signup code is not valid for this class."
+    if student_id is not None and row['student_id'] not in (None, student_id):
+        return None, "This signup code is not valid for this student."
+    if row['class_id']:
+        c = conn.execute("SELECT school_id,tenant_id,level,arm FROM classes WHERE id=?", (row['class_id'],)).fetchone()
+        if not c or c['school_id'] != row['school_id'] or c['tenant_id'] != row['tenant_id']:
+            return None, "This signup code is invalid."
+    if consume:
+        new_count = int(row['usage_count'] or 0) + 1
+        status = 'exhausted' if new_count >= int(row['max_usage'] or 1) else 'active'
+        conn.execute("UPDATE signup_codes SET usage_count=?,last_used_at=CURRENT_TIMESTAMP,status=? WHERE id=?", (new_count,status,row['id']))
+    return row, None
+
+
+def migration_052_auth_signup_audit_spec(conn):
+    """V52 authentication/signup/linking/audit hardening.
+
+    Idempotent additions only: existing academic records and RBAC remain intact.
+    """
+    for table, cols in {
+        'schools': [('school_id_public','TEXT'), ('tenant_id','TEXT')],
+        'users': [('tenant_id','TEXT'), ('account_status',"TEXT DEFAULT 'active'"), ('signup_status',"TEXT DEFAULT 'approved'"), ('activation_status',"TEXT DEFAULT 'active'"), ('first_login_required','INTEGER DEFAULT 0'), ('address','TEXT'), ('date_of_birth','TEXT'), ('gender','TEXT'), ('qualifications','TEXT')],
+        'students': [('tenant_id','TEXT'), ('register_no','TEXT'), ('account_status',"TEXT DEFAULT 'active'"), ('signup_status',"TEXT DEFAULT 'not_started'")],
+        'parent_accounts': [('account_status',"TEXT DEFAULT 'active'"), ('signup_status',"TEXT DEFAULT 'approved'")],
+        'signup_codes': [('session_id','INTEGER'), ('class_arm','TEXT')],
+        'audit_log': [('request_id','TEXT'), ('actor_user_id','INTEGER'), ('tenant_id','TEXT'), ('event_category','TEXT')],
+    }.items():
+        if table_exists(conn, table):
+            for col, typ in cols: ensure_column(conn, table, col, typ)
+    if table_exists(conn,'schools'):
+        conn.execute("UPDATE schools SET school_id_public=school_code WHERE school_id_public IS NULL OR school_id_public='' ")
+        conn.execute("UPDATE schools SET tenant_id=COALESCE(tenant_id, 'TEN-' || upper(hex(randomblob(6)))) WHERE tenant_id IS NULL OR tenant_id='' ")
+    if table_exists(conn,'users') and table_exists(conn,'schools'):
+        conn.execute("UPDATE users SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=users.school_id) WHERE tenant_id IS NULL OR tenant_id='' ")
+    if table_exists(conn,'students'):
+        conn.execute("UPDATE students SET tenant_id=(SELECT s.tenant_id FROM classes c JOIN schools s ON s.id=c.school_id WHERE c.id=students.class_id) WHERE tenant_id IS NULL OR tenant_id='' ")
+        conn.execute("UPDATE students SET register_no=admission_no WHERE register_no IS NULL OR register_no='' ")
+    conn.execute("""CREATE TABLE IF NOT EXISTS signups(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, signup_type TEXT NOT NULL,
+        signup_status TEXT NOT NULL DEFAULT 'pending', submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        verified_at TEXT, approved_at TEXT, rejected_at TEXT, correction_requested_at TEXT,
+        school_id INTEGER, tenant_id TEXT, request_id TEXT, notes TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(school_id) REFERENCES schools(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_signups_school_status ON signups(school_id,signup_status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS activation_attempts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, signup_id INTEGER, user_id INTEGER, school_id INTEGER, tenant_id TEXT,
+        attempt_number INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL, failure_code TEXT,
+        failure_message_internal TEXT, started_at TEXT DEFAULT CURRENT_TIMESTAMP, completed_at TEXT,
+        retry_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, request_id TEXT
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS status_history(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL,
+        status_type TEXT NOT NULL, previous_status TEXT, new_status TEXT NOT NULL, changed_by INTEGER,
+        reason TEXT, school_id INTEGER, tenant_id TEXT, request_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS security_events(
+        id INTEGER PRIMARY KEY AUTOINCREMENT, event_name TEXT NOT NULL, actor_user_id INTEGER,
+        actor_role TEXT, actor_name TEXT, school_id INTEGER, tenant_id TEXT, resource_type TEXT,
+        resource_id INTEGER, decision TEXT, details TEXT, request_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_security_events_school_time ON security_events(school_id,created_at)")
+    # Standard tenant indexes and safe one-account-per-student guard.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_one_account ON students(user_id) WHERE user_id IS NOT NULL") if 'user_id' in column_names(conn,'students') else None
+    # Student account ownership is represented by students.user_id in V52.
+    if table_exists(conn,'students') and 'user_id' not in column_names(conn,'students'):
+        ensure_column(conn,'students','user_id','INTEGER')
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_students_one_account ON students(user_id) WHERE user_id IS NOT NULL")
+    if table_exists(conn,'signup_codes'):
+        conn.execute("UPDATE signup_codes SET class_arm=(SELECT arm FROM classes WHERE classes.id=signup_codes.class_id) WHERE class_arm IS NULL AND class_id IS NOT NULL")
+
+
 # v41 Parent Portal
 
 def migration_050_parent_portal(conn):
@@ -2682,3 +2731,4 @@ def migration_050_parent_portal(conn):
 STEPS.append(("parent_portal", migration_050_parent_portal))
 
 STEPS.append(("registration_security_v52_finalize", migration_051_registration_security_spec))
+STEPS.append(("auth_signup_audit_v52", migration_052_auth_signup_audit_spec))
