@@ -2338,7 +2338,7 @@ POSITION_LABELS = {
     "vice_principal": "Vice Principal",
     "exam_officer": "Exam Officer",
     "subject_teacher": "Subject Teacher",
-    "form_teacher": "Form Teacher",
+    "form_teacher": "Class Teacher / Form Teacher",
 }
 
 FULL_ACCESS_POSITIONS = {"principal", "vice_principal", "exam_officer"}
@@ -2850,3 +2850,137 @@ def migration_054_system_enhancements(conn):
 
 STEPS.append(("system_enhancements_v52", migration_054_system_enhancements))
 
+
+def migration_055_online_stability(conn):
+    """Online-first stability additions: staff attendance check-in/out timestamps
+    and canonical Class Teacher / Form Teacher role naming. Offline sync keeps
+    using the same tables and remains untouched."""
+    if table_exists(conn, "staff_attendance"):
+        ensure_column(conn, "staff_attendance", "check_in_at", "TEXT")
+        ensure_column(conn, "staff_attendance", "check_out_at", "TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_staff_attendance_staff_date ON staff_attendance(school_id,user_id,date)")
+    if table_exists(conn, "users") and "rbac_role" in column_names(conn, "users"):
+        conn.execute("UPDATE users SET rbac_role='Class Teacher / Form Teacher' WHERE rbac_role IN ('Form Teacher','Class Teacher')")
+    if table_exists(conn, "role_assignments"):
+        conn.execute("UPDATE role_assignments SET role='Class Teacher / Form Teacher' WHERE role IN ('Form Teacher','Class Teacher')")
+
+STEPS.append(("online_first_stability_v55", migration_055_online_stability))
+
+
+
+def migration_056_automated_timetable_v2(conn):
+    """Replace the legacy timetable UI/data model with the tenant-scoped
+    ScheduleSlot + TimetableEntry architecture described in the automated
+    timetable specification. Legacy timetable tables are retained only for
+    backwards/offline compatibility; v2 is the active online source of truth."""
+    def tbl(sql): conn.execute(sql)
+    # Default school days: these are structure, not lesson times, so creating
+    # them does not recreate the old timetable.
+    tbl("""CREATE TABLE IF NOT EXISTS school_days_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        day_name TEXT NOT NULL, day_code TEXT NOT NULL, day_order INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(tenant_id,school_id,day_code), FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    # Keep the specification's logical name while using _v2 physical names to
+    # avoid destroying the legacy offline sync tables.
+    for school in conn.execute("SELECT id,COALESCE(tenant_id,CAST(id AS TEXT)) tenant_id FROM schools").fetchall():
+        for order,name,code in [(1,'Monday','MON'),(2,'Tuesday','TUE'),(3,'Wednesday','WED'),(4,'Thursday','THU'),(5,'Friday','FRI'),(6,'Saturday','SAT')]:
+            conn.execute("INSERT OR IGNORE INTO school_days_v2(tenant_id,school_id,day_name,day_code,day_order,is_active) VALUES(?,?,?,?,?,?)",(school['tenant_id'],school['id'],name,code,order,1 if order<=5 else 0))
+    tbl("""CREATE TABLE IF NOT EXISTS schedule_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        academic_session_id INTEGER, term_id INTEGER, name TEXT NOT NULL, description TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(academic_session_id) REFERENCES sessions(id), FOREIGN KEY(term_id) REFERENCES terms(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS schedule_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        academic_session_id INTEGER, term_id INTEGER, day_id INTEGER NOT NULL, schedule_template_id INTEGER NOT NULL,
+        slot_number INTEGER NOT NULL, slot_name TEXT NOT NULL, slot_type TEXT NOT NULL DEFAULT 'TEACHING',
+        start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1, is_fixed INTEGER NOT NULL DEFAULT 0, allows_timetable_entry INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        CHECK(slot_type IN ('TEACHING','BREAK','ASSEMBLY','ACTIVITY','OTHER')), CHECK(start_time < end_time),
+        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(day_id) REFERENCES school_days_v2(id), FOREIGN KEY(schedule_template_id) REFERENCES schedule_templates(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS class_subject_requirements_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        academic_session_id INTEGER, term_id INTEGER, class_id INTEGER NOT NULL, arm_id INTEGER, subject_id INTEGER NOT NULL,
+        periods_per_week INTEGER NOT NULL DEFAULT 1, periods_per_day_limit INTEGER NOT NULL DEFAULT 1,
+        requires_double_period INTEGER NOT NULL DEFAULT 0, requires_triple_period INTEGER NOT NULL DEFAULT 0,
+        preferred_period_type TEXT DEFAULT 'ANY', priority INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'active',
+        UNIQUE(tenant_id,school_id,class_id,subject_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(class_id) REFERENCES classes(id), FOREIGN KEY(subject_id) REFERENCES subjects(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS teacher_availability_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,
+        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, availability_status TEXT NOT NULL DEFAULT 'Available', reason TEXT,
+        is_hard_constraint INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(tenant_id,school_id,teacher_id,day_id,slot_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id), FOREIGN KEY(day_id) REFERENCES school_days_v2(id), FOREIGN KEY(slot_id) REFERENCES schedule_slots(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS teacher_workload_profiles_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,
+        max_periods_per_day INTEGER NOT NULL DEFAULT 8, max_periods_per_week INTEGER NOT NULL DEFAULT 40,
+        max_consecutive_periods INTEGER NOT NULL DEFAULT 4, preferred_free_periods INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active',
+        UNIQUE(tenant_id,school_id,teacher_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS teacher_timetable_preferences_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,
+        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, preference_type TEXT NOT NULL, priority INTEGER NOT NULL DEFAULT 1, reason TEXT,
+        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS class_timetable_preferences_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, class_id INTEGER NOT NULL, arm_id INTEGER,
+        subject_id INTEGER, preferred_days TEXT, preferred_slots TEXT, avoid_days TEXT, avoid_slots TEXT,
+        max_subject_periods_per_day INTEGER, status TEXT NOT NULL DEFAULT 'active', FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(class_id) REFERENCES classes(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_rooms_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, room_name TEXT NOT NULL,
+        room_code TEXT, room_type TEXT NOT NULL DEFAULT 'ROOM', capacity INTEGER DEFAULT 0, building TEXT, floor TEXT, status TEXT NOT NULL DEFAULT 'active',
+        UNIQUE(tenant_id,school_id,room_name), FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS subject_room_requirements_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, room_id INTEGER NOT NULL,
+        requirement_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', UNIQUE(tenant_id,school_id,subject_id,room_id),
+        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(subject_id) REFERENCES subjects(id), FOREIGN KEY(room_id) REFERENCES timetable_rooms_v2(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS fixed_activities_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, academic_session_id INTEGER, term_id INTEGER,
+        activity_name TEXT NOT NULL, activity_type TEXT NOT NULL, day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL,
+        class_id INTEGER, arm_id INTEGER, teacher_id INTEGER, room_id INTEGER, is_mandatory INTEGER DEFAULT 1, is_immovable INTEGER DEFAULT 1,
+        FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_configurations_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, academic_session_id INTEGER, term_id INTEGER,
+        allow_double_periods INTEGER DEFAULT 1, allow_triple_periods INTEGER DEFAULT 0, allow_same_subject_same_day INTEGER DEFAULT 1,
+        max_same_subject_per_day INTEGER DEFAULT 2, max_teacher_consecutive_periods INTEGER DEFAULT 4, balance_teacher_workload INTEGER DEFAULT 1,
+        spread_subjects INTEGER DEFAULT 1, minimize_class_gaps INTEGER DEFAULT 1, prefer_morning_subjects INTEGER DEFAULT 0, solver_time_limit INTEGER DEFAULT 30,
+        status TEXT DEFAULT 'active', UNIQUE(tenant_id,school_id,academic_session_id,term_id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_types_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, name TEXT NOT NULL, type_code TEXT NOT NULL,
+        description TEXT, status TEXT DEFAULT 'active', UNIQUE(tenant_id,school_id,type_code), FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_versions_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, academic_session_id INTEGER, term_id INTEGER,
+        timetable_type_id INTEGER, version_number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'DRAFT', validation_status TEXT NOT NULL DEFAULT 'PENDING',
+        is_current INTEGER DEFAULT 1, parent_version_id INTEGER, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_by INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        submitted_by INTEGER, submitted_at TEXT, published_by INTEGER, published_at TEXT, archived_at TEXT, revision_reason TEXT,
+        UNIQUE(tenant_id,school_id,version_number), FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_entries_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,
+        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, class_id INTEGER NOT NULL, arm_id INTEGER, subject_id INTEGER NOT NULL,
+        teacher_id INTEGER, room_id INTEGER, entry_type TEXT NOT NULL DEFAULT 'LESSON', block_group_id TEXT, is_fixed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(timetable_version_id,day_id,slot_id,class_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(timetable_version_id) REFERENCES timetable_versions_v2(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_conflicts_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,
+        conflict_type TEXT NOT NULL, severity TEXT NOT NULL, entity_type TEXT, entity_id INTEGER, description TEXT NOT NULL, suggested_action TEXT,
+        resolved INTEGER NOT NULL DEFAULT 0, resolved_by INTEGER, resolved_at TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_approvals_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,
+        approval_level INTEGER NOT NULL, assigned_role TEXT NOT NULL, assigned_user_id INTEGER, status TEXT NOT NULL DEFAULT 'pending', decision TEXT,
+        comment TEXT, decided_by INTEGER, decided_at TEXT, FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    tbl("""CREATE TABLE IF NOT EXISTS timetable_audit_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER, user_id INTEGER,
+        role TEXT, action TEXT NOT NULL, previous_status TEXT, new_status TEXT, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    # Seed one timetable type and configuration per school, but no lesson slots.
+    for school in conn.execute("SELECT id,COALESCE(tenant_id,CAST(id AS TEXT)) tenant_id FROM schools").fetchall():
+        conn.execute("INSERT OR IGNORE INTO timetable_types_v2(tenant_id,school_id,name,type_code,description) VALUES(?,?,?,?,?)",(school['tenant_id'],school['id'],'Regular Academic Timetable','REGULAR','Standard academic timetable'))
+        conn.execute("INSERT OR IGNORE INTO timetable_configurations_v2(tenant_id,school_id,allow_double_periods,allow_triple_periods,balance_teacher_workload,spread_subjects,minimize_class_gaps) VALUES(?,?,?,?,?,?,?)",(school['tenant_id'],school['id'],1,0,1,1,1))
+        for row in conn.execute("SELECT id,name FROM classes WHERE school_id=?",(school['id'],)).fetchall():
+            for cs in conn.execute("SELECT subject_id,teacher_id FROM class_subjects WHERE class_id=?",(row['id'],)).fetchall():
+                conn.execute("INSERT OR IGNORE INTO class_subject_requirements_v2(tenant_id,school_id,class_id,arm_id,subject_id,periods_per_week,periods_per_day_limit,status) VALUES(?,?,?,?,?,?,?,'active')",(school['tenant_id'],school['id'],row['id'],row['id'],cs['subject_id'],1,1))
+                if cs['teacher_id']:
+                    conn.execute("INSERT OR IGNORE INTO teacher_workload_profiles_v2(tenant_id,school_id,teacher_id) VALUES(?,?,?)",(school['tenant_id'],school['id'],cs['teacher_id']))
+    # Make all new timetable entities syncable for the future offline/sync phase.
+    for t in ["school_days_v2","schedule_templates","schedule_slots","class_subject_requirements_v2","teacher_availability_v2","teacher_workload_profiles_v2","teacher_timetable_preferences_v2","class_timetable_preferences_v2","timetable_rooms_v2","subject_room_requirements_v2","fixed_activities_v2","timetable_configurations_v2","timetable_types_v2","timetable_versions_v2","timetable_entries_v2","timetable_conflicts_v2","timetable_approvals_v2","timetable_audit_v2"]:
+        try: _make_syncable(conn,t)
+        except Exception: pass
+
+STEPS.append(("automated_timetable_v2", migration_056_automated_timetable_v2))

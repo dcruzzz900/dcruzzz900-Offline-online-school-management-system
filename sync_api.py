@@ -628,6 +628,14 @@ ENTITIES = {
         "natural_key": ("class_id", "day_of_week", "period_id"),
         "conflict_policy": POLICY_MERGE,
     },
+    "school_days_v2": {"table":"school_days_v2","fields":["day_name","day_code","day_order","is_active"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("day_code",),"conflict_policy":POLICY_MERGE},
+    "schedule_slots": {"table":"schedule_slots","fields":["academic_session_id","term_id","day_id","schedule_template_id","slot_number","slot_name","slot_type","start_time","end_time","duration_minutes","is_active","is_fixed","allows_timetable_entry"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("day_id","slot_number"),"conflict_policy":POLICY_MERGE},
+    "class_subject_requirements_v2": {"table":"class_subject_requirements_v2","fields":["academic_session_id","term_id","class_id","arm_id","subject_id","periods_per_week","periods_per_day_limit","requires_double_period","requires_triple_period","preferred_period_type","priority","status"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("class_id","subject_id"),"conflict_policy":POLICY_MERGE},
+    "teacher_availability_v2": {"table":"teacher_availability_v2","fields":["teacher_id","day_id","slot_id","availability_status","reason","is_hard_constraint"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("teacher_id","day_id","slot_id"),"conflict_policy":POLICY_MERGE},
+    "teacher_workload_profiles_v2": {"table":"teacher_workload_profiles_v2","fields":["teacher_id","max_periods_per_day","max_periods_per_week","max_consecutive_periods","preferred_free_periods","status"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("teacher_id",),"conflict_policy":POLICY_MERGE},
+    "timetable_rooms_v2": {"table":"timetable_rooms_v2","fields":["room_name","room_code","room_type","capacity","building","floor","status"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("room_name",),"conflict_policy":POLICY_MERGE},
+    "timetable_versions_v2": {"table":"timetable_versions_v2","fields":["academic_session_id","term_id","timetable_type_id","version_number","status","validation_status","is_current","parent_version_id","revision_reason"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("version_number",),"conflict_policy":POLICY_MERGE},
+    "timetable_entries_v2": {"table":"timetable_entries_v2","fields":["timetable_version_id","day_id","slot_id","class_id","arm_id","subject_id","teacher_id","room_id","entry_type","block_group_id","is_fixed"],"school_col":"direct","scope_ids":_all_scope,"scope_col":None,"can_write":set(ADMIN_ROLES),"can_read":set(STAFF_ROLES),"natural_key":("timetable_version_id","day_id","slot_id","class_id"),"conflict_policy":POLICY_MERGE},
 }
 
 
@@ -753,7 +761,7 @@ _ENTITY_SELF_ALIAS = {
     "student_term_info": "x", "staff_attendance": "x", "users": "x",
     "classes": "x", "subjects": "x", "sessions": "x", "terms": "x",
     "class_subjects": "x", "grading_config": "x", "grade_scale": "x", "enrollments": "x", "skill_traits": "x", "student_skill_ratings": "x", "materials": "x",
-    "timetable_periods": "x", "timetable_entries": "x",
+    "timetable_periods": "x", "timetable_entries": "x", "school_days_v2":"x", "schedule_slots":"x", "class_subject_requirements_v2":"x", "teacher_availability_v2":"x", "teacher_workload_profiles_v2":"x", "timetable_rooms_v2":"x", "timetable_versions_v2":"x", "timetable_entries_v2":"x",
 }
 
 PAGE_SIZE = 500

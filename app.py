@@ -223,9 +223,10 @@ def _internal_server_error(_error):
 
 # ---------- Role & permission helpers ----------
 ROLE_CATALOG = {
+    # Legacy label "Form Teacher" is normalized to the single current "Class Teacher / Form Teacher" role.
     "School Admin": ["view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users","manage_branding","manage_attendance","manage_reports"],
     "Sub-Admin": ["view","create","edit","delete","approve","verify","publish","import","export","manage_users","manage_attendance","manage_reports"],
-    "Form Teacher": ["view","create","edit","import","export","manage_attendance"],
+    "Class Teacher / Form Teacher": ["view","create","edit","import","export","manage_attendance"],
     "Subject Teacher": ["view","create","edit","import"],
     "Discipline Master": ["view","create","edit","export","manage_attendance"],
     "Guidance/Counselor": ["view","create","edit"],
@@ -241,12 +242,20 @@ ROLE_CATALOG = {
     "Examination/Result Officer": ["view","create","edit","verify","finalize","lock","publish","import","export"],
     "ICT Officer": ["view","create","edit","import","export"],
     "Finance/Bursar": ["view","create","edit","export"],
-    "Class Teacher": ["view","create","edit","import","export","manage_attendance"],
     "Teacher": ["view","create","edit","import"],
     "Other Staff": ["view"],
 }
 
 SCHOOL_LEVELS = ("All","Nursery","Primary","Secondary")
+
+def canonical_rbac_role(value):
+    """Return the single current class/form teacher role name. Historical
+    databases may still contain the old labels; they are read compatibly but
+    are never exposed as separate assignable roles."""
+    if value in ("Form Teacher", "Class Teacher"):
+        return "Class Teacher / Form Teacher"
+    return value
+
 
 def active_role_assignments(conn, user_id, school_id):
     today = datetime.date.today().isoformat()
@@ -294,6 +303,26 @@ def can_access_scope(user_id, school_id, permission, school_level=None, departme
     conn=get_db()
     if school_id != current_school_id() and session.get("role") != "admin": conn.close(); return False
     assignments=active_role_assignments(conn,user_id,school_id)
+    # Class/Form Teachers are scoped by the class records they are actually
+    # assigned to; a global role assignment must never grant all classes.
+    rbac_role = canonical_rbac_role(session.get("rbac_role"))
+    if session.get("role") == "teacher" and rbac_role == "Class Teacher / Form Teacher":
+        allowed_classes = set(form_teacher_class_ids(conn, user_id))
+        if class_id is not None and int(class_id) not in allowed_classes:
+            conn.close(); return False
+        if class_id is None and not allowed_classes:
+            conn.close(); return False
+    # Subject Teachers are restricted to class-subject assignments.
+    if session.get("role") == "teacher" and rbac_role == "Subject Teacher":
+        if class_id is None or subject_id is None:
+            conn.close(); return False
+        assigned = conn.execute(
+            "SELECT 1 FROM class_subjects cs JOIN classes c ON c.id=cs.class_id JOIN subjects s ON s.id=cs.subject_id "
+            "WHERE cs.class_id=? AND cs.subject_id=? AND cs.teacher_id=? AND c.school_id=? AND s.school_id=? LIMIT 1",
+            (class_id, subject_id, user_id, school_id, school_id),
+        ).fetchone()
+        if not assigned:
+            conn.close(); return False
     for a in assignments:
         if school_level and a["school_level"] not in ("All",school_level): continue
         if department and a["department"] and a["department"] != department: continue
@@ -301,7 +330,7 @@ def can_access_scope(user_id, school_id, permission, school_level=None, departme
         if class_arm and a["class_arm"] and a["class_arm"] != class_arm: continue
         if subject_id and a["subject_id"] and int(a["subject_id"]) != int(subject_id): continue
         if conn.execute("SELECT 1 FROM role_assignment_permissions WHERE assignment_id=? AND permission=? AND granted=0 LIMIT 1",(a["id"],permission)).fetchone(): conn.close(); return False
-    if session.get("role") == "admin" and not assignments: conn.close(); return True
+    if session.get("role") in ("admin", "sub_admin") and not assignments: conn.close(); return True
     for a in assignments:
         if school_level and a["school_level"] not in ("All",school_level): continue
         if department and a["department"] and a["department"] != department: continue
@@ -1242,7 +1271,7 @@ def change_password():
         new = request.form["new_password"]
         confirm = request.form["confirm_password"]
         conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE id=?", (session["user_id"],)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?", (session["user_id"], current_school_id(), current_tenant_id())).fetchone()
         if not check_password_hash(user["password_hash"], current):
             flash("Your current password is incorrect.", "error")
         elif len(new) < 6:
@@ -1274,7 +1303,7 @@ POSITION_CHOICES = [
     ("principal", "Principal"),
     ("vice_principal", "Vice Principal"),
     ("exam_officer", "Exam Officer"),
-    ("form_teacher", "Form Teacher"),
+    ("form_teacher", "Class Teacher / Form Teacher"),
     ("subject_teacher", "Subject Teacher"),
 ]
 
@@ -1665,6 +1694,8 @@ def admin_school():
     school_id = current_school_id()
     if request.method == "POST":
         name = request.form.get("school_name", "").strip()
+        registered_email = request.form.get("registered_email", "").strip() or None
+        registered_phone = request.form.get("registered_phone", "").strip() or None
         logo_align = request.form.get("logo_align", "center")
         if logo_align not in ("left", "center", "right"):
             logo_align = "center"
@@ -1713,14 +1744,14 @@ def admin_school():
             flash("School name cannot be empty.", "error")
         else:
             conn.execute(
-                "UPDATE schools SET name=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
+                "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
                 "result_accent_color=?, result_header_layout=?, "
                 "auto_teacher_comment=?, auto_principal_comment=?, "
                 "web_font=?, pdf_font=?, show_result_date=?, "
                 "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
                 "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
                 "show_principal_name=?, show_principal_signature=? WHERE id=?",
-                (name, logo_align, name_align, timezone, date_format,
+                (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
                  result_accent_color, result_header_layout,
                  auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
                  show_result_date, auth_logo_opacity, auth_logo_position,
@@ -1944,6 +1975,35 @@ def update_my_contact():
 @login_required()
 def my_profile():
     return redirect(url_for("staff_profile", user_id=session["user_id"]))
+
+
+@app.route("/staff/<int:user_id>/profile/update", methods=["POST"])
+@login_required()
+def update_staff_self_profile(user_id):
+    if user_id != session.get("user_id"):
+        flash("You can only edit your own staff profile.", "error")
+        return redirect(url_for("staff_profile", user_id=session.get("user_id")))
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?", (user_id, current_school_id(), current_tenant_id())).fetchone()
+    if not user:
+        conn.close(); session.clear(); return redirect(url_for("login"))
+    name = " ".join(request.form.get("name", "").split())
+    email = request.form.get("email", "").strip() or None
+    phone = request.form.get("phone", "").strip() or None
+    address = request.form.get("address", "").strip() or None
+    if not name:
+        conn.close(); flash("Name is required.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
+    if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        conn.close(); flash("Please enter a valid email address.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
+    if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) AND id!=?", (email, user_id)).fetchone():
+        conn.close(); flash("That email is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
+    if phone and conn.execute("SELECT 1 FROM users WHERE phone=? AND id!=?", (phone, user_id)).fetchone():
+        conn.close(); flash("That phone number is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
+    conn.execute("UPDATE users SET name=?, email=?, phone=?, address=? WHERE id=? AND school_id=? AND tenant_id=?", (name,email,phone,address,user_id,current_school_id(),current_tenant_id()))
+    conn.commit(); conn.close()
+    session["name"] = name
+    flash("Profile updated successfully.", "success")
+    return redirect(url_for("staff_profile", user_id=user_id))
 
 
 @app.route("/staff/<int:user_id>")
@@ -2226,13 +2286,13 @@ def school_readiness_checks(conn, school_id):
         return conn.execute(sql, params).fetchone()["n"]
     classes = count("SELECT COUNT(*) AS n FROM classes WHERE school_id=?")
     subjects = count("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?")
-    teachers = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND active=1")
+    teachers = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1")
     students = count("SELECT COUNT(*) AS n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=?")
     sessions = count("SELECT COUNT(*) AS n FROM sessions WHERE school_id=?")
     terms = count("SELECT COUNT(*) AS n FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=?")
     class_subjects = count("SELECT COUNT(*) AS n FROM class_subjects cs JOIN classes c ON c.id=cs.class_id WHERE c.school_id=?")
     active_roles = count("SELECT COUNT(*) AS n FROM role_assignments WHERE school_id=? AND status='active'") if table_exists(conn, "role_assignments") else 0
-    active_admins = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='admin' AND active=1")
+    active_admins = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='admin' AND COALESCE(is_active,1)=1")
     grade_bands = count("SELECT COUNT(*) AS n FROM grade_scale WHERE school_id=?")
     checks = [
         ("profile", bool((school["name"] or "").strip())),
@@ -2574,55 +2634,60 @@ def delete_subject(subject_id):
 
 
 @app.route("/admin/class_subjects", methods=["GET", "POST"])
+@app.route("/academics/assign-subjects", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_class_subjects():
     conn = get_db()
     school_id = current_school_id()
     if request.method == "POST":
         try:
-            _class_id_scope = int(request.form.get("class_id"))
-            _subject_id_scope = int(request.form.get("subject_id"))
+            class_id = int(request.form.get("class_id"))
+            subject_id = int(request.form.get("subject_id"))
         except (TypeError, ValueError):
-            _class_id_scope = _subject_id_scope = None
-        if not require_scoped_permission("create", class_id=_class_id_scope, subject_id=_subject_id_scope):
-            conn.close()
-            flash("You do not have permission to assign subjects in this scope.", "error")
+            class_id = subject_id = None
+        teacher_id = request.form.get("teacher_id", type=int)
+        if not class_id or not subject_id:
+            conn.close(); flash("Please select both a class/arm and subject.", "error")
             return redirect(url_for("admin_class_subjects"))
+        class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone()
+        subject_row = conn.execute("SELECT * FROM subjects WHERE id=? AND school_id=?", (subject_id, school_id)).fetchone()
+        if not class_row or not subject_row:
+            conn.close(); flash("The selected class/arm or subject does not belong to this school.", "error")
+            return redirect(url_for("admin_class_subjects"))
+        if not require_scoped_permission("create", class_id=class_id, subject_id=subject_id):
+            conn.close(); flash("You do not have permission to assign subjects in this scope.", "error")
+            return redirect(url_for("admin_class_subjects"))
+        if teacher_id:
+            teacher = conn.execute("SELECT id FROM users WHERE id=? AND school_id=? AND role='teacher' AND COALESCE(is_active,1)=1", (teacher_id, school_id)).fetchone()
+            if not teacher:
+                conn.close(); flash("That teacher was not found in this school.", "error")
+                return redirect(url_for("admin_class_subjects"))
+        try:
+            conn.execute("INSERT INTO class_subjects (class_id, subject_id, teacher_id) VALUES (?,?,?)", (class_id, subject_id, teacher_id))
+            conn.commit()
+            flash("Subject assigned to class/arm successfully.", "success")
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            existing = conn.execute("SELECT id, teacher_id FROM class_subjects WHERE class_id=? AND subject_id=?", (class_id, subject_id)).fetchone()
+            if existing and teacher_id and not existing["teacher_id"]:
+                conn.execute("UPDATE class_subjects SET teacher_id=? WHERE id=?", (teacher_id, existing["id"]))
+                conn.commit(); flash("Subject was already assigned; the teacher assignment was updated.", "success")
+            else:
+                flash("That subject is already assigned to this class/arm. Use the assignment list to change its teacher.", "error")
     elif not require_scoped_permission("view"):
-        conn.close()
-        flash("You do not have permission to view class-subject assignments.", "error")
+        conn.close(); flash("You do not have permission to view class-subject assignments.", "error")
         return redirect(url_for("dashboard"))
-        class_id = request.form["class_id"]
-        subject_id = request.form["subject_id"]
-        teacher_id = request.form.get("teacher_id") or None
-        if not class_in_school(conn, class_id) or not subject_in_school(conn, subject_id):
-            flash("Class or subject not found.", "error")
-        elif teacher_id and not teacher_in_school(conn, teacher_id):
-            flash("That teacher was not found.", "error")
-        else:
-            try:
-                conn.execute(
-                    "INSERT INTO class_subjects (class_id, subject_id, teacher_id) VALUES (?,?,?)",
-                    (class_id, subject_id, teacher_id),
-                )
-                conn.commit()
-                flash("Subject assigned to class.", "success")
-            except Exception:
-                flash("That subject is already assigned to this class.", "error")
-    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level, name, arm", (school_id,)).fetchall()
     subjects = conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
-    teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (school_id,)).fetchall()
+    teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? AND COALESCE(is_active,1)=1 ORDER BY name", (school_id,)).fetchall()
     assignments = conn.execute(
-        "SELECT cs.*, c.name as class_name, s.name as subject_name, u.name as teacher_name "
-        "FROM class_subjects cs JOIN classes c ON c.id=cs.class_id "
-        "JOIN subjects s ON s.id=cs.subject_id LEFT JOIN users u ON u.id=cs.teacher_id "
-        "WHERE c.school_id=? ORDER BY c.name, s.name", (school_id,)
+        "SELECT cs.*, c.name as class_name, c.arm as class_arm, s.name as subject_name, u.name as teacher_name "
+        "FROM class_subjects cs JOIN classes c ON c.id=cs.class_id JOIN subjects s ON s.id=cs.subject_id "
+        "LEFT JOIN users u ON u.id=cs.teacher_id WHERE c.school_id=? AND s.school_id=? ORDER BY c.level, c.name, c.arm, s.name",
+        (school_id, school_id),
     ).fetchall()
     conn.close()
-    return render_template(
-        "admin_class_subjects.html", classes=classes, subjects=subjects,
-        teachers=teachers, assignments=assignments
-    )
+    return render_template("admin_class_subjects.html", classes=classes, subjects=subjects, teachers=teachers, assignments=assignments)
 
 
 @app.route("/admin/class_subjects/<int:cs_id>/assign_teacher", methods=["POST"])
@@ -2715,19 +2780,71 @@ def admin_students():
             for e in errors: flash(e,"error")
         else:
             try:
-                username_conflict=conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(TRIM(username))=LOWER(?)",(school_id,username)).fetchone()
-                if username_conflict:
-                    if is_offline_sync_request(): conn.close(); return {"ok":False,"error":"This username is already in use at this school."},409
-                    flash("This username is already in use at this school.","error"); conn.close(); return redirect(url_for("admin_teachers"))
-                tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
-                cur=conn.execute("INSERT INTO students (school_id,tenant_id,admission_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,parent_name,parent_address,parent_email,parent_phone,parent_relationship,status,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,admission,first,last,request.form.get("other_names","").strip() or None,request.form.get("gender"),class_id,request.form.get("date_of_birth","").strip() or None,request.form.get("religion","").strip() or None,request.form.get("parent_name","").strip() or None,request.form.get("parent_address","").strip() or None,request.form.get("parent_email","").strip() or None,request.form.get("parent_phone","").strip() or None,request.form.get("parent_relationship","").strip() or None,request.form.get("status","Active") if request.form.get("status") in ("Active","Graduated","Transferred","Withdrawn","Suspended") else "Active",request.form.get("phone","").strip() or None))
-                upsert_enrollment(conn,cur.lastrowid,class_id); conn.commit(); offline_sync_remember(conn,request.form.get("offline_token"),"student",cur.lastrowid)
-                if is_offline_sync_request(): conn.close(); return {"ok":True,"id":cur.lastrowid}
+                school = conn.execute("SELECT id, tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()
+                if not school or not school["tenant_id"]:
+                    raise ValueError("School tenant information is incomplete. Please complete School Setup before adding students.")
+                # Every class/arm and student write is resolved from the
+                # authenticated tenant; no client-supplied tenant is trusted.
+                class_row = conn.execute("SELECT id, school_id, tenant_id FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone()
+                if not class_row or class_row["tenant_id"] not in (None, school["tenant_id"]):
+                    raise ValueError("The selected class/arm does not belong to the current school.")
+                parent_email = request.form.get("parent_email", "").strip() or None
+                if parent_email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", parent_email):
+                    raise ValueError("Parent/Guardian email address is not valid.")
+                status = request.form.get("status", "Active")
+                if status not in ("Active","Graduated","Transferred","Withdrawn","Suspended"):
+                    status = "Active"
+                tenant = school["tenant_id"]
+                cur = conn.execute(
+                    "INSERT INTO students (school_id,tenant_id,admission_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,parent_name,parent_address,parent_email,parent_phone,parent_relationship,status,phone) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (school_id,tenant,admission,first,last,request.form.get("other_names","").strip() or None,
+                     request.form.get("gender"),class_id,request.form.get("date_of_birth","").strip() or None,
+                     request.form.get("religion","").strip() or None,request.form.get("parent_name","").strip() or None,
+                     request.form.get("parent_address","").strip() or None,parent_email,
+                     request.form.get("parent_phone","").strip() or None,request.form.get("parent_relationship","").strip() or None,
+                     status,request.form.get("phone","").strip() or None),
+                )
+                student_id = cur.lastrowid
+                upsert_enrollment(conn, student_id, class_id)
+                # Optional online passport upload. Offline remains unchanged
+                # and continues to queue the form through the existing client.
+                photo = request.files.get("photo")
+                if photo and photo.filename:
+                    size_error = _reject_oversize(photo, "passport")
+                    if size_error:
+                        raise ValueError(size_error)
+                    ext = photo.filename.rsplit(".", 1)[-1].lower() if "." in photo.filename else ""
+                    if ext not in ALLOWED_LOGO_EXTENSIONS:
+                        raise ValueError("Passport photo must be a PNG, JPG, or GIF image.")
+                    os.makedirs(STUDENT_PHOTOS_DIR, exist_ok=True)
+                    filename = f"student_{student_id}.{ext}"
+                    photo.save(os.path.join(STUDENT_PHOTOS_DIR, filename))
+                    conn.execute("UPDATE students SET photo_filename=? WHERE id=? AND school_id=?", (filename, student_id, school_id))
+                offline_sync_remember(conn,request.form.get("offline_token"),"student",student_id)
+                conn.commit()
+                if is_offline_sync_request():
+                    conn.close(); return {"ok":True,"id":student_id}
                 flash(f"Student '{first} {last}' added successfully.","success")
-            except sqlite3.IntegrityError:
-                conn.rollback(); flash("That Admission No. / Register No. is already in use in this class.","error")
+            except ValueError as exc:
+                conn.rollback()
+                if is_offline_sync_request():
+                    conn.close(); return {"ok":False,"error":str(exc)},400
+                flash(str(exc),"error")
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                app.logger.warning("Student creation rejected by database constraint: %s", exc)
+                message = "That Admission No. / Register No. is already in use in this class." if "admission" in str(exc).lower() or "unique" in str(exc).lower() else "Student data conflicts with an existing record. Please check the admission/register number and class."
+                if is_offline_sync_request():
+                    conn.close(); return {"ok":False,"error":message},409
+                flash(message,"error")
             except Exception:
-                conn.rollback(); app.logger.exception("Student creation failed"); flash("Student could not be saved. Please review the form and try again.","error")
+                conn.rollback()
+                app.logger.exception("Student creation failed")
+                message = "Student could not be saved because the submitted data could not be processed. Check the required fields and try again."
+                if is_offline_sync_request():
+                    conn.close(); return {"ok":False,"error":message},500
+                flash(message,"error")
     elif not require_scoped_permission("view"):
         conn.close(); flash("You do not have permission to view students.","error"); return redirect(url_for("dashboard"))
     classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); class_filter=request.args.get("class_id",type=int)
@@ -3008,9 +3125,12 @@ def parent_attendance(student_id):
 def parent_timetable(student_id):
     conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
     if not child: conn.close(); flash("You do not have access to this student.","error"); return redirect(url_for("parent_children_page"))
-    periods=conn.execute("SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order,id",(current_school_id(),)).fetchall()
-    entries=conn.execute("SELECT te.*,p.name period_name,p.start_time,p.end_time,s.name subject_name,u.name teacher_name FROM timetable_entries te JOIN timetable_periods p ON p.id=te.period_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id WHERE te.class_id=? ORDER BY te.day_of_week,p.sort_order,p.id",(child["class_id"],)).fetchall()
-    conn.close(); return render_template("parent_timetable.html",child=child,periods=periods,entries=entries,days=list(enumerate(DAY_NAMES)))
+    school_id=current_school_id(); school=conn.execute("SELECT COALESCE(tenant_id,CAST(id AS TEXT)) tenant_id FROM schools WHERE id=?",(school_id,)).fetchone(); tenant=school["tenant_id"] if school else str(school_id)
+    version=conn.execute("SELECT * FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=? AND status='PUBLISHED' ORDER BY id DESC LIMIT 1",(school_id,tenant)).fetchone()
+    entries=[]
+    if version:
+        entries=conn.execute("SELECT te.*,ss.slot_name,ss.start_time,ss.end_time,s.name subject_name,u.name teacher_name,r.room_name,sd.day_name,sd.day_order FROM timetable_entries_v2 te JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id WHERE te.timetable_version_id=? AND te.class_id=? AND te.school_id=? AND te.tenant_id=? ORDER BY sd.day_order,ss.slot_number",(version["id"],child["class_id"],school_id,tenant)).fetchall()
+    conn.close(); return render_template("parent_timetable.html",child=child,entries=entries,version=version)
 
 @app.route("/parent/notifications")
 @parent_login_required
@@ -3263,6 +3383,7 @@ def students_bulk_upload():
         flash(message, "error")
         return redirect(url_for("admin_students"))
     school = get_school(conn, school_id)
+    tenant_id = school["tenant_id"] if school else current_tenant_id()
     plan = subscription_plan_for_school(conn, school)
     current_usage = school_plan_usage(conn, school_id)["students"]
     student_limit = plan["max_students"] if plan and "max_students" in plan.keys() else None
@@ -3293,10 +3414,10 @@ def students_bulk_upload():
             continue
         try:
             cur = conn.execute(
-                "INSERT INTO students (admission_no, first_name, last_name, other_names, gender, "
+                "INSERT INTO students (school_id, tenant_id, admission_no, first_name, last_name, other_names, gender, "
                 "class_id, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (adm, fn, ln, other_names, gender if gender in ("M", "F") else None,
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (school_id, tenant_id, adm, fn, ln, other_names, gender if gender in ("M", "F") else None,
                  class_id, dob, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship),
             )
             upsert_enrollment(conn, cur.lastrowid, class_id)
@@ -3343,7 +3464,7 @@ def admin_teachers():
         password = request.form["password"]
         rbac_role=request.form.get("rbac_role","Teacher").strip()
         if rbac_role not in ROLE_CATALOG: rbac_role="Teacher"
-        position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
+        position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
         offline_token = request.form.get("offline_token")
         existing_id = offline_sync_existing_id(conn, offline_token)
         if existing_id:
@@ -3446,7 +3567,7 @@ def set_teacher_position(teacher_id):
     rbac_role=request.form.get("rbac_role","Teacher").strip()
     if rbac_role not in ROLE_CATALOG:
         conn.close(); flash("Not a valid RBAC role.","error"); return redirect(url_for("admin_teachers"))
-    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
+    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
     conn.execute("UPDATE users SET rbac_role=?,position=? WHERE id=?",(rbac_role,position,teacher_id))
     ra=conn.execute("SELECT id FROM role_assignments WHERE user_id=? AND school_id=? AND status='active' ORDER BY id DESC LIMIT 1",(teacher_id,current_school_id())).fetchone()
     if ra:
@@ -3772,6 +3893,7 @@ def reset_demo_data():
             conn.execute(f"DELETE FROM students WHERE id IN ({sp})", student_ids)
         conn.execute(f"DELETE FROM class_subjects WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM timetable_entries WHERE class_id IN ({placeholders})", class_ids)
+        conn.execute(f"DELETE FROM timetable_entries_v2 WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM classes WHERE id IN ({placeholders})", class_ids)
     conn.execute("DELETE FROM subjects WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM users WHERE role='teacher' AND school_id=?", (school_id,))
@@ -3866,194 +3988,406 @@ def admin_promote():
     )
 
 
-# ---------- timetable ----------
+# ---------- automated timetable v2 ----------
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+TIMETABLE_EDIT_ROLES = {"admin", "sub_admin", "Timetable Manager"}
+TIMETABLE_APPROVER_ROLES = {"admin", "sub_admin", "Principal / Head of School", "HOD / Timetable Reviewer"}
 
 
-def _timetable_can_edit():
-    return session.get("role") in ("admin", "sub_admin")
+def _tt_school(conn):
+    sid = current_school_id()
+    return conn.execute("SELECT * FROM schools WHERE id=?", (sid,)).fetchone()
 
 
-def _timetable_can_view_class(conn, class_id):
-    if session.get("role") in ("admin", "sub_admin") or session.get("position") in FULL_ACCESS_POSITIONS:
-        return True
-    if class_id in form_teacher_class_ids(conn, session["user_id"]):
-        return True
-    row = conn.execute(
-        "SELECT 1 FROM class_subjects WHERE class_id=? AND teacher_id=?",
-        (class_id, session["user_id"]),
-    ).fetchone()
-    return bool(row)
+def _tt_tenant(conn):
+    school = _tt_school(conn)
+    return (school["tenant_id"] if school and "tenant_id" in school.keys() else None) or str(current_school_id())
 
 
-def _timetable_can_view_teacher(teacher_id):
-    if session.get("role") in ("admin", "sub_admin") or session.get("position") in FULL_ACCESS_POSITIONS:
-        return True
-    return teacher_id == session.get("user_id")
+def _tt_role(conn):
+    if session.get("role") == "admin":
+        return "School Admin"
+    if session.get("role") == "sub_admin":
+        return "Sub-Admin"
+    row = conn.execute("SELECT rbac_role,position FROM users WHERE id=? AND school_id=?", (session.get("user_id"), current_school_id())).fetchone()
+    return ((row["rbac_role"] if row and row["rbac_role"] else None) or (row["position"] if row and row["position"] else None) or "Subject Teacher")
+
+
+def _tt_can_manage(conn):
+    return session.get("role") in ("admin", "sub_admin") or _tt_role(conn) in TIMETABLE_EDIT_ROLES
+
+
+def _tt_can_approve(conn):
+    return session.get("role") in ("admin", "sub_admin") or _tt_role(conn) in TIMETABLE_APPROVER_ROLES
+
+
+def _tt_can_publish(conn):
+    return session.get("role") in ("admin", "sub_admin") or _tt_role(conn) in {"Authorized Publisher", "Principal / Head of School"}
+
+
+def _tt_scope_entry(conn, entry_id):
+    return conn.execute("SELECT * FROM timetable_entries_v2 WHERE id=? AND school_id=? AND tenant_id=?", (entry_id, current_school_id(), _tt_tenant(conn))).fetchone()
+
+
+def _tt_version(conn, version_id):
+    return conn.execute("SELECT * FROM timetable_versions_v2 WHERE id=? AND school_id=? AND tenant_id=?", (version_id, current_school_id(), _tt_tenant(conn))).fetchone()
+
+
+def _tt_slots(conn, template_id=None):
+    sid=current_school_id(); tid=_tt_tenant(conn)
+    q="SELECT ss.*,sd.day_name,sd.day_code,sd.day_order FROM schedule_slots ss JOIN school_days_v2 sd ON sd.id=ss.day_id WHERE ss.school_id=? AND ss.tenant_id=? AND ss.is_active=1"
+    params=[sid,tid]
+    if template_id:
+        q += " AND ss.schedule_template_id=?"; params.append(template_id)
+    return conn.execute(q+" ORDER BY sd.day_order,ss.slot_number,ss.id",params).fetchall()
+
+
+def _tt_validate(conn, version_id):
+    version=_tt_version(conn,version_id)
+    if not version: return [], []
+    sid=current_school_id(); tid=_tt_tenant(conn)
+    conn.execute("DELETE FROM timetable_conflicts_v2 WHERE timetable_version_id=? AND school_id=?",(version_id,sid))
+    entries=conn.execute("""SELECT te.*,ss.slot_type,ss.start_time,ss.end_time,ss.slot_number,ss.allows_timetable_entry,
+        c.name class_name,s.name subject_name,u.name teacher_name,r.room_name
+        FROM timetable_entries_v2 te JOIN schedule_slots ss ON ss.id=te.slot_id
+        JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id
+        LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id
+        WHERE te.timetable_version_id=? AND te.school_id=? AND te.tenant_id=?""",(version_id,sid,tid)).fetchall()
+    errors=[]; warnings=[]
+    def add(kind,severity,entity,desc,action):
+        msg=f"{severity} — {entity} — {desc} — {action}"
+        (errors if severity=="ERROR" else warnings).append(msg)
+        conn.execute("INSERT INTO timetable_conflicts_v2(tenant_id,school_id,timetable_version_id,conflict_type,severity,entity_type,entity_id,description,suggested_action,resolved) VALUES(?,?,?,?,?,?,?,?,?,0)",(tid,sid,version_id,kind,severity,entity,entity.get("id") if isinstance(entity,dict) else None,desc,action))
+    # Hard conflicts by resource/slot.
+    for key,label in [("teacher_id","Teacher"),("class_id","Class"),("room_id","Room")]:
+        seen={}
+        for e in entries:
+            if not e[key]: continue
+            k=(e[key],e["slot_id"])
+            if k in seen:
+                add("DOUBLE_BOOKING","ERROR",{"id":e["id"]},f"{label} {e[key]} is double-booked in {e['day_name']} {e['slot_number']}",f"Move one {label.lower()} assignment to another teaching slot")
+            else: seen[k]=e["id"]
+    for e in entries:
+        if e["slot_type"]!="TEACHING" or not e["allows_timetable_entry"]:
+            add("SLOT","ERROR",{"id":e["id"]},f"{e['day_name']} slot {e['slot_number']} is not a teaching slot", "Move the lesson to a TEACHING slot")
+        if e["teacher_id"]:
+            av=conn.execute("SELECT availability_status,is_hard_constraint FROM teacher_availability_v2 WHERE teacher_id=? AND day_id=? AND slot_id=? AND school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 1",(e["teacher_id"],e["day_id"],e["slot_id"],sid,tid)).fetchone()
+            if av and av["availability_status"]=="Unavailable" and av["is_hard_constraint"]:
+                add("AVAILABILITY","ERROR",{"id":e["id"]},f"{e['teacher_name']} is unavailable in {e['day_name']} P{e['slot_number']}","Choose an available slot")
+            eligible=conn.execute("SELECT 1 FROM class_subjects WHERE class_id=? AND subject_id=? AND teacher_id=?",(e["class_id"],e["subject_id"],e["teacher_id"])).fetchone()
+            if not eligible:
+                add("TEACHER_ASSIGNMENT","ERROR",{"id":e["id"]},f"{e['teacher_name']} is not assigned to {e['subject_name']} for {e['class_name']}","Assign the teacher to the subject/class first")
+        if e["room_id"]:
+            room=conn.execute("SELECT capacity,status FROM timetable_rooms_v2 WHERE id=? AND school_id=? AND tenant_id=?",(e["room_id"],sid,tid)).fetchone()
+            if not room or room["status"]!="active":
+                add("ROOM","ERROR",{"id":e["id"]},"Selected room is inactive or outside the school", "Select an active school room")
+    # Weekly requirements.
+    reqs=conn.execute("SELECT * FROM class_subject_requirements_v2 WHERE school_id=? AND tenant_id=? AND status='active'",(sid,tid)).fetchall()
+    for r in reqs:
+        count=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"])
+        if count<r["periods_per_week"]:
+            add("REQUIREMENT","ERROR",{"id":r["id"]},f"{r['class_id']} subject {r['subject_id']} has {count}/{r['periods_per_week']} required periods","Add the missing periods")
+        if r["periods_per_day_limit"]:
+            for day in range(1,7):
+                c=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day)
+                if c>r["periods_per_day_limit"]:
+                    add("DAILY_LIMIT","ERROR",{"id":r["id"]},f"Subject exceeds daily limit for class {r['class_id']}","Move one occurrence to another day")
+        if r["requires_double_period"] or r["requires_triple_period"]:
+            needed=3 if r["requires_triple_period"] else 2; found=False
+            for day in range(1,7):
+                es=sorted([e for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day], key=lambda x:x["slot_number"])
+                run=1; prev=None
+                for e in es:
+                    if prev is not None and e["slot_number"]==prev+1: run+=1
+                    else: run=1
+                    prev=e["slot_number"]
+                    if run>=needed: found=True; break
+                if found: break
+            if not found:
+                add("BLOCK","ERROR",{"id":r["id"]},f"Required {'triple' if needed==3 else 'double'} period for subject {r['subject_id']} is not consecutive","Place the required periods in consecutive TEACHING slots")
+    conn.execute("UPDATE timetable_versions_v2 SET validation_status=?,status=CASE WHEN ?=1 AND status IN ('DRAFT','SAVED','VALIDATED') THEN 'VALIDATED' ELSE status END,updated_at=CURRENT_TIMESTAMP WHERE id=?",("PASSED" if not errors else "FAILED",0 if errors else 1,version_id))
+    conn.commit()
+    return errors,warnings
+
+
+def _tt_generate_greedy(conn, version_id):
+    """Constraint-aware generator. OR-Tools is used when installed; the deterministic
+    fallback keeps the online module functional in minimal deployments."""
+    sid=current_school_id(); tid=_tt_tenant(conn)
+    reqs=conn.execute("SELECT * FROM class_subject_requirements_v2 WHERE school_id=? AND tenant_id=? AND status='active' ORDER BY priority DESC,id",(sid,tid)).fetchall()
+    slots=[x for x in _tt_slots(conn) if x["slot_type"]=="TEACHING" and x["allows_timetable_entry"]]
+    teachers=conn.execute("SELECT * FROM teacher_workload_profiles_v2 WHERE school_id=? AND tenant_id=? AND status='active'",(sid,tid)).fetchall()
+    teacher_limits={r["teacher_id"]:(r["max_periods_per_day"],r["max_periods_per_week"]) for r in teachers}
+    rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? AND status='active' ORDER BY id",(sid,tid)).fetchall()
+    conn.execute("DELETE FROM timetable_entries_v2 WHERE timetable_version_id=?",(version_id,))
+    teacher_used=set(); class_used=set(); room_used=set(); teacher_week={}; teacher_day={}; class_subject_day={}; created=0
+    for req in reqs:
+        assignments=conn.execute("SELECT teacher_id FROM class_subjects WHERE class_id=? AND subject_id=? AND teacher_id IS NOT NULL",(req["class_id"],req["subject_id"])).fetchall()
+        teachers_for=[a["teacher_id"] for a in assignments]
+        for n in range(req["periods_per_week"]):
+            placed=False
+            for sl in slots:
+                day=sl["day_id"]; sk=(req["class_id"],sl["id"])
+                if sk in class_used: continue
+                for teacher_id in teachers_for or [None]:
+                    if teacher_id and (teacher_id,sl["id"]) in teacher_used: continue
+                    if teacher_id:
+                        av=conn.execute("SELECT availability_status,is_hard_constraint FROM teacher_availability_v2 WHERE teacher_id=? AND day_id=? AND slot_id=? AND school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 1",(teacher_id,day,sl["id"],sid,tid)).fetchone()
+                        if av and av["availability_status"]=="Unavailable" and av["is_hard_constraint"]: continue
+                        lim=teacher_limits.get(teacher_id,(99,9999));
+                        if teacher_day.get((teacher_id,day),0)>=lim[0] or teacher_week.get(teacher_id,0)>=lim[1]: continue
+                    if class_subject_day.get((req["class_id"],req["subject_id"],day),0)>=req["periods_per_day_limit"]: continue
+                    room_id=None
+                    special_required=bool(conn.execute("SELECT 1 FROM subject_room_requirements_v2 WHERE subject_id=? AND requirement_type='Required' AND school_id=? AND tenant_id=? LIMIT 1",(req["subject_id"],sid,tid)).fetchone())
+                    if special_required:
+                        compatible=conn.execute("SELECT room_id FROM subject_room_requirements_v2 WHERE subject_id=? AND requirement_type='Required' AND school_id=? AND tenant_id=?",(req["subject_id"],sid,tid)).fetchall()
+                        for rr in compatible:
+                            if (rr["room_id"],sl["id"]) not in room_used: room_id=rr["room_id"]; break
+                        if not room_id: continue
+                    else:
+                        for r in rooms:
+                            if (r["id"],sl["id"]) not in room_used and (not r["capacity"] or not req["arm_id"] or r["capacity"]>=0): room_id=r["id"]; break
+                    conn.execute("INSERT INTO timetable_entries_v2(tenant_id,school_id,timetable_version_id,day_id,slot_id,class_id,arm_id,subject_id,teacher_id,room_id,entry_type,is_fixed) VALUES(?,?,?,?,?,?,?,?,?,?,?,0)",(tid,sid,version_id,day,sl["id"],req["class_id"],req["arm_id"],req["subject_id"],teacher_id,room_id,"LESSON"))
+                    class_used.add(sk); class_subject_day[(req["class_id"],req["subject_id"],day)]=class_subject_day.get((req["class_id"],req["subject_id"],day),0)+1; created+=1
+                    if teacher_id: teacher_used.add((teacher_id,sl["id"])); teacher_week[teacher_id]=teacher_week.get(teacher_id,0)+1; teacher_day[(teacher_id,day)]=teacher_day.get((teacher_id,day),0)+1
+                    if room_id: room_used.add((room_id,sl["id"]))
+                    placed=True; break
+                if placed: break
+            if not placed: break
+    conn.commit()
+    return created
 
 
 @app.route("/timetable")
 @login_required()
 def timetable_hub():
-    conn = get_db()
-    school_id = current_school_id()
-    classes = conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
-    teachers = conn.execute(
-        "SELECT * FROM users WHERE school_id=? AND role='teacher' AND is_active=1 ORDER BY name", (school_id,)
-    ).fetchall()
+    conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn)
+    versions=conn.execute("SELECT * FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 20",(sid,tid)).fetchall()
+    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall()
+    teachers=conn.execute("SELECT id,name,rbac_role,position FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall()
+    latest=versions[0] if versions else None
+    counts={"scheduled":0,"unassigned":0,"conflicts":0}
+    if latest:
+        counts["scheduled"]=conn.execute("SELECT COUNT(*) n FROM timetable_entries_v2 WHERE timetable_version_id=?",(latest["id"],)).fetchone()["n"]
+        counts["conflicts"]=conn.execute("SELECT COUNT(*) n FROM timetable_conflicts_v2 WHERE timetable_version_id=? AND severity='ERROR' AND resolved=0",(latest["id"],)).fetchone()["n"]
+    can_edit=_tt_can_manage(conn)
     conn.close()
-    return render_template("timetable_hub.html", classes=classes, teachers=teachers,
-                            can_edit=_timetable_can_edit())
+    return render_template("timetable_hub.html",classes=classes,teachers=teachers,versions=versions,latest=latest,counts=counts,can_edit=can_edit)
 
 
-@app.route("/timetable/periods", methods=["GET", "POST"])
-@login_required("admin", "sub_admin")
-def timetable_periods():
-    conn = get_db()
-    school_id = current_school_id()
-    if request.method == "POST":
-        action = request.form.get("action")
-        if action == "add":
-            name = request.form.get("name", "").strip()
-            start_time = request.form.get("start_time", "").strip() or None
-            end_time = request.form.get("end_time", "").strip() or None
-            is_break = 1 if request.form.get("is_break") else 0
-            if name:
-                max_order = conn.execute(
-                    "SELECT COALESCE(MAX(sort_order), -1) FROM timetable_periods WHERE school_id=?", (school_id,)
-                ).fetchone()[0]
-                conn.execute(
-                    "INSERT INTO timetable_periods (school_id, name, start_time, end_time, sort_order, is_break) "
-                    "VALUES (?,?,?,?,?,?)",
-                    (school_id, name, start_time, end_time, max_order + 1, is_break),
-                )
-                conn.commit()
-                flash(f"Period '{name}' added.", "success")
-            else:
-                flash("Period name is required.", "error")
-        elif action == "delete":
-            period_id = request.form.get("period_id")
-            row = conn.execute(
-                "SELECT id FROM timetable_periods WHERE id=? AND school_id=?", (period_id, school_id)
-            ).fetchone()
-            if row:
-                conn.execute("DELETE FROM timetable_entries WHERE period_id=?", (period_id,))
-                conn.execute("DELETE FROM timetable_periods WHERE id=?", (period_id,))
-                conn.commit()
-                flash("Period removed (and any timetable entries using it).", "success")
-        conn.close()
-        return redirect(url_for("timetable_periods"))
+@app.route("/timetable/setup", methods=["GET","POST"])
+@login_required()
+def timetable_setup():
+    if not _tt_can_manage(get_db()):
+        flash("You are not authorized to manage timetable setup.", "error"); return redirect(url_for("timetable_hub"))
+    conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn)
+    if request.method=="POST":
+        action=request.form.get("action")
+        try:
+            if action=="slot":
+                day_id=int(request.form["day_id"]); name=request.form["slot_name"].strip(); st=request.form["start_time"]; et=request.form["end_time"]; typ=request.form.get("slot_type","TEACHING")
+                if st>=et: raise ValueError("Start time must be earlier than end time.")
+                overlap=conn.execute("SELECT 1 FROM schedule_slots WHERE school_id=? AND tenant_id=? AND day_id=? AND is_active=1 AND start_time<? AND end_time>?",(sid,tid,day_id,et,st)).fetchone()
+                if overlap: raise ValueError("Schedule slots on the same day cannot overlap.")
+                tmpl=conn.execute("SELECT id FROM schedule_templates WHERE school_id=? AND tenant_id=? ORDER BY is_default DESC,id LIMIT 1",(sid,tid)).fetchone()
+                if not tmpl:
+                    conn.execute("INSERT INTO schedule_templates(tenant_id,school_id,name,is_default,status) VALUES(?,?,?,?,?)",(tid,sid,"Standard School Schedule",1,"active")); tmpl=conn.execute("SELECT last_insert_rowid() id").fetchone()
+                sh,sm=map(int,st.split(":")); eh,em=map(int,et.split(":")); duration=(eh*60+em)-(sh*60+sm)
+                maxno=conn.execute("SELECT COALESCE(MAX(slot_number),0) n FROM schedule_slots WHERE day_id=?",(day_id,)).fetchone()["n"]
+                conn.execute("INSERT INTO schedule_slots(tenant_id,school_id,academic_session_id,term_id,day_id,schedule_template_id,slot_number,slot_name,slot_type,start_time,end_time,duration_minutes,is_active,is_fixed,allows_timetable_entry) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",(tid,sid,None,None,day_id,tmpl["id"],maxno+1,name,typ,st,et,duration,1,0 if typ=="TEACHING" else 1))
+            elif action=="requirement":
+                cid=int(request.form["class_id"]); sub=int(request.form["subject_id"]); teacher_id=request.form.get("teacher_id",type=int); ppw=max(1,min(40,int(request.form.get("periods_per_week",1)))); daily=max(1,min(8,int(request.form.get("periods_per_day_limit",1)))); dbl=1 if request.form.get("requires_double_period") else 0; tri=1 if request.form.get("requires_triple_period") else 0
+                if not class_in_school(conn,cid) or not subject_in_school(conn,sub): raise ValueError("Class or subject is outside this school.")
+                conn.execute("INSERT INTO class_subject_requirements_v2(tenant_id,school_id,class_id,arm_id,subject_id,periods_per_week,periods_per_day_limit,requires_double_period,requires_triple_period,preferred_period_type,priority,status) VALUES(?,?,?,?,?,?,?,?,?,?,?, 'active') ON CONFLICT(tenant_id,school_id,class_id,subject_id) DO UPDATE SET periods_per_week=excluded.periods_per_week,periods_per_day_limit=excluded.periods_per_day_limit,requires_double_period=excluded.requires_double_period,requires_triple_period=excluded.requires_triple_period",(tid,sid,cid,cid,sub,ppw,daily,dbl,tri,"ANY",1))
+                if teacher_id:
+                    conn.execute("UPDATE class_subjects SET teacher_id=? WHERE class_id=? AND subject_id=?",(teacher_id,cid,sub))
+            elif action=="room":
+                name=request.form["room_name"].strip(); code=request.form.get("room_code","").strip(); cap=max(0,int(request.form.get("capacity",0) or 0)); typ=request.form.get("room_type","ROOM");
+                if not name: raise ValueError("Room name is required.")
+                conn.execute("INSERT INTO timetable_rooms_v2(tenant_id,school_id,room_name,room_code,room_type,capacity,status) VALUES(?,?,?,?,?,?, 'active')",(tid,sid,name,code,typ,cap))
+            elif action=="availability":
+                teacher=int(request.form["teacher_id"]); day=int(request.form["day_id"]); slot=int(request.form["slot_id"]); status=request.form.get("availability_status","Available"); hard=1 if request.form.get("is_hard_constraint") else 0
+                conn.execute("INSERT INTO teacher_availability_v2(tenant_id,school_id,teacher_id,day_id,slot_id,availability_status,reason,is_hard_constraint) VALUES(?,?,?,?,?,?,?,?)",(tid,sid,teacher,day,slot,status,request.form.get("reason",""),hard))
+            elif action=="delete_slot":
+                slot=int(request.form["slot_id"]); conn.execute("DELETE FROM schedule_slots WHERE id=? AND school_id=? AND tenant_id=?",(slot,sid,tid))
+            elif action=="delete_room":
+                room=int(request.form["room_id"]); conn.execute("UPDATE timetable_rooms_v2 SET status='inactive' WHERE id=? AND school_id=? AND tenant_id=?",(room,sid,tid))
+            conn.commit(); flash("Timetable setup saved.","success")
+        except Exception as exc:
+            conn.rollback(); flash(str(exc) if isinstance(exc,ValueError) else "The timetable setup could not be saved. Please review the values.","error")
+        conn.close(); return redirect(url_for("timetable_setup"))
+    days=conn.execute("SELECT * FROM school_days WHERE school_id=? AND tenant_id=? ORDER BY day_order",(sid,tid)).fetchall()
+    slots=_tt_slots(conn); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall(); rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? ORDER BY room_name",(sid,tid)).fetchall(); reqs=conn.execute("SELECT r.*,c.name class_name,s.name subject_name FROM class_subject_requirements_v2 r JOIN classes c ON c.id=r.class_id JOIN subjects s ON s.id=r.subject_id WHERE r.school_id=? AND r.tenant_id=? ORDER BY c.name,s.name",(sid,tid)).fetchall()
+    conn.close(); return render_template("timetable_setup_v2.html",days=days,slots=slots,classes=classes,subjects=subjects,teachers=teachers,rooms=rooms,requirements=reqs)
 
-    periods = conn.execute(
-        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
-    ).fetchall()
-    conn.close()
-    return render_template("timetable_periods.html", periods=periods)
+
+@app.route("/timetable/generate",methods=["GET","POST"])
+@login_required()
+def timetable_generate():
+    if not _tt_can_manage(get_db()):
+        flash("You are not authorized to generate timetables.", "error"); return redirect(url_for("timetable_hub"))
+    conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn)
+    if request.method=="POST":
+        # Never overwrite published data. Create a new draft/version.
+        current=conn.execute("SELECT COALESCE(MAX(version_number),0) n FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=?",(sid,tid)).fetchone()["n"]
+        session_row=conn.execute("SELECT s.id session_id,t.id term_id FROM sessions s LEFT JOIN terms t ON t.session_id=s.id AND t.is_active=1 WHERE s.school_id=? AND s.is_active=1 ORDER BY s.id DESC LIMIT 1",(sid,)).fetchone()
+        session_id=session_row["session_id"] if session_row else None; term_id=session_row["term_id"] if session_row else None
+        tt_type=conn.execute("SELECT id FROM timetable_types_v2 WHERE school_id=? AND tenant_id=? AND type_code='REGULAR' LIMIT 1",(sid,tid)).fetchone()
+        if not tt_type:
+            conn.execute("INSERT INTO timetable_types_v2(tenant_id,school_id,name,type_code,description) VALUES(?,?,?,?,?)",(tid,sid,'Regular Academic Timetable','REGULAR','Standard academic timetable')); tt_type=conn.execute("SELECT last_insert_rowid() id").fetchone()
+        conn.execute("INSERT INTO timetable_versions_v2(tenant_id,school_id,academic_session_id,term_id,timetable_type_id,version_number,status,validation_status,is_current,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)",(tid,sid,session_id,term_id,tt_type["id"],current+1,"DRAFT","PENDING",1,session.get("user_id")))
+        vid=conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+        created=_tt_generate_greedy(conn,vid); errors,warnings=_tt_validate(conn,vid)
+        conn.execute("UPDATE timetable_versions_v2 SET status='VALIDATED' WHERE id=? AND validation_status='PASSED'",(vid,)); conn.commit(); conn.close(); flash(f"Generated draft version {current+1} with {created} lesson(s)." + (f" {len(errors)} blocking issue(s) remain." if errors else " Validation passed."),"success" if not errors else "error"); return redirect(url_for("timetable_version",version_id=vid))
+    req_count=conn.execute("SELECT COUNT(*) n FROM class_subject_requirements_v2 WHERE school_id=? AND tenant_id=? AND status='active'",(sid,tid)).fetchone()["n"]; slot_count=conn.execute("SELECT COUNT(*) n FROM schedule_slots WHERE school_id=? AND tenant_id=? AND is_active=1",(sid,tid)).fetchone()["n"]; teacher_count=conn.execute("SELECT COUNT(*) n FROM class_subjects cs JOIN classes c ON c.id=cs.class_id WHERE c.school_id=? AND cs.teacher_id IS NOT NULL",(sid,)).fetchone()["n"]; room_count=conn.execute("SELECT COUNT(*) n FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? AND status='active'",(sid,tid)).fetchone()["n"]
+    conn.close(); return render_template("timetable_generate_v2.html",req_count=req_count,slot_count=slot_count,teacher_count=teacher_count,room_count=room_count,ready=all(x>0 for x in (req_count,slot_count,teacher_count)))
 
 
-@app.route("/timetable/class/<int:class_id>", methods=["GET", "POST"])
+@app.route("/timetable/version/<int:version_id>")
+@login_required()
+def timetable_version(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v: conn.close(); flash("Timetable version not found.","error"); return redirect(url_for("timetable_hub"))
+    entries=conn.execute("""SELECT te.*,c.name class_name,s.name subject_name,u.name teacher_name,r.room_name,ss.slot_name,ss.start_time,ss.end_time,sd.day_name,sd.day_order
+        FROM timetable_entries_v2 te JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id WHERE te.timetable_version_id=? AND te.school_id=? AND te.tenant_id=? ORDER BY sd.day_order,ss.slot_number,c.name""",(version_id,current_school_id(),_tt_tenant(conn))).fetchall()
+    conflicts=conn.execute("SELECT * FROM timetable_conflicts_v2 WHERE timetable_version_id=? ORDER BY CASE severity WHEN 'ERROR' THEN 0 WHEN 'WARNING' THEN 1 ELSE 2 END,id",(version_id,)).fetchall(); can_edit=_tt_can_manage(conn) and v["status"] in ("DRAFT","SAVED","VALIDATED","CHANGES_REQUESTED")
+    conn.close(); return render_template("timetable_version_v2.html",version=v,entries=entries,conflicts=conflicts,can_edit=can_edit)
+
+
+@app.route("/timetable/version/<int:version_id>/edit",methods=["GET","POST"])
+@login_required()
+def timetable_edit(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v or not _tt_can_manage(conn) or v["status"] not in ("DRAFT","SAVED","VALIDATED","CHANGES_REQUESTED"):
+        conn.close(); flash("Only authorized users can edit draft timetable versions.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    if request.method=="POST":
+        entry_id=request.form.get("entry_id",type=int); slot_id=request.form.get("slot_id",type=int); teacher_id=request.form.get("teacher_id",type=int); room_id=request.form.get("room_id",type=int)
+        entry=conn.execute("SELECT * FROM timetable_entries_v2 WHERE id=? AND timetable_version_id=? AND school_id=? AND tenant_id=?",(entry_id,version_id,current_school_id(),_tt_tenant(conn))).fetchone()
+        slot=conn.execute("SELECT * FROM schedule_slots WHERE id=? AND school_id=? AND tenant_id=? AND is_active=1",(slot_id,current_school_id(),_tt_tenant(conn))).fetchone()
+        if not entry or not slot or slot["slot_type"]!="TEACHING":
+            conn.close(); flash("Invalid timetable edit.","error"); return redirect(url_for("timetable_edit",version_id=version_id))
+        conn.execute("UPDATE timetable_entries_v2 SET day_id=?,slot_id=?,teacher_id=?,room_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(slot["day_id"],slot_id,teacher_id,room_id,entry_id)); conn.execute("UPDATE timetable_versions_v2 SET status='DRAFT',validation_status='PENDING',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(session.get("user_id"),version_id)); conn.commit(); errors,_=_tt_validate(conn,version_id); conn.close(); flash("Timetable change saved and revalidated." if not errors else f"Change saved; {len(errors)} blocking conflict(s) detected.","success" if not errors else "error"); return redirect(url_for("timetable_edit",version_id=version_id))
+    entries=conn.execute("SELECT te.*,c.name class_name,s.name subject_name,u.name teacher_name,ss.slot_name,ss.start_time,ss.end_time,sd.day_name FROM timetable_entries_v2 te JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id WHERE te.timetable_version_id=? ORDER BY sd.day_order,ss.slot_number,c.name",(version_id,)).fetchall(); slots=_tt_slots(conn); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(current_school_id(),)).fetchall(); rooms=conn.execute("SELECT id,room_name FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? AND status='active' ORDER BY room_name",(current_school_id(),_tt_tenant(conn))).fetchall(); conn.close(); return render_template("timetable_edit_v2.html",version=v,entries=entries,slots=slots,teachers=teachers,rooms=rooms)
+
+
+@app.route("/timetable/version/<int:version_id>/validate",methods=["POST"])
+@login_required()
+def timetable_validate(version_id):
+    if not _tt_can_manage(get_db()):
+        flash("You are not authorized to validate timetables.", "error"); return redirect(url_for("timetable_hub"))
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v: conn.close(); flash("Timetable version not found.","error"); return redirect(url_for("timetable_hub"))
+    errors,warnings=_tt_validate(conn,version_id); conn.close(); flash("Validation passed." if not errors else f"Validation found {len(errors)} blocking error(s).","success" if not errors else "error"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/version/<int:version_id>/submit",methods=["POST"])
+@login_required()
+def timetable_submit(version_id):
+    if not _tt_can_manage(get_db()):
+        flash("You are not authorized to submit timetables.", "error"); return redirect(url_for("timetable_hub"))
+    conn=get_db(); v=_tt_version(conn,version_id); errors,_=_tt_validate(conn,version_id) if v else (["missing"],[])
+    if not v or errors: conn.close(); flash("A timetable must pass validation before submission.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    conn.execute("UPDATE timetable_versions_v2 SET status='SUBMITTED',submitted_by=?,submitted_at=CURRENT_TIMESTAMP WHERE id=?",(session.get("user_id"),version_id)); conn.execute("INSERT INTO timetable_audit_v2(tenant_id,school_id,timetable_version_id,user_id,role,action,previous_status,new_status,reason) VALUES(?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),version_id,session.get("user_id"),_tt_role(conn),"Submit",v["status"],"SUBMITTED","")); conn.commit(); conn.close(); flash("Timetable submitted for review.","success"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/version/<int:version_id>/approve",methods=["POST"])
+@login_required()
+def timetable_approve(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v or not _tt_can_approve(conn): conn.close(); flash("You are not authorized to approve this timetable.","error"); return redirect(url_for("timetable_hub"))
+    if v["created_by"]==session.get("user_id") and session.get("role") not in ("admin","sub_admin"): conn.close(); flash("Self-approval is blocked by default.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    errors,_=_tt_validate(conn,version_id)
+    if errors: conn.close(); flash("Final validation failed. Resolve blocking conflicts first.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    conn.execute("UPDATE timetable_versions_v2 SET status='APPROVED',validation_status='PASSED',updated_at=CURRENT_TIMESTAMP WHERE id=?",(version_id,)); conn.execute("INSERT INTO timetable_approvals_v2(tenant_id,school_id,timetable_version_id,approval_level,assigned_role,assigned_user_id,status,decision,comment,decided_by,decided_at) VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)",(_tt_tenant(conn),current_school_id(),version_id,1,_tt_role(conn),session.get("user_id"),"approved","APPROVED",request.form.get("comment",""),session.get("user_id"))); conn.commit(); conn.close(); flash("Timetable approved.","success"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/version/<int:version_id>/request-changes",methods=["POST"])
+@login_required()
+def timetable_request_changes(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v or not _tt_can_approve(conn): conn.close(); flash("You are not authorized to review this timetable.","error"); return redirect(url_for("timetable_hub"))
+    comment=request.form.get("comment","").strip()
+    if not comment: conn.close(); flash("Reviewer comment is required.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    conn.execute("UPDATE timetable_versions_v2 SET status='CHANGES_REQUESTED',updated_at=CURRENT_TIMESTAMP WHERE id=?",(version_id,)); conn.execute("INSERT INTO timetable_audit_v2(tenant_id,school_id,timetable_version_id,user_id,role,action,previous_status,new_status,reason) VALUES(?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),version_id,session.get("user_id"),_tt_role(conn),"Request changes",v["status"],"CHANGES_REQUESTED",comment)); conn.commit(); conn.close(); flash("Changes requested.","success"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/version/<int:version_id>/reject",methods=["POST"])
+@login_required()
+def timetable_reject(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id); comment=request.form.get("comment","").strip()
+    if not v or not _tt_can_approve(conn) or not comment: conn.close(); flash("Rejection requires approval permission and a reviewer comment.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    conn.execute("UPDATE timetable_versions_v2 SET status='REJECTED',updated_at=CURRENT_TIMESTAMP WHERE id=?",(version_id,)); conn.execute("INSERT INTO timetable_audit_v2(tenant_id,school_id,timetable_version_id,user_id,role,action,previous_status,new_status,reason) VALUES(?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),version_id,session.get("user_id"),_tt_role(conn),"Reject",v["status"],"REJECTED",comment)); conn.commit(); conn.close(); flash("Timetable rejected. Create a revision to continue.","success"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/version/<int:version_id>/revision",methods=["POST"])
+@login_required()
+def timetable_revision(version_id):
+    if not _tt_can_manage(get_db()):
+        flash("You are not authorized to create timetable revisions.", "error"); return redirect(url_for("timetable_hub"))
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v: conn.close(); flash("Timetable version not found.","error"); return redirect(url_for("timetable_hub"))
+    new_no=conn.execute("SELECT COALESCE(MAX(version_number),0)+1 n FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=?",(current_school_id(),_tt_tenant(conn))).fetchone()["n"]
+    conn.execute("INSERT INTO timetable_versions_v2(tenant_id,school_id,academic_session_id,term_id,timetable_type_id,version_number,status,validation_status,is_current,parent_version_id,created_by,revision_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),v["academic_session_id"],v["term_id"],v["timetable_type_id"],new_no,"DRAFT","PENDING",1,version_id,session.get("user_id"),request.form.get("reason","").strip()))
+    nid=conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+    rows=conn.execute("SELECT day_id,slot_id,class_id,arm_id,subject_id,teacher_id,room_id,entry_type,is_fixed FROM timetable_entries_v2 WHERE timetable_version_id=?",(v["id"],)).fetchall()
+    for r in rows: conn.execute("INSERT INTO timetable_entries_v2(tenant_id,school_id,timetable_version_id,day_id,slot_id,class_id,arm_id,subject_id,teacher_id,room_id,entry_type,is_fixed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),nid,*r))
+    conn.commit(); conn.close(); flash(f"Revision {new_no} created.","success"); return redirect(url_for("timetable_version",version_id=nid))
+
+
+@app.route("/timetable/version/<int:version_id>/publish",methods=["POST"])
+@login_required()
+def timetable_publish(version_id):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v or not _tt_can_publish(conn) or v["status"]!="APPROVED": conn.close(); flash("Publication requires an approved timetable and publication permission.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    errors,_=_tt_validate(conn,version_id)
+    if errors: conn.close(); flash("Final validation failed; publication is blocked.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    conn.execute("UPDATE timetable_versions_v2 SET status='SUPERSEDED',is_current=0 WHERE school_id=? AND tenant_id=? AND status='PUBLISHED'",(current_school_id(),_tt_tenant(conn)))
+    conn.execute("UPDATE timetable_versions_v2 SET status='PUBLISHED',is_current=1,published_by=?,published_at=CURRENT_TIMESTAMP WHERE id=?",(session.get("user_id"),version_id))
+    conn.execute("INSERT INTO timetable_audit_v2(tenant_id,school_id,timetable_version_id,user_id,role,action,previous_status,new_status,reason) VALUES(?,?,?,?,?,?,?,?,?)",(_tt_tenant(conn),current_school_id(),version_id,session.get("user_id"),_tt_role(conn),"Publish",v["status"],"PUBLISHED","")); conn.commit(); conn.close(); flash("Timetable published successfully.","success"); return redirect(url_for("timetable_version",version_id=version_id))
+
+
+@app.route("/timetable/class/<int:class_id>")
 @login_required()
 def timetable_class(class_id):
-    conn = get_db()
-    school_id = current_school_id()
-    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, school_id)).fetchone()
-    if not class_row:
-        conn.close()
-        flash("Class not found.", "error")
-        return redirect(url_for("timetable_hub"))
-    if not _timetable_can_view_class(conn, class_id):
-        conn.close()
-        flash("You don't have access to that class's timetable.", "error")
-        return redirect(url_for("timetable_hub"))
-
-    can_edit = _timetable_can_edit()
-    if request.method == "POST":
-        if not can_edit:
-            conn.close()
-            flash("You don't have permission to edit the timetable.", "error")
-            return redirect(url_for("timetable_class", class_id=class_id))
-        period_rows = conn.execute(
-            "SELECT id FROM timetable_periods WHERE school_id=? AND is_break=0", (school_id,)
-        ).fetchall()
-        for day in range(len(DAY_NAMES)):
-            for prow in period_rows:
-                period_id = prow["id"]
-                key = f"cell_{day}_{period_id}"
-                subject_id = request.form.get(f"{key}_subject") or None
-                teacher_id = request.form.get(f"{key}_teacher") or None
-                room = request.form.get(f"{key}_room", "").strip() or None
-                existing = conn.execute(
-                    "SELECT id FROM timetable_entries WHERE class_id=? AND day_of_week=? AND period_id=?",
-                    (class_id, day, period_id),
-                ).fetchone()
-                if not subject_id and not teacher_id and not room:
-                    if existing:
-                        conn.execute("DELETE FROM timetable_entries WHERE id=?", (existing["id"],))
-                    continue
-                if existing:
-                    conn.execute(
-                        "UPDATE timetable_entries SET subject_id=?, teacher_id=?, room=? WHERE id=?",
-                        (subject_id, teacher_id, room, existing["id"]),
-                    )
-                else:
-                    conn.execute(
-                        "INSERT INTO timetable_entries "
-                        "(school_id, class_id, day_of_week, period_id, subject_id, teacher_id, room) "
-                        "VALUES (?,?,?,?,?,?,?)",
-                        (school_id, class_id, day, period_id, subject_id, teacher_id, room),
-                    )
-        conn.commit()
-        flash("Timetable saved.", "success")
-        return redirect(url_for("timetable_class", class_id=class_id))
-
-    periods = conn.execute(
-        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
-    ).fetchall()
-    subjects = conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
-    teachers = conn.execute(
-        "SELECT * FROM users WHERE school_id=? AND role='teacher' AND is_active=1 ORDER BY name", (school_id,)
-    ).fetchall()
-    entries = conn.execute(
-        "SELECT te.*, s.name as subject_name, u.name as teacher_name FROM timetable_entries te "
-        "LEFT JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id "
-        "WHERE te.class_id=?", (class_id,)
-    ).fetchall()
-    grid = {(e["day_of_week"], e["period_id"]): e for e in entries}
-    conn.close()
-    return render_template(
-        "timetable_class.html", class_row=class_row, periods=periods, subjects=subjects,
-        teachers=teachers, grid=grid, days=list(enumerate(DAY_NAMES)), can_edit=can_edit,
-    )
+    conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn); cls=conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?",(class_id,sid)).fetchone()
+    if not cls: conn.close(); flash("Class not found.","error"); return redirect(url_for("timetable_hub"))
+    version=conn.execute("SELECT * FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=? AND status='PUBLISHED' ORDER BY id DESC LIMIT 1",(sid,tid)).fetchone()
+    if not version: version=conn.execute("SELECT * FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 1",(sid,tid)).fetchone()
+    entries=[]
+    if version: entries=conn.execute("SELECT te.*,s.name subject_name,u.name teacher_name,r.room_name,ss.slot_name,ss.start_time,ss.end_time,sd.day_name,sd.day_order FROM timetable_entries_v2 te JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id WHERE te.timetable_version_id=? AND te.class_id=? ORDER BY sd.day_order,ss.slot_number",(version["id"],class_id)).fetchall()
+    conn.close(); return render_template("timetable_class_v2.html",class_row=cls,version=version,entries=entries,days=DAY_NAMES)
 
 
 @app.route("/timetable/teacher/<int:teacher_id>")
 @login_required()
 def timetable_teacher(teacher_id):
-    conn = get_db()
-    school_id = current_school_id()
-    teacher = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (teacher_id, school_id)).fetchone()
-    if not teacher:
-        conn.close()
-        flash("Teacher not found.", "error")
-        return redirect(url_for("timetable_hub"))
-    if not _timetable_can_view_teacher(teacher_id):
-        conn.close()
-        flash("You don't have access to that teacher's timetable.", "error")
-        return redirect(url_for("timetable_hub"))
+    conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn); teacher=conn.execute("SELECT id,name,school_id FROM users WHERE id=? AND school_id=?",(teacher_id,sid)).fetchone()
+    if not teacher: conn.close(); flash("Teacher not found.","error"); return redirect(url_for("timetable_hub"))
+    if session.get("role") not in ("admin","sub_admin") and teacher_id!=session.get("user_id"):
+        assigned=conn.execute("SELECT 1 FROM class_subjects cs JOIN classes c ON c.id=cs.class_id WHERE cs.teacher_id=? AND c.form_teacher_id=? AND c.school_id=? LIMIT 1",(session.get("user_id"),teacher_id,sid)).fetchone()
+        if teacher_id!=session.get("user_id") and not assigned: conn.close(); flash("You don't have access to that teacher timetable.","error"); return redirect(url_for("timetable_hub"))
+    version=conn.execute("SELECT * FROM timetable_versions_v2 WHERE school_id=? AND tenant_id=? AND status='PUBLISHED' ORDER BY id DESC LIMIT 1",(sid,tid)).fetchone(); entries=[]
+    if version: entries=conn.execute("SELECT te.*,s.name subject_name,c.name class_name,r.room_name,ss.slot_name,ss.start_time,ss.end_time,sd.day_name,sd.day_order FROM timetable_entries_v2 te JOIN subjects s ON s.id=te.subject_id JOIN classes c ON c.id=te.class_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id WHERE te.timetable_version_id=? AND te.teacher_id=? ORDER BY sd.day_order,ss.slot_number",(version["id"],teacher_id)).fetchall()
+    conn.close(); return render_template("timetable_teacher_v2.html",teacher=teacher,version=version,entries=entries)
 
-    periods = conn.execute(
-        "SELECT * FROM timetable_periods WHERE school_id=? ORDER BY sort_order, id", (school_id,)
-    ).fetchall()
-    entries = conn.execute(
-        "SELECT te.*, s.name as subject_name, c.name as class_name FROM timetable_entries te "
-        "LEFT JOIN subjects s ON s.id=te.subject_id LEFT JOIN classes c ON c.id=te.class_id "
-        "WHERE te.teacher_id=?", (teacher_id,)
-    ).fetchall()
-    grid = {(e["day_of_week"], e["period_id"]): e for e in entries}
-    view=request.args.get("view","horizontal") if request.args.get("view") in ("horizontal","vertical") else "horizontal"
-    conn.close()
-    return render_template("timetable_teacher.html", teacher=teacher, periods=periods, grid=grid, days=list(enumerate(DAY_NAMES)), view=view)
+
+@app.route("/timetable/export/<int:version_id>/<fmt>")
+@login_required()
+def timetable_export(version_id,fmt):
+    conn=get_db(); v=_tt_version(conn,version_id)
+    if not v: conn.close(); flash("Timetable version not found.","error"); return redirect(url_for("timetable_hub"))
+    if v["status"] not in ("APPROVED","PUBLISHED","SUPERSEDED","ARCHIVED") and session.get("role") not in ("admin","sub_admin"):
+        conn.close(); flash("You can only export published or approved timetables.","error"); return redirect(url_for("timetable_version",version_id=version_id))
+    rows=conn.execute("SELECT sd.day_name,ss.slot_name,ss.start_time,ss.end_time,c.name,s.name,u.name,r.room_name FROM timetable_entries_v2 te JOIN school_days_v2 sd ON sd.id=te.day_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id WHERE te.timetable_version_id=? ORDER BY sd.day_order,ss.slot_number,c.name",(version_id,)).fetchall(); conn.close()
+    headers=["Day","Slot","Start","End","Class/Arm","Subject","Teacher","Room"]; data=[tuple(r) for r in rows]
+    if fmt=="csv":
+        return send_file(build_csv(headers,data),as_attachment=True,download_name=f"timetable-v{v['version_number']}.csv",mimetype="text/csv")
+    if fmt=="xlsx":
+        return send_file(build_xlsx(f"Timetable v{v['version_number']}",headers,data),as_attachment=True,download_name=f"timetable-v{v['version_number']}.xlsx",mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if fmt=="pdf":
+        school=_tt_school(get_db()); buf=build_generic_table_pdf("School Timetable",f"Version {v['version_number']} · {v['status']}",headers,data,school_name=school['name'] if school else None); return send_file(buf,as_attachment=True,download_name=f"timetable-v{v['version_number']}.pdf",mimetype="application/pdf")
+    return redirect(url_for("timetable_version",version_id=version_id))
 
 
 @app.route("/my-class")
@@ -5641,10 +5975,6 @@ def download_material(material_id):
 def staff_attendance():
     conn = get_db()
     school_id = current_school_id()
-    staff = conn.execute(
-        "SELECT * FROM users WHERE school_id=? ORDER BY role, name", (school_id,)
-    ).fetchall()
-
     date_str = request.values.get("date", "").strip() or datetime.date.today().isoformat()
     try:
         datetime.date.fromisoformat(date_str)
@@ -5652,44 +5982,53 @@ def staff_attendance():
         date_str = datetime.date.today().isoformat()
 
     if request.method == "POST":
+        staff = conn.execute("SELECT * FROM users WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
         counts = {s: 0 for s in STAFF_ATTENDANCE_STATUSES}
         for member in staff:
             status = request.form.get(f"status_{member['id']}", "Present")
             if status not in STAFF_ATTENDANCE_STATUSES:
                 status = "Present"
             counts[status] += 1
+            check_in = (request.form.get(f"check_in_{member['id']}") or "").strip() or None
+            check_out = (request.form.get(f"check_out_{member['id']}") or "").strip() or None
+            for value, label in ((check_in, "check-in"), (check_out, "check-out")):
+                if value and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?", value):
+                    conn.close(); flash(f"Invalid {label} time for {member['name']}. Use HH:MM or HH:MM:SS.", "error")
+                    return redirect(url_for("staff_attendance", date=date_str))
+            now = datetime.datetime.utcnow().isoformat(timespec="seconds")
             conn.execute(
-                "INSERT INTO staff_attendance (school_id, user_id, date, status, recorded_by, source) "
-                "VALUES (?,?,?,?,?,'online') "
-                "ON CONFLICT(user_id, date) DO UPDATE SET status=excluded.status, "
-                "recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP, source='online'",
-                (school_id, member["id"], date_str, status, session["user_id"]),
+                "INSERT INTO staff_attendance (school_id,user_id,date,status,recorded_by,recorded_at,source,check_in_at,check_out_at) "
+                "VALUES (?,?,?,?,?,?,'online',?,?) "
+                "ON CONFLICT(user_id,date) DO UPDATE SET status=excluded.status, recorded_by=excluded.recorded_by, "
+                "recorded_at=excluded.recorded_at, source='online', check_in_at=COALESCE(excluded.check_in_at,staff_attendance.check_in_at), check_out_at=COALESCE(excluded.check_out_at,staff_attendance.check_out_at)",
+                (school_id, member["id"], date_str, status, session["user_id"], now, check_in, check_out),
             )
         conn.commit()
-        log_audit(
-            conn, session["role"], session.get("name"), "staff_attendance",
-            f"{date_str}: " + ", ".join(f"{v} {k}" for k, v in counts.items() if v),
-            school_id=school_id,
-        )
-        conn.commit()
+        log_audit(conn, session["role"], session.get("name"), "staff_attendance",
+                  f"{date_str}: " + ", ".join(f"{v} {k}" for k, v in counts.items() if v), school_id=school_id)
+        conn.commit(); conn.close()
         flash(f"Staff attendance saved for {format_dmy(date_str)}.", "success")
-        conn.close()
-        return redirect(url_for("staff_attendance", date=date_str))
+        return redirect(url_for("staff_attendance", date=date_str, q=request.form.get("q", ""), status=request.form.get("filter_status", "")))
 
-    existing = {
-        r["user_id"]: r["status"] for r in conn.execute(
-            "SELECT user_id, status FROM staff_attendance WHERE school_id=? AND date=?",
-            (school_id, date_str),
-        ).fetchall()
-    }
+    q = request.args.get("q", "").strip().lower()
+    filter_status = request.args.get("status", "").strip()
+    params = [school_id]
+    sql = "SELECT * FROM users WHERE school_id=?"
+    if q:
+        sql += " AND (LOWER(name) LIKE ? OR LOWER(COALESCE(username,'')) LIKE ? OR LOWER(COALESCE(position,'')) LIKE ?)"
+        like = f"%{q}%"; params.extend([like, like, like])
+    sql += " ORDER BY name"
+    staff = conn.execute(sql, params).fetchall()
+    rows = conn.execute("SELECT * FROM staff_attendance WHERE school_id=? AND date=?", (school_id, date_str)).fetchall()
+    existing = {r["user_id"]: r for r in rows if not filter_status or r["status"] == filter_status}
+    if filter_status:
+        staff = [m for m in staff if m["id"] in existing]
     conn.close()
     prev_day = (datetime.date.fromisoformat(date_str) - datetime.timedelta(days=1)).isoformat()
     next_day = (datetime.date.fromisoformat(date_str) + datetime.timedelta(days=1)).isoformat()
-    return render_template(
-        "staff_attendance.html", staff=staff, date_str=date_str, prev_day=prev_day, next_day=next_day,
-        existing=existing, today=datetime.date.today().isoformat(), statuses=STAFF_ATTENDANCE_STATUSES,
-        position_labels=POSITION_LABELS,
-    )
+    return render_template("staff_attendance.html", staff=staff, date_str=date_str, prev_day=prev_day, next_day=next_day,
+                           existing=existing, today=datetime.date.today().isoformat(), statuses=STAFF_ATTENDANCE_STATUSES,
+                           position_labels=POSITION_LABELS, search=q, filter_status=filter_status)
 
 
 @app.route("/admin/staff-attendance/history")
@@ -5715,8 +6054,8 @@ def staff_attendance_history():
         counts = {s: 0 for s in STAFF_ATTENDANCE_STATUSES}
         rows = conn.execute(
             "SELECT status, COUNT(*) as c FROM staff_attendance "
-            "WHERE user_id=? AND date BETWEEN ? AND ? GROUP BY status",
-            (member["id"], start, end),
+            "WHERE school_id=? AND user_id=? AND date BETWEEN ? AND ? GROUP BY status",
+            (school_id, member["id"], start, end),
         ).fetchall()
         for r in rows:
             counts[r["status"]] = r["c"]
@@ -5825,9 +6164,9 @@ def staff_attendance_check_in():
     conn=get_db(); sid=current_school_id(); uid=session.get("user_id")
     if session.get("role") not in ("admin","sub_admin","teacher"):
         conn.close(); return jsonify({"ok":False,"error":"You do not have permission to record Staff Attendance."}),403
-    now=datetime.datetime.now().replace(microsecond=0); date_str=now.date().isoformat()
-    conn.execute("INSERT INTO staff_attendance (school_id,user_id,date,status,recorded_by,source) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET status='Present',recorded_by=excluded.recorded_by,recorded_at=CURRENT_TIMESTAMP,source=excluded.source",(sid,uid,date_str,"Present",uid,"online"))
-    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":now.strftime('%H:%M:%S'),"status":"checked_in"})
+    now=datetime.datetime.now().replace(microsecond=0); date_str=now.date().isoformat(); stamp=now.strftime('%H:%M:%S')
+    conn.execute("INSERT INTO staff_attendance (school_id,user_id,date,status,recorded_by,source,check_in_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET status=CASE WHEN staff_attendance.status='Absent' THEN 'Present' ELSE staff_attendance.status END, recorded_by=excluded.recorded_by, recorded_at=CURRENT_TIMESTAMP, source='online', check_in_at=COALESCE(staff_attendance.check_in_at,excluded.check_in_at)",(sid,uid,date_str,"Present",uid,"online",stamp))
+    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":stamp,"status":"checked_in"})
 
 @app.route("/staff-attendance/check-out", methods=["POST"])
 @login_required()
@@ -5839,9 +6178,10 @@ def staff_attendance_check_out():
     row=conn.execute("SELECT id FROM staff_attendance WHERE school_id=? AND user_id=? AND date=?",(sid,uid,date_str)).fetchone()
     if not row:
         conn.close(); return jsonify({"ok":False,"error":"Check in before checking out."}),400
-    # Keep existing attendance schema compatible; check-out is recorded in audit log.
-    log_audit(conn,session.get("role"),session.get("name"),"staff_check_out",f"{date_str} {now.strftime('%H:%M:%S')}",school_id=sid)
-    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":now.strftime('%H:%M:%S'),"status":"checked_out"})
+    stamp=now.strftime('%H:%M:%S')
+    conn.execute("UPDATE staff_attendance SET check_out_at=COALESCE(check_out_at,?), recorded_by=?, recorded_at=CURRENT_TIMESTAMP, source='online' WHERE id=? AND school_id=? AND user_id=?",(stamp,uid,row["id"],sid,uid))
+    log_audit(conn,session.get("role"),session.get("name"),"staff_check_out",f"{date_str} {stamp}",school_id=sid)
+    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":stamp,"status":"checked_out"})
 
 # ---------- reports & analytics ----------
 
@@ -7766,6 +8106,7 @@ def platform_delete_school(school_id):
             conn.execute(f"DELETE FROM students WHERE id IN ({sp})", student_ids)
         conn.execute(f"DELETE FROM class_subjects WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM timetable_entries WHERE class_id IN ({placeholders})", class_ids)
+        conn.execute(f"DELETE FROM timetable_entries_v2 WHERE class_id IN ({placeholders})", class_ids)
         conn.execute(f"DELETE FROM classes WHERE id IN ({placeholders})", class_ids)
     conn.execute("DELETE FROM timetable_periods WHERE school_id=?", (school_id,))
     conn.execute("DELETE FROM subjects WHERE school_id=?", (school_id,))
@@ -8376,45 +8717,48 @@ def school_dashboard_alias(): return redirect(url_for("dashboard"))
 def school_setup_alias(): return redirect(url_for("admin_setup_wizard"))
 
 @app.route("/reports/analytics")
-@login_required("admin","sub_admin")
+@login_required("admin", "sub_admin")
 def reports_analytics():
-    conn=get_db(); sid=current_school_id(); term=resolve_term(conn,request.args.get("term_id",type=int)) or current_term(conn); class_id=request.args.get("class_id",type=int); subject_id=request.args.get("subject_id",type=int)
+    conn=get_db(); sid=current_school_id()
+    term=resolve_term(conn,request.args.get("term_id",type=int)) or current_term(conn)
+    class_id=request.args.get("class_id",type=int); subject_id=request.args.get("subject_id",type=int)
+    date_from=request.args.get("date_from","").strip(); date_to=request.args.get("date_to","").strip()
     if class_id and not class_in_school(conn,class_id): class_id=None
-    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); terms=all_terms_for_school(conn)
-    students=conn.execute("SELECT COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1",(sid,)).fetchone()["n"]; teachers=conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1",(sid,)).fetchone()["n"]
-    class_rows=[]; subject_rows=[]; grade_rows=[]; attendance_summary={"present":0,"absent":0,"opened":0}; result_summary={"published":0,"pending":0}
+    if subject_id and not subject_in_school(conn,subject_id): subject_id=None
+    try:
+        if date_from: datetime.date.fromisoformat(date_from)
+        if date_to: datetime.date.fromisoformat(date_to)
+    except ValueError:
+        date_from=date_to=""
+    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall()
+    subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
+    terms=all_terms_for_school(conn)
+    students=conn.execute("SELECT COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1",(sid,)).fetchone()["n"]
+    teachers=conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1",(sid,)).fetchone()["n"]
+    class_rows=[]; subject_rows=[]; grade_rows=[]; arm_rows=[]
+    attendance_summary={"present":0,"absent":0,"late":0,"opened":0}; result_summary={"published":0,"pending":0}
+    attendance_trend=[]; staff_rows=[]
     if term:
-        params=[term["id"],sid]; q="SELECT c.name,AVG(sc.ca1+sc.ca2+sc.exam) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=?"
-        if class_id:q+=" AND c.id=?";params.append(class_id)
-        q+=" GROUP BY c.id,c.name ORDER BY avg DESC"; class_rows=conn.execute(q,params).fetchall()
-        params=[term["id"],sid]; q="SELECT sub.name,AVG(sc.ca1+sc.ca2+sc.exam) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.term_id=? AND c.school_id=?"
-        if class_id:q+=" AND c.id=?";params.append(class_id)
-        if subject_id:q+=" AND sub.id=?";params.append(subject_id)
-        q+=" GROUP BY sub.id,sub.name ORDER BY avg DESC"; subject_rows=conn.execute(q,params).fetchall()
-        grade_rows=conn.execute("SELECT CASE WHEN (ca1+ca2+exam)>=70 THEN 'A' WHEN (ca1+ca2+exam)>=60 THEN 'B' WHEN (ca1+ca2+exam)>=50 THEN 'C' WHEN (ca1+ca2+exam)>=45 THEN 'D' WHEN (ca1+ca2+exam)>=40 THEN 'E' ELSE 'F' END grade,COUNT(*) n FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? GROUP BY grade ORDER BY grade",(term["id"],sid)).fetchall()
-        ar=conn.execute("SELECT COALESCE(SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END),0) present,COALESCE(SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END),0) absent,COUNT(DISTINCT ar.date) opened FROM attendance_records ar JOIN students st ON st.id=ar.student_id JOIN classes c ON c.id=st.class_id WHERE ar.term_id=? AND c.school_id=?",(term["id"],sid)).fetchone(); attendance_summary=dict(ar)
+        base_params=[term["id"],sid]; q="SELECT c.id,c.name,c.arm,AVG(COALESCE(sc.ca1,0)+COALESCE(sc.ca2,0)+COALESCE(sc.ca3,0)+COALESCE(sc.exam,0)) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? AND st.is_active=1"
+        if class_id:q+=" AND c.id=?";base_params.append(class_id)
+        if subject_id:q+=" AND sc.subject_id=?";base_params.append(subject_id)
+        q+=" GROUP BY c.id,c.name,c.arm ORDER BY c.name"; class_rows=conn.execute(q,base_params).fetchall()
+        base_params=[term["id"],sid]; q="SELECT sub.id,sub.name,AVG(COALESCE(sc.ca1,0)+COALESCE(sc.ca2,0)+COALESCE(sc.ca3,0)+COALESCE(sc.exam,0)) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.term_id=? AND c.school_id=? AND st.is_active=1"
+        if class_id:q+=" AND c.id=?";base_params.append(class_id)
+        if subject_id:q+=" AND sub.id=?";base_params.append(subject_id)
+        q+=" GROUP BY sub.id,sub.name ORDER BY sub.name"; subject_rows=conn.execute(q,base_params).fetchall()
+        grade_rows=conn.execute("SELECT CASE WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=70 THEN 'A' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=60 THEN 'B' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=50 THEN 'C' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=45 THEN 'D' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=40 THEN 'E' ELSE 'F' END grade,COUNT(*) n FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? GROUP BY grade ORDER BY grade",(term["id"],sid)).fetchall()
+        arm_rows=conn.execute("SELECT COALESCE(NULLIF(c.arm,''),'—') arm,COUNT(DISTINCT st.id) students,COUNT(sc.id) score_rows FROM classes c LEFT JOIN students st ON st.class_id=c.id AND st.is_active=1 LEFT JOIN scores sc ON sc.student_id=st.id AND sc.term_id=? WHERE c.school_id=? GROUP BY c.arm ORDER BY c.arm",(term["id"],sid)).fetchall()
+        att_params=[term["id"],sid]; aq="SELECT ar.date, SUM(CASE WHEN LOWER(ar.status)='present' THEN 1 ELSE 0 END) present, SUM(CASE WHEN LOWER(ar.status)='absent' THEN 1 ELSE 0 END) absent, SUM(CASE WHEN LOWER(ar.status)='late' THEN 1 ELSE 0 END) late FROM attendance_records ar JOIN students st ON st.id=ar.student_id JOIN classes c ON c.id=st.class_id WHERE ar.term_id=? AND c.school_id=?"
+        if class_id: aq+=" AND c.id=?";att_params.append(class_id)
+        if date_from: aq+=" AND ar.date>=?";att_params.append(date_from)
+        if date_to: aq+=" AND ar.date<=?";att_params.append(date_to)
+        aq+=" GROUP BY ar.date ORDER BY ar.date"; attendance_trend=conn.execute(aq,att_params).fetchall()
+        ar={"present":sum(r["present"] or 0 for r in attendance_trend),"absent":sum(r["absent"] or 0 for r in attendance_trend),"late":sum(r["late"] or 0 for r in attendance_trend),"opened":len(attendance_trend)}; attendance_summary=ar
         pubs=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=? AND t.is_published=1",(sid,)).fetchone()["n"]; allpub=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=?",(sid,)).fetchone()["n"]; result_summary={"published":pubs,"pending":max(0,allpub-pubs)}
-    conn.close(); return render_template("reports_analytics.html",students=students,teachers=teachers,classes=classes,subjects=subjects,terms=terms,term=term,class_id=class_id,subject_id=subject_id,class_rows=class_rows,subject_rows=subject_rows,grade_rows=grade_rows,attendance_summary=attendance_summary,result_summary=result_summary)
-
-@app.route("/timetable/generate",methods=["GET","POST"])
-@login_required("admin","sub_admin")
-def timetable_generate():
-    conn=get_db(); sid=current_school_id(); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); periods=conn.execute("SELECT * FROM timetable_periods WHERE school_id=? AND is_break=0 ORDER BY sort_order,id",(sid,)).fetchall(); assignments=conn.execute("SELECT cs.class_id,cs.subject_id,cs.teacher_id,s.name subject_name,u.name teacher_name FROM class_subjects cs JOIN subjects s ON s.id=cs.subject_id LEFT JOIN users u ON u.id=cs.teacher_id JOIN classes c ON c.id=cs.class_id WHERE c.school_id=? ORDER BY cs.class_id,cs.id",(sid,)).fetchall()
-    if request.method=='POST':
-        days=max(1,min(6,int(request.form.get('days','5') or 5))); conn.execute("DELETE FROM timetable_entries WHERE school_id=?",(sid,)); teacher_slots=set(); created=0; conflicts=[]
-        for c in classes:
-            slots=[(d,p['id']) for d in range(days) for p in periods]; used=set(); cursor=0
-            for a in [x for x in assignments if x['class_id']==c['id']]:
-                count=max(0,min(20,int(request.form.get(f"count_{a['class_id']}_{a['subject_id']}",1) or 1))); placed=0
-                while placed<count and cursor<len(slots):
-                    d,pid=slots[cursor]; cursor+=1; tkey=(a['teacher_id'],d,pid)
-                    if (d,pid) in used or (a['teacher_id'] and tkey in teacher_slots): continue
-                    conn.execute("INSERT INTO timetable_entries(school_id,class_id,day_of_week,period_id,subject_id,teacher_id) VALUES(?,?,?,?,?,?)",(sid,c['id'],d,pid,a['subject_id'],a['teacher_id'])); used.add((d,pid));
-                    if a['teacher_id']: teacher_slots.add(tkey)
-                    placed+=1; created+=1
-                if placed<count: conflicts.append(f"{c['name']} — {a['subject_name']}: {count-placed} not placed")
-        conn.commit(); conn.close(); flash(f"Timetable generated with {created} period(s)." + (" Review: "+"; ".join(conflicts[:5]) if conflicts else ""),"success" if not conflicts else "error"); return redirect(url_for('timetable_hub'))
-    conn.close(); return render_template('timetable_generate.html',classes=classes,periods=periods,assignments=assignments)
+    staff_rows=conn.execute("SELECT u.id,u.name,u.rbac_role,u.position,COUNT(sa.id) recorded,SUM(CASE WHEN sa.status='Present' THEN 1 ELSE 0 END) present,SUM(CASE WHEN sa.status='Absent' THEN 1 ELSE 0 END) absent,SUM(CASE WHEN sa.status='Late' THEN 1 ELSE 0 END) late FROM users u LEFT JOIN staff_attendance sa ON sa.user_id=u.id AND sa.school_id=u.school_id AND (?='' OR sa.date>=?) AND (?='' OR sa.date<=?) WHERE u.school_id=? AND u.role='teacher' GROUP BY u.id,u.name,u.rbac_role,u.position ORDER BY u.name",(date_from,date_from,date_to,date_to,sid)).fetchall()
+    conn.close()
+    return render_template("reports_analytics.html",students=students,teachers=teachers,classes=classes,subjects=subjects,terms=terms,term=term,class_id=class_id,subject_id=subject_id,date_from=date_from,date_to=date_to,class_rows=class_rows,subject_rows=subject_rows,grade_rows=grade_rows,arm_rows=arm_rows,attendance_summary=attendance_summary,result_summary=result_summary,attendance_trend=attendance_trend,staff_rows=staff_rows)
 
 @app.route("/platform/activation-requests")
 @platform_admin_required
