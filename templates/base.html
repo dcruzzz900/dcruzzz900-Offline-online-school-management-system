@@ -7,6 +7,7 @@
 <div class="nav-group">Academic</div>
 {% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('admin_students') }}">◉ <span>Students</span></a><a href="{{ url_for('admin_teachers') }}">♙ <span>Teachers</span></a><a href="{{ url_for('admin_classes') }}">▤ <span>Classes</span></a><a href="{{ url_for('admin_subjects') }}">▦ <span>Subjects</span></a>{% else %}<a href="{{ url_for('my_class') }}">▣ <span>My Classes</span></a>{% endif %}
 <a href="{{ url_for('classes_list') }}">▣ <span>Results</span></a>
+{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('admin_class_subjects') }}">◈ <span>Assign Subjects</span></a>{% endif %}
 <a href="{{ url_for('staff_attendance') if session.get('role') in ['admin','sub_admin','teacher'] else '/app#/attendance' }}">✓ <span>Staff Attendance</span></a>
 <a href="{{ url_for('timetable_hub') }}">▦ <span>Timetable</span></a>{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('timetable_generate') }}">⚙ <span>Generate Timetable</span></a>{% endif %}
 <a href="{{ url_for('materials') }}">▤ <span>Learning Materials</span></a>

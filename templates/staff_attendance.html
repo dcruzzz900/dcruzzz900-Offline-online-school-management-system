@@ -1,47 +1,36 @@
+{% extends "base.html" %}
 {% block title %}Staff Attendance{% endblock %}
-{% block content %}<div class="card attendance-self-actions"><h3>My Staff Attendance</h3><p>Record your own check-in and check-out. Your attendance remains school-scoped and synchronizes when connectivity returns.</p><button type="button" class="btn" onclick="staffAttendanceAction('/staff-attendance/check-in')">Check In</button> <button type="button" class="btn btn-secondary" onclick="staffAttendanceAction('/staff-attendance/check-out')">Check Out</button><span id="staffAttendanceStatus"></span></div>
-<h1>Staff Attendance</h1>
-<p style="color:#666; font-size:0.9rem;">
-    Mark each staff member's status for the day. Everyone defaults to Present.
-</p>
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Online attendance is saved directly to the school server. Existing offline attendance remains supported.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
+
+<div class="card attendance-self-actions">
+  <div class="section-title"><div><h3>My Attendance</h3><p class="muted">Record your own check-in and check-out without creating duplicate daily records.</p></div><span id="staffAttendanceStatus" class="badge"></span></div>
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn" onclick="staffAttendanceAction('/staff-attendance/check-in')">Check In</button><button type="button" class="btn btn-secondary" onclick="staffAttendanceAction('/staff-attendance/check-out')">Check Out</button></div>
+</div>
 
 <div class="card">
-    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
-        <a class="btn btn-small" href="{{ url_for('staff_attendance', date=prev_day) }}">&larr; Previous Day</a>
-        <form method="GET" style="display:flex; align-items:center; gap:0.5rem;">
-            <input type="date" name="date" value="{{ date_str }}" onchange="this.form.submit()" max="{{ today }}">
-        </form>
-        <a class="btn btn-small" href="{{ url_for('staff_attendance', date=next_day) }}">Next Day &rarr;</a>
-        {% if date_str != today %}
-        <a class="btn btn-small" href="{{ url_for('staff_attendance', date=today) }}">Jump to Today</a>
-        {% endif %}
-        <a class="btn btn-small" style="margin-left:auto;" href="{{ url_for('staff_attendance_history') }}">View History &amp; Reports</a>
-    </div>
-
-    {% if not staff %}
-    <p style="color:#999;">No staff members found.</p>
-    {% else %}
-    <form method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="date" value="{{ date_str }}">
-        <table>
-            <tr>
-                <th>Name</th><th>Role</th>
-                {% for st in statuses %}<th>{{ st }}</th>{% endfor %}
-            </tr>
-            {% for m in staff %}
-            {% set current = existing.get(m.id, 'Present') %}
-            <tr>
-                <td>{{ m.name }}</td>
-                <td>{{ position_labels.get(m.position, m.role.replace('_',' ')|title) }}</td>
-                {% for st in statuses %}
-                <td><input type="radio" name="status_{{ m.id }}" value="{{ st }}" {% if current == st %}checked{% endif %}></td>
-                {% endfor %}
-            </tr>
-            {% endfor %}
-        </table>
-        <button class="btn" type="submit" style="margin-top:1rem;">Save Attendance for {{ date_str|dmy }}</button>
-    </form>
-    {% endif %}
+  <form method="GET" class="form-grid" style="align-items:end">
+    <label>Date<input type="date" name="date" value="{{ date_str }}" max="{{ today }}"></label>
+    <label>Search staff<input type="search" name="q" value="{{ search or '' }}" placeholder="Name, username or role"></label>
+    <label>Status<select name="status"><option value="">All statuses</option>{% for st in statuses %}<option value="{{ st }}" {% if filter_status==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></label>
+    <button class="btn">Apply filters</button>
+  </form>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:12px"><a class="btn btn-small" href="{{ url_for('staff_attendance', date=prev_day) }}">&larr; Previous</a><a class="btn btn-small" href="{{ url_for('staff_attendance', date=next_day) }}">Next &rarr;</a>{% if date_str != today %}<a class="btn btn-small" href="{{ url_for('staff_attendance', date=today) }}">Today</a>{% endif %}</div>
 </div>
-<script>async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token': '{{ csrf_token() }}'}});const d=await r.json();el.textContent=d.ok?(' '+d.status+' at '+d.time):(' '+d.error);}catch(e){el.textContent=' Saved for synchronization when online.';}}</script>{% endblock %}
+
+<div class="card" style="overflow-x:auto">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="date" value="{{ date_str }}"><input type="hidden" name="q" value="{{ search or '' }}"><input type="hidden" name="filter_status" value="{{ filter_status or '' }}">
+    {% if staff %}
+    <table class="responsive-table"><thead><tr><th>Staff</th><th>Role</th><th>Status</th><th>Check-in</th><th>Check-out</th></tr></thead><tbody>
+    {% for m in staff %}{% set row=existing.get(m.id) %}{% set current=row.status if row else 'Present' %}
+    <tr><td data-label="Staff"><strong>{{ m.name }}</strong><br><small>{{ m.username }}</small></td><td data-label="Role">{{ position_labels.get(m.position, m.rbac_role or m.role.replace('_',' ')|title) }}</td><td data-label="Status"><select name="status_{{ m.id }}">{% for st in statuses %}<option value="{{ st }}" {% if current==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></td><td data-label="Check-in"><input type="time" name="check_in_{{ m.id }}" value="{{ (row.check_in_at or '')[:5] if row else '' }}"></td><td data-label="Check-out"><input type="time" name="check_out_{{ m.id }}" value="{{ (row.check_out_at or '')[:5] if row else '' }}"></td></tr>
+    {% endfor %}</tbody></table>
+    <button class="btn" type="submit" style="margin-top:1rem">Save Attendance for {{ date_str|dmy }}</button>
+    {% else %}<p class="muted">No staff matched the selected filters.</p>{% endif %}
+  </form>
+</div>
+<script>
+async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');el.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token':'{{ csrf_token() }}','Accept':'application/json'}});const d=await r.json();el.textContent=d.ok?(' '+d.status.replace('_',' ')+' at '+d.time):(' '+(d.error||'Unable to save attendance'));}catch(e){el.textContent='Connection problem. Your existing offline attendance workflow is still available.';}}
+</script>
+{% endblock %}

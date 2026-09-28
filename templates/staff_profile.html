@@ -28,10 +28,23 @@
     <h3>Role & Assignments</h3>
     <p><b>Subjects Taught:</b> {{ subjects_taught|map(attribute='name')|join(', ') if subjects_taught else '—' }}</p>
     <p><b>Classes Taught (subjects):</b> {{ classes_taught|map(attribute='name')|join(', ') if classes_taught else '—' }}</p>
-    <p><b>Form Teacher Of:</b> {{ form_classes|map(attribute='name')|join(', ') if form_classes else '—' }}</p>
+    <p><b>Class Teacher / Form Teacher Of:</b> {{ form_classes|map(attribute='name')|join(', ') if form_classes else '—' }}</p>
 </div>
 
 {% if is_self %}
+<div class="card" style="max-width:640px;">
+    <h3>Edit My Profile</h3>
+    <p class="muted">You may update your permitted personal information. Role, staff ID, school/tenant ID, permissions and assignments are administrator-controlled.</p>
+    <form method="POST" action="{{ url_for('update_staff_self_profile', user_id=staff.id) }}" class="form-grid">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Full Name<input name="name" value="{{ staff.name or '' }}" required></label>
+      <label>Email<input type="email" name="email" value="{{ staff.email or '' }}"></label>
+      <label>Phone<input name="phone" value="{{ staff.phone or '' }}"></label>
+      <label>Address<textarea name="address" rows="3">{{ staff.address or '' }}</textarea></label>
+      <div class="full"><button class="btn">Save Profile</button> <a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a></div>
+    </form>
+</div>
+
 <div class="card" style="max-width:640px;">
     <h3>Update Photo</h3>
     <form method="POST" action="{{ url_for('upload_my_photo') }}" enctype="multipart/form-data">
