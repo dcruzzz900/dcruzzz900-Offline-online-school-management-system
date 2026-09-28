@@ -3,7 +3,7 @@
 {% block content %}
 <div class="dashboard-header"><div><h1>{{ school.name }}</h1><p><code>{{ school.school_code }}</code> · <code>{{ school.tenant_id }}</code></p></div></div>
 <div class="card"><h2>Current subscription</h2><p><strong>Status:</strong> {{ state.label }}</p><p><strong>Plan:</strong> {{ school.subscription_plan or 'legacy' }}</p><p><strong>Trial ends:</strong> {{ school.trial_ends_at or '—' }}</p><p><strong>Subscription ends:</strong> {{ school.subscription_ends_at or '—' }}</p><p><strong>Grace ends:</strong> {{ school.grace_ends_at or '—' }}</p><p><strong>Days remaining:</strong> {{ state.days_left if state.days_left is not none else '—' }}</p></div>
-<div class="card"><h2>Plan usage</h2><p>Current usage is shown for planning. V26 does not automatically block existing data entry when a limit is reached.</p>
+<div class="card"><h2>Plan usage</h2><p>Current usage is shown for planning. The current plan does not automatically block existing data entry when a limit is reached.</p>
 <table><tr><th>Resource</th><th>Used</th><th>Limit</th><th>Usage</th></tr>
 <tr><td>Students</td><td>{{ limits.students.used }}</td><td>{{ limits.students.limit or '—' }}</td><td>{{ limits.students.percent }}%</td></tr>
 <tr><td>Teachers</td><td>{{ limits.teachers.used }}</td><td>{{ limits.teachers.limit or '—' }}</td><td>{{ limits.teachers.percent }}%</td></tr></table></div>

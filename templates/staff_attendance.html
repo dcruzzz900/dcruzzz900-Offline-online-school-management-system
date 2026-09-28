@@ -1,6 +1,5 @@
-{% extends "base.html" %}
 {% block title %}Staff Attendance{% endblock %}
-{% block content %}
+{% block content %}<div class="card attendance-self-actions"><h3>My Staff Attendance</h3><p>Record your own check-in and check-out. Your attendance remains school-scoped and synchronizes when connectivity returns.</p><button type="button" class="btn" onclick="staffAttendanceAction('/staff-attendance/check-in')">Check In</button> <button type="button" class="btn btn-secondary" onclick="staffAttendanceAction('/staff-attendance/check-out')">Check Out</button><span id="staffAttendanceStatus"></span></div>
 <h1>Staff Attendance</h1>
 <p style="color:#666; font-size:0.9rem;">
     Mark each staff member's status for the day. Everyone defaults to Present.
@@ -45,4 +44,4 @@
     </form>
     {% endif %}
 </div>
-{% endblock %}
+<script>async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token': '{{ csrf_token() }}'}});const d=await r.json();el.textContent=d.ok?(' '+d.status+' at '+d.time):(' '+d.error);}catch(e){el.textContent=' Saved for synchronization when online.';}}</script>{% endblock %}
