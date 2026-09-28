@@ -27,6 +27,10 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>School Name</label>
         <input type="text" name="school_name" value="{{ settings.name if settings else '' }}" required>
+        <div class="form-grid">
+          <label>School Contact Email<input type="email" name="registered_email" value="{{ settings.registered_email if settings else '' }}"></label>
+          <label>School Contact Phone<input type="text" name="registered_phone" value="{{ settings.registered_phone if settings else '' }}"></label>
+        </div>
 
         <label>Logo Image (PNG, JPG, or GIF — leave blank to keep the current one)</label>
         <input type="file" name="logo" accept=".png,.jpg,.jpeg,.gif">
@@ -170,6 +174,21 @@
     <p style="margin-top:0.75rem;">
         <a href="{{ url_for('result_design_preview') }}">Preview a sample result with these settings &rarr;</a>
     </p>
+</div>
+
+<div class="card" style="max-width:760px;">
+  <h3>Complete School Setup</h3>
+  <p class="muted">Use these tenant-scoped setup areas for academic structure, assignments, grading, result configuration, branding and staff signatures.</p>
+  <div class="quick-links">
+    <a href="{{ url_for('admin_terms') }}">Sessions & Terms</a>
+    <a href="{{ url_for('admin_classes') }}">Classes & Arms</a>
+    <a href="{{ url_for('admin_subjects') }}">Subjects</a>
+    <a href="{{ url_for('admin_class_subjects') }}">Assign Subjects</a>
+    <a href="{{ url_for('admin_grading') }}">Grading</a>
+    <a href="{{ url_for('admin_theme') }}">Branding & Theme</a>
+    <a href="{{ url_for('admin_teachers') }}">Staff & Signatures</a>
+    <a href="{{ url_for('admin_setup_wizard') }}">Setup Readiness</a>
+  </div>
 </div>
 
 <div class="card" style="max-width:520px;">
