@@ -223,20 +223,29 @@ def _internal_server_error(_error):
 
 # ---------- Role & permission helpers ----------
 ROLE_CATALOG = {
-    "School Admin": ["view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users"],
-    "Principal": ["view","create","edit","approve","verify","finalize","lock","publish","import","export","manage_users"],
-    "Head Teacher": ["view","create","edit","approve","verify","finalize","publish","import","export","manage_users"],
-    "Vice Principal": ["view","create","edit","approve","verify","finalize","publish","export"],
+    "School Admin": ["view","create","edit","delete","approve","verify","finalize","lock","publish","import","export","manage_users","manage_branding","manage_attendance","manage_reports"],
+    "Sub-Admin": ["view","create","edit","delete","approve","verify","publish","import","export","manage_users","manage_attendance","manage_reports"],
+    "Form Teacher": ["view","create","edit","import","export","manage_attendance"],
+    "Subject Teacher": ["view","create","edit","import"],
+    "Discipline Master": ["view","create","edit","export","manage_attendance"],
+    "Guidance/Counselor": ["view","create","edit"],
+    "Librarian": ["view","create","edit","delete","export"],
+    "Labour Master": ["view","create","edit","export","manage_attendance"],
+    "Non-Teaching Staff": ["view","manage_attendance"],
+    # Legacy/approved administrative roles remain available for existing accounts.
+    "Principal": ["view","create","edit","approve","verify","finalize","lock","publish","import","export","manage_users","manage_branding","manage_attendance","manage_reports"],
+    "Head Teacher": ["view","create","edit","approve","verify","finalize","publish","import","export","manage_users","manage_branding","manage_attendance","manage_reports"],
+    "Vice Principal": ["view","create","edit","approve","verify","finalize","publish","export","manage_attendance","manage_reports"],
     "Deputy Head": ["view","create","edit","approve","verify","publish","export"],
     "HOD": ["view","create","edit","approve","verify","export"],
     "Examination/Result Officer": ["view","create","edit","verify","finalize","lock","publish","import","export"],
     "ICT Officer": ["view","create","edit","import","export"],
     "Finance/Bursar": ["view","create","edit","export"],
-    "Sub-Admin": ["view","create","edit","import","export"],
-    "Class Teacher": ["view","create","edit","import","export"],
-    "Teacher": ["view","create","edit","export"],
+    "Class Teacher": ["view","create","edit","import","export","manage_attendance"],
+    "Teacher": ["view","create","edit","import"],
     "Other Staff": ["view"],
 }
+
 SCHOOL_LEVELS = ("All","Nursery","Primary","Secondary")
 
 def active_role_assignments(conn, user_id, school_id):
@@ -883,6 +892,10 @@ def require_class_result_access(conn, class_id, permission="view"):
     if not class_row:
         flash("That class doesn't exist.", "error")
         return redirect(url_for("dashboard"))
+    # Subject Teachers are deliberately excluded from full-result/broadsheet access.
+    if session.get("role") == "teacher" and (session.get("rbac_role") or "") == "Subject Teacher":
+        flash("Subject Teachers can access only their assigned subject scores.", "error")
+        return redirect(url_for("dashboard"))
     level = class_row["level"] if "level" in class_row.keys() else None
     if can_access_scope(session.get("user_id"), current_school_id(), permission,
                         school_level=level, class_id=class_id):
@@ -1200,6 +1213,7 @@ def login():
             session["name"] = user["name"]
             session["role"] = user["role"]
             session["position"] = user["position"]
+            session["rbac_role"] = user["rbac_role"] if "rbac_role" in user.keys() else None
             session["school_id"] = user["school_id"]
             session["tenant_id"] = school["tenant_id"] if school and "tenant_id" in school.keys() else None
             session["school_code"] = school["school_code"] if school and "school_code" in school.keys() else None
@@ -1509,8 +1523,6 @@ def dashboard():
     # school's data on the device and syncs it automatically — the same screens
     # whether the connection is up or down. The server-rendered dashboard below is
     # kept only as a fallback: /dashboard?classic=1
-    if not request.args.get("classic"):
-        return redirect("/app")
     conn = get_db()
     term = current_term(conn)
     school_id = current_school_id()
@@ -2703,6 +2715,10 @@ def admin_students():
             for e in errors: flash(e,"error")
         else:
             try:
+                username_conflict=conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(TRIM(username))=LOWER(?)",(school_id,username)).fetchone()
+                if username_conflict:
+                    if is_offline_sync_request(): conn.close(); return {"ok":False,"error":"This username is already in use at this school."},409
+                    flash("This username is already in use at this school.","error"); conn.close(); return redirect(url_for("admin_teachers"))
                 tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
                 cur=conn.execute("INSERT INTO students (school_id,tenant_id,admission_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,parent_name,parent_address,parent_email,parent_phone,parent_relationship,status,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,admission,first,last,request.form.get("other_names","").strip() or None,request.form.get("gender"),class_id,request.form.get("date_of_birth","").strip() or None,request.form.get("religion","").strip() or None,request.form.get("parent_name","").strip() or None,request.form.get("parent_address","").strip() or None,request.form.get("parent_email","").strip() or None,request.form.get("parent_phone","").strip() or None,request.form.get("parent_relationship","").strip() or None,request.form.get("status","Active") if request.form.get("status") in ("Active","Graduated","Transferred","Withdrawn","Suspended") else "Active",request.form.get("phone","").strip() or None))
                 upsert_enrollment(conn,cur.lastrowid,class_id); conn.commit(); offline_sync_remember(conn,request.form.get("offline_token"),"student",cur.lastrowid)
@@ -3321,7 +3337,7 @@ def admin_teachers():
             flash(message, "error")
             return redirect(url_for("admin_teachers"))
         name = request.form["name"].strip()
-        username = request.form["username"].strip()
+        username = " ".join(request.form["username"].strip().split()).lower()
         email = request.form.get("email", "").strip() or None
         phone = request.form.get("phone", "").strip() or None
         password = request.form["password"]
@@ -3335,12 +3351,12 @@ def admin_teachers():
                 conn.close()
                 return {"ok": True, "id": existing_id}
             flash(f"Teacher '{name}' added.", "success")
-        elif email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
+        elif email and conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(email)=LOWER(?)", (school_id,email)).fetchone():
             if is_offline_sync_request():
                 conn.close()
                 return {"ok": False, "error": "That email is already in use by another account."}, 409
             flash("That email is already in use by another account.", "error")
-        elif phone and conn.execute("SELECT 1 FROM users WHERE phone=?", (phone,)).fetchone():
+        elif phone and conn.execute("SELECT 1 FROM users WHERE school_id=? AND phone=?", (school_id,phone)).fetchone():
             if is_offline_sync_request():
                 conn.close()
                 return {"ok": False, "error": "That phone number is already in use by another account."}, 409
@@ -5677,7 +5693,7 @@ def staff_attendance():
 
 
 @app.route("/admin/staff-attendance/history")
-@login_required("admin", "sub_admin")
+@login_required()
 def staff_attendance_history():
     conn = get_db()
     school_id = current_school_id()
@@ -5690,7 +5706,10 @@ def staff_attendance_history():
     except ValueError:
         start, end = today.replace(day=1).isoformat(), today.isoformat()
 
-    staff = conn.execute("SELECT * FROM users WHERE school_id=? ORDER BY role, name", (school_id,)).fetchall()
+    if session.get("role") in ("admin", "sub_admin"):
+        staff = conn.execute("SELECT * FROM users WHERE school_id=? ORDER BY role, name", (school_id,)).fetchall()
+    else:
+        staff = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (session.get("user_id"), school_id)).fetchall()
     summaries = []
     for member in staff:
         counts = {s: 0 for s in STAFF_ATTENDANCE_STATUSES}
@@ -5798,10 +5817,36 @@ def offline_app_shell():
     return render_template("offline_app.html", school_name=school_name)
 
 
+# ---------- staff self check-in/out ----------
+
+@app.route("/staff-attendance/check-in", methods=["POST"])
+@login_required()
+def staff_attendance_check_in():
+    conn=get_db(); sid=current_school_id(); uid=session.get("user_id")
+    if session.get("role") not in ("admin","sub_admin","teacher"):
+        conn.close(); return jsonify({"ok":False,"error":"You do not have permission to record Staff Attendance."}),403
+    now=datetime.datetime.now().replace(microsecond=0); date_str=now.date().isoformat()
+    conn.execute("INSERT INTO staff_attendance (school_id,user_id,date,status,recorded_by,source) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,date) DO UPDATE SET status='Present',recorded_by=excluded.recorded_by,recorded_at=CURRENT_TIMESTAMP,source=excluded.source",(sid,uid,date_str,"Present",uid,"online"))
+    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":now.strftime('%H:%M:%S'),"status":"checked_in"})
+
+@app.route("/staff-attendance/check-out", methods=["POST"])
+@login_required()
+def staff_attendance_check_out():
+    conn=get_db(); sid=current_school_id(); uid=session.get("user_id")
+    if session.get("role") not in ("admin","sub_admin","teacher"):
+        conn.close(); return jsonify({"ok":False,"error":"You do not have permission to record Staff Attendance."}),403
+    now=datetime.datetime.now().replace(microsecond=0); date_str=now.date().isoformat()
+    row=conn.execute("SELECT id FROM staff_attendance WHERE school_id=? AND user_id=? AND date=?",(sid,uid,date_str)).fetchone()
+    if not row:
+        conn.close(); return jsonify({"ok":False,"error":"Check in before checking out."}),400
+    # Keep existing attendance schema compatible; check-out is recorded in audit log.
+    log_audit(conn,session.get("role"),session.get("name"),"staff_check_out",f"{date_str} {now.strftime('%H:%M:%S')}",school_id=sid)
+    conn.commit(); conn.close(); return jsonify({"ok":True,"date":date_str,"time":now.strftime('%H:%M:%S'),"status":"checked_out"})
+
 # ---------- reports & analytics ----------
 
 @app.route("/reports")
-@login_required("admin", "sub_admin")
+@login_required()
 def reports_hub():
     conn = get_db()
     school_id = current_school_id()
