@@ -17,3 +17,19 @@ body{background:#f6f8fb;color:#172033;font-family:var(--app-font,Inter,system-ui
 .analytics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem}.analytics-row{margin:1rem 0}.analytics-row span{float:right;font-weight:800}.bar{height:10px;background:#e8eef7;border-radius:999px;overflow:hidden;margin-top:.45rem}.bar i{display:block;height:100%;background:var(--theme-primary,#1f6feb)}.grade-chart{display:flex;gap:1rem;align-items:flex-end;min-height:150px}.grade-chart div{display:flex;flex-direction:column;align-items:center;gap:.25rem}.grade-chart span{width:34px;background:var(--theme-accent,#7c4dff);border-radius:6px 6px 0 0}.brand-mark img{width:36px;height:36px;object-fit:contain;border-radius:8px}.form-notice{padding:.8rem;border-radius:12px;background:#eef5ff;font-weight:600}.card small{font-weight:600;color:#475569}
 
 .result-signoff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb}.result-signoff-grid span{display:block;font-size:.78rem;font-weight:700;color:#64748b}.result-signoff-grid b{display:block;margin-top:.25rem}.notification-card{padding:1rem;border-bottom:1px solid #e5e7eb}.notification-card:last-child{border-bottom:0}
+/* Online-first readability pass */
+body{color:#111827}
+.card,.panel,.stat-card,.stat-box{color:#111827}
+.card p,.panel p,.muted{color:#475569}
+table{color:#111827}
+th{font-weight:800}
+td,th{border-color:#cbd5e1}
+label{color:#1f2937;font-weight:700}
+input,select,textarea{color:#111827;background:#fff;border:1px solid #94a3b8}
+input:focus,select:focus,textarea:focus{outline:3px solid rgba(37,99,235,.18);border-color:#2563eb}
+.btn{font-weight:800}
+.btn-secondary,.btn.secondary{color:#1f2937;background:#e5e7eb}
+.badge{font-weight:800}
+.analytics-row small{display:block;color:#475569;margin-top:4px}
+canvas{width:100%;max-width:100%;display:block}
+@media(max-width:650px){.responsive-table thead{display:none}.responsive-table,.responsive-table tbody,.responsive-table tr,.responsive-table td{display:block;width:100%;box-sizing:border-box}.responsive-table tr{padding:12px 0;border-bottom:1px solid #cbd5e1}.responsive-table td{border:0;padding:7px 0}.responsive-table td::before{content:attr(data-label);display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:800;color:#475569;margin-bottom:3px}}
