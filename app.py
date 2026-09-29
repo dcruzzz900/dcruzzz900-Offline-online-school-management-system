@@ -4271,7 +4271,7 @@ def timetable_setup():
         except Exception as exc:
             conn.rollback(); flash(str(exc) if isinstance(exc,ValueError) else "The timetable setup could not be saved. Please review the values.","error")
         conn.close(); return redirect(url_for("timetable_setup"))
-    days=conn.execute("SELECT * FROM school_days WHERE school_id=? AND tenant_id=? ORDER BY day_order",(sid,tid)).fetchall()
+    days=conn.execute("SELECT * FROM school_days_v2 WHERE school_id=? AND tenant_id=? AND is_active=1 ORDER BY day_order",(sid,tid)).fetchall()
     sessions=conn.execute("SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall(); active_session=next((x for x in sessions if x["is_active"]), sessions[0] if sessions else None)
     terms=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? ORDER BY t.id DESC",(sid,)).fetchall(); active_term=next((x for x in terms if x["is_active"]), terms[0] if terms else None)
     slots=_tt_slots(conn); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall(); rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? ORDER BY room_name",(sid,tid)).fetchall(); reqs=conn.execute("SELECT r.*,c.name class_name,s.name subject_name FROM class_subject_requirements_v2 r JOIN classes c ON c.id=r.class_id JOIN subjects s ON s.id=r.subject_id WHERE r.school_id=? AND r.tenant_id=? ORDER BY c.name,s.name",(sid,tid)).fetchall()

@@ -3017,3 +3017,63 @@ def migration_057_staff_profile_documents(conn):
 
 STEPS.append(("staff_profile_documents_v57", migration_057_staff_profile_documents))
 
+
+def migration_058_runtime_schema_repair(conn):
+    """Repair critical online schemas when schema_steps says a migration ran
+    but a table/column was lost or an older deployment left a partial schema.
+    This is deliberately additive: it never drops or deletes existing data.
+    """
+    if table_exists(conn, "schools"):
+        for col, typ in [
+            ("tenant_id", "TEXT"), ("registered_email", "TEXT"), ("registered_phone", "TEXT"),
+            ("cumulative_enabled", "INTEGER DEFAULT 0"), ("theme_preset", "TEXT NOT NULL DEFAULT 'default'"),
+            ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1f6feb'"),
+            ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0b3b75'"),
+            ("dashboard_accent_color", "TEXT NOT NULL DEFAULT '#7c4dff'"),
+            ("dashboard_sidebar_style", "TEXT NOT NULL DEFAULT 'dark'"),
+            ("dashboard_header_style", "TEXT NOT NULL DEFAULT 'solid'"),
+            ("school_tagline", "TEXT"), ("result_accent_color", "TEXT DEFAULT '#1f3a5f'"),
+            ("result_header_layout", "TEXT DEFAULT 'logo-left'"), ("web_font", "TEXT DEFAULT 'system'"),
+            ("pdf_font", "TEXT DEFAULT 'Helvetica'"), ("show_result_date", "INTEGER DEFAULT 1"),
+            ("auto_teacher_comment", "INTEGER DEFAULT 0"), ("auto_principal_comment", "INTEGER DEFAULT 0"),
+            ("auth_logo_opacity", "REAL NOT NULL DEFAULT 0.10"), ("auth_logo_position", "TEXT NOT NULL DEFAULT 'center'"),
+            ("auth_background_style", "TEXT NOT NULL DEFAULT 'watermark'"), ("auth_show_school_name", "INTEGER NOT NULL DEFAULT 1"),
+            ("auth_branding_enabled", "INTEGER NOT NULL DEFAULT 1"), ("show_form_teacher_name", "INTEGER DEFAULT 1"),
+            ("show_form_teacher_signature", "INTEGER DEFAULT 1"), ("show_principal_name", "INTEGER DEFAULT 1"),
+            ("show_principal_signature", "INTEGER DEFAULT 1"), ("activation_status", "TEXT DEFAULT 'active'"),
+            ("is_suspended", "INTEGER DEFAULT 0"), ("is_archived", "INTEGER DEFAULT 0"), ("force_logout_at", "TEXT"),
+        ]:
+            ensure_column(conn, "schools", col, typ)
+        conn.execute("UPDATE schools SET tenant_id=COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) WHERE tenant_id IS NULL OR tenant_id='' ")
+
+    if table_exists(conn, "users"):
+        ensure_column(conn, "users", "tenant_id", "TEXT")
+        conn.execute("UPDATE users SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=users.school_id) WHERE tenant_id IS NULL OR tenant_id='' ")
+
+    # Ensure the active v2 timetable tables exist. migration_056 is idempotent.
+    critical = ["school_days_v2", "schedule_templates", "schedule_slots", "timetable_versions_v2", "timetable_entries_v2"]
+    if any(not table_exists(conn, t) for t in critical):
+        migration_056_automated_timetable_v2(conn)
+
+    # Repair partial/older timetable tables without deleting existing rows.
+    if table_exists(conn, "school_days_v2"):
+        for col, typ in [("tenant_id", "TEXT"), ("school_id", "INTEGER"), ("day_name", "TEXT"), ("day_code", "TEXT"), ("day_order", "INTEGER"), ("is_active", "INTEGER DEFAULT 1")]:
+            ensure_column(conn, "school_days_v2", col, typ)
+        for school in conn.execute("SELECT id,COALESCE(tenant_id,CAST(id AS TEXT)) tenant_id FROM schools").fetchall():
+            for order,name,code in [(1,'Monday','MON'),(2,'Tuesday','TUE'),(3,'Wednesday','WED'),(4,'Thursday','THU'),(5,'Friday','FRI'),(6,'Saturday','SAT')]:
+                conn.execute("INSERT OR IGNORE INTO school_days_v2(tenant_id,school_id,day_name,day_code,day_order,is_active) VALUES(?,?,?,?,?,?)",(school['tenant_id'],school['id'],name,code,order,1 if order<=5 else 0))
+
+    if table_exists(conn, "schedule_templates"):
+        for col, typ in [("tenant_id","TEXT"),("school_id","INTEGER"),("academic_session_id","INTEGER"),("term_id","INTEGER"),("name","TEXT"),("description","TEXT"),("is_default","INTEGER DEFAULT 0"),("status","TEXT DEFAULT 'active'")]:
+            ensure_column(conn, "schedule_templates", col, typ)
+    if table_exists(conn, "schedule_slots"):
+        for col, typ in [
+            ("tenant_id","TEXT"),("school_id","INTEGER"),("academic_session_id","INTEGER"),("term_id","INTEGER"),
+            ("day_id","INTEGER"),("schedule_template_id","INTEGER"),("slot_number","INTEGER DEFAULT 0"),
+            ("slot_name","TEXT"),("slot_type","TEXT DEFAULT 'TEACHING'"),("start_time","TEXT"),("end_time","TEXT"),
+            ("duration_minutes","INTEGER DEFAULT 0"),("is_active","INTEGER DEFAULT 1"),("is_fixed","INTEGER DEFAULT 0"),
+            ("allows_timetable_entry","INTEGER DEFAULT 1")]:
+            ensure_column(conn, "schedule_slots", col, typ)
+
+STEPS.append(("runtime_schema_repair_v58", migration_058_runtime_schema_repair))
+
