@@ -2984,3 +2984,36 @@ def migration_056_automated_timetable_v2(conn):
         except Exception: pass
 
 STEPS.append(("automated_timetable_v2", migration_056_automated_timetable_v2))
+
+def migration_057_staff_profile_documents(conn):
+    """Store the exact staff signup name parts and tenant-scoped staff documents.
+    Existing users retain their legacy `name` value and are backfilled safely.
+    """
+    ensure_column(conn, "users", "first_name", "TEXT")
+    ensure_column(conn, "users", "surname", "TEXT")
+    ensure_column(conn, "users", "other_names", "TEXT")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS staff_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            user_id INTEGER NOT NULL,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL,
+            mime_type TEXT,
+            size_bytes INTEGER NOT NULL DEFAULT 0,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, stored_filename)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_staff_documents_tenant_user ON staff_documents(tenant_id,school_id,user_id)")
+    rows=conn.execute("SELECT id,name FROM users WHERE first_name IS NULL OR surname IS NULL OR first_name='' OR surname='' ").fetchall()
+    for r in rows:
+        parts=(r["name"] or "").split()
+        if not parts: continue
+        first=parts[0]; surname=parts[-1] if len(parts)>1 else parts[0]; other=" ".join(parts[1:-1]) if len(parts)>2 else None
+        conn.execute("UPDATE users SET first_name=COALESCE(NULLIF(first_name,''),?), surname=COALESCE(NULLIF(surname,''),?), other_names=COALESCE(NULLIF(other_names,''),?) WHERE id=?",(first,surname,other,r["id"]))
+
+STEPS.append(("staff_profile_documents_v57", migration_057_staff_profile_documents))
+

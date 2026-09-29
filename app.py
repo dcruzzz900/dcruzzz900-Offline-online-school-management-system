@@ -57,6 +57,8 @@ MATERIALS_DIR = os.path.join(INSTANCE_DIR, "materials")
 STUDENT_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "student_photos")
 STAFF_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "staff_photos")
 SIGNATURES_DIR = os.path.join(INSTANCE_DIR, "signatures")
+STAFF_DOCUMENTS_DIR = os.path.join(INSTANCE_DIR, "staff_documents")
+STAFF_DOCUMENT_EXTENSIONS = {"pdf","doc","docx","jpg","jpeg","png"}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # hard request ceiling; individual upload limits are enforced below
@@ -191,7 +193,7 @@ def _security_headers(response):
 
 
 # ---------- strict per-file upload limits ----------
-UPLOAD_LIMITS = {"passport": 500 * 1024, "signature": 500 * 1024, "learning_material": 1 * 1024 * 1024}
+UPLOAD_LIMITS = {"passport": 500 * 1024, "signature": 500 * 1024, "staff_document": 1 * 1024 * 1024, "learning_material": 1 * 1024 * 1024}
 
 def _file_size_bytes(file_storage):
     if not file_storage or not getattr(file_storage, "filename", ""):
@@ -204,7 +206,7 @@ def _file_size_bytes(file_storage):
 def _reject_oversize(file_storage, kind):
     limit = UPLOAD_LIMITS[kind]; size = _file_size_bytes(file_storage)
     if size > limit:
-        label = {"passport":"Passport image", "signature":"Signature", "learning_material":"Learning material"}[kind]
+        label = {"passport":"Passport image", "signature":"Signature", "staff_document":"Staff document", "learning_material":"Learning material"}[kind]
         return f"{label} must not exceed {'500 KB' if limit == 500 * 1024 else '1 MB'}."
     return None
 
@@ -1359,7 +1361,7 @@ def register():
             conn.close(); return render_template("register.html")
         try:
             full=" ".join(x for x in (first,last,other) if x)
-            cur=conn.execute("INSERT INTO users(school_id,tenant_id,name,username,password_hash,role,first_login_required,account_status,signup_status,activation_status) VALUES(?,?,?,?,?,'teacher',1,'active','approved','active')",(row["school_id"],row["tenant_id"],full,username,generate_password_hash(password)))
+            cur=conn.execute("INSERT INTO users(school_id,tenant_id,name,first_name,surname,other_names,username,password_hash,role,first_login_required,account_status,signup_status,activation_status) VALUES(?,?,?,?,?,?,?, ?,'teacher',1,'active','approved','active')",(row["school_id"],row["tenant_id"],full,first,last,other or None,username,generate_password_hash(password)))
             uid=cur.lastrowid
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id) VALUES(?,?,?,?,?,?,?,?)",(uid,"staff","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id()))
             verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True)
@@ -1987,19 +1989,22 @@ def update_staff_self_profile(user_id):
     user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?", (user_id, current_school_id(), current_tenant_id())).fetchone()
     if not user:
         conn.close(); session.clear(); return redirect(url_for("login"))
-    name = " ".join(request.form.get("name", "").split())
+    first = " ".join(request.form.get("first_name", "").split())
+    surname = " ".join(request.form.get("surname", "").split())
+    other = " ".join(request.form.get("other_names", "").split())
+    name = " ".join(x for x in (first, surname, other) if x)
     email = request.form.get("email", "").strip() or None
     phone = request.form.get("phone", "").strip() or None
     address = request.form.get("address", "").strip() or None
-    if not name:
-        conn.close(); flash("Name is required.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
+    if len(first) < 2 or len(surname) < 2:
+        conn.close(); flash("First name and surname are required.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
     if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         conn.close(); flash("Please enter a valid email address.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
     if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) AND id!=?", (email, user_id)).fetchone():
         conn.close(); flash("That email is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
     if phone and conn.execute("SELECT 1 FROM users WHERE phone=? AND id!=?", (phone, user_id)).fetchone():
         conn.close(); flash("That phone number is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
-    conn.execute("UPDATE users SET name=?, email=?, phone=?, address=? WHERE id=? AND school_id=? AND tenant_id=?", (name,email,phone,address,user_id,current_school_id(),current_tenant_id()))
+    conn.execute("UPDATE users SET name=?, first_name=?, surname=?, other_names=?, email=?, phone=?, address=? WHERE id=? AND school_id=? AND tenant_id=?", (name,first,surname,other or None,email,phone,address,user_id,current_school_id(),current_tenant_id()))
     conn.commit(); conn.close()
     session["name"] = name
     flash("Profile updated successfully.", "success")
@@ -2011,7 +2016,7 @@ def update_staff_self_profile(user_id):
 def staff_profile(user_id):
     conn = get_db()
     school_id = current_school_id()
-    staff = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (user_id, school_id)).fetchone()
+    staff = conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?", (user_id, school_id, current_tenant_id())).fetchone()
     if not staff:
         conn.close()
         flash("Staff member not found.", "error")
@@ -2035,13 +2040,14 @@ def staff_profile(user_id):
         "SELECT name FROM classes WHERE form_teacher_id=? AND school_id=? ORDER BY name", (user_id, school_id)
     ).fetchall()
     recent_attendance = conn.execute(
-        "SELECT * FROM staff_attendance WHERE user_id=? ORDER BY date DESC, id DESC LIMIT 20", (user_id,)
+        "SELECT * FROM staff_attendance WHERE user_id=? AND school_id=? ORDER BY date DESC, id DESC LIMIT 20", (user_id, school_id)
     ).fetchall()
+    documents = conn.execute("SELECT * FROM staff_documents WHERE user_id=? AND school_id=? AND tenant_id=? ORDER BY uploaded_at DESC", (user_id, school_id, current_tenant_id())).fetchall() if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='staff_documents'").fetchone() else []
     conn.close()
     return render_template(
         "staff_profile.html", staff=staff, is_self=is_self, can_manage=can_manage,
         subjects_taught=subjects_taught, classes_taught=classes_taught, form_classes=form_classes,
-        recent_attendance=recent_attendance, position_labels=POSITION_LABELS,
+        recent_attendance=recent_attendance, documents=documents, position_labels=POSITION_LABELS,
     )
 
 
@@ -2175,6 +2181,51 @@ def remove_my_signature():
     conn.close()
     return redirect(url_for("staff_profile", user_id=user_id))
 
+
+@app.route("/account/staff-document/upload", methods=["POST"])
+@login_required()
+def upload_staff_document():
+    uid=session["user_id"]; conn=get_db(); staff=conn.execute("SELECT id FROM users WHERE id=? AND school_id=? AND tenant_id=?",(uid,current_school_id(),current_tenant_id())).fetchone()
+    file=request.files.get("document")
+    if not staff or not file or not file.filename:
+        conn.close(); flash("Please choose a staff document to upload.","error"); return redirect(url_for("staff_profile",user_id=uid))
+    size=_file_size_bytes(file)
+    if size>UPLOAD_LIMITS["staff_document"]:
+        conn.close(); flash("Staff document must not exceed 1 MB.","error"); return redirect(url_for("staff_profile",user_id=uid))
+    ext=file.filename.rsplit(".",1)[-1].lower() if "." in file.filename else ""
+    if ext not in STAFF_DOCUMENT_EXTENSIONS:
+        conn.close(); flash("Staff document must be PDF, Word or an image file (JPG, PNG).","error"); return redirect(url_for("staff_profile",user_id=uid))
+    os.makedirs(os.path.join(STAFF_DOCUMENTS_DIR,str(current_school_id()),str(uid)),exist_ok=True)
+    stored=f"{secrets.token_hex(12)}.{ext}"; path=os.path.join(STAFF_DOCUMENTS_DIR,str(current_school_id()),str(uid),stored)
+    file.save(path)
+    conn.execute("INSERT INTO staff_documents(school_id,tenant_id,user_id,original_filename,stored_filename,mime_type,size_bytes) VALUES(?,?,?,?,?,?,?)",(current_school_id(),current_tenant_id(),uid,secure_filename(file.filename),stored,file.mimetype,size))
+    conn.commit(); conn.close(); flash("Staff document uploaded successfully.","success"); return redirect(url_for("staff_profile",user_id=uid))
+
+@app.route("/staff-document/<int:document_id>")
+@login_required()
+def staff_document(document_id):
+    conn=get_db(); doc=conn.execute("SELECT * FROM staff_documents WHERE id=? AND school_id=? AND tenant_id=?",(document_id,current_school_id(),current_tenant_id())).fetchone()
+    if not doc:
+        conn.close(); return "",404
+    allowed=doc["user_id"]==session.get("user_id") or session.get("role") in ("admin","sub_admin")
+    if not allowed:
+        conn.close(); return "",403
+    path=os.path.join(STAFF_DOCUMENTS_DIR,str(doc["school_id"]),str(doc["user_id"]),doc["stored_filename"])
+    conn.close()
+    if not os.path.isfile(path): return "",404
+    return send_file(path,download_name=doc["original_filename"],as_attachment=False,mimetype=doc["mime_type"] or None)
+
+@app.route("/staff-document/<int:document_id>/delete",methods=["POST"])
+@login_required()
+def delete_staff_document(document_id):
+    conn=get_db(); doc=conn.execute("SELECT * FROM staff_documents WHERE id=? AND school_id=? AND tenant_id=?",(document_id,current_school_id(),current_tenant_id())).fetchone()
+    if not doc:
+        conn.close(); flash("Document not found.","error"); return redirect(url_for("staff_profile",user_id=session.get("user_id")))
+    if doc["user_id"]!=session.get("user_id") and session.get("role") not in ("admin","sub_admin"):
+        conn.close(); flash("You are not authorized to remove that document.","error"); return redirect(url_for("staff_profile",user_id=session.get("user_id")))
+    path=os.path.join(STAFF_DOCUMENTS_DIR,str(doc["school_id"]),str(doc["user_id"]),doc["stored_filename"])
+    if os.path.isfile(path): os.remove(path)
+    conn.execute("DELETE FROM staff_documents WHERE id=?",(document_id,)); conn.commit(); conn.close(); flash("Staff document removed.","success"); return redirect(url_for("staff_profile",user_id=session.get("user_id")))
 
 # ---------- notifications (staff) ----------
 
@@ -2321,7 +2372,7 @@ def staff_onboarding():
         first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); other=request.form.get("other_names","").strip()
         if not first or not last: flash("First name and surname are required.","error")
         else:
-            vals={"name":" ".join(x for x in (first,last,other) if x),"email":request.form.get("email","").strip() or None,"phone":request.form.get("phone","").strip() or None,"first_login_required":0,"first_login_completed_at":datetime.datetime.utcnow().isoformat(timespec="seconds")}
+            vals={"name":" ".join(x for x in (first,last,other) if x),"first_name":first,"surname":last,"other_names":other or None,"email":request.form.get("email","").strip() or None,"phone":request.form.get("phone","").strip() or None,"first_login_required":0,"first_login_completed_at":datetime.datetime.utcnow().isoformat(timespec="seconds")}
             for col in ("address","date_of_birth","gender","qualifications"):
                 if col in user.keys(): vals[col]=request.form.get(col,"").strip() or None
             conn.execute(f"UPDATE users SET {', '.join(k+'=?' for k in vals)} WHERE id=?",list(vals.values())+[uid]); conn.commit(); conn.close(); flash("Staff profile saved.","success"); return redirect(url_for("dashboard"))
@@ -4187,6 +4238,9 @@ def timetable_setup():
         try:
             if action=="slot":
                 day_id=int(request.form["day_id"]); name=request.form["slot_name"].strip(); st=request.form["start_time"]; et=request.form["end_time"]; typ=request.form.get("slot_type","TEACHING")
+                session_id=request.form.get("academic_session_id",type=int); term_id=request.form.get("term_id",type=int)
+                if session_id and not conn.execute("SELECT 1 FROM sessions WHERE id=? AND school_id=?",(session_id,sid)).fetchone(): raise ValueError("Select a valid academic session.")
+                if term_id and not conn.execute("SELECT 1 FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,sid)).fetchone(): raise ValueError("Select a valid academic term.")
                 if st>=et: raise ValueError("Start time must be earlier than end time.")
                 overlap=conn.execute("SELECT 1 FROM schedule_slots WHERE school_id=? AND tenant_id=? AND day_id=? AND is_active=1 AND start_time<? AND end_time>?",(sid,tid,day_id,et,st)).fetchone()
                 if overlap: raise ValueError("Schedule slots on the same day cannot overlap.")
@@ -4195,7 +4249,7 @@ def timetable_setup():
                     conn.execute("INSERT INTO schedule_templates(tenant_id,school_id,name,is_default,status) VALUES(?,?,?,?,?)",(tid,sid,"Standard School Schedule",1,"active")); tmpl=conn.execute("SELECT last_insert_rowid() id").fetchone()
                 sh,sm=map(int,st.split(":")); eh,em=map(int,et.split(":")); duration=(eh*60+em)-(sh*60+sm)
                 maxno=conn.execute("SELECT COALESCE(MAX(slot_number),0) n FROM schedule_slots WHERE day_id=?",(day_id,)).fetchone()["n"]
-                conn.execute("INSERT INTO schedule_slots(tenant_id,school_id,academic_session_id,term_id,day_id,schedule_template_id,slot_number,slot_name,slot_type,start_time,end_time,duration_minutes,is_active,is_fixed,allows_timetable_entry) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",(tid,sid,None,None,day_id,tmpl["id"],maxno+1,name,typ,st,et,duration,1,0 if typ=="TEACHING" else 1))
+                conn.execute("INSERT INTO schedule_slots(tenant_id,school_id,academic_session_id,term_id,day_id,schedule_template_id,slot_number,slot_name,slot_type,start_time,end_time,duration_minutes,is_active,is_fixed,allows_timetable_entry) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",(tid,sid,session_id,term_id,day_id,tmpl["id"],maxno+1,name,typ,st,et,duration,1,0 if typ=="TEACHING" else 1))
             elif action=="requirement":
                 cid=int(request.form["class_id"]); sub=int(request.form["subject_id"]); teacher_id=request.form.get("teacher_id",type=int); ppw=max(1,min(40,int(request.form.get("periods_per_week",1)))); daily=max(1,min(8,int(request.form.get("periods_per_day_limit",1)))); dbl=1 if request.form.get("requires_double_period") else 0; tri=1 if request.form.get("requires_triple_period") else 0
                 if not class_in_school(conn,cid) or not subject_in_school(conn,sub): raise ValueError("Class or subject is outside this school.")
@@ -4218,8 +4272,10 @@ def timetable_setup():
             conn.rollback(); flash(str(exc) if isinstance(exc,ValueError) else "The timetable setup could not be saved. Please review the values.","error")
         conn.close(); return redirect(url_for("timetable_setup"))
     days=conn.execute("SELECT * FROM school_days WHERE school_id=? AND tenant_id=? ORDER BY day_order",(sid,tid)).fetchall()
-    slots=_tt_slots(conn); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall(); rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? ORDER BY room_name",(sid,tid)).fetchall(); reqs=conn.execute("SELECT r.*,c.name class_name,s.name subject_name FROM class_subject_requirements_v2 r JOIN classes c ON c.id=r.class_id JOIN subjects s ON s.id=r.subject_id WHERE r.school_id=? AND r.tenant_id=? ORDER BY c.name,s.name",(sid,tid)).fetchall()
-    conn.close(); return render_template("timetable_setup_v2.html",days=days,slots=slots,classes=classes,subjects=subjects,teachers=teachers,rooms=rooms,requirements=reqs)
+    sessions=conn.execute("SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall(); active_session=next((x for x in sessions if x["is_active"]), sessions[0] if sessions else None)
+    terms=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? ORDER BY t.id DESC",(sid,)).fetchall(); active_term=next((x for x in terms if x["is_active"]), terms[0] if terms else None)
+    slots=_tt_slots(conn); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall(); rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? ORDER BY room_name",(sid,tid)).fetchall(); reqs=conn.execute("SELECT r.*,c.name class_name,s.name subject_name FROM class_subject_requirements_v2 r JOIN classes c ON c.id=r.class_id JOIN subjects s ON s.id=r.subject_id WHERE r.school_id=? AND r.tenant_id=? ORDER BY c.name,s.name",(sid,tid)).fetchall()
+    conn.close(); return render_template("timetable_setup_v2.html",days=days,slots=slots,classes=classes,subjects=subjects,teachers=teachers,rooms=rooms,requirements=reqs,sessions=sessions,terms=terms,active_session=active_session,active_term=active_term)
 
 
 @app.route("/timetable/generate",methods=["GET","POST"])
@@ -8714,7 +8770,7 @@ def school_dashboard_alias(): return redirect(url_for("dashboard"))
 
 @app.route("/school-setup")
 @login_required("admin","sub_admin")
-def school_setup_alias(): return redirect(url_for("admin_setup_wizard"))
+def school_setup_alias(): return redirect(url_for("admin_school"))
 
 @app.route("/reports/analytics")
 @login_required("admin", "sub_admin")
