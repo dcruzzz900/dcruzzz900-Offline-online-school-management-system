@@ -22,7 +22,7 @@
   <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="date" value="{{ date_str }}"><input type="hidden" name="q" value="{{ search or '' }}"><input type="hidden" name="filter_status" value="{{ filter_status or '' }}">
     {% if staff %}
-    <table class="responsive-table"><thead><tr><th>Staff</th><th>Role</th><th>Status</th><th>Check-in</th><th>Check-out</th></tr></thead><tbody>
+    <table class="responsive-table"><caption>Staff Attendance</caption><thead><tr><th>Staff</th><th>Role</th><th>Status</th><th>Check-in</th><th>Check-out</th></tr></thead><tbody>
     {% for m in staff %}{% set row=existing.get(m.id) %}{% set current=row.status if row else 'Present' %}
     <tr><td data-label="Staff"><strong>{{ m.name }}</strong><br><small>{{ m.username }}</small></td><td data-label="Role">{{ position_labels.get(m.position, m.rbac_role or m.role.replace('_',' ')|title) }}</td><td data-label="Status"><select name="status_{{ m.id }}">{% for st in statuses %}<option value="{{ st }}" {% if current==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></td><td data-label="Check-in"><input type="time" name="check_in_{{ m.id }}" value="{{ (row.check_in_at or '')[:5] if row else '' }}"></td><td data-label="Check-out"><input type="time" name="check_out_{{ m.id }}" value="{{ (row.check_out_at or '')[:5] if row else '' }}"></td></tr>
     {% endfor %}</tbody></table>

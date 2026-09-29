@@ -60,4 +60,20 @@
 })();
 </script>
 <script>document.querySelectorAll('input[data-max-bytes]').forEach(function(input){input.addEventListener('change',function(){var f=input.files&&input.files[0];if(!f)return;var max=Number(input.dataset.maxBytes||0);if(max&&f.size>max){alert(input.dataset.sizeMessage||'File is too large.');input.value='';}});});document.querySelectorAll('form[enctype="multipart/form-data"]').forEach(function(form){form.addEventListener('submit',function(e){var bad=false;form.querySelectorAll('input[data-max-bytes]').forEach(function(i){var f=i.files&&i.files[0],m=Number(i.dataset.maxBytes||0);if(f&&m&&f.size>m){bad=true;alert(i.dataset.sizeMessage||'File is too large.');i.value='';}});if(bad)e.preventDefault();});});document.getElementById('sidebarToggle')?.addEventListener('click',()=>document.querySelector('.app-sidebar')?.classList.toggle('open'));function updateLiveClock(){let e=document.getElementById('liveClock');if(!e)return;let d=new Date();e.textContent=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear()+' — '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}updateLiveClock();setInterval(updateLiveClock,30000);</script>
+<script>
+(function(){
+  function tableTitle(table){
+    const explicit=table.getAttribute('data-table-title'); if(explicit) return explicit;
+    const card=table.closest('.card,.panel,section');
+    const heading=card && card.querySelector('h2,h3,h4');
+    if(heading && heading.textContent.trim()) return heading.textContent.trim();
+    const page=document.querySelector('.page-heading h1,.page-head h1,h1');
+    return page && page.textContent.trim() ? page.textContent.trim() : 'Data Table';
+  }
+  document.querySelectorAll('table').forEach((table)=>{
+    if(!table.querySelector('caption')){const c=document.createElement('caption');c.textContent=tableTitle(table);table.insertBefore(c,table.firstChild);}
+    if(!table.querySelector('thead')){const first=table.querySelector('tr'); if(first && first.querySelector('th')){const thead=document.createElement('thead');thead.appendChild(first);table.insertBefore(thead,table.tBodies[0]||null);}}
+  });
+})();
+</script>
 </body></html>

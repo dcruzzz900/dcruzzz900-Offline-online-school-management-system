@@ -14,7 +14,7 @@
             {% endif %}
         </div>
         <div>
-            <p style="margin:0;"><b>{{ staff.name }}</b></p>
+            <p style="margin:0;"><b>{{ staff.first_name or staff.name }} {{ staff.surname or "" }} {{ staff.other_names or "" }}</b></p>
             <p style="margin:0.2rem 0; color:#666;">{{ position_labels.get(staff.position, staff.position or staff.role|title) }}</p>
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Username:</b> {{ staff.username }}</p>
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Email:</b> {{ staff.email or '—' }}</p>
@@ -37,7 +37,9 @@
     <p class="muted">You may update your permitted personal information. Role, staff ID, school/tenant ID, permissions and assignments are administrator-controlled.</p>
     <form method="POST" action="{{ url_for('update_staff_self_profile', user_id=staff.id) }}" class="form-grid">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Full Name<input name="name" value="{{ staff.name or '' }}" required></label>
+      <label>First Name<input name="first_name" value="{{ staff.first_name or '' }}" required></label>
+      <label>Surname<input name="surname" value="{{ staff.surname or '' }}" required></label>
+      <label>Other Names<input name="other_names" value="{{ staff.other_names or '' }}"></label>
       <label>Email<input type="email" name="email" value="{{ staff.email or '' }}"></label>
       <label>Phone<input name="phone" value="{{ staff.phone or '' }}"></label>
       <label>Address<textarea name="address" rows="3">{{ staff.address or '' }}</textarea></label>
@@ -86,6 +88,24 @@
         <input type="file" name="signature" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
         <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
     </form>
+</div>
+
+<div class="card" style="max-width:640px;">
+    <h3>Staff Documents</h3>
+    <p class="muted">Upload permitted staff documents up to <strong>1 MB per file</strong>. Documents are protected by school and tenant access controls.</p>
+    {% if is_self %}
+    <form method="POST" action="{{ url_for('upload_staff_document') }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="document" data-max-bytes="1048576" data-size-message="Staff document must not exceed 1 MB." accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+      <small>Accepted: PDF, Word, JPG, JPEG, PNG · Maximum 1 MB</small>
+      <button class="btn" type="submit" style="margin-top:.5rem;">Upload Document</button>
+    </form>
+    {% endif %}
+    {% if documents %}
+    <table><caption>Staff Documents</caption><thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
+    {% for d in documents %}<tr><td><a href="{{ url_for('staff_document', document_id=d.id) }}" target="_blank" rel="noopener">{{ d.original_filename }}</a></td><td>{{ (d.size_bytes / 1024)|round(1) }} KB</td><td>{{ d.uploaded_at }}</td><td><form method="POST" action="{{ url_for('delete_staff_document', document_id=d.id) }}" style="display:inline" onsubmit="return confirm('Remove this document?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-small btn-secondary">Remove</button></form></td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="muted">No staff documents uploaded yet.</p>{% endif %}
 </div>
 {% endif %}
 
