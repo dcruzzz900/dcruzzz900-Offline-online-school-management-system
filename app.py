@@ -2334,7 +2334,15 @@ def school_readiness_checks(conn, school_id):
     if not school:
         return [], False
     def count(sql, params=(school_id,)):
-        return conn.execute(sql, params).fetchone()["n"]
+        # Setup must remain readable even when an older/partially migrated
+        # production database is missing an optional readiness table.  Treat
+        # that check as incomplete instead of allowing the whole setup page to
+        # crash with a generic 500 error.
+        try:
+            row = conn.execute(sql, params).fetchone()
+            return int(row["n"] or 0) if row else 0
+        except Exception:
+            return 0
     classes = count("SELECT COUNT(*) AS n FROM classes WHERE school_id=?")
     subjects = count("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?")
     teachers = count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1")
@@ -2348,7 +2356,7 @@ def school_readiness_checks(conn, school_id):
     checks = [
         ("profile", bool((school["name"] or "").strip())),
         ("identity", bool((school["school_code"] or "").strip()) and bool((school["tenant_id"] or "").strip())),
-        ("activation", (school["activation_status"] or "active") == "active" and not school["is_archived"]),
+        ("activation", (school["activation_status"] if "activation_status" in school.keys() else "active") == "active" and not bool(school["is_archived"] if "is_archived" in school.keys() else 0)),
         ("sessions", sessions > 0),
         ("terms", terms > 0),
         ("classes", classes > 0),
@@ -2470,10 +2478,18 @@ def admin_setup_wizard():
     for key, done in checks:
         items.append({"key":key,"label":labels[key],"description":descriptions[key],"done":done,"url":urls[key]})
     completed=sum(1 for x in items if x["done"]); total=len(items); percent=round(completed*100/total) if total else 0
-    status = school["readiness_status"] or "pending"
+    status = (school["readiness_status"] if "readiness_status" in school.keys() else None) or "pending"
+    # The wizard template displays these counters.  Supplying them explicitly
+    # avoids undefined template state and keeps the page useful on older data.
+    stats = {
+        "classes": count("SELECT COUNT(*) AS n FROM classes WHERE school_id=?"),
+        "subjects": count("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?"),
+        "teachers": count("SELECT COUNT(*) AS n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1"),
+        "students": count("SELECT COUNT(*) AS n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=?"),
+    }
     conn.close()
     return render_template("admin_setup_wizard.html", school=school, checks=items, completed=completed, total=total,
-                           percent=percent, ready=ready, readiness_status=status)
+                           percent=percent, ready=ready, readiness_status=status, stats=stats)
 
 
 # ---------- admin: setup ----------
