@@ -3025,7 +3025,7 @@ def migration_058_runtime_schema_repair(conn):
     """
     if table_exists(conn, "schools"):
         for col, typ in [
-            ("tenant_id", "TEXT"), ("registered_email", "TEXT"), ("registered_phone", "TEXT"),
+            ("tenant_id", "TEXT"), ("school_code", "TEXT"), ("registered_email", "TEXT"), ("registered_phone", "TEXT"),
             ("cumulative_enabled", "INTEGER DEFAULT 0"), ("theme_preset", "TEXT NOT NULL DEFAULT 'default'"),
             ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1f6feb'"),
             ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0b3b75'"),
@@ -3041,6 +3041,8 @@ def migration_058_runtime_schema_repair(conn):
             ("auth_branding_enabled", "INTEGER NOT NULL DEFAULT 1"), ("show_form_teacher_name", "INTEGER DEFAULT 1"),
             ("show_form_teacher_signature", "INTEGER DEFAULT 1"), ("show_principal_name", "INTEGER DEFAULT 1"),
             ("show_principal_signature", "INTEGER DEFAULT 1"), ("activation_status", "TEXT DEFAULT 'active'"),
+            ("readiness_status", "TEXT NOT NULL DEFAULT 'pending'"), ("ready_at", "TEXT"), ("ready_by", "INTEGER"),
+            ("readiness_version", "INTEGER NOT NULL DEFAULT 1"),
             ("is_suspended", "INTEGER DEFAULT 0"), ("is_archived", "INTEGER DEFAULT 0"), ("force_logout_at", "TEXT"),
         ]:
             ensure_column(conn, "schools", col, typ)
