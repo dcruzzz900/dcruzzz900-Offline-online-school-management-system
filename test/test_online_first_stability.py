@@ -31,7 +31,7 @@ def test_class_form_teacher_is_single_canonical_role():
 
 
 def test_staff_self_profile_and_password_routes():
-    assert '/staff/<int:user_id>/profile/update' in APP
+    assert '/staff/<int:user_id>/edit' in (ROOT / 'profile_routes.py').read_text()
     assert '/account/password' in APP
     assert 'school_id=? AND tenant_id=?' in APP
 
