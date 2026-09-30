@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Staff Attendance{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Online attendance is saved directly to the school server. Existing offline attendance remains supported.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
+<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Attendance is saved directly to the school server.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
 
 <div class="card attendance-self-actions">
   <div class="section-title"><div><h3>My Attendance</h3><p class="muted">Record your own check-in and check-out without creating duplicate daily records.</p></div><span id="staffAttendanceStatus" class="badge"></span></div>
@@ -31,6 +31,6 @@
   </form>
 </div>
 <script>
-async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');el.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token':'{{ csrf_token() }}','Accept':'application/json'}});const d=await r.json();el.textContent=d.ok?(' '+d.status.replace('_',' ')+' at '+d.time):(' '+(d.error||'Unable to save attendance'));}catch(e){el.textContent='Connection problem. Your existing offline attendance workflow is still available.';}}
+async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');el.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token':'{{ csrf_token() }}','Accept':'application/json'}});const d=await r.json();el.textContent=d.ok?(' '+d.status.replace('_',' ')+' at '+d.time):(' '+(d.error||'Unable to save attendance'));}catch(e){el.textContent='Cannot reach the server. Check your internet connection and try again. Nothing was saved.';}}
 </script>
 {% endblock %}

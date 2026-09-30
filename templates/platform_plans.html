@@ -18,7 +18,7 @@
 </div>
 <p><strong>Modules</strong></p>
 <div style="display:flex;flex-wrap:wrap;gap:12px">
-{% for feature in ['results','attendance','materials','timetable','reports','offline_sync','ai','advanced_reports'] %}<label><input type="checkbox" name="feature" value="{{ feature }}" {% if p.features_json and feature in p.features_json %}checked{% endif %}> {{ feature|replace('_',' ')|title }}</label>{% endfor %}
+{% for feature in ['results','attendance','materials','timetable','reports','ai','advanced_reports'] %}<label><input type="checkbox" name="feature" value="{{ feature }}" {% if p.features_json and feature in p.features_json %}checked{% endif %}> {{ feature|replace('_',' ')|title }}</label>{% endfor %}
 </div>
 <button class="btn" type="submit">Save {{ p.name }} Plan</button>
 </form></div>

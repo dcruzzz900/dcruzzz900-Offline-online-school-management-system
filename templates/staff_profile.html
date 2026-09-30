@@ -19,6 +19,8 @@
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Username:</b> {{ staff.username }}</p>
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Email:</b> {{ staff.email or '—' }}</p>
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Phone:</b> {{ staff.phone or '—' }}</p>
+            <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Staff ID:</b> {{ staff.staff_id or '—' }}</p>
+            <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Name at signup:</b> {{ staff.signup_name or staff.name }}</p>
             <p style="margin:0.2rem 0; font-size:0.9rem;"><b>Status:</b> {{ 'Active' if staff.is_active else 'Inactive' }}</p>
         </div>
     </div>
@@ -31,31 +33,16 @@
     <p><b>Class Teacher / Form Teacher Of:</b> {{ form_classes|map(attribute='name')|join(', ') if form_classes else '—' }}</p>
 </div>
 
+{% if is_self or can_manage and session.get('role') == 'admin' %}
+<div class="card" style="max-width:640px;">
+    <h3>{{ 'Edit My Profile' if is_self else 'Edit this Profile' }}</h3>
+    <p class="muted">Add missing details and update your permitted personal information. Username, Staff ID, role, school and security settings are administrator-controlled.</p>
+    <a class="btn" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
+    {% if is_self %}<a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a>{% endif %}
+</div>
+{% endif %}
+
 {% if is_self %}
-<div class="card" style="max-width:640px;">
-    <h3>Edit My Profile</h3>
-    <p class="muted">You may update your permitted personal information. Role, staff ID, school/tenant ID, permissions and assignments are administrator-controlled.</p>
-    <form method="POST" action="{{ url_for('update_staff_self_profile', user_id=staff.id) }}" class="form-grid">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>First Name<input name="first_name" value="{{ staff.first_name or '' }}" required></label>
-      <label>Surname<input name="surname" value="{{ staff.surname or '' }}" required></label>
-      <label>Other Names<input name="other_names" value="{{ staff.other_names or '' }}"></label>
-      <label>Email<input type="email" name="email" value="{{ staff.email or '' }}"></label>
-      <label>Phone<input name="phone" value="{{ staff.phone or '' }}"></label>
-      <label>Address<textarea name="address" rows="3">{{ staff.address or '' }}</textarea></label>
-      <div class="full"><button class="btn">Save Profile</button> <a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a></div>
-    </form>
-</div>
-
-<div class="card" style="max-width:640px;">
-    <h3>Update Photo</h3>
-    <form method="POST" action="{{ url_for('upload_my_photo') }}" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="file" name="photo" data-max-bytes="512000" data-size-message="Passport image must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Upload Photo</button>
-    </form>
-</div>
-
 <div class="card" style="max-width:640px;">
     <h3>Digital Signature</h3>
     <p style="font-size:0.9rem; color:#666;">

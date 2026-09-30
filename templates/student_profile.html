@@ -18,6 +18,11 @@
             <p><b>Religion:</b> {{ student.religion or '—' }}</p>
             <p><b>Status:</b> {{ student.status or 'Active' }}</p>
             <p><b>Student's Phone:</b> {{ student.phone or '—' }}</p>
+            <p><b>State / LGA:</b> {{ student.state or '—' }} / {{ student.lga or '—' }}</p>
+            <p><b>Tribe:</b> {{ student.tribe or '—' }}</p>
+            <p><b>Address:</b> {{ student.address or '—' }}</p>
+            <p><b>Date of Admission:</b> {{ student.date_of_admission|dmy if student.date_of_admission else '—' }}</p>
+            <p><a class="btn btn-small" href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Full Profile</a></p>
         </div>
         <div>
             <p><b>Parent/Guardian Name:</b> {{ student.parent_name or '—' }}</p>

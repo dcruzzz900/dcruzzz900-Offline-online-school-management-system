@@ -12,9 +12,9 @@
 </div>
 
 <div class="card">
-    <h3>Work Offline (CSV)</h3>
+    <h3>Bulk Upload (CSV)</h3>
     <p style="font-size:0.9rem; color:#666;">
-        Download the current scores as a CSV, fill it in on your computer, then upload it back — handy if you don't have reliable internet in the classroom.
+        Download the current scores as a CSV, fill it in on your computer, then upload it back — handy for entering many scores at once.
     </p>
     <a class="btn btn-small" href="{{ url_for('score_csv_template', class_id=class_row.id, subject_id=subject_row.id) }}">Download CSV Template</a>
     <form method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
@@ -30,7 +30,7 @@
     <input type="text" id="studentSearch" placeholder="Type a name or Admission No. / Register No..." autocomplete="off">
 </div>
 
-<form method="POST" data-offline="true" data-offline-label="Enter Scores">
+<form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <table id="scoreTable">
         <tr>

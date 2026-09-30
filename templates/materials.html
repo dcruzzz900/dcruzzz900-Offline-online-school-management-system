@@ -89,11 +89,6 @@
                 <a class="btn btn-small" href="{{ url_for('download_material', material_id=m.id) }}">
                     {% if m.external_url %}Open Link{% else %}Download{% endif %}
                 </a>
-                <button type="button" class="btn btn-small saveOffline" style="background:#555;"
-                        data-id="{{ m.id }}" data-title="{{ m.title }}" data-kind="{{ m.kind }}"
-                        data-subject="{{ m.subject_name }}" data-filename="{{ m.original_filename or '' }}"
-                        data-url="{{ m.external_url or '' }}"
-                        data-class="{% if class_id %}{{ accessible_classes|selectattr('id','equalto',class_id)|map(attribute='name')|first }}{% endif %}">Save offline</button>
                 {% if can_upload %}
                 <form method="POST" action="{{ url_for('delete_material', material_id=m.id) }}" class="inline"
                       onsubmit="return confirm('Remove this material?');">
@@ -108,26 +103,4 @@
     {% endif %}
 </div>
 {% endif %}
-<script src="{{ url_for('static', filename='js/offline-materials.js') }}"></script>
-<script>
-(function () {
-    var schoolId = {{ session.get('school_id') or 'null' }};
-    if (!schoolId) return;
-    document.querySelectorAll('.saveOffline').forEach(function (btn) {
-        var id = Number(btn.dataset.id);
-        OfflineMaterials.isSaved(schoolId, id).then(function (yes) { if (yes) btn.textContent = 'Saved offline \u2713'; }).catch(function () {});
-        btn.addEventListener('click', async function () {
-            btn.disabled = true; btn.textContent = 'Saving\u2026';
-            try {
-                await OfflineMaterials.save(schoolId, {
-                    id: id, title: btn.dataset.title, kind: btn.dataset.kind, subject: btn.dataset.subject,
-                    class_name: btn.dataset.class, filename: btn.dataset.filename || null, external_url: btn.dataset.url || null,
-                });
-                btn.textContent = 'Saved offline \u2713';
-            } catch (e) { btn.textContent = 'Save offline'; alert(e.message); }
-            btn.disabled = false;
-        });
-    });
-})();
-</script>
 {% endblock %}
