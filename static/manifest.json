@@ -1,8 +1,8 @@
 {
   "name": "School Result System",
   "short_name": "Results",
-  "description": "Record CA/Exam scores, broadsheets, and printable terminal results.",
-  "start_url": "/app",
+  "description": "Online school results and management system.",
+  "start_url": "/dashboard",
   "id": "/dashboard",
   "scope": "/",
   "display": "standalone",
