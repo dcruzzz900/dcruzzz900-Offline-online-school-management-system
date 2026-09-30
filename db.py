@@ -2035,15 +2035,17 @@ def seed(conn):
         "INSERT INTO schools (name, logo_filename, staff_signup_code) VALUES ('My School', NULL, NULL)"
     )
     school_id = cur.lastrowid
+    cur.execute("UPDATE schools SET tenant_id=COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) WHERE id=?", (school_id,))
+    seed_tenant = cur.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()[0]
 
     cur.execute(
-        "INSERT INTO users (school_id, name, username, password_hash, role) VALUES (?,?,?,?,?)",
-        (school_id, "Administrator", "admin", generate_password_hash("admin123"), "admin"),
+        "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role) VALUES (?,?,?,?,?,?)",
+        (school_id, seed_tenant, "Administrator", "admin", generate_password_hash("admin123"), "admin"),
     )
 
     cur.execute(
-        "INSERT INTO users (school_id, name, username, password_hash, role, position) VALUES (?,?,?,?,?,?)",
-        (school_id, "Mrs. Ada Okafor", "aokafor", generate_password_hash("teacher123"), "teacher", "form_teacher"),
+        "INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, position) VALUES (?,?,?,?,?,?,?)",
+        (school_id, seed_tenant, "Mrs. Ada Okafor", "aokafor", generate_password_hash("teacher123"), "teacher", "form_teacher"),
     )
     teacher_id = cur.lastrowid
 
@@ -2080,8 +2082,8 @@ def seed(conn):
     ]
     for adm, fn, ln, g in students:
         cur.execute(
-            "INSERT INTO students (admission_no, first_name, last_name, gender, class_id) VALUES (?,?,?,?,?)",
-            (adm, fn, ln, g, class_id),
+            "INSERT INTO students (school_id, tenant_id, admission_no, first_name, last_name, gender, class_id) VALUES (?,?,?,?,?,?,?)",
+            (school_id, seed_tenant, adm, fn, ln, g, class_id),
         )
         cur.execute(
             "INSERT INTO enrollments (student_id, session_id, class_id) VALUES (?,?,?)",
@@ -3079,3 +3081,196 @@ def migration_058_runtime_schema_repair(conn):
 
 STEPS.append(("runtime_schema_repair_v58", migration_058_runtime_schema_repair))
 
+
+
+# ---------------------------------------------------------------------------
+# V60: profiles, uniqueness, custom fields, protected audit history
+# ---------------------------------------------------------------------------
+
+def _create_unique_index_if_safe(conn, name, table, columns_sql, where_sql, dup_sql):
+    """Create a unique index only when existing data already satisfies it, so an
+    upgrade can never fail on a live database. When old duplicates exist the index is
+    skipped, the skip is recorded in migration_notes, and the application-level checks
+    still block every new duplicate."""
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?", (name,)).fetchone():
+        return True
+    if conn.execute(dup_sql).fetchone():
+        conn.execute("CREATE TABLE IF NOT EXISTS migration_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, note TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)")
+        conn.execute("INSERT INTO migration_notes(note) VALUES (?)", (f"Unique index {name} skipped: existing duplicate rows must be resolved first.",))
+        return False
+    conn.execute(f"CREATE UNIQUE INDEX {name} ON {table}({columns_sql}) WHERE {where_sql}")
+    return True
+
+
+def migration_059_profiles_customfields(conn):
+    # ---- student profile columns ------------------------------------------------
+    for col, typ in [("email", "TEXT"), ("state", "TEXT"), ("lga", "TEXT"), ("tribe", "TEXT"),
+                     ("date_of_admission", "TEXT"), ("address", "TEXT"), ("profile_updated_at", "TEXT")]:
+        ensure_column(conn, "students", col, typ)
+    # ---- staff profile columns --------------------------------------------------
+    for col, typ in [("state", "TEXT"), ("lga", "TEXT"), ("staff_id", "TEXT"), ("subjects_taught", "TEXT"),
+                     ("profile_updated_at", "TEXT"), ("signup_name", "TEXT")]:
+        ensure_column(conn, "users", col, typ)
+    # The name given at signup is the initial identity record: filled once, never overwritten.
+    conn.execute("UPDATE users SET signup_name=name WHERE signup_name IS NULL OR signup_name=''")
+    conn.execute("DROP TRIGGER IF EXISTS trg_users_signup_name_init")
+    conn.execute("""CREATE TRIGGER trg_users_signup_name_init AFTER INSERT ON users FOR EACH ROW
+                    WHEN NEW.signup_name IS NULL OR NEW.signup_name=''
+                    BEGIN UPDATE users SET signup_name=NEW.name WHERE id=NEW.id; END""")
+    conn.execute("DROP TRIGGER IF EXISTS trg_users_signup_name_lock")
+    conn.execute("""CREATE TRIGGER trg_users_signup_name_lock BEFORE UPDATE OF signup_name ON users FOR EACH ROW
+                    WHEN OLD.signup_name IS NOT NULL AND OLD.signup_name<>'' AND NEW.signup_name IS NOT OLD.signup_name
+                    BEGIN SELECT RAISE(ABORT,'The signup name is a permanent identity record'); END""")
+    # ---- tenant backfill for legacy students (seeded/imported before tenant stamping) ----
+    conn.execute("""UPDATE students SET school_id=(SELECT c.school_id FROM classes c WHERE c.id=students.class_id)
+                    WHERE school_id IS NULL""")
+    conn.execute("""UPDATE students SET tenant_id=(SELECT s.tenant_id FROM schools s WHERE s.id=students.school_id)
+                    WHERE (tenant_id IS NULL OR tenant_id='') AND school_id IS NOT NULL""")
+    conn.execute("""UPDATE schools SET tenant_id=CAST(id AS TEXT) WHERE tenant_id IS NULL OR tenant_id=''""")
+    conn.execute("""UPDATE users SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=users.school_id)
+                    WHERE tenant_id IS NULL OR tenant_id=''""")
+    conn.execute("""UPDATE students SET tenant_id=(SELECT s.tenant_id FROM schools s WHERE s.id=students.school_id)
+                    WHERE (tenant_id IS NULL OR tenant_id='') AND school_id IS NOT NULL""")
+
+    # ---- database-level uniqueness (tenant-aware, case-insensitive) -------------
+    _create_unique_index_if_safe(
+        conn, "ux_students_school_admission", "students", "school_id, LOWER(TRIM(admission_no))",
+        "admission_no IS NOT NULL AND school_id IS NOT NULL",
+        "SELECT 1 FROM students WHERE admission_no IS NOT NULL AND school_id IS NOT NULL "
+        "GROUP BY school_id, LOWER(TRIM(admission_no)) HAVING COUNT(*)>1 LIMIT 1")
+    _create_unique_index_if_safe(
+        conn, "ux_students_school_email", "students", "school_id, LOWER(email)",
+        "email IS NOT NULL AND email<>'' AND school_id IS NOT NULL",
+        "SELECT 1 FROM students WHERE email IS NOT NULL AND email<>'' AND school_id IS NOT NULL "
+        "GROUP BY school_id, LOWER(email) HAVING COUNT(*)>1 LIMIT 1")
+    _create_unique_index_if_safe(
+        conn, "ux_users_lower_email", "users", "LOWER(email)",
+        "email IS NOT NULL AND email<>''",
+        "SELECT 1 FROM users WHERE email IS NOT NULL AND email<>'' GROUP BY LOWER(email) HAVING COUNT(*)>1 LIMIT 1")
+    _create_unique_index_if_safe(
+        conn, "ux_users_lower_username", "users", "LOWER(username)",
+        "username IS NOT NULL",
+        "SELECT 1 FROM users WHERE username IS NOT NULL GROUP BY LOWER(username) HAVING COUNT(*)>1 LIMIT 1")
+    _create_unique_index_if_safe(
+        conn, "ux_users_school_staff_id", "users", "school_id, LOWER(staff_id)",
+        "staff_id IS NOT NULL AND staff_id<>''",
+        "SELECT 1 FROM users WHERE staff_id IS NOT NULL AND staff_id<>'' GROUP BY school_id, LOWER(staff_id) HAVING COUNT(*)>1 LIMIT 1")
+
+    # ---- triggers: tenant stamping + school-wide admission-number uniqueness on EVERY write path ----
+    # (CSV imports and older code paths insert without school_id; these triggers cover them too.
+    #  SQLite serialises writers, so the check and the insert cannot race.)
+    for t in ("trg_students_stamp_tenant", "trg_students_admission_unique_ins", "trg_students_admission_unique_upd"):
+        conn.execute(f"DROP TRIGGER IF EXISTS {t}")
+    conn.execute("""CREATE TRIGGER trg_students_stamp_tenant AFTER INSERT ON students FOR EACH ROW
+        WHEN NEW.school_id IS NULL OR NEW.tenant_id IS NULL OR NEW.tenant_id=''
+        BEGIN
+          UPDATE students SET school_id=(SELECT school_id FROM classes WHERE id=NEW.class_id),
+                              tenant_id=(SELECT sc.tenant_id FROM classes c JOIN schools sc ON sc.id=c.school_id WHERE c.id=NEW.class_id)
+          WHERE id=NEW.id;
+        END""")
+    dup_check = """EXISTS (SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id
+                     WHERE c.school_id=(SELECT school_id FROM classes WHERE id=NEW.class_id)
+                       AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(NEW.admission_no)){self_clause})"""
+    conn.execute("""CREATE TRIGGER trg_students_admission_unique_ins BEFORE INSERT ON students FOR EACH ROW
+        WHEN NEW.admission_no IS NOT NULL AND """ + dup_check.format(self_clause="") + """
+        BEGIN SELECT RAISE(ABORT,'Admission No. / Register No. already exists in this school'); END""")
+    conn.execute("""CREATE TRIGGER trg_students_admission_unique_upd BEFORE UPDATE OF admission_no, class_id ON students FOR EACH ROW
+        WHEN NEW.admission_no IS NOT NULL AND """ + dup_check.format(self_clause=" AND s.id<>OLD.id") + """
+        BEGIN SELECT RAISE(ABORT,'Admission No. / Register No. already exists in this school'); END""")
+    # Staff username / email / staff-id: case-insensitive, database-enforced on every write path.
+    for t in ("trg_users_identity_unique_ins", "trg_users_identity_unique_upd"):
+        conn.execute(f"DROP TRIGGER IF EXISTS {t}")
+    conn.execute("""CREATE TRIGGER trg_users_identity_unique_ins BEFORE INSERT ON users FOR EACH ROW
+        WHEN (NEW.email IS NOT NULL AND NEW.email<>'' AND EXISTS(SELECT 1 FROM users WHERE LOWER(email)=LOWER(NEW.email)))
+          OR (NEW.staff_id IS NOT NULL AND NEW.staff_id<>'' AND EXISTS(SELECT 1 FROM users WHERE school_id=NEW.school_id AND LOWER(staff_id)=LOWER(NEW.staff_id)))
+          OR EXISTS(SELECT 1 FROM users WHERE LOWER(username)=LOWER(NEW.username))
+        BEGIN SELECT RAISE(ABORT,'Username, email or Staff ID already exists'); END""")
+    conn.execute("""CREATE TRIGGER trg_users_identity_unique_upd BEFORE UPDATE OF username, email, staff_id ON users FOR EACH ROW
+        WHEN (NEW.email IS NOT NULL AND NEW.email<>'' AND EXISTS(SELECT 1 FROM users WHERE id<>OLD.id AND LOWER(email)=LOWER(NEW.email)))
+          OR (NEW.staff_id IS NOT NULL AND NEW.staff_id<>'' AND EXISTS(SELECT 1 FROM users WHERE id<>OLD.id AND school_id=NEW.school_id AND LOWER(staff_id)=LOWER(NEW.staff_id)))
+          OR EXISTS(SELECT 1 FROM users WHERE id<>OLD.id AND LOWER(username)=LOWER(NEW.username))
+        BEGIN SELECT RAISE(ABORT,'Username, email or Staff ID already exists'); END""")
+
+    # ---- custom fields -----------------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS custom_fields (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            applies_to TEXT NOT NULL CHECK (applies_to IN ('student','staff')),
+            field_key TEXT NOT NULL,
+            label TEXT NOT NULL,
+            description TEXT,
+            field_type TEXT NOT NULL,
+            is_required INTEGER NOT NULL DEFAULT 0,
+            is_unique INTEGER NOT NULL DEFAULT 0,
+            is_editable INTEGER NOT NULL DEFAULT 1,
+            default_value TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            is_archived INTEGER NOT NULL DEFAULT 0,
+            display_order INTEGER NOT NULL DEFAULT 0,
+            created_by INTEGER, created_by_name TEXT,
+            updated_by INTEGER, updated_by_name TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (school_id, applies_to, field_key)
+        )""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_custom_fields_label ON custom_fields(school_id, applies_to, LOWER(label)) WHERE is_archived=0")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_custom_fields_scope ON custom_fields(school_id, tenant_id, applies_to)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS custom_field_options (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            field_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            option_value TEXT NOT NULL,
+            display_order INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE (field_id, option_value)
+        )""")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS custom_field_values (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            field_id INTEGER NOT NULL,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            entity_type TEXT NOT NULL CHECK (entity_type IN ('student','staff')),
+            entity_id INTEGER NOT NULL,
+            value TEXT,
+            unique_value TEXT,
+            updated_by INTEGER,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (field_id, entity_id)
+        )""")
+    # DB-level enforcement of "Unique" custom fields: unique_value is only filled for unique fields.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_custom_values_unique ON custom_field_values(field_id, unique_value) WHERE unique_value IS NOT NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_custom_values_entity ON custom_field_values(school_id, entity_type, entity_id)")
+
+    # ---- protected audit history --------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS rbac_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            actor_type TEXT, actor_id INTEGER, actor_name TEXT, actor_role TEXT,
+            school_id INTEGER, tenant_id TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT, entity_id TEXT,
+            changes TEXT,
+            ip_address TEXT
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rbac_audit_school ON rbac_audit_log(school_id, created_at)")
+    for t in ("rbac_audit_log", "audit_log", "role_assignment_audit", "security_events"):
+        if not table_exists(conn, t):
+            continue
+        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_update")
+        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_delete")
+        conn.execute(f"CREATE TRIGGER trg_{t}_no_update BEFORE UPDATE ON {t} BEGIN SELECT RAISE(ABORT,'Audit history is append-only'); END")
+        conn.execute(f"CREATE TRIGGER trg_{t}_no_delete BEFORE DELETE ON {t} BEGIN SELECT RAISE(ABORT,'Audit history is append-only'); END")
+
+    # ---- retire offline-only data --------------------------------------------------
+    # Device credentials let a phone unlock the retired offline app; none may remain valid.
+    if table_exists(conn, "device_credentials"):
+        conn.execute("DELETE FROM device_credentials")
+
+
+STEPS.append(("profiles_customfields_v60", migration_059_profiles_customfields))

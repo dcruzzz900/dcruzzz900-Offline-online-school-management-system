@@ -28,7 +28,7 @@ from db import (
     generate_teacher_comment, generate_principal_comment,
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
-    verify_activation_code, revoke_device_credentials_for_user, revoke_device_credentials_for_school,
+    verify_activation_code,
     generate_signup_code, verify_signup_code,
     TIMEZONE_CHOICES, RESULT_HEADER_LAYOUTS,
 )
@@ -37,7 +37,6 @@ import json
 from pdf_utils import build_broadsheet_pdf, build_result_pdf, build_class_results_pdf, build_cumulative_result_pdf, build_generic_table_pdf
 from email_utils import send_email, send_platform_email
 from reports import build_csv, build_xlsx
-from sync_api import sync_bp
 from security_audit import run_security_audit
 from ai.provider import generate as ai_provider_generate, configured as ai_provider_configured
 from ai.result_analysis import analyze_student, compare as compare_analysis
@@ -58,6 +57,7 @@ STUDENT_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "student_photos")
 STAFF_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "staff_photos")
 SIGNATURES_DIR = os.path.join(INSTANCE_DIR, "signatures")
 STAFF_DOCUMENTS_DIR = os.path.join(INSTANCE_DIR, "staff_documents")
+CUSTOM_FILES_DIR = os.path.join(INSTANCE_DIR, "custom_field_files")
 STAFF_DOCUMENT_EXTENSIONS = {"pdf","doc","docx","jpg","jpeg","png"}
 
 app = Flask(__name__)
@@ -94,12 +94,8 @@ def _get_or_create_secret_key():
 
 app.secret_key = os.environ.get("SECRET_KEY") or _get_or_create_secret_key()
 
-# A non-permanent Flask session cookie disappears when the browser process
-# ends — on a PWA/"Add to Home Screen" app that can mean losing login after
-# just being backgrounded for a while. That defeats offline use: staff need
-# to stay logged in through a multi-day stretch with no connection so their
-# queued offline entries still have a valid session to sync against once
-# they're back online. session.permanent is set at login (see login()).
+# Keep staff signed in across a working week (session.permanent is set at login).
+# The school server is always required: there is no offline mode.
 app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=30)
 
 # Make sure the database exists and is migrated, whether this file is run
@@ -136,29 +132,9 @@ def _check_csrf():
     if request.method not in CSRF_UNSAFE_METHODS:
         return None
     if request.path.startswith("/api/"):
-        # The offline sync API is JSON-only and authenticated one of two
-        # ways, neither of which is vulnerable to classic cookie-riding
-        # CSRF the way a form POST is:
-        #   - a device credential sent as custom headers (X-Device-Id /
-        #     X-Device-Secret) — a cross-site page can't attach arbitrary
-        #     headers to a simple form submission, and reading them back
-        #     out of the device's encrypted local storage requires
-        #     same-origin JS in the first place;
-        #   - the normal session cookie, for the one endpoint that's used
-        #     before a device has a credential yet (/api/offline/enroll) —
-        #     that path is checked below via an explicit header instead of
-        #     the form field, since it's a JSON body rather than a form.
-        if request.headers.get("X-Device-Id") and request.headers.get("X-Device-Secret"):
-            return None
-        if request.path == "/api/offline/verify":
-            # Authenticated entirely by knowledge of the device_secret in
-            # the JSON body (checked against its stored hash inside the
-            # handler) — there's deliberately no session/cookie involved
-            # here, since the whole point is to work for a device that
-            # only just regained connectivity and hasn't necessarily
-            # logged in online this session.
-            return None
-        if "user_id" in session:
+        # JSON endpoints authenticate with the session cookie, so they must carry the
+        # CSRF token in a header (a cross-site page cannot set custom headers).
+        if "user_id" in session or "student_id" in session or "platform_admin_id" in session:
             submitted = request.headers.get("X-CSRF-Token", "")
             expected = session.get("_csrf_token", "")
             if expected and secrets.compare_digest(submitted, expected):
@@ -173,7 +149,6 @@ def _check_csrf():
 
 
 app.jinja_env.filters["dmy"] = format_dmy
-app.register_blueprint(sync_bp)
 
 
 # ---------- production security headers ----------
@@ -202,6 +177,16 @@ def _file_size_bytes(file_storage):
         pos = file_storage.stream.tell(); file_storage.stream.seek(0, os.SEEK_END); size = file_storage.stream.tell(); file_storage.stream.seek(pos); return int(size)
     except Exception:
         return 0
+
+def _verify_image(file_storage, limit, label):
+    """Server-side check that an upload really is an image of acceptable size (not just a file name)."""
+    import profile_core
+    data, _ext, err = profile_core.read_image_upload(file_storage, limit, label)
+    try:
+        file_storage.stream.seek(0)
+    except Exception:
+        pass
+    return err
 
 def _reject_oversize(file_storage, kind):
     limit = UPLOAD_LIMITS[kind]; size = _file_size_bytes(file_storage)
@@ -246,7 +231,28 @@ ROLE_CATALOG = {
     "Finance/Bursar": ["view","create","edit","export"],
     "Teacher": ["view","create","edit","import"],
     "Other Staff": ["view"],
+    # Standardised role names (V60). Default-deny: each role starts with only the permissions below.
+    "Vice Principal / Deputy Principal": ["view","create","edit","approve","verify","finalize","publish","export","manage_attendance","manage_reports"],
+    "HOD / Head of Department": ["view","create","edit","approve","verify","export"],
+    "Examination Officer": ["view","create","edit","verify","finalize","lock","publish","import","export"],
+    "Guidance/Counselling Officer": ["view","create","edit"],
+    "Bursar / Accountant": ["view","create","edit","export"],
+    "Registrar / Admissions Officer": ["view","create","edit","import","export"],
+    "Attendance Officer": ["view","manage_attendance","export"],
+    "ICT / System Support Officer": ["view"],
+    "Front Desk / Reception Officer": ["view","create"],
 }
+
+# Legacy role names stay valid for existing accounts, but new assignments use the standardised names.
+LEGACY_ROLE_ALIASES = {
+    "Vice Principal": "Vice Principal / Deputy Principal", "Deputy Head": "Vice Principal / Deputy Principal",
+    "HOD": "HOD / Head of Department", "Examination/Result Officer": "Examination Officer",
+    "Guidance/Counselor": "Guidance/Counselling Officer", "Finance/Bursar": "Bursar / Accountant",
+    "ICT Officer": "ICT / System Support Officer",
+}
+
+def assignable_roles():
+    return sorted(r for r in ROLE_CATALOG if r not in LEGACY_ROLE_ALIASES)
 
 SCHOOL_LEVELS = ("All","Nursery","Primary","Secondary")
 
@@ -373,17 +379,6 @@ def readyz():
     except Exception:
         # Do not expose database paths or SQL details to unauthenticated probes.
         return jsonify({"status": "not_ready", "database": "unavailable"}), 503
-
-
-@app.route("/csrf-token")
-def csrf_token_endpoint():
-    """Used by the offline-queue script to fetch a fresh, valid token right
-    before replaying a queued submission — the token captured when the
-    form was originally filled out (possibly while offline, possibly much
-    earlier) may no longer match the session by the time it syncs."""
-    if "user_id" not in session and "student_id" not in session and "platform_admin_id" not in session:
-        return {"error": "not logged in"}, 401
-    return {"csrf_token": get_csrf_token()}
 
 
 # ---------- rate limiting ----------
@@ -710,35 +705,6 @@ def _security_audit_event(conn, action, details, school_id=None):
     except Exception: pass
 
 
-def offline_sync_existing_id(conn, token):
-    """If this offline-created record was already synced under this token
-    (e.g. an earlier attempt succeeded but the client never saw the
-    response), return its id so the caller can reuse it instead of
-    inserting a duplicate."""
-    if not token:
-        return None
-    row = conn.execute("SELECT entity_id FROM offline_sync_tokens WHERE token=?", (token,)).fetchone()
-    return row["entity_id"] if row else None
-
-
-def offline_sync_remember(conn, token, entity_type, entity_id):
-    if not token:
-        return
-    conn.execute(
-        "INSERT OR IGNORE INTO offline_sync_tokens (token, entity_type, entity_id) VALUES (?,?,?)",
-        (token, entity_type, entity_id),
-    )
-    conn.commit()
-
-
-def is_offline_sync_request():
-    """The offline queue marks its replayed requests with this header so
-    create-endpoints know to respond with {ok, id} JSON (which the queue
-    needs to resolve dependent, not-yet-synced records) instead of the
-    normal flash-and-redirect a live browser submission gets."""
-    return request.headers.get("X-Offline-Sync") == "1"
-
-
 def current_term(conn):
     return conn.execute(
         "SELECT terms.*, sessions.name as session_name FROM terms "
@@ -961,8 +927,12 @@ def require_cumulative_enabled(conn):
 
 @app.route("/service-worker.js")
 def service_worker():
+    """Online-only: this worker caches nothing. Devices that installed an older
+    offline-capable worker fetch this file on their next visit, and it removes
+    itself and every cache the old worker created."""
     resp = send_from_directory("static", "service-worker.js", mimetype="application/javascript")
     resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -1536,7 +1506,6 @@ def recover_reset():
             conn = get_db()
             conn.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(new), user_id))
             conn.commit()
-            revoke_device_credentials_for_user(conn, user_id, "password reset (account recovery)")
             conn.close()
             session.pop("recovery_user_id", None)
             session.pop("recovery_verified_user_id", None)
@@ -1603,7 +1572,7 @@ def dashboard():
 @app.route("/api/subscription-status")
 @login_required("admin", "sub_admin")
 def api_subscription_status():
-    """Small non-sensitive payload for the unified offline/online UI."""
+    """Small non-sensitive subscription payload for the admin UI."""
     conn = get_db()
     school_id = current_school_id()
     school = get_school(conn, school_id)
@@ -1617,77 +1586,6 @@ def api_subscription_status():
 
 
 # ---------- admin: school profile ----------
-
-@app.route("/admin/sync-conflicts")
-@login_required("admin", "sub_admin")
-def admin_sync_conflicts():
-    """Conflicts recorded by the offline sync API (sync_api.py) when a
-    device's push disagreed with the server's current data. These aren't
-    resolved automatically — a human decides which version is right — so
-    without this page they'd only be visible to whichever offline device
-    caused them (via the Offline App's own Sync Status screen), and would
-    otherwise sit invisible in the database indefinitely."""
-    conn = get_db()
-    school_id = current_school_id()
-    rows = conn.execute(
-        "SELECT * FROM sync_conflicts WHERE school_id=? AND resolved=0 ORDER BY detected_at DESC",
-        (school_id,),
-    ).fetchall()
-    conflicts = []
-    for r in rows:
-        conflicts.append({
-            "id": r["id"], "entity": r["entity"], "client_uuid": r["client_uuid"],
-            "device_id": r["device_id"], "detected_at": r["detected_at"],
-            "client_payload": json.loads(r["client_payload"]),
-            "server_payload": json.loads(r["server_payload"]),
-        })
-    conn.close()
-    return render_template("admin_sync_conflicts.html", conflicts=conflicts)
-
-
-@app.route("/admin/sync-conflicts/<int:conflict_id>/resolve", methods=["POST"])
-@login_required("admin", "sub_admin")
-def admin_resolve_sync_conflict(conflict_id):
-    from sync_api import ENTITIES
-    conn = get_db()
-    school_id = current_school_id()
-    row = conn.execute(
-        "SELECT * FROM sync_conflicts WHERE id=? AND school_id=?", (conflict_id, school_id)
-    ).fetchone()
-    if not row:
-        flash("Conflict not found.", "error")
-        conn.close()
-        return redirect(url_for("admin_sync_conflicts"))
-
-    action = request.form.get("action")
-    cfg = ENTITIES.get(row["entity"])
-    if action == "apply_client" and cfg:
-        client_fields = json.loads(row["client_payload"])
-        client_fields = {k: v for k, v in client_fields.items() if k in cfg["fields"]}
-        existing = conn.execute(
-            f"SELECT id FROM {cfg['table']} WHERE client_uuid=?", (row["client_uuid"],)
-        ).fetchone()
-        if existing and client_fields:
-            set_clause = ", ".join(f"{k}=?" for k in client_fields)
-            conn.execute(
-                f"UPDATE {cfg['table']} SET {set_clause}, updated_at=? WHERE client_uuid=?",
-                (*client_fields.values(), datetime.datetime.utcnow().isoformat(timespec="seconds"), row["client_uuid"]),
-            )
-            resolution = "applied_client_version"
-        else:
-            resolution = "kept_server_version (client row not found — likely a create conflict; add it manually if needed)"
-    else:
-        resolution = "kept_server_version"
-
-    conn.execute(
-        "UPDATE sync_conflicts SET resolved=1, resolved_at=?, resolution=? WHERE id=?",
-        (datetime.datetime.utcnow().isoformat(timespec="seconds"), resolution, conflict_id),
-    )
-    conn.commit()
-    conn.close()
-    flash("Conflict marked resolved.", "success")
-    return redirect(url_for("admin_sync_conflicts"))
-
 
 @app.route("/admin/school", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
@@ -1979,38 +1877,6 @@ def my_profile():
     return redirect(url_for("staff_profile", user_id=session["user_id"]))
 
 
-@app.route("/staff/<int:user_id>/profile/update", methods=["POST"])
-@login_required()
-def update_staff_self_profile(user_id):
-    if user_id != session.get("user_id"):
-        flash("You can only edit your own staff profile.", "error")
-        return redirect(url_for("staff_profile", user_id=session.get("user_id")))
-    conn = get_db()
-    user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=? AND tenant_id=?", (user_id, current_school_id(), current_tenant_id())).fetchone()
-    if not user:
-        conn.close(); session.clear(); return redirect(url_for("login"))
-    first = " ".join(request.form.get("first_name", "").split())
-    surname = " ".join(request.form.get("surname", "").split())
-    other = " ".join(request.form.get("other_names", "").split())
-    name = " ".join(x for x in (first, surname, other) if x)
-    email = request.form.get("email", "").strip() or None
-    phone = request.form.get("phone", "").strip() or None
-    address = request.form.get("address", "").strip() or None
-    if len(first) < 2 or len(surname) < 2:
-        conn.close(); flash("First name and surname are required.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
-    if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        conn.close(); flash("Please enter a valid email address.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
-    if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?) AND id!=?", (email, user_id)).fetchone():
-        conn.close(); flash("That email is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
-    if phone and conn.execute("SELECT 1 FROM users WHERE phone=? AND id!=?", (phone, user_id)).fetchone():
-        conn.close(); flash("That phone number is already in use by another account.", "error"); return redirect(url_for("staff_profile", user_id=user_id))
-    conn.execute("UPDATE users SET name=?, first_name=?, surname=?, other_names=?, email=?, phone=?, address=? WHERE id=? AND school_id=? AND tenant_id=?", (name,first,surname,other or None,email,phone,address,user_id,current_school_id(),current_tenant_id()))
-    conn.commit(); conn.close()
-    session["name"] = name
-    flash("Profile updated successfully.", "success")
-    return redirect(url_for("staff_profile", user_id=user_id))
-
-
 @app.route("/staff/<int:user_id>")
 @login_required()
 def staff_profile(user_id):
@@ -2088,7 +1954,7 @@ def upload_my_photo():
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("staff_profile", user_id=user_id))
-    size_error = _reject_oversize(file, "passport")
+    size_error = _reject_oversize(file, "passport") or _verify_image(file, 500 * 1024, "Passport photograph")
     if size_error:
         conn.close(); flash(size_error, "error"); return redirect(url_for("staff_profile", user_id=user_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -2121,7 +1987,7 @@ def upload_my_signature():
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("staff_profile", user_id=user_id))
-    size_error = _reject_oversize(file, "signature")
+    size_error = _reject_oversize(file, "signature") or _verify_image(file, 500 * 1024, "Signature")
     if size_error:
         conn.close(); flash(size_error, "error"); return redirect(url_for("staff_profile", user_id=user_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -2528,29 +2394,13 @@ def admin_classes():
             if existed:
                 flash("Already existed: " + ", ".join(existed) + ".", "error")
         elif name:
-            # A phone running the earlier build may replay a form it queued while offline; its token
-            # makes the create happen once, and the X-Offline-Sync header asks for JSON with the new id.
-            offline_token = request.form.get("offline_token")
-            existing_id = offline_sync_existing_id(conn, offline_token)
-            if existing_id:
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": True, "id": existing_id}
+            try:
+                conn.execute("INSERT INTO classes (school_id, name, category) VALUES (?,?,?)", (school_id, name, category))
+                conn.commit()
                 flash(f"Class '{name}' added.", "success")
-            else:
-                try:
-                    cur = conn.execute("INSERT INTO classes (school_id, name, category) VALUES (?,?,?)", (school_id, name, category))
-                    conn.commit()
-                    offline_sync_remember(conn, offline_token, "class", cur.lastrowid)
-                    if is_offline_sync_request():
-                        conn.close()
-                        return {"ok": True, "id": cur.lastrowid}
-                    flash(f"Class '{name}' added.", "success")
-                except Exception:
-                    if is_offline_sync_request():
-                        conn.close()
-                        return {"ok": False, "error": "That class already exists."}, 409
-                    flash("That class already exists.", "error")
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                flash("That class already exists.", "error")
     classes = conn.execute(
         "SELECT c.*, u.name as teacher_name FROM classes c LEFT JOIN users u ON u.id=c.form_teacher_id "
         "WHERE c.school_id=? ORDER BY c.name", (school_id,)
@@ -2648,28 +2498,14 @@ def admin_subjects():
         return redirect(url_for("dashboard"))
     if request.method == "POST":
         name = request.form["name"].strip()
-        offline_token = request.form.get("offline_token")
         if name:
-            existing_id = offline_sync_existing_id(conn, offline_token)
-            if existing_id:
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": True, "id": existing_id}
+            try:
+                conn.execute("INSERT INTO subjects (school_id, name) VALUES (?,?)", (school_id, name))
+                conn.commit()
                 flash(f"Subject '{name}' added.", "success")
-            else:
-                try:
-                    cur = conn.execute("INSERT INTO subjects (school_id, name) VALUES (?,?)", (school_id, name))
-                    conn.commit()
-                    offline_sync_remember(conn, offline_token, "subject", cur.lastrowid)
-                    if is_offline_sync_request():
-                        conn.close()
-                        return {"ok": True, "id": cur.lastrowid}
-                    flash(f"Subject '{name}' added.", "success")
-                except Exception:
-                    if is_offline_sync_request():
-                        conn.close()
-                        return {"ok": False, "error": "That subject already exists."}, 409
-                    flash("That subject already exists.", "error")
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                flash("That subject already exists.", "error")
     subjects = conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
     conn.close()
     return render_template("admin_subjects.html", subjects=subjects)
@@ -2842,7 +2678,7 @@ def admin_students():
         if not first: errors.append("First name is required.")
         if not last: errors.append("Last name is required.")
         if request.form.get("gender") not in ("M","F"): errors.append("Gender is required.")
-        if conn.execute("SELECT 1 FROM students WHERE class_id=? AND admission_no=?",(class_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already in use in this class.")
+        if conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))",(school_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already used by another student in this school.")
         if errors:
             for e in errors: flash(e,"error")
         else:
@@ -2874,11 +2710,10 @@ def admin_students():
                 )
                 student_id = cur.lastrowid
                 upsert_enrollment(conn, student_id, class_id)
-                # Optional online passport upload. Offline remains unchanged
-                # and continues to queue the form through the existing client.
+                # Optional passport upload (validated server-side).
                 photo = request.files.get("photo")
                 if photo and photo.filename:
-                    size_error = _reject_oversize(photo, "passport")
+                    size_error = _reject_oversize(photo, "passport") or _verify_image(photo, 500 * 1024, "Passport photograph")
                     if size_error:
                         raise ValueError(size_error)
                     ext = photo.filename.rsplit(".", 1)[-1].lower() if "." in photo.filename else ""
@@ -2888,29 +2723,20 @@ def admin_students():
                     filename = f"student_{student_id}.{ext}"
                     photo.save(os.path.join(STUDENT_PHOTOS_DIR, filename))
                     conn.execute("UPDATE students SET photo_filename=? WHERE id=? AND school_id=?", (filename, student_id, school_id))
-                offline_sync_remember(conn,request.form.get("offline_token"),"student",student_id)
                 conn.commit()
-                if is_offline_sync_request():
-                    conn.close(); return {"ok":True,"id":student_id}
                 flash(f"Student '{first} {last}' added successfully.","success")
             except ValueError as exc:
                 conn.rollback()
-                if is_offline_sync_request():
-                    conn.close(); return {"ok":False,"error":str(exc)},400
                 flash(str(exc),"error")
             except sqlite3.IntegrityError as exc:
                 conn.rollback()
                 app.logger.warning("Student creation rejected by database constraint: %s", exc)
-                message = "That Admission No. / Register No. is already in use in this class." if "admission" in str(exc).lower() or "unique" in str(exc).lower() else "Student data conflicts with an existing record. Please check the admission/register number and class."
-                if is_offline_sync_request():
-                    conn.close(); return {"ok":False,"error":message},409
+                message = "That Admission No. / Register No. is already used by another student in this school." if "admission" in str(exc).lower() or "unique" in str(exc).lower() else "Student data conflicts with an existing record. Please check the admission/register number and class."
                 flash(message,"error")
             except Exception:
                 conn.rollback()
                 app.logger.exception("Student creation failed")
                 message = "Student could not be saved because the submitted data could not be processed. Check the required fields and try again."
-                if is_offline_sync_request():
-                    conn.close(); return {"ok":False,"error":message},500
                 flash(message,"error")
     elif not require_scoped_permission("view"):
         conn.close(); flash("You do not have permission to view students.","error"); return redirect(url_for("dashboard"))
@@ -3278,7 +3104,12 @@ def student_profile(student_id):
 
 
 def _can_manage_student(conn, student):
-    return session["role"] in ("admin", "sub_admin") or student["class_id"] in form_teacher_class_ids(conn, session["user_id"])
+    if session["role"] in ("admin", "sub_admin") or student["class_id"] in form_teacher_class_ids(conn, session["user_id"]):
+        return True
+    try:
+        return any(r["role"] == "Registrar / Admissions Officer" for r in active_role_assignments(conn, session["user_id"], current_school_id()))
+    except Exception:
+        return False
 
 
 @app.route("/students/<int:student_id>/photo")
@@ -3310,7 +3141,7 @@ def upload_student_photo(student_id):
         conn.close()
         flash("Please choose an image file to upload.", "error")
         return redirect(url_for("student_profile", student_id=student_id))
-    size_error = _reject_oversize(file, "passport")
+    size_error = _reject_oversize(file, "passport") or _verify_image(file, 500 * 1024, "Passport photograph")
     if size_error:
         conn.close(); flash(size_error, "error"); return redirect(url_for("student_profile", student_id=student_id))
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
@@ -3518,9 +3349,6 @@ def admin_teachers():
     if request.method == "POST":
         allowed, message, _state = plan_limit_check(conn, school_id, "teachers", 1)
         if not allowed:
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": message}, 403
             conn.close()
             flash(message, "error")
             return redirect(url_for("admin_teachers"))
@@ -3531,24 +3359,13 @@ def admin_teachers():
         password = request.form["password"]
         rbac_role=request.form.get("rbac_role","Teacher").strip()
         if rbac_role not in ROLE_CATALOG: rbac_role="Teacher"
-        position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
-        offline_token = request.form.get("offline_token")
-        existing_id = offline_sync_existing_id(conn, offline_token)
-        if existing_id:
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": True, "id": existing_id}
-            flash(f"Teacher '{name}' added.", "success")
-        elif email and conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(email)=LOWER(?)", (school_id,email)).fetchone():
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": "That email is already in use by another account."}, 409
+        position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer","Vice Principal / Deputy Principal":"vice_principal"}.get(rbac_role)
+        if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
             flash("That email is already in use by another account.", "error")
-        elif phone and conn.execute("SELECT 1 FROM users WHERE school_id=? AND phone=?", (school_id,phone)).fetchone():
-            if is_offline_sync_request():
-                conn.close()
-                return {"ok": False, "error": "That phone number is already in use by another account."}, 409
+        elif phone and conn.execute("SELECT 1 FROM users WHERE phone=?", (phone,)).fetchone():
             flash("That phone number is already in use by another account.", "error")
+        elif conn.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (username,)).fetchone():
+            flash("That username is already taken.", "error")
         else:
             try:
                 tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
@@ -3556,19 +3373,18 @@ def admin_teachers():
                 ra=conn.execute("INSERT INTO role_assignments(user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at) VALUES (?,?,?,'All',?,'active',?,?,CURRENT_TIMESTAMP)",(cur.lastrowid,school_id,tenant,rbac_role,session.get("user_id"),session.get("user_id"))).lastrowid
                 for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra,perm))
                 conn.commit()
-                offline_sync_remember(conn, offline_token, "teacher", cur.lastrowid)
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": True, "id": cur.lastrowid}
                 flash(f"Teacher '{name}' added.", "success")
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                app.logger.warning("Teacher creation rejected by database constraint: %s", exc)
+                flash("That username, email or phone number is already in use.", "error")
             except Exception:
-                if is_offline_sync_request():
-                    conn.close()
-                    return {"ok": False, "error": "That username is already taken."}, 409
-                flash("That username is already taken.", "error")
+                conn.rollback()
+                app.logger.exception("Teacher creation failed")
+                flash("The teacher account could not be saved. Please check the details and try again.", "error")
     teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (school_id,)).fetchall()
     conn.close()
-    return render_template("admin_teachers.html", teachers=teachers, rbac_roles=sorted(ROLE_CATALOG), position_labels=POSITION_LABELS)
+    return render_template("admin_teachers.html", teachers=teachers, rbac_roles=assignable_roles(), position_labels=POSITION_LABELS)
 
 
 @app.route("/admin/teachers/<int:teacher_id>/contact", methods=["POST"])
@@ -3613,7 +3429,6 @@ def delete_teacher(teacher_id):
     conn.execute("UPDATE classes SET form_teacher_id=NULL WHERE form_teacher_id=?", (teacher_id,))
     conn.execute("UPDATE class_subjects SET teacher_id=NULL WHERE teacher_id=?", (teacher_id,))
     conn.execute("DELETE FROM users WHERE id=? AND role='teacher'", (teacher_id,))
-    revoke_device_credentials_for_user(conn, teacher_id, reason="account deleted")
     conn.commit()
     conn.close()
     flash("Teacher removed. Any classes/subjects they were assigned to are now unassigned.", "success")
@@ -3634,7 +3449,7 @@ def set_teacher_position(teacher_id):
     rbac_role=request.form.get("rbac_role","Teacher").strip()
     if rbac_role not in ROLE_CATALOG:
         conn.close(); flash("Not a valid RBAC role.","error"); return redirect(url_for("admin_teachers"))
-    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer"}.get(rbac_role)
+    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer","Vice Principal / Deputy Principal":"vice_principal"}.get(rbac_role)
     conn.execute("UPDATE users SET rbac_role=?,position=? WHERE id=?",(rbac_role,position,teacher_id))
     ra=conn.execute("SELECT id FROM role_assignments WHERE user_id=? AND school_id=? AND status='active' ORDER BY id DESC LIMIT 1",(teacher_id,current_school_id())).fetchone()
     if ra:
@@ -3660,15 +3475,8 @@ def toggle_teacher_active(teacher_id):
     new_status = 0 if teacher["is_active"] else 1
     conn.execute("UPDATE users SET is_active=? WHERE id=?", (new_status, teacher_id))
     conn.commit()
-    if not new_status:
-        # Cut off every device this person enrolled for offline use, too.
-        revoke_device_credentials_for_user(conn, teacher_id, "account deactivated")
     conn.close()
-    flash(
-        "Account deactivated. This also stops every device they enrolled for offline use from syncing or unlocking."
-        if not new_status else "Account reactivated. They will need to log in online once on each device to renew offline access.",
-        "success",
-    )
+    flash("Account deactivated. They can no longer sign in." if not new_status else "Account reactivated.", "success")
     return redirect(url_for("admin_teachers"))
 
 
@@ -3687,10 +3495,6 @@ def admin_reset_teacher_password(teacher_id):
     new_password = secrets.token_urlsafe(6)
     conn.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(new_password), teacher_id))
     conn.commit()
-    # A reset means the old password may be known to someone else, and a device
-    # that was set up with it still opens with it. Cut those devices off; the
-    # person logs in online with the new password and each device renews itself.
-    revoke_device_credentials_for_user(conn, teacher_id, "password reset by admin")
     conn.close()
     flash(
         f"Password reset for {teacher['name']} (username: {teacher['username']}). "
@@ -4775,10 +4579,22 @@ def my_class_edit_student(class_id, student_id):
         conn.close()
         flash("You're not the form teacher for that class.", "error")
         return redirect(url_for("dashboard"))
+    existing_student = conn.execute("SELECT * FROM students WHERE id=? AND class_id=?", (student_id, class_id)).fetchone()
+    if not existing_student:
+        conn.close()
+        flash("Student not found in this class.", "error")
+        return redirect(url_for("my_class_roster", class_id=class_id))
+    is_school_admin_user = session["role"] in ("admin", "sub_admin")
     try:
         status = request.form.get("status", "Active")
         if status not in ("Active", "Graduated", "Transferred", "Withdrawn", "Suspended"):
             status = "Active"
+        # Protected fields (Admission No. / Register No., administrative status) can only be changed by the school administration.
+        if not is_school_admin_user:
+            status = existing_student["status"] or "Active"
+            protected_admission_no = existing_student["admission_no"]
+        else:
+            protected_admission_no = request.form["admission_no"].strip()
         conn.execute(
             "UPDATE students SET first_name=?, last_name=?, other_names=?, admission_no=?, gender=?, "
             "date_of_birth=?, religion=?, parent_name=?, parent_address=?, parent_email=?, parent_phone=?, parent_relationship=?, "
@@ -4788,7 +4604,7 @@ def my_class_edit_student(class_id, student_id):
                 request.form["first_name"].strip(),
                 request.form["last_name"].strip(),
                 request.form.get("other_names", "").strip() or None,
-                request.form["admission_no"].strip(),
+                protected_admission_no,
                 request.form.get("gender") or None,
                 request.form.get("date_of_birth", "").strip() or None,
                 request.form.get("religion", "").strip() or None,
@@ -4799,14 +4615,19 @@ def my_class_edit_student(class_id, student_id):
                 request.form.get("parent_relationship", "").strip() or None,
                 status,
                 request.form.get("phone", "").strip() or None,
-                1 if status == "Active" else 0,
+                (1 if status == "Active" else 0) if is_school_admin_user else existing_student["is_active"],
                 student_id, class_id,
             ),
         )
         conn.commit()
         flash("Student details updated.", "success")
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        flash("That Admission No. / Register No. is already used by another student in this school.", "error")
     except Exception:
-        flash("That register number is already used by another student in this class.", "error")
+        conn.rollback()
+        app.logger.exception("Roster student edit failed")
+        flash("The student could not be saved. Please check the details and try again.", "error")
     conn.close()
     return redirect(url_for("my_class_roster", class_id=class_id))
 
@@ -5299,12 +5120,6 @@ def email_class_results(class_id):
         "SELECT * FROM students WHERE class_id=? AND is_active=1 ORDER BY last_name", (class_id,)
     ).fetchall()
 
-    offline_token = request.form.get("offline_token")
-    if offline_sync_existing_id(conn, offline_token) is not None:
-        conn.close()
-        flash("Results already emailed for this class (skipped duplicate offline resend).", "success")
-        return redirect(url_for("broadsheet", class_id=class_id))
-
     sent, skipped = 0, 0
     for st in students:
         if not st["parent_email"]:
@@ -5330,8 +5145,6 @@ def email_class_results(class_id):
             sent += 1
         else:
             skipped += 1
-    if sent:
-        offline_sync_remember(conn, offline_token, "email_class_results", class_id)
     conn.close()
     flash(f"Emailed {sent} result(s). {skipped} skipped (no parent email on file, or sending failed).",
           "success" if sent else "error")
@@ -5638,16 +5451,6 @@ def email_result(student_id):
         )
         return redirect(url_for("result", student_id=student_id))
 
-    offline_token = request.form.get("offline_token")
-    if offline_sync_existing_id(conn, offline_token) is not None:
-        # This exact offline-queued email already went out — most likely
-        # the send succeeded earlier but the device never saw the response
-        # (e.g. connection dropped right after) and retried. Don't send it
-        # again; just report success as if it had gone through this time.
-        conn.close()
-        flash(f"Result emailed to {student_row['parent_email']}.", "success")
-        return redirect(url_for("result", student_id=student_id))
-
     data = build_result_data(conn, student_id, term["id"])
     school = get_school(conn, current_school_id())
     logo_path = None
@@ -5666,9 +5469,6 @@ def email_result(student_id):
         attachment_bytes=pdf_buf.getvalue(),
         attachment_filename=f"result_{student_row['admission_no']}.pdf".replace("/", "-"),
     )
-    if ok:
-        offline_sync_remember(conn, offline_token, "email_result", student_id)
-    conn.close()
     flash(msg, "success" if ok else "error")
     return redirect(url_for("result", student_id=student_id))
 
@@ -6184,50 +5984,6 @@ def report_staff_attendance(fmt=None):
     return _send_report(fmt, "Staff Attendance", headers, rows, fname, subtitle=f"{format_dmy(start)} to {format_dmy(end)}")
 
 
-@app.route("/offline")
-@login_required()
-def offline_queue_page():
-    """The queue itself lives in this browser's localStorage, not the
-    server — this page is just the JS-rendered view onto it, so it works
-    the same regardless of which staff member's device it is."""
-    return render_template("offline_queue.html")
-
-
-@app.route("/api/offline/confirm_password", methods=["POST"])
-@rate_limit(max_attempts=10, window_seconds=300)
-def offline_confirm_password():
-    """Used by Settings -> Offline Access when a person who is already logged
-    in (from before this device was set up) wants to set up offline access
-    without logging out and in: it checks the password they type really is
-    their account password before the device encrypts anything with it."""
-    if "user_id" not in session:
-        return jsonify({"ok": False}), 401
-    password = (request.get_json(silent=True) or {}).get("password", "")
-    conn = get_db()
-    user = conn.execute("SELECT password_hash, is_active FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    conn.close()
-    ok = bool(user and user["is_active"] and check_password_hash(user["password_hash"], password))
-    return jsonify({"ok": ok}), (200 if ok else 403)
-
-
-@app.route("/app")
-@app.route("/offline-app")
-def offline_app_shell():
-    """The full offline-first app shell: PIN login (no server session
-    needed at all) plus attendance/score-entry/registration/sync screens
-    rendered entirely from this device's local IndexedDB copy of the
-    data. Deliberately NOT behind @login_required — the whole point is
-    that it has to open with zero connectivity, so it can't depend on a
-    live Flask session. See OFFLINE_ARCHITECTURE.md."""
-    school_name = None
-    if "school_id" in session:
-        conn = get_db()
-        school = get_school(conn, session["school_id"])
-        conn.close()
-        school_name = school["name"] if school else None
-    return render_template("offline_app.html", school_name=school_name)
-
-
 # ---------- staff self check-in/out ----------
 
 @app.route("/staff-attendance/check-in", methods=["POST"])
@@ -6475,6 +6231,24 @@ def student_login_required(f):
     def wrapped(*args, **kwargs):
         if "student_id" not in session:
             return redirect(url_for("student_login"))
+        # A student session must never outlive or cross its account: re-check the
+        # student, class, school and tenant on every request.
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT s.id, s.is_active, s.tenant_id AS s_tenant, c.school_id, sc.tenant_id AS school_tenant, "
+                "sc.activation_status, sc.is_suspended, sc.is_archived "
+                "FROM students s JOIN classes c ON c.id=s.class_id JOIN schools sc ON sc.id=c.school_id "
+                "WHERE s.id=?", (session["student_id"],)).fetchone()
+        finally:
+            conn.close()
+        ok = bool(row and row["is_active"] and session.get("school_id") == row["school_id"]
+                  and session.get("tenant_id") == row["school_tenant"]
+                  and row["activation_status"] == "active" and not row["is_suspended"] and not row["is_archived"])
+        if not ok:
+            session.clear()
+            flash("Your session is no longer valid. Please sign in again.", "error")
+            return redirect(url_for("student_login"))
         return f(*args, **kwargs)
     return wrapped
 
@@ -6483,47 +6257,77 @@ def student_login_required(f):
 @rate_limit(max_attempts=10, window_seconds=300)
 def student_login():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        requested_school_code = request.form.get("school_code", "").strip()
-        conn = get_db()
-        student = conn.execute(
-            "SELECT * FROM students WHERE is_active=1 AND (username=? OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))", (username,username,username)
-        ).fetchone()
-        if student and student["password_hash"] and check_password_hash(student["password_hash"], password):
-            class_row = conn.execute("SELECT school_id FROM classes WHERE id=?", (student["class_id"],)).fetchone()
-            school = get_school(conn, class_row["school_id"]) if class_row else None
-            if requested_school_code and school and requested_school_code.lower() not in {str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower(), str(school["school_id_public"] or "").lower()}:
-                conn.close()
-                flash("That School ID / Tenant ID does not match this student account.", "error")
-                return render_template("student_login.html")
-            conn.close()
-            if school and school["activation_status"] != "active":
-                flash("This school hasn't been activated yet.", "error")
-                return render_template("student_login.html")
-            if school and school["is_archived"]:
-                flash("This school's account has been archived. Contact the platform administrator.", "error")
-                return render_template("student_login.html")
-            if school and school["is_suspended"]:
-                flash("This school's account has been suspended. Contact the platform administrator.", "error")
-                return render_template("student_login.html")
-            if school and not subscription_login_allowed(school):
-                flash("This school's subscription or trial has expired. Contact the platform administrator.", "error")
-                return render_template("student_login.html")
-            if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
-                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
-                return render_template("student_login.html")
-            session.clear()
-            session["student_id"] = student["id"]
-            session["role"] = "student"
-            session["school_id"] = school["id"] if school else None
-            session["tenant_id"] = school["tenant_id"] if school else None
-            session["school_code"] = school["school_code"] if school else None
-            session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-            return redirect(url_for("student_dashboard"))
-        conn.close()
-        flash("Invalid username or password.", "error")
+        try:
+            return _student_login_post()
+        except Exception:
+            # Full technical detail goes to the server log; the student sees a clear, safe message.
+            app.logger.exception("Student login failed unexpectedly")
+            flash("We could not complete your sign-in right now. Please try again shortly or contact your school.", "error")
+            return render_template("student_login.html"), 500
     return render_template("student_login.html")
+
+
+def _student_login_post():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    requested_school_code = request.form.get("school_code", "").strip()
+    conn = get_db()
+    try:
+        candidates = conn.execute(
+            "SELECT * FROM students WHERE is_active=1 AND password_hash IS NOT NULL AND password_hash<>'' AND "
+            "(LOWER(username)=LOWER(?) OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))",
+            (username, username, username)).fetchall() if username else []
+        matches = [st for st in candidates if check_password_hash(st["password_hash"], password)]
+        if len(matches) != 1:
+            # Zero matches = wrong credentials. More than one = an ambiguous identifier
+            # (e.g. a shared phone number): refuse rather than guess whose account to open.
+            if len(matches) > 1:
+                app.logger.warning("Student login refused: identifier matched %d accounts", len(matches))
+                flash("That sign-in name matches more than one account. Please sign in with your username.", "error")
+            else:
+                flash("Invalid username or password.", "error")
+            return render_template("student_login.html")
+        student = matches[0]
+        class_row = conn.execute("SELECT school_id FROM classes WHERE id=?", (student["class_id"],)).fetchone()
+        school = get_school(conn, class_row["school_id"]) if class_row else None
+        if not school:
+            app.logger.error("Student %s has no valid class/school link (class_id=%s)", student["id"], student["class_id"])
+            flash("Your account is not linked to a class or school. Please contact your school administrator.", "error")
+            return render_template("student_login.html")
+        if requested_school_code and requested_school_code.lower() not in {
+                str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower(),
+                str(school["school_id_public"] or "").lower()}:
+            flash("That School ID / Tenant ID does not match this student account.", "error")
+            return render_template("student_login.html")
+        if school["activation_status"] != "active":
+            flash("This school hasn't been activated yet.", "error")
+            return render_template("student_login.html")
+        if school["is_archived"]:
+            flash("This school's account has been archived. Contact the platform administrator.", "error")
+            return render_template("student_login.html")
+        if school["is_suspended"]:
+            flash("This school's account has been suspended. Contact the platform administrator.", "error")
+            return render_template("student_login.html")
+        if not subscription_login_allowed(school):
+            flash("This school's subscription or trial has expired. Contact the platform administrator.", "error")
+            return render_template("student_login.html")
+        if g.portal_school and school["id"] != g.portal_school["id"]:
+            flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
+            return render_template("student_login.html")
+        if not school["tenant_id"]:
+            app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
+            flash("This school's account setup is incomplete. Please contact the platform administrator.", "error")
+            return render_template("student_login.html")
+        session.clear()
+        session["student_id"] = student["id"]
+        session["role"] = "student"
+        session["school_id"] = school["id"]
+        session["tenant_id"] = school["tenant_id"]
+        session["school_code"] = school["school_code"]
+        session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
+        return redirect(url_for("student_dashboard"))
+    finally:
+        conn.close()
 
 
 @app.route("/student/logout")
@@ -8123,7 +7927,6 @@ def platform_suspend_school(school_id):
     school = get_school(conn, school_id)
     if school:
         conn.execute("UPDATE schools SET is_suspended=1 WHERE id=?", (school_id,))
-        revoke_device_credentials_for_school(conn, school_id, reason="school suspended")
         log_audit(conn, "platform_admin", session.get("platform_admin_name"), "suspend_school",
                   details=f"Suspended '{school['name']}'", school_id=school_id)
         conn.commit()
@@ -8366,7 +8169,7 @@ def platform_roles():
     schools = conn.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
     conn.close()
     return render_template("platform_roles.html", assignments=rows, schools=schools,
-                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS, ROLE_CATALOG=ROLE_CATALOG)
+                           roles=assignable_roles(), levels=SCHOOL_LEVELS, ROLE_CATALOG=ROLE_CATALOG)
 
 @app.route("/platform/roles/new", methods=["GET","POST"])
 @platform_admin_required
@@ -8383,7 +8186,7 @@ def platform_role_new():
             users = conn.execute("SELECT id,name,username,school_id FROM users WHERE school_id=? ORDER BY name",(school_id or 0,)).fetchall()
             schools = conn.execute("SELECT id,name FROM schools ORDER BY name").fetchall()
             conn.close()
-            return render_template("platform_role_form.html", users=users, schools=schools, roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS)
+            return render_template("platform_role_form.html", users=users, schools=schools, roles=assignable_roles(), levels=SCHOOL_LEVELS)
         user = conn.execute("SELECT * FROM users WHERE id=? AND school_id=?", (user_id, school_id)).fetchone()
         school = conn.execute("SELECT * FROM schools WHERE id=?", (school_id,)).fetchone()
         if not user or not school:
@@ -8417,7 +8220,7 @@ def platform_role_new():
     ).fetchall()
     conn.close()
     return render_template("platform_role_form.html", users=users, schools=schools,
-                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS, selected_school=school_id)
+                           roles=assignable_roles(), levels=SCHOOL_LEVELS, selected_school=school_id)
 
 @app.route("/platform/roles/<int:assignment_id>/revoke", methods=["POST"])
 @platform_admin_required
@@ -8451,7 +8254,7 @@ def admin_roles():
     """,(sid,)).fetchall()
     conn.close()
     return render_template("admin_roles.html", users=users, assignments=assignments,
-                           roles=sorted(ROLE_CATALOG), levels=SCHOOL_LEVELS)
+                           roles=assignable_roles(), levels=SCHOOL_LEVELS)
 
 @app.route("/admin/roles", methods=["POST"])
 @login_required("admin")
@@ -8867,6 +8670,17 @@ def platform_approve_activation(school_id):
 @platform_admin_required
 def platform_notification_inbox():
     conn=get_db(); rows=conn.execute("SELECT n.*,s.name school_name FROM platform_notifications n LEFT JOIN schools s ON s.id=n.school_id ORDER BY n.id DESC LIMIT 200").fetchall(); conn.close(); return render_template("platform_notification_inbox.html",notifications=rows)
+
+
+# ---------- V60: profiles, custom fields, audit views ----------
+from profile_routes import register_profile_routes
+register_profile_routes(app, dict(
+    get_db=get_db, login_required=login_required, student_login_required=student_login_required,
+    platform_admin_required=platform_admin_required, student_full_name=student_full_name,
+    STUDENT_PHOTOS_DIR=STUDENT_PHOTOS_DIR, STAFF_PHOTOS_DIR=STAFF_PHOTOS_DIR, SIGNATURES_DIR=SIGNATURES_DIR,
+    CUSTOM_FILES_DIR=CUSTOM_FILES_DIR, form_teacher_class_ids=form_teacher_class_ids,
+    active_role_assignments=active_role_assignments, security_event=security_event, POSITION_LABELS=POSITION_LABELS,
+))
 
 
 if __name__ == "__main__":
