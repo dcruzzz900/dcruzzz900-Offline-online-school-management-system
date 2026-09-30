@@ -5,7 +5,7 @@
 
 <div class="card">
     <h3>Add a Teacher</h3>
-    <form method="POST" data-offline="true" data-offline-label="Add Teacher">
+    <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Full Name</label>
         <input type="text" name="name" required>
@@ -50,7 +50,7 @@
             </td>
             <td style="white-space:nowrap;">
                 <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
-                      {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and every device they use offline will stop working until you reactivate them.');"{% endif %}>
+                      {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and unable to sign in until you reactivate them.');"{% endif %}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-small" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
                 </form>
