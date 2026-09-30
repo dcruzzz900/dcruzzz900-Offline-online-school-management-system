@@ -5,11 +5,13 @@ import ast, glob, re, sys
 app_path='app.py'
 tree=ast.parse(open(app_path,encoding='utf-8').read())
 endpoints={n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+for extra in ('profile_routes.py','billing_finalization.py'):
+    endpoints |= {n.name for n in ast.walk(ast.parse(open(extra,encoding='utf-8').read())) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
 refs=set()
 for path in glob.glob('templates/**/*.html',recursive=True):
     text=open(path,encoding='utf-8').read()
     refs.update(re.findall(r"url_for\(\s*['\"]([^'\"]+)",text))
-missing=sorted(r for r in refs if r not in endpoints and r!='static')
+missing=sorted(r for r in refs if r.split('.',1)[-1] not in endpoints and r!='static')
 required_templates={
  'login.html','register.html','admin_dashboard.html','teacher_dashboard.html',
  'student_dashboard.html','parent_dashboard.html','parent_children.html',
