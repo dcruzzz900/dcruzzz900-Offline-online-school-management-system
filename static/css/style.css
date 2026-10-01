@@ -293,9 +293,13 @@ label { font-size: 0.88rem; font-weight: 600; display: block; margin-top: 0.75re
 }
 
 @media print {
-    .navbar, .no-print { display: none !important; }
-    .container { max-width: 100%; margin: 0; padding: 0; }
-    .card { border: none; padding: 0; }
+    .navbar, .no-print, .topbar, .sidebar, nav, aside, button, form { display: none !important; }
+    body { background: #fff !important; margin: 0; }
+    .container, .screen-shell { max-width: 100%; margin: 0; padding: 0; }
+    .screen-shell > *:not(.result-printable) { display: none !important; }
+    .result-printable { display: block !important; width: 100%; margin: 0; padding: 0.5cm; border: 0 !important; box-shadow: none !important; }
+    .result-printable .table-wrap { overflow: visible !important; }
+    @page { size: A4; margin: 10mm; }
 }
 
 @media (max-width: 700px) {
