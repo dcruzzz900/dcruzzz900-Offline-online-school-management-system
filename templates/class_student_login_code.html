@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Student Login Code{% endblock %}
+{% block content %}
+<div class="screen-shell">
+  <div class="page-heading"><div><div class="eyebrow">CLASS SECURITY</div><h1>{{ class_row.name }} Student Login Code</h1><p>Only the assigned Form/Class Teacher or an authorized administrator can manage this code.</p></div></div>
+  <div class="card" style="max-width:680px;">
+    <h3>Active Class Login Code</h3>
+    {% if code and code.is_active %}
+      <div style="font-size:2rem;font-weight:800;letter-spacing:.15em;padding:1rem;background:#f4f7fb;border-radius:12px;text-align:center;">{{ code.code }}</div>
+      <p class="muted">Share this code only with students in this class. It is required for each student's first successful login.</p>
+    {% else %}
+      <p>No active class login code exists.</p>
+    {% endif %}
+    <div class="action-row">
+      <form method="POST" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="generate"><button class="btn" type="submit">{% if code %}Regenerate / Rotate{% else %}Generate Code{% endif %}</button></form>
+      {% if code and code.is_active %}<form method="POST" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="revoke"><button class="btn" type="submit">Revoke Code</button></form>{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <h3>Students in this class</h3>
+    <div class="table-wrap"><table><tr><th>Student</th><th>Admission / Register No.</th><th>Username</th><th>First Login</th></tr>
+    {% for st in students %}<tr><td>{{ st.last_name }} {{ st.first_name }}</td><td>{{ st.admission_no }}</td><td>{{ st.username or 'Not set' }}</td><td>{{ 'Required' if st.first_login_required else 'Completed' }}</td></tr>
+    {% else %}<tr><td colspan="4">No active students are assigned to this class.</td></tr>{% endfor %}</table></div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Student Account Settings{% endblock %}
+{% block content %}
+<div class="screen-shell"><div class="page-heading"><div><div class="eyebrow">MY ACCOUNT</div><h1>Account Settings</h1><p>Students can change only their login username and password here. Official school information remains staff-managed.</p></div></div>
+<div class="card" style="max-width:620px;">
+{% if errors %}<div class="form-notice">{% for e in errors %}<div>{{ e }}</div>{% endfor %}</div>{% endif %}
+<form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Username<input name="username" value="{{ student.username or '' }}" required maxlength="40"></label>
+<label>New Password <span class="optional">leave blank to keep current password</span><input type="password" name="new_password" minlength="8" autocomplete="new-password"></label>
+<label>Confirm New Password<input type="password" name="confirm_password" minlength="8" autocomplete="new-password"></label>
+<button class="btn" type="submit">Save Account Settings</button>
+</form>
+</div></div>
+{% endblock %}

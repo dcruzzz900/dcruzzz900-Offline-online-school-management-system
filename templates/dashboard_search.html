@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<div class="screen-shell">
+  <div class="page-heading"><div><div class="eyebrow">SEARCH</div><h1>Search Results</h1><p>{% if q %}Showing matches for “{{ q }}”.{% else %}Enter a search term above.{% endif %}</p></div></div>
+  {% if q and not total %}<div class="card"><p>No results found.</p></div>{% endif %}
+  {% if results.students %}<div class="card"><h3>Students</h3><div class="table-wrap"><table><tr><th>Student</th><th>Admission / Register No.</th><th>Username</th><th>Class</th></tr>{% for s in results.students %}<tr><td><a href="{{ url_for('student_profile', student_id=s.id) }}">{{ s.last_name }} {{ s.first_name }} {{ s.other_names or '' }}</a></td><td>{{ s.admission_no }}</td><td>{{ s.username or '—' }}</td><td>{{ s.class_name }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+  {% if results.staff %}<div class="card"><h3>Staff</h3><div class="table-wrap"><table><tr><th>Name</th><th>Username</th><th>Role</th></tr>{% for u in results.staff %}<tr><td>{{ u.name }}</td><td>{{ u.username }}</td><td>{{ u.rbac_role or u.role }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+  {% if results.classes %}<div class="card"><h3>Classes</h3><div class="table-wrap"><table><tr><th>Class</th><th>Level</th><th>Arm</th></tr>{% for c in results.classes %}<tr><td><a href="{{ url_for('class_results_list', class_id=c.id) }}">{{ c.name }}</a></td><td>{{ c.level or '—' }}</td><td>{{ c.arm or '—' }}</td></tr>{% endfor %}</table></div></div>{% endif %}
+</div>
+{% endblock %}
