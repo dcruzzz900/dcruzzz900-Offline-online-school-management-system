@@ -10,6 +10,7 @@ import uuid
 from functools import wraps
 
 from flask import (abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for)
+from werkzeug.security import generate_password_hash
 
 import profile_core as pc
 from werkzeug.exceptions import HTTPException
@@ -278,6 +279,60 @@ def register_profile_routes(app, h):
             states=pc.NIGERIAN_STATES, mode=mode, has_signature=False,
             entity_id=student["id"], today=pc._today().isoformat(),
         )
+
+    @app.route("/student/account", methods=["GET", "POST"])
+    @student_login_required
+    def student_account():
+        conn = get_db()
+        try:
+            student = student_row(conn, session["student_id"])
+            if not student:
+                session.clear()
+                return redirect(url_for("student_login"))
+            if request.method == "POST":
+                username = request.form.get("username", "").strip()
+                new_password = request.form.get("new_password", "")
+                confirm = request.form.get("confirm_password", "")
+                errors = []
+                if not username:
+                    errors.append("Username is required.")
+                elif len(username) > 40:
+                    errors.append("Username must be 40 characters or fewer.")
+                if new_password:
+                    if len(new_password) < 8:
+                        errors.append("Password must be at least 8 characters.")
+                    if new_password != confirm:
+                        errors.append("Password and confirmation do not match.")
+                if not errors:
+                    clash = conn.execute(
+                        "SELECT 1 FROM students WHERE LOWER(username)=LOWER(?) AND id<>? AND tenant_id=?",
+                        (username, student["id"], tenant_id())
+                    ).fetchone()
+                    if clash or conn.execute(
+                        "SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (username,)
+                    ).fetchone():
+                        errors.append("That username is already in use.")
+                if errors:
+                    return render_template("student_account.html", student=student, errors=errors), 422
+                if new_password:
+                    conn.execute(
+                        "UPDATE students SET username=?, password_hash=? WHERE id=? AND school_id=? AND tenant_id=?",
+                        (username, generate_password_hash(new_password),
+                         student["id"], school_id(), tenant_id())
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE students SET username=? WHERE id=? AND school_id=? AND tenant_id=?",
+                        (username, student["id"], school_id(), tenant_id())
+                    )
+                pc.audit(conn, actor(), "student_account_credentials_updated", "student", student["id"],
+                         {"username": username, "password_changed": bool(new_password)}, ip=ip())
+                conn.commit()
+                flash("Student account settings updated.", "success")
+                return redirect(url_for("student_account"))
+            return render_template("student_account.html", student=student, errors=[])
+        finally:
+            conn.close()
 
     @app.route("/student/profile", methods=["GET", "POST"])
     @student_login_required

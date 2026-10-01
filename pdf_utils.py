@@ -136,13 +136,17 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         )))
         elements.append(Spacer(1, 0.2 * cm))
 
-    info_table = Table([
+    info_rows = [
         ["Name:", name, "Adm./Reg. No.:", student["admission_no"]],
         ["Class / Arm:", class_row["name"], "No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}"],
         ["Total Score:", str(data["total"]), "Average:", str(data["average"])],
-        ["Position:", f"{data['position']} of {data['class_size']}",
-         "Category:" if class_row["category"] else "", class_row["category"] or ""],
-    ], colWidths=[3 * cm, 5 * cm, 3.5 * cm, 5.5 * cm])
+    ]
+    if data.get("show_overall_position", True):
+        info_rows.append(["Position:", f"{data.get('position_label', data['position'])} of {data['class_size']}",
+                          "Category:" if class_row["category"] else "", class_row["category"] or ""])
+    else:
+        info_rows.append(["Status:", "Published", "Category:" if class_row["category"] else "", class_row["category"] or ""])
+    info_table = Table(info_rows, colWidths=[3 * cm, 5 * cm, 3.5 * cm, 5.5 * cm])
     info_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("FONTNAME", (0, 0), (-1, -1), regular),

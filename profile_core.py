@@ -41,23 +41,25 @@ def _f(key, label, kind="text", required=False, self_edit=False, staff_edit=True
 
 
 STUDENT_SPECS = [
-    _f("first_name", "First Name", "name", True),
-    _f("last_name", "Surname", "name", True),
-    _f("other_names", "Other Names", "name", False),
-    _f("admission_no", "Admission No. / Register No.", "text", True, False, False, admin_only=True, maxlen=40),
-    _f("date_of_birth", "Date of Birth", "dob_student", True),
-    _f("gender", "Gender", "gender", True),
-    _f("state", "State", "place", True, True, True, maxlen=60, datalist="states"),
-    _f("lga", "Local Government Area (LGA)", "place", True, True, True, maxlen=60),
+    # Students may not edit official academic/profile identity fields themselves.
+    # Username/password are managed by the dedicated student account endpoint.
+    _f("first_name", "First Name", "name", False, False, False, admin_only=True),
+    _f("last_name", "Surname", "name", False, False, False, admin_only=True),
+    _f("other_names", "Other Names", "name", False, False, False, admin_only=True),
+    _f("admission_no", "Admission No. / Register No.", "text", False, False, False, admin_only=True, maxlen=40),
+    _f("date_of_birth", "Date of Birth", "dob_student", False, False, False, admin_only=True),
+    _f("gender", "Gender", "gender", False, False, False, admin_only=True),
+    _f("state", "State", "place", False, True, True, maxlen=60, datalist="states"),
+    _f("lga", "Local Government Area (LGA)", "place", False, True, True, maxlen=60),
     _f("tribe", "Tribe", "place", False, True, True, maxlen=60),
     _f("religion", "Religion", "place", False, True, True, maxlen=40),
     _f("date_of_admission", "Date of Admission", "admission_date", False),
     _f("email", "Email", "email", False, True, True),
     _f("phone", "Phone Number", "phone", False, True, True),
-    _f("address", "Address", "address", True, True, True, maxlen=300),
-    _f("parent_name", "Parent/Guardian Name", "name", True, True, True),
+    _f("address", "Address", "address", False, True, True, maxlen=300),
+    _f("parent_name", "Parent/Guardian Name", "name", False, True, True),
     _f("parent_relationship", "Relationship to Student", "place", False, True, True, maxlen=40),
-    _f("parent_phone", "Parent/Guardian Phone", "phone", True, True, True),
+    _f("parent_phone", "Parent/Guardian Phone", "phone", False, True, True),
     _f("parent_email", "Parent/Guardian Email", "email", False, True, True),
     _f("parent_address", "Parent/Guardian Address", "address", False, True, True, maxlen=300),
 ]

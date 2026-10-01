@@ -126,6 +126,29 @@ def get_csrf_token():
 
 app.jinja_env.globals["csrf_token"] = get_csrf_token
 
+@app.context_processor
+def inject_dashboard_photo():
+    """Expose only the authenticated user's own passport for the top dashboard avatar."""
+    photo_url = None
+    try:
+        if session.get("student_id") and session.get("role") == "student":
+            row = get_db().execute(
+                "SELECT photo_filename FROM students WHERE id=? AND school_id=? AND tenant_id=?",
+                (session["student_id"], session.get("school_id"), session.get("tenant_id"))
+            ).fetchone()
+            if row and row["photo_filename"]:
+                photo_url = url_for("student_self_photo")
+        elif session.get("user_id"):
+            row = get_db().execute(
+                "SELECT photo_filename FROM users WHERE id=? AND school_id=? AND tenant_id=?",
+                (session["user_id"], session.get("school_id"), session.get("tenant_id"))
+            ).fetchone()
+            if row and row["photo_filename"]:
+                photo_url = url_for("staff_photo", user_id=session["user_id"])
+    except Exception:
+        photo_url = None
+    return {"dashboard_photo_url": photo_url}
+
 
 @app.before_request
 def _check_csrf():
@@ -807,6 +830,16 @@ def get_grading_config(conn):
 def compute_total(ca1, ca2, exam, ca3=0):
     return round((ca1 or 0) + (ca2 or 0) + (ca3 or 0) + (exam or 0), 2)
 
+def ordinal(n):
+    if n is None:
+        return "—"
+    n=int(n)
+    if 10 <= n % 100 <= 20:
+        suffix="th"
+    else:
+        suffix={1:"st",2:"nd",3:"rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
 
 def ca3_enabled(config):
     """CA3 is optional: a school switches it on by giving it a maximum above 0.
@@ -817,26 +850,41 @@ def ca3_enabled(config):
         return False
 
 
-def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_id):
-    """The one place an online score row is written (form save and CSV
-    import both come through here), including the who-changed-what history."""
+def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_id, reason=None):
+    """Central score write path with a tenant-scoped, auditable before/after record."""
     existing = conn.execute(
         "SELECT * FROM scores WHERE student_id=? AND subject_id=? AND term_id=?",
         (student_id, subject_id, term_id),
     ).fetchone()
-    if existing and (existing["ca1"] != ca1 or existing["ca2"] != ca2
-                     or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam):
+    changed = bool(existing and (
+        existing["ca1"] != ca1 or existing["ca2"] != ca2
+        or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam
+    ))
+    is_new = not existing and (ca1 or ca2 or ca3 or exam)
+    if changed or is_new:
+        old_total = compute_total(existing["ca1"], existing["ca2"], existing["exam"], existing["ca3"]) if existing else 0
+        new_total = compute_total(ca1, ca2, exam, ca3)
+        term_row = conn.execute(
+            "SELECT t.is_published, s.school_id, s.tenant_id FROM terms t "
+            "JOIN sessions s ON s.id=t.session_id WHERE t.id=?", (term_id,)
+        ).fetchone()
+        user = conn.execute("SELECT role, rbac_role FROM users WHERE id=?", (user_id,)).fetchone()
+        role = (user["rbac_role"] or user["role"]) if user else None
         conn.execute(
-            "INSERT INTO score_history (student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
-            "new_ca1, new_ca2, new_ca3, new_exam, changed_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (student_id, subject_id, term_id, existing["ca1"], existing["ca2"], existing["ca3"], existing["exam"],
-             ca1, ca2, ca3, exam, user_id),
-        )
-    elif not existing and (ca1 or ca2 or ca3 or exam):
-        conn.execute(
-            "INSERT INTO score_history (student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
-            "new_ca1, new_ca2, new_ca3, new_exam, changed_by) VALUES (?,?,?,NULL,NULL,NULL,NULL,?,?,?,?,?)",
-            (student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_id),
+            "INSERT INTO score_history "
+            "(student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
+            "new_ca1, new_ca2, new_ca3, new_exam, changed_by, old_total, new_total, difference, "
+            "changed_by_role, reason, result_status, tenant_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                student_id, subject_id, term_id,
+                existing["ca1"] if existing else None, existing["ca2"] if existing else None,
+                existing["ca3"] if existing else None, existing["exam"] if existing else None,
+                ca1, ca2, ca3, exam, user_id, old_total, new_total, round(new_total-old_total, 2),
+                role, reason or "Score entry/correction",
+                "published" if term_row and term_row["is_published"] else "draft",
+                term_row["tenant_id"] if term_row else None,
+            ),
         )
     conn.execute(
         "INSERT INTO scores (student_id, subject_id, term_id, ca1, ca2, ca3, exam) VALUES (?,?,?,?,?,?,?) "
@@ -1342,49 +1390,6 @@ def register():
             conn.rollback(); conn.close(); flash("We could not complete your registration. Please try again.","error")
     conn.close(); return render_template("register.html")
 
-@app.route("/register/student", methods=["GET","POST"])
-@rate_limit(max_attempts=5, window_seconds=3600)
-def register_student():
-    """Claim an existing official student record; never create a duplicate."""
-    conn=get_db()
-    if request.method=="POST":
-        code=request.form.get("signup_code","").strip(); admission=request.form.get("admission_no","").strip(); password=request.form.get("password",""); confirm=request.form.get("confirm_password","")
-        errors=[]
-        if not admission: errors.append("Admission Number / Register Number is required.")
-        errors += validate_password_policy(password, admission)
-        if password!=confirm: errors.append("Password and confirmation don't match.")
-        row,msg=verify_signup_code(conn,code,"student",consume=False)
-        if not row: errors.append(msg)
-        student=None
-        if row and row["class_id"]:
-            student=conn.execute("SELECT st.*,c.school_id,c.tenant_id,c.name class_name,c.level,c.arm FROM students st JOIN classes c ON c.id=st.class_id WHERE c.id=? AND c.school_id=? AND (st.admission_no=? OR st.register_no=?) AND st.is_active=1",(row["class_id"],row["school_id"],admission,admission)).fetchone()
-            if not student: errors.append("We could not find an eligible student record for that admission/register number.")
-            elif student["user_id"] if "user_id" in student.keys() else False:
-                errors.append("This student record has already been registered. If you believe this is your record, please contact your school administrator for assistance.")
-        if errors:
-            for e in errors: flash(e,"error")
-            conn.close(); return render_template("register_student.html")
-        try:
-            base=admission.lower().replace(" ",".")
-            username=base[:30] or f"student{student['id']}"
-            n=2; candidate=username
-            while conn.execute("SELECT 1 FROM students WHERE LOWER(username)=LOWER(?) AND id<>?",(candidate,student["id"])).fetchone() or conn.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)",(candidate,)).fetchone():
-                suffix=str(n); candidate=(username[:30-len(suffix)]+suffix); n+=1
-            username=candidate
-            if "user_id" not in student.keys():
-                conn.execute("ALTER TABLE students ADD COLUMN user_id INTEGER")
-            conn.execute("UPDATE students SET username=?,password_hash=?,account_status='active',signup_status='approved',user_id=? WHERE id=? AND (user_id IS NULL OR user_id='')",(username,generate_password_hash(password),None,student["id"]))
-            verify_signup_code(conn,code,"student",school_id=row["school_id"],class_id=row["class_id"],consume=True)
-            conn.execute("INSERT INTO signups(signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id,notes) VALUES(?,?,?,?,?,?,?,?)",("student","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id(),f"Existing student record {student['id']} claimed"))
-            security_event(conn,"STUDENT_ACCOUNT_CREATED",details="Existing student record claimed; no duplicate academic record created",resource_type="student",resource_id=student["id"],school_id=row["school_id"],tenant_id=row["tenant_id"])
-            conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",row["school_id"],"admin","New student account activation",f"{student['first_name']} {student['last_name']} activated a student account."))
-            conn.commit(); conn.close()
-            flash("Student account created. Your existing school record has been linked.","success")
-            return redirect(url_for("student_login"))
-        except Exception:
-            conn.rollback(); conn.close(); flash("We could not complete your registration. Please try again.","error")
-    conn.close(); return render_template("register_student.html")
-
 @app.route("/register/parent", methods=["GET","POST"])
 @rate_limit(max_attempts=5, window_seconds=3600)
 def register_parent():
@@ -1440,9 +1445,6 @@ def signup_school_alias(): return register_school()
 
 @app.route("/signup/staff", methods=["GET","POST"])
 def signup_staff_alias(): return register()
-
-@app.route("/signup/student", methods=["GET","POST"])
-def signup_student_alias(): return register_student()
 
 @app.route("/signup/parent", methods=["GET","POST"])
 def signup_parent_alias(): return register_parent()
@@ -1515,6 +1517,41 @@ def recover_reset():
 
 
 # ---------- dashboard ----------
+
+
+@app.route("/dashboard/search")
+@login_required()
+def dashboard_search():
+    q = (request.args.get("q") or "").strip()
+    conn = get_db()
+    results = {"students": [], "staff": [], "classes": []}
+    if q:
+        like = f"%{q}%"
+        sid = current_school_id()
+        # All searches are constrained by the authenticated school and, for
+        # students/classes, by the same server-side tenant boundary.
+        results["students"] = conn.execute(
+            "SELECT s.id,s.first_name,s.last_name,s.other_names,s.admission_no,s.username,c.name class_name "
+            "FROM students s JOIN classes c ON c.id=s.class_id "
+            "WHERE c.school_id=? AND c.tenant_id=? AND s.is_active=1 AND "
+            "(s.first_name LIKE ? OR s.last_name LIKE ? OR s.other_names LIKE ? OR s.admission_no LIKE ? OR "
+            "s.username LIKE ? OR c.name LIKE ?) ORDER BY s.last_name,s.first_name LIMIT 50",
+            (sid, current_tenant_id(), like, like, like, like, like, like)
+        ).fetchall()
+        results["staff"] = conn.execute(
+            "SELECT id,name,username,role,rbac_role FROM users WHERE school_id=? AND tenant_id=? AND COALESCE(is_active,1)=1 "
+            "AND (name LIKE ? OR username LIKE ? OR email LIKE ? OR staff_id LIKE ?) ORDER BY name LIMIT 50",
+            (sid, current_tenant_id(), like, like, like, like)
+        ).fetchall()
+        results["classes"] = conn.execute(
+            "SELECT id,name,level,arm FROM classes WHERE school_id=? AND tenant_id=? AND (name LIKE ? OR level LIKE ? OR arm LIKE ?) "
+            "ORDER BY level,name,arm LIMIT 50",
+            (sid, current_tenant_id(), like, like, like)
+        ).fetchall()
+    conn.close()
+    total = sum(len(v) for v in results.values())
+    return render_template("dashboard_search.html", q=q, results=results, total=total)
+
 
 @app.route("/dashboard")
 @login_required()
@@ -1590,99 +1627,123 @@ def api_subscription_status():
 @app.route("/admin/school", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_school():
-    conn = get_db()
-    school_id = current_school_id()
-    if request.method == "POST":
-        name = request.form.get("school_name", "").strip()
-        registered_email = request.form.get("registered_email", "").strip() or None
-        registered_phone = request.form.get("registered_phone", "").strip() or None
-        logo_align = request.form.get("logo_align", "center")
-        if logo_align not in ("left", "center", "right"):
-            logo_align = "center"
-        name_align = request.form.get("name_align", "center")
-        if name_align not in ("left", "center", "right"):
-            name_align = "center"
-        timezone = request.form.get("timezone", "Africa/Lagos").strip() or "Africa/Lagos"
-        if timezone not in TIMEZONE_CHOICES:
-            timezone = "Africa/Lagos"
-        date_format = request.form.get("date_format", "dmy")
-        if date_format not in ("dmy", "mdy", "ymd"):
-            date_format = "dmy"
-        result_accent_color = request.form.get("result_accent_color", "#1f3a5f").strip()
-        if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_accent_color or ""):
-            result_accent_color = "#1f3a5f"
-        result_header_layout = request.form.get("result_header_layout", "logo-left")
-        if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
-            result_header_layout = "logo-left"
-        try:
-            auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
-        except (TypeError, ValueError):
-            auth_logo_opacity = 0.10
-        auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
-        auth_logo_position = request.form.get("auth_logo_position", "center")
-        if auth_logo_position not in ("left", "center", "right"):
-            auth_logo_position = "center"
-        auth_background_style = request.form.get("auth_background_style", "watermark")
-        if auth_background_style not in ("watermark", "soft", "plain"):
-            auth_background_style = "watermark"
-        auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
-        auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
-        show_form_teacher_name = 1 if request.form.get("show_form_teacher_name") else 0
-        show_form_teacher_signature = 1 if request.form.get("show_form_teacher_signature") else 0
-        show_principal_name = 1 if request.form.get("show_principal_name") else 0
-        show_principal_signature = 1 if request.form.get("show_principal_signature") else 0
-        auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
-        auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
-        show_result_date = 1 if request.form.get("show_result_date") else 0
-        web_font = request.form.get("web_font", "system")
-        if web_font not in WEB_FONTS:
-            web_font = "system"
-        pdf_font = request.form.get("pdf_font", "Helvetica")
-        if pdf_font not in PDF_FONT_CHOICES:
-            pdf_font = "Helvetica"
-        if not name:
-            flash("School name cannot be empty.", "error")
-        else:
-            conn.execute(
-                "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
-                "result_accent_color=?, result_header_layout=?, "
-                "auto_teacher_comment=?, auto_principal_comment=?, "
-                "web_font=?, pdf_font=?, show_result_date=?, "
-                "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
-                "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
-                "show_principal_name=?, show_principal_signature=? WHERE id=?",
-                (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
-                 result_accent_color, result_header_layout,
-                 auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
-                 show_result_date, auth_logo_opacity, auth_logo_position,
-                 auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
-                 show_principal_name, show_principal_signature, school_id),
-            )
-            conn.commit()
-            flash("School profile updated.", "success")
-
-        file = request.files.get("logo")
-        if file and file.filename:
-            ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-            if ext not in ALLOWED_LOGO_EXTENSIONS:
-                flash("Logo must be a PNG, JPG, or GIF image.", "error")
+    try:
+        conn = get_db()
+        school_id = current_school_id()
+        if request.method == "POST":
+            name = request.form.get("school_name", "").strip()
+            registered_email = request.form.get("registered_email", "").strip() or None
+            registered_phone = request.form.get("registered_phone", "").strip() or None
+            logo_align = request.form.get("logo_align", "center")
+            if logo_align not in ("left", "center", "right"):
+                logo_align = "center"
+            name_align = request.form.get("name_align", "center")
+            if name_align not in ("left", "center", "right"):
+                name_align = "center"
+            timezone = request.form.get("timezone", "Africa/Lagos").strip() or "Africa/Lagos"
+            if timezone not in TIMEZONE_CHOICES:
+                timezone = "Africa/Lagos"
+            date_format = request.form.get("date_format", "dmy")
+            if date_format not in ("dmy", "mdy", "ymd"):
+                date_format = "dmy"
+            result_accent_color = request.form.get("result_accent_color", "#1f3a5f").strip()
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_accent_color or ""):
+                result_accent_color = "#1f3a5f"
+            result_header_layout = request.form.get("result_header_layout", "logo-left")
+            if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
+                result_header_layout = "logo-left"
+            try:
+                auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
+            except (TypeError, ValueError):
+                auth_logo_opacity = 0.10
+            auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
+            auth_logo_position = request.form.get("auth_logo_position", "center")
+            if auth_logo_position not in ("left", "center", "right"):
+                auth_logo_position = "center"
+            auth_background_style = request.form.get("auth_background_style", "watermark")
+            if auth_background_style not in ("watermark", "soft", "plain"):
+                auth_background_style = "watermark"
+            auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
+            auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
+            show_form_teacher_name = 1 if request.form.get("show_form_teacher_name") else 0
+            show_form_teacher_signature = 1 if request.form.get("show_form_teacher_signature") else 0
+            show_principal_name = 1 if request.form.get("show_principal_name") else 0
+            show_principal_signature = 1 if request.form.get("show_principal_signature") else 0
+            auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
+            auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
+            show_result_date = 1 if request.form.get("show_result_date") else 0
+            show_overall_position = 1 if request.form.get("show_overall_position") else 0
+            show_subject_position = 1 if request.form.get("show_subject_position") else 0
+            result_template = request.form.get("result_template", "modern")
+            if result_template not in ("classic", "modern", "compact", "detailed"):
+                result_template = "modern"
+            web_font = request.form.get("web_font", "system")
+            if web_font not in WEB_FONTS:
+                web_font = "system"
+            pdf_font = request.form.get("pdf_font", "Helvetica")
+            if pdf_font not in PDF_FONT_CHOICES:
+                pdf_font = "Helvetica"
+            if not name:
+                flash("School name cannot be empty.", "error")
             else:
-                old = get_school(conn, school_id)
-                if old and old["logo_filename"]:
-                    old_path = os.path.join(INSTANCE_DIR, old["logo_filename"])
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                new_filename = f"school_logo_{school_id}.{ext}"
-                os.makedirs(INSTANCE_DIR, exist_ok=True)
-                file.save(os.path.join(INSTANCE_DIR, new_filename))
-                conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
+                conn.execute(
+                    "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
+                    "result_accent_color=?, result_header_layout=?, "
+                    "auto_teacher_comment=?, auto_principal_comment=?, "
+                    "web_font=?, pdf_font=?, show_result_date=?, show_overall_position=?, show_subject_position=?, result_template=?, "
+                    "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
+                    "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
+                    "show_principal_name=?, show_principal_signature=? WHERE id=?",
+                    (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
+                     result_accent_color, result_header_layout,
+                     auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
+                     show_result_date, show_overall_position, show_subject_position, result_template,
+                     auth_logo_opacity, auth_logo_position,
+                     auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
+                     show_principal_name, show_principal_signature, school_id),
+                )
                 conn.commit()
-                flash("Logo updated.", "success")
+                flash("School profile updated.", "success")
 
-    settings = get_school(conn, school_id)
-    conn.close()
-    return render_template("admin_school.html", settings=settings, web_fonts=WEB_FONTS, pdf_fonts=PDF_FONT_CHOICES,
-                            base_domain=BASE_DOMAIN, timezones=TIMEZONE_CHOICES, header_layouts=RESULT_HEADER_LAYOUTS)
+            file = request.files.get("logo")
+            if file and file.filename:
+                ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+                if ext not in ALLOWED_LOGO_EXTENSIONS:
+                    flash("Logo must be a PNG, JPG, or GIF image.", "error")
+                else:
+                    old = get_school(conn, school_id)
+                    if old and old["logo_filename"]:
+                        old_path = os.path.join(INSTANCE_DIR, old["logo_filename"])
+                        if os.path.exists(old_path):
+                            os.remove(old_path)
+                    new_filename = f"school_logo_{school_id}.{ext}"
+                    os.makedirs(INSTANCE_DIR, exist_ok=True)
+                    file.save(os.path.join(INSTANCE_DIR, new_filename))
+                    conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
+                    conn.commit()
+                    flash("Logo updated.", "success")
+
+        settings = get_school(conn, school_id)
+        conn.close()
+        return render_template("admin_school.html", settings=settings, web_fonts=WEB_FONTS, pdf_fonts=PDF_FONT_CHOICES,
+                                base_domain=BASE_DOMAIN, timezones=TIMEZONE_CHOICES, header_layouts=RESULT_HEADER_LAYOUTS)
+    except sqlite3.Error as exc:
+        app.logger.exception("School Setup database error")
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
+        flash("School Setup could not open because a required database field or table is unavailable. The technical error was recorded in the server log.", "error")
+        return redirect(url_for("dashboard"))
+    except Exception:
+        app.logger.exception("School Setup unexpected error")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        flash("School Setup could not open. The technical error was recorded in the server log.", "error")
+        return redirect(url_for("dashboard"))
 
 
 @app.route("/admin/school/subdomain", methods=["POST"])
@@ -3203,15 +3264,24 @@ def set_student_login(student_id):
         flash("Password must be at least 6 characters.", "error")
         return redirect(url_for("student_profile", student_id=student_id))
     try:
+        had_login = bool(student["password_hash"])
         if password:
             conn.execute(
-                "UPDATE students SET username=?, password_hash=? WHERE id=?",
-                (username, generate_password_hash(password), student_id),
+                "UPDATE students SET username=?, password_hash=?, "
+                "first_login_required=CASE WHEN password_hash IS NULL OR password_hash='' THEN 1 ELSE COALESCE(first_login_required,0) END "
+                "WHERE id=? AND school_id=? AND tenant_id=?",
+                (username, generate_password_hash(password), student_id, current_school_id(), current_tenant_id()),
             )
         else:
-            conn.execute("UPDATE students SET username=? WHERE id=?", (username, student_id))
+            conn.execute("UPDATE students SET username=? WHERE id=? AND school_id=? AND tenant_id=?",
+                         (username, student_id, current_school_id(), current_tenant_id()))
+        if not had_login and password:
+            conn.execute("UPDATE students SET first_login_required=1 WHERE id=? AND school_id=? AND tenant_id=?",
+                         (student_id, current_school_id(), current_tenant_id()))
+        log_audit(conn, session.get("user_id"), "student_login_credentials_updated",
+                  details=f"Student {student_id} login credentials updated", school_id=current_school_id())
         conn.commit()
-        flash("Student login saved.", "success")
+        flash("Student login saved. The student must use the class login code on first login.", "success")
     except Exception:
         flash("That username is already taken by another student.", "error")
     conn.close()
@@ -3650,6 +3720,52 @@ def delete_grade_scale(scale_id):
     return redirect(url_for("admin_grading"))
 
 
+
+def _auto_create_next_academic_period(conn, term_id, school_id):
+    """Create the next term/session once, preserving historical records."""
+    term = conn.execute(
+        "SELECT t.*, s.name session_name, s.school_id FROM terms t JOIN sessions s ON s.id=t.session_id "
+        "WHERE t.id=? AND s.school_id=?", (term_id, school_id)
+    ).fetchone()
+    if not term:
+        return None
+    name = (term["name"] or "").strip().lower()
+    next_term = {"first term":"Second Term", "first":"Second Term", "1st term":"Second Term",
+                 "second term":"Third Term", "second":"Third Term", "2nd term":"Third Term"}.get(name)
+    if next_term:
+        exists = conn.execute("SELECT id FROM terms WHERE session_id=? AND LOWER(name)=LOWER(?)",
+                              (term["session_id"], next_term)).fetchone()
+        if not exists:
+            conn.execute("INSERT INTO terms(name,session_id,is_active,is_published) VALUES(?,?,0,0)",
+                         (next_term, term["session_id"]))
+            return next_term
+        return None
+
+    # End of a third/last term: create the next academic session and first term.
+    if "third" in name or "3rd" in name or name in ("final term", "last term"):
+        session_name = term["session_name"] or ""
+        m = re.match(r"^\s*(\d{4})\s*/\s*(\d{4})\s*$", session_name)
+        if m:
+            next_session_name = f"{int(m.group(1))+1}/{int(m.group(2))+1}"
+        else:
+            next_session_name = f"{session_name} (Next)" if session_name else "Next Academic Session"
+        existing_session = conn.execute(
+            "SELECT id FROM sessions WHERE school_id=? AND LOWER(name)=LOWER(?)",
+            (school_id, next_session_name)
+        ).fetchone()
+        session_id = existing_session["id"] if existing_session else None
+        if session_id is None:
+            cur = conn.execute("INSERT INTO sessions(school_id,name,is_active) VALUES(?,?,0)",
+                               (school_id, next_session_name))
+            session_id = cur.lastrowid
+        if not conn.execute("SELECT 1 FROM terms WHERE session_id=? AND LOWER(name)=LOWER('First Term')",
+                            (session_id,)).fetchone():
+            conn.execute("INSERT INTO terms(name,session_id,is_active,is_published) VALUES(?,?,0,0)",
+                         ("First Term", session_id))
+            return next_session_name
+    return None
+
+
 @app.route("/admin/terms", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_terms():
@@ -3708,6 +3824,11 @@ def admin_terms():
             ).fetchone()
             if owner:
                 conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (tid,))
+                created_period = _auto_create_next_academic_period(conn, int(tid), school_id)
+                if created_period:
+                    log_audit(conn, session.get("user_id"), "academic_period_auto_created",
+                              details=f"Created next academic period after publishing term {tid}: {created_period}",
+                              school_id=school_id)
                 conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",(session.get("name","Administrator"),school_id,"admin","Result publication","A term's results were published and are now available to authorized users."))
                 conn.commit()
                 flash("Term published — results can now be emailed to parents.", "success")
@@ -3920,8 +4041,9 @@ def _tt_validate(conn, version_id):
     sid=current_school_id(); tid=_tt_tenant(conn)
     conn.execute("DELETE FROM timetable_conflicts_v2 WHERE timetable_version_id=? AND school_id=?",(version_id,sid))
     entries=conn.execute("""SELECT te.*,ss.slot_type,ss.start_time,ss.end_time,ss.slot_number,ss.allows_timetable_entry,
-        c.name class_name,s.name subject_name,u.name teacher_name,r.room_name
+        sd.day_name,sd.day_order,c.name class_name,s.name subject_name,u.name teacher_name,r.room_name
         FROM timetable_entries_v2 te JOIN schedule_slots ss ON ss.id=te.slot_id
+        JOIN school_days_v2 sd ON sd.id=te.day_id AND sd.school_id=te.school_id AND sd.tenant_id=te.tenant_id
         JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id
         LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id
         WHERE te.timetable_version_id=? AND te.school_id=? AND te.tenant_id=?""",(version_id,sid,tid)).fetchall()
@@ -3960,13 +4082,14 @@ def _tt_validate(conn, version_id):
         if count<r["periods_per_week"]:
             add("REQUIREMENT","ERROR",{"id":r["id"]},f"{r['class_id']} subject {r['subject_id']} has {count}/{r['periods_per_week']} required periods","Add the missing periods")
         if r["periods_per_day_limit"]:
-            for day in range(1,7):
+            day_ids=sorted({e["day_id"] for e in entries})
+            for day in day_ids:
                 c=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day)
                 if c>r["periods_per_day_limit"]:
                     add("DAILY_LIMIT","ERROR",{"id":r["id"]},f"Subject exceeds daily limit for class {r['class_id']}","Move one occurrence to another day")
         if r["requires_double_period"] or r["requires_triple_period"]:
             needed=3 if r["requires_triple_period"] else 2; found=False
-            for day in range(1,7):
+            for day in sorted({e["day_id"] for e in entries}):
                 es=sorted([e for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day], key=lambda x:x["slot_number"])
                 run=1; prev=None
                 for e in es:
@@ -4059,6 +4182,9 @@ def timetable_setup():
             if action=="slot":
                 day_id=int(request.form["day_id"]); name=request.form["slot_name"].strip(); st=request.form["start_time"]; et=request.form["end_time"]; typ=request.form.get("slot_type","TEACHING")
                 session_id=request.form.get("academic_session_id",type=int); term_id=request.form.get("term_id",type=int)
+                day_row=conn.execute("SELECT id FROM school_days_v2 WHERE id=? AND school_id=? AND tenant_id=? AND is_active=1",
+                                     (day_id,sid,tid)).fetchone()
+                if not day_row: raise ValueError("Select a valid school day.")
                 if session_id and not conn.execute("SELECT 1 FROM sessions WHERE id=? AND school_id=?",(session_id,sid)).fetchone(): raise ValueError("Select a valid academic session.")
                 if term_id and not conn.execute("SELECT 1 FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,sid)).fetchone(): raise ValueError("Select a valid academic term.")
                 if st>=et: raise ValueError("Start time must be earlier than end time.")
@@ -4694,7 +4820,7 @@ def score_entry(class_id, subject_id):
             if errs:
                 bad_rows.append(f"student {sid}: " + "; ".join(errs))
                 continue
-            save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"])
+            save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"], request.form.get("change_reason") or None)
         conn.commit()
         if bad_rows:
             flash("Some rows were not saved — " + " | ".join(bad_rows[:5]), "error")
@@ -4832,7 +4958,7 @@ def score_csv_upload(class_id, subject_id):
             skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): " + "; ".join(row_errors))
             continue
 
-        save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"])
+        save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"], request.form.get("change_reason") or None)
         updated += 1
 
     conn.commit()
@@ -4867,11 +4993,15 @@ def score_history_view(class_id, subject_id):
         return redirect(url_for("dashboard"))
 
     history = conn.execute(
-        "SELECT h.*, s.first_name, s.last_name, s.other_names, u.name as changed_by_name "
+        "SELECT h.*, s.first_name, s.last_name, s.other_names, u.name as changed_by_name, "
+        "u.role as changed_by_role_current, c.name as class_name, t.name as term_name, se.name as session_name "
         "FROM score_history h JOIN students s ON s.id=h.student_id "
+        "JOIN classes c ON c.id=s.class_id JOIN terms t ON t.id=h.term_id JOIN sessions se ON se.id=t.session_id "
         "LEFT JOIN users u ON u.id=h.changed_by "
-        "WHERE h.subject_id=? AND h.term_id=(SELECT id FROM terms WHERE is_active=1 LIMIT 1) "
-        "AND s.class_id=? ORDER BY h.changed_at DESC", (subject_id, class_id)
+        "WHERE h.subject_id=? AND c.id=? AND c.school_id=? AND "
+        "COALESCE(h.tenant_id,c.tenant_id,?)=? "
+        "ORDER BY h.changed_at DESC",
+        (subject_id, class_id, current_school_id(), current_tenant_id(), current_tenant_id())
     ).fetchall()
     conn.close()
     return render_template(
@@ -4924,8 +5054,35 @@ def build_broadsheet_data(conn, class_id, term_id):
         })
 
     rows.sort(key=lambda r: r["total"], reverse=True)
+
+    # Competition ranking for tied overall scores: 1st, 1st, 3rd.
+    previous = None
+    rank = 0
     for i, r in enumerate(rows, start=1):
-        r["position"] = i
+        if previous is None or r["total"] != previous:
+            rank = i
+            previous = r["total"]
+        r["position"] = rank
+        r["subject_positions"] = {}
+
+    # Subject positions use the same class/session scope as the result and
+    # competition ranking, with missing scores excluded.
+    for subj in subjects:
+        scored = sorted(
+            [(r["student"]["id"], r["scores"][subj["id"]]["total"])
+             for r in rows if isinstance(r["scores"][subj["id"]]["total"], (int, float))],
+            key=lambda x: x[1], reverse=True
+        )
+        prev = None
+        srank = 0
+        for idx, (student_id, score) in enumerate(scored, start=1):
+            if prev is None or score != prev:
+                srank = idx
+                prev = score
+            for r in rows:
+                if r["student"]["id"] == student_id:
+                    r["subject_positions"][subj["id"]] = srank
+                    break
 
     return subjects, rows
 
@@ -5005,7 +5162,7 @@ def build_cumulative_result_data(conn, student_id, session_id):
     return {
         "student": student, "class_row": class_row, "terms": terms, "subjects": subject_details,
         "average": average, "grade": grade, "remark": remark,
-        "position": my_row["position"] if my_row else "-", "class_size": len(rows),
+        "position": my_row["position"] if my_row else "-", "position_label": ordinal(my_row["position"]) if my_row else "—", "class_size": len(rows),
     }
 
 
@@ -5175,8 +5332,10 @@ def build_result_data(conn, student_id, term_id):
             total = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
             grade, remark = grade_for(total, conn, school_id)
             subject_details.append({
-                "name": subj["name"], "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"] or 0,
-                "exam": score["exam"], "total": total, "grade": grade, "remark": remark
+                "id": subj["id"], "name": subj["name"], "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"] or 0,
+                "exam": score["exam"], "total": total, "grade": grade, "remark": remark,
+                "position": (my_row.get("subject_positions", {}) if my_row else {}).get(subj["id"]),
+                "position_label": ordinal((my_row.get("subject_positions", {}) if my_row else {}).get(subj["id"]))
             })
         else:
             subject_details.append({
@@ -5249,7 +5408,7 @@ def build_result_data(conn, student_id, term_id):
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
         "average": my_row["average"] if my_row else 0,
-        "position": my_row["position"] if my_row else "-",
+        "position": my_row["position"] if my_row else "-", "position_label": ordinal(my_row["position"]) if my_row else "—",
         "class_size": class_size, "info": info, "ratings": ratings,
         "subjects_written": subjects_written,
         "show_ca3": ca3_enabled(conn.execute(
@@ -5264,6 +5423,10 @@ def build_result_data(conn, student_id, term_id):
         "show_form_teacher_signature": bool(school["show_form_teacher_signature"]) if school and "show_form_teacher_signature" in school.keys() else True,
         "show_principal_name": bool(school["show_principal_name"]) if school and "show_principal_name" in school.keys() else True,
         "show_principal_signature": bool(school["show_principal_signature"]) if school and "show_principal_signature" in school.keys() else True,
+        "show_overall_position": bool(school["show_overall_position"]) if school and "show_overall_position" in school.keys() else True,
+        "show_subject_position": bool(school["show_subject_position"]) if school and "show_subject_position" in school.keys() else False,
+        "result_template": school["result_template"] if school and "result_template" in school.keys() else "modern",
+        "school_logo_url": url_for("school_logo") if school and school["logo_filename"] else None,
     }
 
 
@@ -6253,6 +6416,76 @@ def student_login_required(f):
     return wrapped
 
 
+
+def _class_code_can_manage(conn, class_id):
+    c = conn.execute("SELECT id,school_id,tenant_id FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
+                     (class_id, current_school_id(), current_tenant_id())).fetchone()
+    if not c:
+        return None
+    if session.get("role") in ("admin", "sub_admin"):
+        return c
+    if session.get("role") == "teacher" and class_id in form_teacher_class_ids(conn, session.get("user_id")):
+        return c
+    return None
+
+
+def _class_login_code_row(conn, class_id):
+    return conn.execute(
+        "SELECT * FROM class_login_codes WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1",
+        (class_id, current_school_id(), current_tenant_id())
+    ).fetchone()
+
+
+@app.route("/class/<int:class_id>/student-login-code", methods=["GET", "POST"])
+@login_required()
+def class_student_login_code(class_id):
+    conn = get_db()
+    school_class = _class_code_can_manage(conn, class_id)
+    if not school_class:
+        conn.close()
+        flash("You do not have permission to manage student login codes for this class.", "error")
+        return redirect(url_for("dashboard"))
+    current = _class_login_code_row(conn, class_id)
+    if request.method == "POST":
+        action = request.form.get("action", "generate")
+        if action == "revoke":
+            if current:
+                conn.execute("UPDATE class_login_codes SET is_active=0, revoked_at=CURRENT_TIMESTAMP WHERE id=?", (current["id"],))
+                log_audit(conn, session.get("user_id"), "student_class_login_code_revoked",
+                          details=f"Class {class_id} login code revoked", school_id=current_school_id())
+                conn.commit()
+                flash("The class login code has been revoked.", "success")
+        else:
+            code = secrets.token_urlsafe(8).replace("-", "").replace("_", "").upper()[:10]
+            if current:
+                conn.execute(
+                    "UPDATE class_login_codes SET code=?,created_by=?,regenerated_at=CURRENT_TIMESTAMP,revoked_at=NULL,is_active=1 "
+                    "WHERE id=? AND school_id=? AND tenant_id=?",
+                    (code, session.get("user_id"), current["id"], current_school_id(), current_tenant_id())
+                )
+                action_name = "student_class_login_code_regenerated"
+            else:
+                conn.execute(
+                    "INSERT INTO class_login_codes(school_id,tenant_id,class_id,code,created_by,is_active) VALUES(?,?,?,?,?,1)",
+                    (current_school_id(), current_tenant_id(), class_id, code, session.get("user_id"))
+                )
+                action_name = "student_class_login_code_created"
+            log_audit(conn, session.get("user_id"), action_name,
+                      details=f"Class {class_id} student login code changed", school_id=current_school_id())
+            conn.commit()
+            flash("Class student login code generated.", "success")
+        current = _class_login_code_row(conn, class_id)
+    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
+                             (class_id, current_school_id(), current_tenant_id())).fetchone()
+    students = conn.execute(
+        "SELECT id,first_name,last_name,admission_no,username,first_login_required FROM students "
+        "WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1 ORDER BY last_name,first_name",
+        (class_id, current_school_id(), current_tenant_id())
+    ).fetchall()
+    conn.close()
+    return render_template("class_student_login_code.html", class_row=class_row, code=current, students=students)
+
+
 @app.route("/student/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def student_login():
@@ -6268,63 +6501,96 @@ def student_login():
 
 
 def _student_login_post():
-    username = request.form.get("username", "").strip()
+    identifier = request.form.get("username", "").strip()
     password = request.form.get("password", "")
     requested_school_code = request.form.get("school_code", "").strip()
+    class_login_code = request.form.get("class_login_code", "").strip().upper()
     conn = get_db()
     try:
-        candidates = conn.execute(
-            "SELECT * FROM students WHERE is_active=1 AND password_hash IS NOT NULL AND password_hash<>'' AND "
-            "(LOWER(username)=LOWER(?) OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))",
-            (username, username, username)).fetchall() if username else []
-        matches = [st for st in candidates if check_password_hash(st["password_hash"], password)]
-        if len(matches) != 1:
-            # Zero matches = wrong credentials. More than one = an ambiguous identifier
-            # (e.g. a shared phone number): refuse rather than guess whose account to open.
-            if len(matches) > 1:
-                app.logger.warning("Student login refused: identifier matched %d accounts", len(matches))
-                flash("That sign-in name matches more than one account. Please sign in with your username.", "error")
+        # Resolve school scope first. A tenant/school identifier supplied by the
+        # browser is only used to select an existing school; authorization still
+        # comes from the server-side school record.
+        scoped_school_id = None
+        if g.portal_school:
+            scoped_school_id = g.portal_school["id"]
+        elif requested_school_code:
+            school = conn.execute(
+                "SELECT id FROM schools WHERE activation_status='active' AND is_suspended=0 AND is_archived=0 "
+                "AND (LOWER(school_code)=LOWER(?) OR LOWER(tenant_id)=LOWER(?) OR LOWER(school_id_public)=LOWER(?))",
+                (requested_school_code, requested_school_code, requested_school_code)
+            ).fetchone()
+            if school:
+                scoped_school_id = school["id"]
             else:
                 flash("Invalid username or password.", "error")
+                return render_template("student_login.html")
+
+        where_scope = ""
+        params = [identifier, identifier, identifier, identifier]
+        if scoped_school_id is not None:
+            where_scope = " AND s.school_id=? AND s.tenant_id=(SELECT tenant_id FROM schools WHERE id=?)"
+            params.extend([scoped_school_id, scoped_school_id])
+        candidates = conn.execute(
+            "SELECT s.* FROM students s "
+            "WHERE s.is_active=1 AND s.password_hash IS NOT NULL AND s.password_hash<>'' AND "
+            "(LOWER(s.username)=LOWER(?) OR LOWER(s.admission_no)=LOWER(?) "
+            "OR (s.register_no IS NOT NULL AND LOWER(s.register_no)=LOWER(?)) "
+            "OR (s.email IS NOT NULL AND LOWER(s.email)=LOWER(?)))" + where_scope,
+            tuple(params)
+        ).fetchall() if identifier else []
+
+        matches = [st for st in candidates if check_password_hash(st["password_hash"], password)]
+        if len(matches) != 1:
+            # Never disclose whether a specific username/admission/register number exists.
+            if len(matches) > 1:
+                app.logger.warning("Student login refused: ambiguous identifier across tenants")
+            flash("Invalid username or password.", "error")
             return render_template("student_login.html")
+
         student = matches[0]
-        class_row = conn.execute("SELECT school_id FROM classes WHERE id=?", (student["class_id"],)).fetchone()
-        school = get_school(conn, class_row["school_id"]) if class_row else None
-        if not school:
-            app.logger.error("Student %s has no valid class/school link (class_id=%s)", student["id"], student["class_id"])
-            flash("Your account is not linked to a class or school. Please contact your school administrator.", "error")
+        class_row = conn.execute(
+            "SELECT * FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
+            (student["class_id"], student["school_id"], student["tenant_id"])
+        ).fetchone()
+        school = get_school(conn, student["school_id"])
+        if not class_row or not school:
+            app.logger.error("Student %s has no valid tenant-scoped class/school link", student["id"])
+            flash("Invalid username or password.", "error")
             return render_template("student_login.html")
-        if requested_school_code and requested_school_code.lower() not in {
-                str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower(),
-                str(school["school_id_public"] or "").lower()}:
-            flash("That School ID / Tenant ID does not match this student account.", "error")
-            return render_template("student_login.html")
-        if school["activation_status"] != "active":
-            flash("This school hasn't been activated yet.", "error")
-            return render_template("student_login.html")
-        if school["is_archived"]:
-            flash("This school's account has been archived. Contact the platform administrator.", "error")
-            return render_template("student_login.html")
-        if school["is_suspended"]:
-            flash("This school's account has been suspended. Contact the platform administrator.", "error")
-            return render_template("student_login.html")
-        if not subscription_login_allowed(school):
-            flash("This school's subscription or trial has expired. Contact the platform administrator.", "error")
+
+        if school["activation_status"] != "active" or school["is_archived"] or school["is_suspended"] or not subscription_login_allowed(school):
+            flash("This school's student portal is not currently available.", "error")
             return render_template("student_login.html")
         if g.portal_school and school["id"] != g.portal_school["id"]:
-            flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error")
+            flash("Invalid username or password.", "error")
             return render_template("student_login.html")
-        if not school["tenant_id"]:
-            app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
-            flash("This school's account setup is incomplete. Please contact the platform administrator.", "error")
-            return render_template("student_login.html")
+
+        # First login requires the code belonging to the student's current class.
+        if int(student["first_login_required"] or 0):
+            code_row = conn.execute(
+                "SELECT code FROM class_login_codes WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1",
+                (student["class_id"], student["school_id"], student["tenant_id"])
+            ).fetchone()
+            if not code_row or not class_login_code or not secrets.compare_digest(str(code_row["code"]), class_login_code):
+                flash("Invalid username or password.", "error")
+                return render_template("student_login.html")
+            conn.execute(
+                "UPDATE students SET first_login_required=0, first_login_completed_at=CURRENT_TIMESTAMP, class_login_code_used_at=CURRENT_TIMESTAMP "
+                "WHERE id=? AND school_id=? AND tenant_id=?",
+                (student["id"], student["school_id"], student["tenant_id"])
+            )
+            log_audit(conn, student["id"], "student_first_login_completed",
+                      details="Student completed first login using class login code", school_id=student["school_id"])
+
         session.clear()
         session["student_id"] = student["id"]
         session["role"] = "student"
         session["school_id"] = school["id"]
         session["tenant_id"] = school["tenant_id"]
         session["school_code"] = school["school_code"]
+        session["name"] = student_full_name(student)
         session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
+        conn.commit()
         return redirect(url_for("student_dashboard"))
     finally:
         conn.close()
@@ -6593,55 +6859,72 @@ def platform_dashboard():
 @app.route("/platform/control-center")
 @platform_admin_required
 def platform_control_center():
-    """Platform-wide non-sensitive health/readiness view for all schools."""
-    conn = get_db()
-    schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
-    rows = []
-    totals = {"ready": 0, "pending": 0, "suspended": 0, "archived": 0, "attention": 0}
-    for school in schools:
-        checks, ready = school_readiness_checks(conn, school["id"])
-        identity = [
-            bool((school["school_code"] or "").strip()),
-            bool((school["tenant_id"] or "").strip()),
-            (conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False),
-            (conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False),
-        ]
-        admin_mismatch = conn.execute(
-            "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)",
-            (school["id"], school["tenant_id"]),
-        ).fetchone()["n"]
-        role_mismatch = 0
-        if table_exists(conn, "role_assignments"):
-            role_mismatch = conn.execute(
-                "SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)",
+    try:
+        """Platform-wide non-sensitive health/readiness view for all schools."""
+        conn = get_db()
+        schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
+        rows = []
+        totals = {"ready": 0, "pending": 0, "suspended": 0, "archived": 0, "attention": 0}
+        for school in schools:
+            checks, ready = school_readiness_checks(conn, school["id"])
+            identity = [
+                bool((school["school_code"] or "").strip()),
+                bool((school["tenant_id"] or "").strip()),
+                (conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False),
+                (conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False),
+            ]
+            admin_mismatch = conn.execute(
+                "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)",
                 (school["id"], school["tenant_id"]),
             ).fetchone()["n"]
-        identity_ok = all(identity) and admin_mismatch == 0 and role_mismatch == 0
-        failed_readiness = sum(1 for _, ok in checks if not ok)
-        status = school["readiness_status"] or ("ready" if ready else "pending")
-        archived = bool(school["is_archived"])
-        suspended = bool(school["is_suspended"])
-        attention = (not identity_ok) or failed_readiness > 0 or archived or suspended or school["activation_status"] != "active"
-        if status == "ready": totals["ready"] += 1
-        else: totals["pending"] += 1
-        if suspended: totals["suspended"] += 1
-        if archived: totals["archived"] += 1
-        if attention: totals["attention"] += 1
-        total_checks = len(checks) or 1
-        passed = total_checks - failed_readiness
-        rows.append({
-            "school": school,
-            "ready": ready,
-            "status": status,
-            "identity_ok": identity_ok,
-            "failed_readiness": failed_readiness,
-            "readiness_percent": round(passed * 100 / total_checks),
-            "attention": attention,
-            "admin_mismatch": admin_mismatch,
-            "role_mismatch": role_mismatch,
-        })
-    conn.close()
-    return render_template("platform_control_center.html", rows=rows, totals=totals)
+            role_mismatch = 0
+            if table_exists(conn, "role_assignments"):
+                role_mismatch = conn.execute(
+                    "SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)",
+                    (school["id"], school["tenant_id"]),
+                ).fetchone()["n"]
+            identity_ok = all(identity) and admin_mismatch == 0 and role_mismatch == 0
+            failed_readiness = sum(1 for _, ok in checks if not ok)
+            status = school["readiness_status"] or ("ready" if ready else "pending")
+            archived = bool(school["is_archived"])
+            suspended = bool(school["is_suspended"])
+            attention = (not identity_ok) or failed_readiness > 0 or archived or suspended or school["activation_status"] != "active"
+            if status == "ready": totals["ready"] += 1
+            else: totals["pending"] += 1
+            if suspended: totals["suspended"] += 1
+            if archived: totals["archived"] += 1
+            if attention: totals["attention"] += 1
+            total_checks = len(checks) or 1
+            passed = total_checks - failed_readiness
+            rows.append({
+                "school": school,
+                "ready": ready,
+                "status": status,
+                "identity_ok": identity_ok,
+                "failed_readiness": failed_readiness,
+                "readiness_percent": round(passed * 100 / total_checks),
+                "attention": attention,
+                "admin_mismatch": admin_mismatch,
+                "role_mismatch": role_mismatch,
+            })
+        conn.close()
+        return render_template("platform_control_center.html", rows=rows, totals=totals)
+    except sqlite3.Error:
+        app.logger.exception("Multi-School Control Centre database error")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        flash("Multi-School Control Centre could not open because a required platform database component is unavailable. The technical error was recorded in the server log.", "error")
+        return redirect(url_for("platform_dashboard"))
+    except Exception:
+        app.logger.exception("Multi-School Control Centre unexpected error")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        flash("Multi-School Control Centre could not open. The technical error was recorded in the server log.", "error")
+        return redirect(url_for("platform_dashboard"))
 
 
 @app.route("/platform/plans", methods=["GET", "POST"])

@@ -3274,3 +3274,80 @@ def migration_059_profiles_customfields(conn):
 
 
 STEPS.append(("profiles_customfields_v60", migration_059_profiles_customfields))
+
+
+# V61 requirements: result positions/templates, student first-login codes,
+# richer score audit history, and explicit school result configuration.
+def migration_060_complete_enhancements(conn):
+    if table_exists(conn, "schools"):
+        for col, typ in [
+            ("show_overall_position", "INTEGER NOT NULL DEFAULT 1"),
+            ("show_subject_position", "INTEGER NOT NULL DEFAULT 0"),
+            ("result_template", "TEXT NOT NULL DEFAULT 'modern'"),
+        ]:
+            ensure_column(conn, "schools", col, typ)
+
+    if table_exists(conn, "students"):
+        ensure_column(conn, "students", "first_login_required", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(conn, "students", "first_login_completed_at", "TEXT")
+        ensure_column(conn, "students", "class_login_code_used_at", "TEXT")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS class_login_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT NOT NULL,
+            class_id INTEGER NOT NULL,
+            code TEXT NOT NULL,
+            created_by INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            regenerated_at TEXT,
+            revoked_at TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            UNIQUE(school_id, class_id),
+            FOREIGN KEY(school_id) REFERENCES schools(id),
+            FOREIGN KEY(class_id) REFERENCES classes(id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_class_login_codes_scope ON class_login_codes(school_id,tenant_id,class_id,is_active)")
+
+    if table_exists(conn, "score_history"):
+        for col, typ in [
+            ("old_total", "REAL"),
+            ("new_total", "REAL"),
+            ("difference", "REAL"),
+            ("changed_by_role", "TEXT"),
+            ("reason", "TEXT"),
+            ("result_status", "TEXT"),
+            ("tenant_id", "TEXT"),
+        ]:
+            ensure_column(conn, "score_history", col, typ)
+        conn.execute("""
+            UPDATE score_history
+            SET tenant_id=(
+                SELECT sc.tenant_id FROM students st
+                JOIN classes c ON c.id=st.class_id
+                JOIN schools sc ON sc.id=c.school_id
+                WHERE st.id=score_history.student_id
+            )
+            WHERE tenant_id IS NULL OR tenant_id=''
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_score_history_tenant_term ON score_history(tenant_id,term_id,changed_at)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log_v61 (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER,
+            tenant_id TEXT,
+            actor_id INTEGER,
+            actor_role TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id TEXT,
+            details TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_v61_scope ON audit_log_v61(school_id,tenant_id,created_at)")
+
+STEPS.append(("complete_enhancements_v61", migration_060_complete_enhancements))
+
