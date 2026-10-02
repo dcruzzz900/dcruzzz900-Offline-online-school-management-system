@@ -115,6 +115,7 @@ def db():
 
 # ------------------------------------------------------------------------------------ setup
 conn = db()
+conn.execute("UPDATE students SET first_login_completed_at=CURRENT_TIMESTAMP")
 conn.execute("UPDATE students SET username=?, password_hash=? WHERE id=1", ("chinedu", generate_password_hash("Pass1234")))
 conn.execute("UPDATE students SET username=?, password_hash=? WHERE id=2", ("amaka", generate_password_hash("Pass1234")))
 conn.execute("UPDATE users SET password_hash=? WHERE username IN ('admin','aokafor')", (generate_password_hash("Pass1234"),))
@@ -135,6 +136,8 @@ cid2 = conn.execute("SELECT id FROM classes WHERE school_id=?", (sid2,)).fetchon
 conn.execute("INSERT INTO students(school_id,tenant_id,admission_no,first_name,last_name,gender,class_id,username,password_hash) VALUES(?,?,'001','Zed','Other','M',?,'zed',?)",
              (sid2, "2", cid2, generate_password_hash("Pass1234")))
 conn.commit()
+conn.execute("UPDATE students SET first_login_completed_at=CURRENT_TIMESTAMP")
+conn.commit()
 other_student = conn.execute("SELECT id FROM students WHERE username='zed'").fetchone()[0]
 conn.close()
 
@@ -147,11 +150,11 @@ check("student dashboard shows assigned class", "JSS" in html(r) or "SS" in html
 with c.session_transaction() as s:
     check("student session bound to tenant", s.get("tenant_id") == "1" and s.get("school_id") == 1)
 c_bad, r = student_login("chinedu", "wrongpass")
-check("wrong password gives clear error, not 500", r.status_code == 200 and "Invalid username or password" in html(r), r.status_code)
+check("wrong password gives clear error, not 500", r.status_code == 200 and "Invalid login details" in html(r), r.status_code)
 c_bad, r = student_login("nobody")
-check("unknown student gives same clear error", r.status_code == 200 and "Invalid username or password" in html(r))
+check("unknown student gives same clear error", r.status_code == 200 and "Invalid login details" in html(r))
 c_x, r = student_login("chinedu", school_code="ZZZ")
-check("wrong school id rejected", "does not match" in html(r))
+check("wrong school id rejected without revealing why", "Invalid login details" in html(r))
 c_x, r = student_login("zed")
 check("student of other school logs into own tenant only", A.app.test_client() and True)
 with c_x.session_transaction() as s:
@@ -163,17 +166,13 @@ conn.execute("PRAGMA foreign_keys=OFF")
 conn.execute("UPDATE students SET class_id=9999 WHERE id=3")
 conn.commit(); conn.close()
 c_o, r = student_login("orphan")
-check("broken class link gives friendly error", r.status_code == 200 and "not linked to a class or school" in html(r), (r.status_code, html(r)[-300:]))
+check("broken class link gives the generic error, not a 500", r.status_code == 200 and "Invalid login details" in html(r))
 conn = db(); conn.execute("UPDATE students SET class_id=? WHERE id=3", (first_class,)); conn.commit(); conn.close()
-# ambiguous identifier (shared phone)
-conn = db()
-conn.execute("UPDATE students SET phone='08055550000', username='s_a' WHERE id=1")
-conn.execute("UPDATE students SET phone='08055550000' WHERE id=2")
-conn.execute("UPDATE students SET username='amaka' WHERE id=2")
-conn.commit(); conn.close()
+# a phone number is not a login identifier any more
+conn = db(); conn.execute("UPDATE students SET phone='08055550000' WHERE id IN (1,2)"); conn.commit(); conn.close()
 c_a, r = student_login("08055550000")
-check("ambiguous phone login refused (does not pick an arbitrary account)", "more than one account" in html(r), html(r)[-200:])
-conn = db(); conn.execute("UPDATE students SET phone=NULL, username='chinedu' WHERE id=1"); conn.execute("UPDATE students SET phone=NULL WHERE id=2"); conn.commit(); conn.close()
+check("phone number does not log anyone in", "Invalid login details" in html(r))
+conn = db(); conn.execute("UPDATE students SET phone=NULL WHERE id IN (1,2)"); conn.commit(); conn.close()
 
 # ------------------------------------------------------------------------------------ 1/3. student profile
 c, _ = student_login("chinedu")
