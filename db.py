@@ -2026,6 +2026,7 @@ def seed_school_defaults(conn, school_id):
     for t in affective:
         conn.execute("INSERT INTO skill_traits (school_id, name, category) VALUES (?,?, 'affective')", (school_id, t))
     conn.commit()
+    ensure_school_v61_defaults(conn, school_id)
 
 
 def seed(conn):
@@ -3276,22 +3277,21 @@ def migration_059_profiles_customfields(conn):
 STEPS.append(("profiles_customfields_v60", migration_059_profiles_customfields))
 
 
-# V61 requirements: result positions/templates, student first-login codes,
-# richer score audit history, and explicit school result configuration.
-def migration_060_complete_enhancements(conn):
-    if table_exists(conn, "schools"):
-        for col, typ in [
-            ("show_overall_position", "INTEGER NOT NULL DEFAULT 1"),
-            ("show_subject_position", "INTEGER NOT NULL DEFAULT 0"),
-            ("result_template", "TEXT NOT NULL DEFAULT 'modern'"),
-        ]:
-            ensure_column(conn, "schools", col, typ)
+# ---------------------------------------------------------------------------
+# V61: class login codes, score audit, staff name history, result-sheet settings,
+#      configurable educational domains, auto term/session, subscription history
+# ---------------------------------------------------------------------------
 
-    if table_exists(conn, "students"):
-        ensure_column(conn, "students", "first_login_required", "INTEGER NOT NULL DEFAULT 0")
-        ensure_column(conn, "students", "first_login_completed_at", "TEXT")
-        ensure_column(conn, "students", "class_login_code_used_at", "TEXT")
+def migration_060_v61(conn):
+    # ---- students: first-login + lockout tracking -------------------------------
+    for col, typ in [("first_login_completed_at", "TEXT"), ("failed_logins", "INTEGER DEFAULT 0"),
+                     ("locked_until", "TEXT"), ("username_changed_at", "TEXT"), ("last_login_at", "TEXT")]:
+        ensure_column(conn, "students", col, typ)
+    # Students who already have a working account are not sent back through the class-code step.
+    conn.execute("""UPDATE students SET first_login_completed_at=COALESCE(first_login_completed_at,CURRENT_TIMESTAMP)
+                    WHERE password_hash IS NOT NULL AND password_hash<>'' AND first_login_completed_at IS NULL""")
 
+    # ---- class login codes -----------------------------------------------------
     conn.execute("""
         CREATE TABLE IF NOT EXISTS class_login_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3299,55 +3299,155 @@ def migration_060_complete_enhancements(conn):
             tenant_id TEXT NOT NULL,
             class_id INTEGER NOT NULL,
             code TEXT NOT NULL,
-            created_by INTEGER,
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked','rotated','expired')),
+            expires_at TEXT,
+            created_by INTEGER, created_by_name TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            regenerated_at TEXT,
-            revoked_at TEXT,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            UNIQUE(school_id, class_id),
-            FOREIGN KEY(school_id) REFERENCES schools(id),
-            FOREIGN KEY(class_id) REFERENCES classes(id)
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_class_login_codes_scope ON class_login_codes(school_id,tenant_id,class_id,is_active)")
+            ended_at TEXT, ended_by INTEGER, ended_by_name TEXT, end_reason TEXT,
+            use_count INTEGER NOT NULL DEFAULT 0
+        )""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_class_login_codes_code ON class_login_codes(code)")
+    # One live code per class: a new code must retire the old one first.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_class_login_codes_one_active ON class_login_codes(class_id) WHERE status='active'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_class_login_codes_school ON class_login_codes(school_id, class_id)")
 
-    if table_exists(conn, "score_history"):
-        for col, typ in [
-            ("old_total", "REAL"),
-            ("new_total", "REAL"),
-            ("difference", "REAL"),
-            ("changed_by_role", "TEXT"),
-            ("reason", "TEXT"),
-            ("result_status", "TEXT"),
-            ("tenant_id", "TEXT"),
-        ]:
-            ensure_column(conn, "score_history", col, typ)
-        conn.execute("""
-            UPDATE score_history
-            SET tenant_id=(
-                SELECT sc.tenant_id FROM students st
-                JOIN classes c ON c.id=st.class_id
-                JOIN schools sc ON sc.id=c.school_id
-                WHERE st.id=score_history.student_id
-            )
-            WHERE tenant_id IS NULL OR tenant_id=''
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_score_history_tenant_term ON score_history(tenant_id,term_id,changed_at)")
+    # ---- staff name history ----------------------------------------------------
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS audit_log_v61 (
+        CREATE TABLE IF NOT EXISTS staff_name_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            school_id INTEGER,
-            tenant_id TEXT,
-            actor_id INTEGER,
-            actor_role TEXT,
+            school_id INTEGER NOT NULL, tenant_id TEXT NOT NULL, user_id INTEGER NOT NULL,
+            previous_first_name TEXT, previous_surname TEXT, previous_other_names TEXT, previous_name TEXT,
+            new_first_name TEXT, new_surname TEXT, new_other_names TEXT, new_name TEXT,
+            changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            changed_by INTEGER, changed_by_name TEXT, admin_notified INTEGER NOT NULL DEFAULT 0
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_staff_name_history_user ON staff_name_history(school_id, user_id)")
+
+    # ---- score audit (complete, append-only) -------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS score_audit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL, tenant_id TEXT NOT NULL,
+            student_id INTEGER NOT NULL, student_name TEXT, admission_no TEXT,
+            subject_id INTEGER NOT NULL, subject_name TEXT,
+            class_id INTEGER, class_name TEXT,
+            session_id INTEGER, session_name TEXT, term_id INTEGER NOT NULL, term_name TEXT,
+            old_ca1 REAL, old_ca2 REAL, old_ca3 REAL, old_exam REAL, old_total REAL,
+            new_ca1 REAL, new_ca2 REAL, new_ca3 REAL, new_exam REAL, new_total REAL,
+            difference REAL,
+            changed_by INTEGER, changed_by_name TEXT, changed_by_role TEXT,
+            changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            result_status TEXT, reason TEXT, source TEXT
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_score_audit_school ON score_audit(school_id, term_id, class_id, subject_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_score_audit_student ON score_audit(school_id, student_id)")
+    for t in ("score_audit", "staff_name_history"):
+        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_update")
+        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_delete")
+        conn.execute(f"CREATE TRIGGER trg_{t}_no_update BEFORE UPDATE ON {t} WHEN {'1' if t=='score_audit' else 'OLD.admin_notified=NEW.admin_notified'} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
+        conn.execute(f"CREATE TRIGGER trg_{t}_no_delete BEFORE DELETE ON {t} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
+
+    # ---- educational domains: categories become school-configurable ---------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS educational_domains (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL, tenant_id TEXT,
+            domain_key TEXT NOT NULL, label TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (school_id, domain_key)
+        )""")
+    sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='skill_traits'").fetchone()
+    if sql and "CHECK" in (sql[0] or "").upper():
+        # The old table only allowed two categories. Rebuild it without the CHECK (data preserved).
+        conn.execute("ALTER TABLE skill_traits RENAME TO skill_traits_old")
+        conn.execute("""CREATE TABLE skill_traits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'affective',
+            client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, tenant_id TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(school_id, name))""")
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(skill_traits_old)")]
+        keep = [c for c in ("id", "school_id", "name", "category", "client_uuid", "updated_at", "is_deleted", "tenant_id") if c in cols]
+        conn.execute(f"INSERT INTO skill_traits({','.join(keep)}) SELECT {','.join(keep)} FROM skill_traits_old")
+        conn.execute("DROP TABLE skill_traits_old")
+    else:
+        ensure_column(conn, "skill_traits", "is_active", "INTEGER NOT NULL DEFAULT 1")
+        ensure_column(conn, "skill_traits", "sort_order", "INTEGER NOT NULL DEFAULT 0")
+    for sch in conn.execute("SELECT id, COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) t FROM schools").fetchall():
+        for i, (key, label) in enumerate([("affective", "Affective Domain"), ("psychomotor", "Psychomotor Domain")], 1):
+            conn.execute("INSERT OR IGNORE INTO educational_domains(school_id,tenant_id,domain_key,label,sort_order) VALUES(?,?,?,?,?)",
+                         (sch["id"], sch["t"], key, label, i))
+
+    # ---- result-sheet settings -------------------------------------------------------
+    for col, typ in [("show_overall_position", "INTEGER NOT NULL DEFAULT 1"), ("show_subject_position", "INTEGER NOT NULL DEFAULT 0"),
+                     ("result_template", "TEXT NOT NULL DEFAULT 'classic'"), ("result_title", "TEXT"),
+                     ("result_footer_text", "TEXT"), ("result_watermark_text", "TEXT"), ("result_show_watermark", "INTEGER NOT NULL DEFAULT 0"),
+                     ("result_show_passport", "INTEGER NOT NULL DEFAULT 1"), ("result_show_contact", "INTEGER NOT NULL DEFAULT 1"),
+                     ("result_secondary_color", "TEXT"), ("result_signature_layout", "TEXT NOT NULL DEFAULT 'split'"),
+                     ("school_address", "TEXT"), ("result_show_grading_key", "INTEGER NOT NULL DEFAULT 1"),
+                     ("result_show_promotion", "INTEGER NOT NULL DEFAULT 1")]:
+        ensure_column(conn, "schools", col, typ)
+
+    ensure_column(conn, "student_term_info", "promotion_status", "TEXT")
+
+    # ---- automatic term / session creation ---------------------------------------------
+    for col, typ in [("start_date", "TEXT"), ("end_date", "TEXT"), ("is_auto_created", "INTEGER NOT NULL DEFAULT 0"),
+                     ("created_from_term_id", "INTEGER")]:
+        ensure_column(conn, "terms", col, typ)
+    for col, typ in [("start_date", "TEXT"), ("end_date", "TEXT"), ("is_auto_created", "INTEGER NOT NULL DEFAULT 0"),
+                     ("created_from_session_id", "INTEGER")]:
+        ensure_column(conn, "sessions", col, typ)
+
+    # ---- subscription history ------------------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS subscription_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER NOT NULL, tenant_id TEXT,
             action TEXT NOT NULL,
-            entity_type TEXT,
-            entity_id TEXT,
-            details TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_v61_scope ON audit_log_v61(school_id,tenant_id,created_at)")
+            previous_status TEXT, new_status TEXT, previous_plan TEXT, new_plan TEXT,
+            previous_ends_at TEXT, new_ends_at TEXT, note TEXT,
+            actor_id INTEGER, actor_name TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_subscription_history_school ON subscription_history(school_id, id)")
+    conn.execute("DROP TRIGGER IF EXISTS trg_subscription_history_no_update")
+    conn.execute("DROP TRIGGER IF EXISTS trg_subscription_history_no_delete")
+    conn.execute("CREATE TRIGGER trg_subscription_history_no_update BEFORE UPDATE ON subscription_history BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
+    conn.execute("CREATE TRIGGER trg_subscription_history_no_delete BEFORE DELETE ON subscription_history BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
 
-STEPS.append(("complete_enhancements_v61", migration_060_complete_enhancements))
+    # ---- repair: the slot form stored the teaching flag inverted (breaks teachable, lessons not) ----
+    if table_exists(conn, "schedule_slots"):
+        conn.execute("UPDATE schedule_slots SET allows_timetable_entry=CASE WHEN slot_type='TEACHING' THEN 1 ELSE 0 END")
 
+    # ---- school days exist for every school, and for every school created later -----------
+    for sch in conn.execute("SELECT id, COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) t FROM schools").fetchall():
+        _seed_school_days(conn, sch["id"], sch["t"])
+
+
+def _seed_school_days(conn, school_id, tenant_id):
+    if not table_exists(conn, "school_days_v2"):
+        return
+    for order, name, code in [(1, 'Monday', 'MON'), (2, 'Tuesday', 'TUE'), (3, 'Wednesday', 'WED'), (4, 'Thursday', 'THU'), (5, 'Friday', 'FRI'), (6, 'Saturday', 'SAT')]:
+        conn.execute("INSERT OR IGNORE INTO school_days_v2(tenant_id,school_id,day_name,day_code,day_order,is_active) VALUES(?,?,?,?,?,?)",
+                     (tenant_id, school_id, name, code, order, 1 if order <= 5 else 0))
+
+
+STEPS.append(("v61_login_codes_audit_results", migration_060_v61))
+
+
+def ensure_school_v61_defaults(conn, school_id):
+    """Idempotent: school days and educational domains for one school. Safe to call on every page that needs them,
+    so a school created after the migration ran (or restored from an old backup) is never left without them."""
+    row = conn.execute("SELECT id, COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) t FROM schools WHERE id=?", (school_id,)).fetchone()
+    if not row:
+        return
+    tenant = row["t"]
+    if not conn.execute("SELECT 1 FROM school_days_v2 WHERE school_id=? AND tenant_id=? LIMIT 1", (school_id, tenant)).fetchone():
+        # days stored under a different tenant string (e.g. tenant assigned after first seeding) are re-homed, not duplicated
+        if conn.execute("SELECT 1 FROM school_days_v2 WHERE school_id=? LIMIT 1", (school_id,)).fetchone():
+            conn.execute("UPDATE school_days_v2 SET tenant_id=? WHERE school_id=?", (tenant, school_id))
+        else:
+            _seed_school_days(conn, school_id, tenant)
+    for i, (key, label) in enumerate([("affective", "Affective Domain"), ("psychomotor", "Psychomotor Domain")], 1):
+        conn.execute("INSERT OR IGNORE INTO educational_domains(school_id,tenant_id,domain_key,label,sort_order) VALUES(?,?,?,?,?)",
+                     (school_id, tenant, key, label, i))
+    conn.commit()

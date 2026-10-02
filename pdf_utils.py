@@ -125,27 +125,34 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     class_row = data["class_row"]
     name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
 
+    rs = data.get("rs") or {}
+    accent_color = rs.get("accent") or accent_color
+    template = rs.get("template", "classic")
+    compact = template == "compact"
     elements = _header_elements(
-        school_name, logo_path, "TERMINAL REPORT SHEET",
+        school_name, logo_path, (rs.get("title") or "Terminal Report Sheet").upper(),
         f"{term['session_name']} &mdash; {term['name']}",
         styles, accent_color=accent_color, name_align=name_align,
     )
+    if rs.get("show_contact") and rs.get("contact"):
+        elements.append(Paragraph(rs["contact"].replace("&", "&amp;"), ParagraphStyle(
+            "contactLine", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, textColor=colors.grey)))
+        elements.append(Spacer(1, 0.15 * cm))
     if data.get("result_date"):
         elements.append(Paragraph(f"Date: {data['result_date']}", ParagraphStyle(
             "resultDate", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9, textColor=colors.grey,
         )))
         elements.append(Spacer(1, 0.2 * cm))
 
+    show_overall = rs.get("show_overall_position", True)
+    show_subj_pos = bool(rs.get("show_subject_position", False))
     info_rows = [
         ["Name:", name, "Adm./Reg. No.:", student["admission_no"]],
-        ["Class / Arm:", class_row["name"], "No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}"],
+        ["Class / Arm:", class_row["name"], "Session / Term:", f"{term['session_name']} / {term['name']}"],
         ["Total Score:", str(data["total"]), "Average:", str(data["average"])],
+        ["No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}",
+         "Overall Position:" if show_overall else "", (f"{data.get('position_text', data['position'])} of {data['class_size']}") if show_overall else ""],
     ]
-    if data.get("show_overall_position", True):
-        info_rows.append(["Position:", f"{data.get('position_label', data['position'])} of {data['class_size']}",
-                          "Category:" if class_row["category"] else "", class_row["category"] or ""])
-    else:
-        info_rows.append(["Status:", "Published", "Category:" if class_row["category"] else "", class_row["category"] or ""])
     info_table = Table(info_rows, colWidths=[3 * cm, 5 * cm, 3.5 * cm, 5.5 * cm])
     info_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -154,18 +161,33 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         ("FONTNAME", (2, 0), (2, -1), bold),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 0.5 * cm))
+    passport_path = rs.get("passport_path")
+    if passport_path and os.path.exists(passport_path):
+        try:
+            pp = Image(passport_path, width=2.4 * cm, height=3 * cm)
+            wrapper = Table([[info_table, pp]], colWidths=[17 * cm, 2.6 * cm])
+            wrapper.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+            elements.append(wrapper)
+        except Exception:
+            elements.append(info_table)
+    else:
+        elements.append(info_table)
+    elements.append(Spacer(1, 0.4 * cm if compact else 0.5 * cm))
 
     elements.append(Paragraph("Academic Performance", section_style))
     show_ca3 = bool(data.get("show_ca3"))
-    subj_header = ["Subject", "CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total", "Grade", "Remark"]
+    with_remark = not compact
+    subj_header = ["Subject", "CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total", "Grade"] + (["Position"] if show_subj_pos else []) + (["Remark"] if with_remark else [])
     subj_data = [subj_header]
     for s in data["subjects"]:
         subj_data.append([s["name"], str(s["ca1"]), str(s["ca2"])] + ([str(s.get("ca3", "-"))] if show_ca3 else []) +
-                          [str(s["exam"]), str(s["total"]), str(s["grade"]), str(s["remark"])])
-    subj_col_widths = ([5 * cm, 2 * cm, 2 * cm, 2 * cm, 2 * cm, 2 * cm, 3 * cm] if not show_ca3
-                       else [4.2 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm, 3 * cm])
+                          [str(s["exam"]), str(s["total"]), str(s["grade"])] + ([str(s.get("position_text", "-"))] if show_subj_pos else []) +
+                          ([str(s["remark"])] if with_remark else []))
+    n_num = 5 + (1 if show_ca3 else 0) + (1 if show_subj_pos else 0)
+    name_w = 4.6 * cm
+    rem_w = 2.8 * cm if with_remark else 0
+    num_w = max(1.2 * cm, (18.4 * cm - name_w - rem_w) / n_num)
+    subj_col_widths = [name_w] + [num_w] * n_num + ([rem_w] if with_remark else [])
     subj_table = Table(subj_data, repeatRows=1, colWidths=subj_col_widths)
     subj_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
@@ -180,33 +202,38 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     elements.append(subj_table)
     elements.append(Spacer(1, 0.5 * cm))
 
-    if data["ratings"]:
-        elements.append(Paragraph("Psychomotor / Affective Skills", section_style))
-        skill_data = [["Trait", "Category", "Rating (1-5)"]]
-        for r in data["ratings"]:
-            skill_data.append([r["name"], r["category"].title(), str(r["rating"])])
-        skill_table = Table(skill_data, colWidths=[6 * cm, 4 * cm, 4 * cm])
-        skill_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, -1), regular),
-            ("FONTNAME", (0, 0), (-1, 0), bold),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ]))
-        elements.append(skill_table)
-        elements.append(Spacer(1, 0.5 * cm))
+    groups = data.get("domain_groups")
+    if groups is None and data.get("ratings"):
+        groups = [{"label": "Psychomotor / Affective Skills", "items": [(r["name"], r["rating"]) for r in data["ratings"]]}]
+    if groups:
+        elements.append(Paragraph("Educational Domains (rated 1-5)", section_style))
+        for g in groups:
+            skill_data = [[g["label"], "Rating"]] + [[n, str(v)] for n, v in g["items"]]
+            skill_table = Table(skill_data, colWidths=[12 * cm, 3 * cm], repeatRows=1)
+            skill_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, -1), regular),
+                ("FONTNAME", (0, 0), (-1, 0), bold),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5 if compact else 9),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+            ]))
+            elements.append(skill_table)
+            elements.append(Spacer(1, 0.25 * cm))
+        elements.append(Spacer(1, 0.25 * cm))
 
     info = data["info"]
     elements.append(Paragraph("Attendance", section_style))
+    promo = data.get("promotion_status")
+    show_promo = bool(rs.get("show_promotion", True) and promo)
     att_table = Table([
-        ["Days School Opened", "Days Present", "Days Absent"],
+        ["Days School Opened", "Days Present", "Days Absent"] + (["Promotion / Status"] if show_promo else []),
         [
             str(info["days_school_opened"]) if info else "-",
             str(info["days_present"]) if info else "-",
             str(info["days_absent"]) if info else "-",
-        ],
+        ] + ([str(promo)] if show_promo else []),
     ])
     att_table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -258,6 +285,17 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             elements.append(Paragraph(f"Date: {principal_date}", normal))
         else:
             elements.append(Paragraph(f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}", normal))
+
+    small = ParagraphStyle("rsSmall", parent=normal, fontSize=7.5, textColor=colors.HexColor("#444444"))
+    scale = rs.get("grading_scale") or []
+    if scale and (rs.get("show_grading_key", True) or template == "detailed"):
+        elements.append(Spacer(1, 0.3 * cm))
+        key = "; ".join(f"{g['grade']} = {g['min_score']:g}-{g['max_score']:g} ({g['remark']})" for g in scale)
+        elements.append(Paragraph(f"<b>Grading key:</b> {key}", small))
+    footer_bits = [x for x in (rs.get("footer"), f"Issued {data['result_date']}" if data.get("result_date") else None) if x]
+    if footer_bits:
+        elements.append(Spacer(1, 0.2 * cm))
+        elements.append(Paragraph(" &nbsp;|&nbsp; ".join(b.replace("&", "&amp;") for b in footer_bits), small))
 
     return elements
 

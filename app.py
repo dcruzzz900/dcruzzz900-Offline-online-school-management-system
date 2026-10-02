@@ -19,7 +19,7 @@ import hashlib
 from collections import defaultdict, deque
 
 from db import (
-    get_db, init_db, grade_for, get_school, INSTANCE_DIR,
+    get_db, init_db, grade_for, get_school, INSTANCE_DIR, table_exists, ensure_school_v61_defaults,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
     seed_school_defaults, upsert_enrollment, log_audit,
@@ -125,29 +125,6 @@ def get_csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = get_csrf_token
-
-@app.context_processor
-def inject_dashboard_photo():
-    """Expose only the authenticated user's own passport for the top dashboard avatar."""
-    photo_url = None
-    try:
-        if session.get("student_id") and session.get("role") == "student":
-            row = get_db().execute(
-                "SELECT photo_filename FROM students WHERE id=? AND school_id=? AND tenant_id=?",
-                (session["student_id"], session.get("school_id"), session.get("tenant_id"))
-            ).fetchone()
-            if row and row["photo_filename"]:
-                photo_url = url_for("student_self_photo")
-        elif session.get("user_id"):
-            row = get_db().execute(
-                "SELECT photo_filename FROM users WHERE id=? AND school_id=? AND tenant_id=?",
-                (session["user_id"], session.get("school_id"), session.get("tenant_id"))
-            ).fetchone()
-            if row and row["photo_filename"]:
-                photo_url = url_for("staff_photo", user_id=session["user_id"])
-    except Exception:
-        photo_url = None
-    return {"dashboard_photo_url": photo_url}
 
 
 @app.before_request
@@ -830,16 +807,6 @@ def get_grading_config(conn):
 def compute_total(ca1, ca2, exam, ca3=0):
     return round((ca1 or 0) + (ca2 or 0) + (ca3 or 0) + (exam or 0), 2)
 
-def ordinal(n):
-    if n is None:
-        return "—"
-    n=int(n)
-    if 10 <= n % 100 <= 20:
-        suffix="th"
-    else:
-        suffix={1:"st",2:"nd",3:"rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
-
 
 def ca3_enabled(config):
     """CA3 is optional: a school switches it on by giving it a maximum above 0.
@@ -850,41 +817,61 @@ def ca3_enabled(config):
         return False
 
 
-def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_id, reason=None):
-    """Central score write path with a tenant-scoped, auditable before/after record."""
+class ScoreChangeError(ValueError):
+    """Raised when a score write is refused (cross-school reference, missing reason, ...)."""
+
+
+def _actor_role_label():
+    if session.get("rbac_role"):
+        return session["rbac_role"]
+    pos = session.get("position")
+    if pos and pos in POSITION_LABELS:
+        return POSITION_LABELS[pos]
+    return (session.get("role") or "user").replace("_", " ").title()
+
+
+def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_id, reason=None, source="score_entry"):
+    """The one place an online score row is written (form save and CSV import both come through here).
+    Every real change is written to the append-only score_audit log in the SAME transaction as the score,
+    so a score can never change without a history row (and vice versa)."""
+    ctx = conn.execute(
+        "SELECT st.first_name, st.last_name, st.other_names, st.admission_no, st.class_id, c.name AS class_name, c.school_id, "
+        "sc.tenant_id, sub.name AS subject_name, t.name AS term_name, t.session_id, se.name AS session_name, t.is_published "
+        "FROM students st JOIN classes c ON c.id=st.class_id JOIN schools sc ON sc.id=c.school_id "
+        "JOIN subjects sub ON sub.id=? AND sub.school_id=c.school_id "
+        "JOIN terms t ON t.id=? JOIN sessions se ON se.id=t.session_id AND se.school_id=c.school_id "
+        "WHERE st.id=?", (subject_id, term_id, student_id)).fetchone()
+    if not ctx or ctx["school_id"] != current_school_id():
+        raise ScoreChangeError("That student, subject or term does not belong to your school.")
     existing = conn.execute(
         "SELECT * FROM scores WHERE student_id=? AND subject_id=? AND term_id=?",
         (student_id, subject_id, term_id),
     ).fetchone()
-    changed = bool(existing and (
-        existing["ca1"] != ca1 or existing["ca2"] != ca2
-        or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam
-    ))
-    is_new = not existing and (ca1 or ca2 or ca3 or exam)
-    if changed or is_new:
-        old_total = compute_total(existing["ca1"], existing["ca2"], existing["exam"], existing["ca3"]) if existing else 0
+    old_vals = (existing["ca1"], existing["ca2"], existing["ca3"], existing["exam"]) if existing else (None, None, None, None)
+    changed = (existing is None and any((ca1, ca2, ca3, exam))) or (
+        existing is not None and (existing["ca1"] != ca1 or existing["ca2"] != ca2 or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam))
+    reason = (reason or "").strip()[:300] or None
+    if changed and ctx["is_published"] and not reason:
+        raise ScoreChangeError("This term's results are published. Enter a reason for the score change.")
+    if changed:
+        old_total = compute_total(old_vals[0], old_vals[1], old_vals[3], old_vals[2]) if existing else None
         new_total = compute_total(ca1, ca2, exam, ca3)
-        term_row = conn.execute(
-            "SELECT t.is_published, s.school_id, s.tenant_id FROM terms t "
-            "JOIN sessions s ON s.id=t.session_id WHERE t.id=?", (term_id,)
-        ).fetchone()
-        user = conn.execute("SELECT role, rbac_role FROM users WHERE id=?", (user_id,)).fetchone()
-        role = (user["rbac_role"] or user["role"]) if user else None
         conn.execute(
-            "INSERT INTO score_history "
-            "(student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
-            "new_ca1, new_ca2, new_ca3, new_exam, changed_by, old_total, new_total, difference, "
-            "changed_by_role, reason, result_status, tenant_id) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                student_id, subject_id, term_id,
-                existing["ca1"] if existing else None, existing["ca2"] if existing else None,
-                existing["ca3"] if existing else None, existing["exam"] if existing else None,
-                ca1, ca2, ca3, exam, user_id, old_total, new_total, round(new_total-old_total, 2),
-                role, reason or "Score entry/correction",
-                "published" if term_row and term_row["is_published"] else "draft",
-                term_row["tenant_id"] if term_row else None,
-            ),
+            "INSERT INTO score_history (student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
+            "new_ca1, new_ca2, new_ca3, new_exam, changed_by, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (student_id, subject_id, term_id, *(old_vals[0], old_vals[1], old_vals[2], old_vals[3]), ca1, ca2, ca3, exam, user_id, ctx["tenant_id"]),
+        )
+        full_name = " ".join(x for x in (ctx["last_name"], ctx["first_name"], ctx["other_names"]) if x)
+        conn.execute(
+            "INSERT INTO score_audit(school_id,tenant_id,student_id,student_name,admission_no,subject_id,subject_name,class_id,class_name,"
+            "session_id,session_name,term_id,term_name,old_ca1,old_ca2,old_ca3,old_exam,old_total,new_ca1,new_ca2,new_ca3,new_exam,new_total,"
+            "difference,changed_by,changed_by_name,changed_by_role,result_status,reason,source) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (ctx["school_id"], ctx["tenant_id"], student_id, full_name, ctx["admission_no"], subject_id, ctx["subject_name"],
+             ctx["class_id"], ctx["class_name"], ctx["session_id"], ctx["session_name"], term_id, ctx["term_name"],
+             old_vals[0], old_vals[1], old_vals[2], old_vals[3], old_total, ca1, ca2, ca3, exam, new_total,
+             round(new_total - (old_total or 0), 2), user_id, session.get("name"), _actor_role_label(),
+             "Published" if ctx["is_published"] else "Draft", reason, source),
         )
     conn.execute(
         "INSERT INTO scores (student_id, subject_id, term_id, ca1, ca2, ca3, exam) VALUES (?,?,?,?,?,?,?) "
@@ -999,6 +986,35 @@ def school_logo():
     if not school or not school["logo_filename"]:
         return "", 404
     return send_from_directory(INSTANCE_DIR, school["logo_filename"])
+
+
+@app.context_processor
+def inject_me_avatar():
+    """The signed-in user's passport (if any) for the dashboard header; clicking it opens their profile."""
+    try:
+        if session.get("student_id") and session.get("role") == "student":
+            conn = get_db()
+            try:
+                r = conn.execute("SELECT first_name, last_name, photo_filename FROM students WHERE id=? AND school_id=?", (session["student_id"], session.get("school_id"))).fetchone()
+            finally:
+                conn.close()
+            if r:
+                return {"me_avatar": {"name": r["first_name"] or "Student", "initial": (r["first_name"] or "S")[0].upper(),
+                                      "photo_url": url_for("student_self_photo") if r["photo_filename"] else None,
+                                      "profile_url": url_for("student_self_profile")}}
+        elif session.get("user_id") and session.get("school_id"):
+            conn = get_db()
+            try:
+                r = conn.execute("SELECT name, photo_filename FROM users WHERE id=? AND school_id=?", (session["user_id"], session.get("school_id"))).fetchone()
+            finally:
+                conn.close()
+            if r:
+                return {"me_avatar": {"name": r["name"], "initial": (r["name"] or "U")[0].upper(),
+                                      "photo_url": url_for("staff_photo", user_id=session["user_id"]) if r["photo_filename"] else None,
+                                      "profile_url": url_for("staff_profile", user_id=session["user_id"])}}
+    except Exception:
+        app.logger.exception("Could not build the header avatar")
+    return {}
 
 
 @app.context_processor
@@ -1446,6 +1462,7 @@ def signup_school_alias(): return register_school()
 @app.route("/signup/staff", methods=["GET","POST"])
 def signup_staff_alias(): return register()
 
+
 @app.route("/signup/parent", methods=["GET","POST"])
 def signup_parent_alias(): return register_parent()
 
@@ -1517,41 +1534,6 @@ def recover_reset():
 
 
 # ---------- dashboard ----------
-
-
-@app.route("/dashboard/search")
-@login_required()
-def dashboard_search():
-    q = (request.args.get("q") or "").strip()
-    conn = get_db()
-    results = {"students": [], "staff": [], "classes": []}
-    if q:
-        like = f"%{q}%"
-        sid = current_school_id()
-        # All searches are constrained by the authenticated school and, for
-        # students/classes, by the same server-side tenant boundary.
-        results["students"] = conn.execute(
-            "SELECT s.id,s.first_name,s.last_name,s.other_names,s.admission_no,s.username,c.name class_name "
-            "FROM students s JOIN classes c ON c.id=s.class_id "
-            "WHERE c.school_id=? AND c.tenant_id=? AND s.is_active=1 AND "
-            "(s.first_name LIKE ? OR s.last_name LIKE ? OR s.other_names LIKE ? OR s.admission_no LIKE ? OR "
-            "s.username LIKE ? OR c.name LIKE ?) ORDER BY s.last_name,s.first_name LIMIT 50",
-            (sid, current_tenant_id(), like, like, like, like, like, like)
-        ).fetchall()
-        results["staff"] = conn.execute(
-            "SELECT id,name,username,role,rbac_role FROM users WHERE school_id=? AND tenant_id=? AND COALESCE(is_active,1)=1 "
-            "AND (name LIKE ? OR username LIKE ? OR email LIKE ? OR staff_id LIKE ?) ORDER BY name LIMIT 50",
-            (sid, current_tenant_id(), like, like, like, like)
-        ).fetchall()
-        results["classes"] = conn.execute(
-            "SELECT id,name,level,arm FROM classes WHERE school_id=? AND tenant_id=? AND (name LIKE ? OR level LIKE ? OR arm LIKE ?) "
-            "ORDER BY level,name,arm LIMIT 50",
-            (sid, current_tenant_id(), like, like, like)
-        ).fetchall()
-    conn.close()
-    total = sum(len(v) for v in results.values())
-    return render_template("dashboard_search.html", q=q, results=results, total=total)
-
 
 @app.route("/dashboard")
 @login_required()
@@ -1627,123 +1609,99 @@ def api_subscription_status():
 @app.route("/admin/school", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_school():
-    try:
-        conn = get_db()
-        school_id = current_school_id()
-        if request.method == "POST":
-            name = request.form.get("school_name", "").strip()
-            registered_email = request.form.get("registered_email", "").strip() or None
-            registered_phone = request.form.get("registered_phone", "").strip() or None
-            logo_align = request.form.get("logo_align", "center")
-            if logo_align not in ("left", "center", "right"):
-                logo_align = "center"
-            name_align = request.form.get("name_align", "center")
-            if name_align not in ("left", "center", "right"):
-                name_align = "center"
-            timezone = request.form.get("timezone", "Africa/Lagos").strip() or "Africa/Lagos"
-            if timezone not in TIMEZONE_CHOICES:
-                timezone = "Africa/Lagos"
-            date_format = request.form.get("date_format", "dmy")
-            if date_format not in ("dmy", "mdy", "ymd"):
-                date_format = "dmy"
-            result_accent_color = request.form.get("result_accent_color", "#1f3a5f").strip()
-            if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_accent_color or ""):
-                result_accent_color = "#1f3a5f"
-            result_header_layout = request.form.get("result_header_layout", "logo-left")
-            if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
-                result_header_layout = "logo-left"
-            try:
-                auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
-            except (TypeError, ValueError):
-                auth_logo_opacity = 0.10
-            auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
-            auth_logo_position = request.form.get("auth_logo_position", "center")
-            if auth_logo_position not in ("left", "center", "right"):
-                auth_logo_position = "center"
-            auth_background_style = request.form.get("auth_background_style", "watermark")
-            if auth_background_style not in ("watermark", "soft", "plain"):
-                auth_background_style = "watermark"
-            auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
-            auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
-            show_form_teacher_name = 1 if request.form.get("show_form_teacher_name") else 0
-            show_form_teacher_signature = 1 if request.form.get("show_form_teacher_signature") else 0
-            show_principal_name = 1 if request.form.get("show_principal_name") else 0
-            show_principal_signature = 1 if request.form.get("show_principal_signature") else 0
-            auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
-            auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
-            show_result_date = 1 if request.form.get("show_result_date") else 0
-            show_overall_position = 1 if request.form.get("show_overall_position") else 0
-            show_subject_position = 1 if request.form.get("show_subject_position") else 0
-            result_template = request.form.get("result_template", "modern")
-            if result_template not in ("classic", "modern", "compact", "detailed"):
-                result_template = "modern"
-            web_font = request.form.get("web_font", "system")
-            if web_font not in WEB_FONTS:
-                web_font = "system"
-            pdf_font = request.form.get("pdf_font", "Helvetica")
-            if pdf_font not in PDF_FONT_CHOICES:
-                pdf_font = "Helvetica"
-            if not name:
-                flash("School name cannot be empty.", "error")
+    conn = get_db()
+    school_id = current_school_id()
+    if request.method == "POST":
+        name = request.form.get("school_name", "").strip()
+        registered_email = request.form.get("registered_email", "").strip() or None
+        registered_phone = request.form.get("registered_phone", "").strip() or None
+        logo_align = request.form.get("logo_align", "center")
+        if logo_align not in ("left", "center", "right"):
+            logo_align = "center"
+        name_align = request.form.get("name_align", "center")
+        if name_align not in ("left", "center", "right"):
+            name_align = "center"
+        timezone = request.form.get("timezone", "Africa/Lagos").strip() or "Africa/Lagos"
+        if timezone not in TIMEZONE_CHOICES:
+            timezone = "Africa/Lagos"
+        date_format = request.form.get("date_format", "dmy")
+        if date_format not in ("dmy", "mdy", "ymd"):
+            date_format = "dmy"
+        result_accent_color = request.form.get("result_accent_color", "#1f3a5f").strip()
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", result_accent_color or ""):
+            result_accent_color = "#1f3a5f"
+        result_header_layout = request.form.get("result_header_layout", "logo-left")
+        if result_header_layout not in ("logo-left", "logo-top-center", "logo-right", "no-logo"):
+            result_header_layout = "logo-left"
+        try:
+            auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
+        except (TypeError, ValueError):
+            auth_logo_opacity = 0.10
+        auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
+        auth_logo_position = request.form.get("auth_logo_position", "center")
+        if auth_logo_position not in ("left", "center", "right"):
+            auth_logo_position = "center"
+        auth_background_style = request.form.get("auth_background_style", "watermark")
+        if auth_background_style not in ("watermark", "soft", "plain"):
+            auth_background_style = "watermark"
+        auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
+        auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
+        show_form_teacher_name = 1 if request.form.get("show_form_teacher_name") else 0
+        show_form_teacher_signature = 1 if request.form.get("show_form_teacher_signature") else 0
+        show_principal_name = 1 if request.form.get("show_principal_name") else 0
+        show_principal_signature = 1 if request.form.get("show_principal_signature") else 0
+        auto_teacher_comment = 1 if request.form.get("auto_teacher_comment") else 0
+        auto_principal_comment = 1 if request.form.get("auto_principal_comment") else 0
+        show_result_date = 1 if request.form.get("show_result_date") else 0
+        web_font = request.form.get("web_font", "system")
+        if web_font not in WEB_FONTS:
+            web_font = "system"
+        pdf_font = request.form.get("pdf_font", "Helvetica")
+        if pdf_font not in PDF_FONT_CHOICES:
+            pdf_font = "Helvetica"
+        if not name:
+            flash("School name cannot be empty.", "error")
+        else:
+            conn.execute(
+                "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
+                "result_accent_color=?, result_header_layout=?, "
+                "auto_teacher_comment=?, auto_principal_comment=?, "
+                "web_font=?, pdf_font=?, show_result_date=?, "
+                "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
+                "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
+                "show_principal_name=?, show_principal_signature=? WHERE id=?",
+                (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
+                 result_accent_color, result_header_layout,
+                 auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
+                 show_result_date, auth_logo_opacity, auth_logo_position,
+                 auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
+                 show_principal_name, show_principal_signature, school_id),
+            )
+            conn.commit()
+            flash("School profile updated.", "success")
+
+        file = request.files.get("logo")
+        if file and file.filename:
+            ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+            if ext not in ALLOWED_LOGO_EXTENSIONS:
+                flash("Logo must be a PNG, JPG, or GIF image.", "error")
             else:
-                conn.execute(
-                    "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
-                    "result_accent_color=?, result_header_layout=?, "
-                    "auto_teacher_comment=?, auto_principal_comment=?, "
-                    "web_font=?, pdf_font=?, show_result_date=?, show_overall_position=?, show_subject_position=?, result_template=?, "
-                    "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
-                    "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
-                    "show_principal_name=?, show_principal_signature=? WHERE id=?",
-                    (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
-                     result_accent_color, result_header_layout,
-                     auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
-                     show_result_date, show_overall_position, show_subject_position, result_template,
-                     auth_logo_opacity, auth_logo_position,
-                     auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
-                     show_principal_name, show_principal_signature, school_id),
-                )
+                old = get_school(conn, school_id)
+                if old and old["logo_filename"]:
+                    old_path = os.path.join(INSTANCE_DIR, old["logo_filename"])
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                new_filename = f"school_logo_{school_id}.{ext}"
+                os.makedirs(INSTANCE_DIR, exist_ok=True)
+                file.save(os.path.join(INSTANCE_DIR, new_filename))
+                conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
                 conn.commit()
-                flash("School profile updated.", "success")
+                flash("Logo updated.", "success")
 
-            file = request.files.get("logo")
-            if file and file.filename:
-                ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-                if ext not in ALLOWED_LOGO_EXTENSIONS:
-                    flash("Logo must be a PNG, JPG, or GIF image.", "error")
-                else:
-                    old = get_school(conn, school_id)
-                    if old and old["logo_filename"]:
-                        old_path = os.path.join(INSTANCE_DIR, old["logo_filename"])
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
-                    new_filename = f"school_logo_{school_id}.{ext}"
-                    os.makedirs(INSTANCE_DIR, exist_ok=True)
-                    file.save(os.path.join(INSTANCE_DIR, new_filename))
-                    conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
-                    conn.commit()
-                    flash("Logo updated.", "success")
-
-        settings = get_school(conn, school_id)
-        conn.close()
-        return render_template("admin_school.html", settings=settings, web_fonts=WEB_FONTS, pdf_fonts=PDF_FONT_CHOICES,
-                                base_domain=BASE_DOMAIN, timezones=TIMEZONE_CHOICES, header_layouts=RESULT_HEADER_LAYOUTS)
-    except sqlite3.Error as exc:
-        app.logger.exception("School Setup database error")
-        try:
-            conn.rollback()
-            conn.close()
-        except Exception:
-            pass
-        flash("School Setup could not open because a required database field or table is unavailable. The technical error was recorded in the server log.", "error")
-        return redirect(url_for("dashboard"))
-    except Exception:
-        app.logger.exception("School Setup unexpected error")
-        try:
-            conn.close()
-        except Exception:
-            pass
-        flash("School Setup could not open. The technical error was recorded in the server log.", "error")
-        return redirect(url_for("dashboard"))
+    settings = get_school(conn, school_id)
+    conn.close()
+    return render_template("admin_school.html", settings=settings, web_fonts=WEB_FONTS, pdf_fonts=PDF_FONT_CHOICES,
+                            base_domain=BASE_DOMAIN, timezones=TIMEZONE_CHOICES, header_layouts=RESULT_HEADER_LAYOUTS)
 
 
 @app.route("/admin/school/subdomain", methods=["POST"])
@@ -2408,6 +2366,10 @@ def admin_setup_wizard():
     status = (school["readiness_status"] if "readiness_status" in school.keys() else None) or "pending"
     # The wizard template displays these counters.  Supplying them explicitly
     # avoids undefined template state and keeps the page useful on older data.
+    def count(sql, params=(school_id,)):
+        row = conn.execute(sql, params).fetchone()
+        return row["n"] if row else 0
+
     stats = {
         "classes": count("SELECT COUNT(*) AS n FROM classes WHERE school_id=?"),
         "subjects": count("SELECT COUNT(*) AS n FROM subjects WHERE school_id=?"),
@@ -3263,27 +3225,40 @@ def set_student_login(student_id):
         conn.close()
         flash("Password must be at least 6 characters.", "error")
         return redirect(url_for("student_profile", student_id=student_id))
+    import profile_core as _pc
+    username = username.lower()
+    if not re.fullmatch(r"[a-z0-9._\-]{3,40}", username):
+        conn.close()
+        flash("Username must be 3-40 characters: letters, numbers, dot, underscore or hyphen.", "error")
+        return redirect(url_for("student_profile", student_id=student_id))
+    # A username must never look like another student's admission/register number in this school (login would be ambiguous).
+    if conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.id<>? AND (LOWER(TRIM(s.admission_no))=? OR LOWER(TRIM(COALESCE(s.register_no,'')))=?)",
+                    (current_school_id(), student_id, username, username)).fetchone():
+        conn.close()
+        flash("That username matches another student's Admission/Register No. Choose a different one.", "error")
+        return redirect(url_for("student_profile", student_id=student_id))
     try:
-        had_login = bool(student["password_hash"])
+        conn.execute("BEGIN IMMEDIATE")
         if password:
             conn.execute(
-                "UPDATE students SET username=?, password_hash=?, "
-                "first_login_required=CASE WHEN password_hash IS NULL OR password_hash='' THEN 1 ELSE COALESCE(first_login_required,0) END "
-                "WHERE id=? AND school_id=? AND tenant_id=?",
-                (username, generate_password_hash(password), student_id, current_school_id(), current_tenant_id()),
+                "UPDATE students SET username=?, password_hash=?, failed_logins=0, locked_until=NULL WHERE id=?",
+                (username, generate_password_hash(password), student_id),
             )
         else:
-            conn.execute("UPDATE students SET username=? WHERE id=? AND school_id=? AND tenant_id=?",
-                         (username, student_id, current_school_id(), current_tenant_id()))
-        if not had_login and password:
-            conn.execute("UPDATE students SET first_login_required=1 WHERE id=? AND school_id=? AND tenant_id=?",
-                         (student_id, current_school_id(), current_tenant_id()))
-        log_audit(conn, session.get("user_id"), "student_login_credentials_updated",
-                  details=f"Student {student_id} login credentials updated", school_id=current_school_id())
+            conn.execute("UPDATE students SET username=? WHERE id=?", (username, student_id))
+        _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(),
+                         "school_id": current_school_id(), "tenant_id": session.get("tenant_id")},
+                  "student_login_set" if password else "student_username_set", "student", student_id,
+                  {"username": [student["username"], username], "password_reset": bool(password)}, ip=request.remote_addr)
         conn.commit()
-        flash("Student login saved. The student must use the class login code on first login.", "success")
-    except Exception:
+        flash("Student login saved. On first login the student needs the Class Login Code." if not student["first_login_completed_at"] else "Student login saved.", "success")
+    except sqlite3.IntegrityError:
+        conn.rollback()
         flash("That username is already taken by another student.", "error")
+    except Exception:
+        conn.rollback()
+        app.logger.exception("set_student_login failed")
+        flash("The login could not be saved. Please try again.", "error")
     conn.close()
     return redirect(url_for("student_profile", student_id=student_id))
 
@@ -3297,7 +3272,10 @@ def remove_student_login(student_id):
         conn.close()
         flash("You don't have access to manage this student's login.", "error")
         return redirect(url_for("dashboard"))
-    conn.execute("UPDATE students SET username=NULL, password_hash=NULL WHERE id=?", (student_id,))
+    conn.execute("UPDATE students SET username=NULL, password_hash=NULL, first_login_completed_at=NULL WHERE id=?", (student_id,))
+    import profile_core as _pc
+    _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(),
+                     "school_id": current_school_id(), "tenant_id": session.get("tenant_id")}, "student_login_removed", "student", student_id, {"username": student["username"]}, ip=request.remote_addr)
     conn.commit()
     conn.close()
     flash("Student login removed.", "success")
@@ -3720,52 +3698,6 @@ def delete_grade_scale(scale_id):
     return redirect(url_for("admin_grading"))
 
 
-
-def _auto_create_next_academic_period(conn, term_id, school_id):
-    """Create the next term/session once, preserving historical records."""
-    term = conn.execute(
-        "SELECT t.*, s.name session_name, s.school_id FROM terms t JOIN sessions s ON s.id=t.session_id "
-        "WHERE t.id=? AND s.school_id=?", (term_id, school_id)
-    ).fetchone()
-    if not term:
-        return None
-    name = (term["name"] or "").strip().lower()
-    next_term = {"first term":"Second Term", "first":"Second Term", "1st term":"Second Term",
-                 "second term":"Third Term", "second":"Third Term", "2nd term":"Third Term"}.get(name)
-    if next_term:
-        exists = conn.execute("SELECT id FROM terms WHERE session_id=? AND LOWER(name)=LOWER(?)",
-                              (term["session_id"], next_term)).fetchone()
-        if not exists:
-            conn.execute("INSERT INTO terms(name,session_id,is_active,is_published) VALUES(?,?,0,0)",
-                         (next_term, term["session_id"]))
-            return next_term
-        return None
-
-    # End of a third/last term: create the next academic session and first term.
-    if "third" in name or "3rd" in name or name in ("final term", "last term"):
-        session_name = term["session_name"] or ""
-        m = re.match(r"^\s*(\d{4})\s*/\s*(\d{4})\s*$", session_name)
-        if m:
-            next_session_name = f"{int(m.group(1))+1}/{int(m.group(2))+1}"
-        else:
-            next_session_name = f"{session_name} (Next)" if session_name else "Next Academic Session"
-        existing_session = conn.execute(
-            "SELECT id FROM sessions WHERE school_id=? AND LOWER(name)=LOWER(?)",
-            (school_id, next_session_name)
-        ).fetchone()
-        session_id = existing_session["id"] if existing_session else None
-        if session_id is None:
-            cur = conn.execute("INSERT INTO sessions(school_id,name,is_active) VALUES(?,?,0)",
-                               (school_id, next_session_name))
-            session_id = cur.lastrowid
-        if not conn.execute("SELECT 1 FROM terms WHERE session_id=? AND LOWER(name)=LOWER('First Term')",
-                            (session_id,)).fetchone():
-            conn.execute("INSERT INTO terms(name,session_id,is_active,is_published) VALUES(?,?,0,0)",
-                         ("First Term", session_id))
-            return next_session_name
-    return None
-
-
 @app.route("/admin/terms", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_terms():
@@ -3776,7 +3708,9 @@ def admin_terms():
         if action == "new_session":
             name = request.form["session_name"].strip()
             try:
-                conn.execute("INSERT INTO sessions (school_id, name, is_active) VALUES (?,?, 0)", (school_id, name))
+                conn.execute("INSERT INTO sessions (school_id, name, is_active, tenant_id) VALUES (?,?, 0, ?)", (school_id, name, session.get("tenant_id")))
+                import profile_core as _pc
+                _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(), "school_id": school_id, "tenant_id": session.get("tenant_id")}, "session_created", "session", name, {"name": name})
                 conn.commit()
                 flash("Session created.", "success")
             except Exception:
@@ -3787,8 +3721,61 @@ def admin_terms():
             owner = conn.execute("SELECT * FROM sessions WHERE id=? AND school_id=?", (session_id, school_id)).fetchone()
             if owner:
                 conn.execute("INSERT INTO terms (name, session_id, is_active) VALUES (?,?,0)", (name, session_id))
+                import profile_core as _pc
+                _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(), "school_id": school_id, "tenant_id": session.get("tenant_id")}, "term_created", "term", name, {"name": name, "session_id": session_id})
                 conn.commit()
                 flash("Term created.", "success")
+        elif action in ("edit_term", "edit_session"):
+            try:
+                import profile_core as _pc
+                _actor = {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(), "school_id": school_id, "tenant_id": session.get("tenant_id")}
+                def _date(v, label):
+                    v = (v or "").strip()
+                    if not v:
+                        return None
+                    d = _pc.parse_date(v)
+                    if not d:
+                        raise ValueError(f"{label} is not a valid date.")
+                    return d.isoformat()
+                if action == "edit_term":
+                    tid_ = request.form.get("term_id", type=int)
+                    row = conn.execute("SELECT t.* FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?", (tid_, school_id)).fetchone()
+                    if not row:
+                        raise ValueError("Term not found.")
+                    name = _pc.clean(request.form.get("name"))
+                    if not 2 <= len(name) <= 40:
+                        raise ValueError("Term name must be 2-40 characters.")
+                    if conn.execute("SELECT 1 FROM terms WHERE session_id=? AND LOWER(name)=LOWER(?) AND id<>?", (row["session_id"], name, row["id"])).fetchone():
+                        raise ValueError("That session already has a term with this name.")
+                    sd, ed, nb = _date(request.form.get("start_date"), "Start date"), _date(request.form.get("end_date"), "End date"), _date(request.form.get("next_term_begins"), "Next term begins")
+                    if sd and ed and ed < sd:
+                        raise ValueError("The end date cannot be before the start date.")
+                    conn.execute("UPDATE terms SET name=?, start_date=?, end_date=?, next_term_begins=? WHERE id=?", (name, sd, ed, nb, row["id"]))
+                    _pc.audit(conn, _actor, "term_edited", "term", row["id"], _pc.diff(row, {"name": name, "start_date": sd, "end_date": ed, "next_term_begins": nb}, ["name", "start_date", "end_date", "next_term_begins"]))
+                    flash("Term updated.", "success")
+                else:
+                    sid_ = request.form.get("session_id", type=int)
+                    row = conn.execute("SELECT * FROM sessions WHERE id=? AND school_id=?", (sid_, school_id)).fetchone()
+                    if not row:
+                        raise ValueError("Session not found.")
+                    name = _pc.clean(request.form.get("name"))
+                    if not 4 <= len(name) <= 20:
+                        raise ValueError("Session name must be 4-20 characters, for example 2026/2027.")
+                    if conn.execute("SELECT 1 FROM sessions WHERE school_id=? AND LOWER(name)=LOWER(?) AND id<>?", (school_id, name, row["id"])).fetchone():
+                        raise ValueError("A session with that name already exists.")
+                    sd, ed = _date(request.form.get("start_date"), "Start date"), _date(request.form.get("end_date"), "End date")
+                    if sd and ed and ed < sd:
+                        raise ValueError("The end date cannot be before the start date.")
+                    conn.execute("UPDATE sessions SET name=?, start_date=?, end_date=? WHERE id=?", (name, sd, ed, row["id"]))
+                    _pc.audit(conn, _actor, "session_edited", "session", row["id"], _pc.diff(row, {"name": name, "start_date": sd, "end_date": ed}, ["name", "start_date", "end_date"]))
+                    flash("Session updated.", "success")
+                conn.commit()
+            except ValueError as exc:
+                conn.rollback()
+                flash(str(exc), "error")
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                flash("That name is already in use.", "error")
         elif action == "activate_session":
             sid = request.form["session_id"]
             owner = conn.execute("SELECT * FROM sessions WHERE id=? AND school_id=?", (sid, school_id)).fetchone()
@@ -3823,12 +3810,20 @@ def admin_terms():
                 "WHERE terms.id=? AND sessions.school_id=?", (tid, school_id)
             ).fetchone()
             if owner:
+                already_published = bool(owner["is_published"])
                 conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (tid,))
-                created_period = _auto_create_next_academic_period(conn, int(tid), school_id)
-                if created_period:
-                    log_audit(conn, session.get("user_id"), "academic_period_auto_created",
-                              details=f"Created next academic period after publishing term {tid}: {created_period}",
-                              school_id=school_id)
+                try:
+                    pc_audit_actor = {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(), "school_id": school_id, "tenant_id": session.get("tenant_id")}
+                    import profile_core as _pc
+                    _pc.audit(conn, pc_audit_actor, "results_published" if not already_published else "results_republished", "term", tid,
+                              {"term": owner["name"]}, ip=request.remote_addr)
+                    # Automatic next term / session: runs once, only when this term was not already published.
+                    if not already_published:
+                        auto_msg = AUTO_ADVANCE(conn, int(tid))
+                        if auto_msg:
+                            flash(auto_msg, "success")
+                except Exception:
+                    app.logger.exception("Automatic next term/session creation failed")
                 conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",(session.get("name","Administrator"),school_id,"admin","Result publication","A term's results were published and are now available to authorized users."))
                 conn.commit()
                 flash("Term published — results can now be emailed to parents.", "success")
@@ -4041,9 +4036,8 @@ def _tt_validate(conn, version_id):
     sid=current_school_id(); tid=_tt_tenant(conn)
     conn.execute("DELETE FROM timetable_conflicts_v2 WHERE timetable_version_id=? AND school_id=?",(version_id,sid))
     entries=conn.execute("""SELECT te.*,ss.slot_type,ss.start_time,ss.end_time,ss.slot_number,ss.allows_timetable_entry,
-        sd.day_name,sd.day_order,c.name class_name,s.name subject_name,u.name teacher_name,r.room_name
+        c.name class_name,s.name subject_name,u.name teacher_name,r.room_name
         FROM timetable_entries_v2 te JOIN schedule_slots ss ON ss.id=te.slot_id
-        JOIN school_days_v2 sd ON sd.id=te.day_id AND sd.school_id=te.school_id AND sd.tenant_id=te.tenant_id
         JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id
         LEFT JOIN users u ON u.id=te.teacher_id LEFT JOIN timetable_rooms_v2 r ON r.id=te.room_id
         WHERE te.timetable_version_id=? AND te.school_id=? AND te.tenant_id=?""",(version_id,sid,tid)).fetchall()
@@ -4082,14 +4076,13 @@ def _tt_validate(conn, version_id):
         if count<r["periods_per_week"]:
             add("REQUIREMENT","ERROR",{"id":r["id"]},f"{r['class_id']} subject {r['subject_id']} has {count}/{r['periods_per_week']} required periods","Add the missing periods")
         if r["periods_per_day_limit"]:
-            day_ids=sorted({e["day_id"] for e in entries})
-            for day in day_ids:
+            for day in range(1,7):
                 c=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day)
                 if c>r["periods_per_day_limit"]:
                     add("DAILY_LIMIT","ERROR",{"id":r["id"]},f"Subject exceeds daily limit for class {r['class_id']}","Move one occurrence to another day")
         if r["requires_double_period"] or r["requires_triple_period"]:
             needed=3 if r["requires_triple_period"] else 2; found=False
-            for day in sorted({e["day_id"] for e in entries}):
+            for day in range(1,7):
                 es=sorted([e for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day], key=lambda x:x["slot_number"])
                 run=1; prev=None
                 for e in es:
@@ -4176,15 +4169,36 @@ def timetable_setup():
     if not _tt_can_manage(get_db()):
         flash("You are not authorized to manage timetable setup.", "error"); return redirect(url_for("timetable_hub"))
     conn=get_db(); sid=current_school_id(); tid=_tt_tenant(conn)
+    ensure_school_v61_defaults(conn, sid)   # schools created before the timetable existed had no days, leaving the Day list empty
     if request.method=="POST":
         action=request.form.get("action")
         try:
-            if action=="slot":
+            if action in ("slot","edit_slot"):
+                if not conn.execute("SELECT 1 FROM school_days_v2 WHERE id=? AND school_id=? AND tenant_id=? AND is_active=1",(request.form.get("day_id",type=int),sid,tid)).fetchone():
+                    raise ValueError("Select a valid school day.")
+            if action=="toggle_day":
+                d=conn.execute("SELECT * FROM school_days_v2 WHERE id=? AND school_id=? AND tenant_id=?",(request.form.get("day_id",type=int),sid,tid)).fetchone()
+                if not d: raise ValueError("Day not found.")
+                if d["is_active"] and conn.execute("SELECT 1 FROM schedule_slots WHERE day_id=? AND school_id=? AND is_active=1 LIMIT 1",(d["id"],sid)).fetchone():
+                    raise ValueError(f"{d['day_name']} still has schedule slots. Remove them before switching the day off.")
+                conn.execute("UPDATE school_days_v2 SET is_active=? WHERE id=?",(0 if d["is_active"] else 1,d["id"]))
+            elif action=="edit_slot":
+                slot_id=request.form.get("slot_id",type=int); day_id=int(request.form["day_id"]); name=request.form["slot_name"].strip(); st=request.form["start_time"]; et=request.form["end_time"]; typ=request.form.get("slot_type","TEACHING")
+                if typ not in ("TEACHING","BREAK","ASSEMBLY","ACTIVITY","OTHER"): raise ValueError("Choose a valid slot type.")
+                cur_slot=conn.execute("SELECT * FROM schedule_slots WHERE id=? AND school_id=? AND tenant_id=?",(slot_id,sid,tid)).fetchone()
+                if not cur_slot: raise ValueError("Slot not found.")
+                if not name: raise ValueError("Slot name is required.")
+                if st>=et: raise ValueError("Start time must be earlier than end time.")
+                if conn.execute("SELECT 1 FROM schedule_slots WHERE school_id=? AND tenant_id=? AND day_id=? AND is_active=1 AND id<>? AND start_time<? AND end_time>?",(sid,tid,day_id,slot_id,et,st)).fetchone():
+                    raise ValueError("Schedule slots on the same day cannot overlap.")
+                if typ!="TEACHING" and conn.execute("SELECT 1 FROM timetable_entries_v2 WHERE slot_id=? AND school_id=? LIMIT 1",(slot_id,sid)).fetchone():
+                    raise ValueError("Lessons are already scheduled in this slot, so it cannot become a break or non-teaching slot.")
+                sh,sm=map(int,st.split(":")); eh,em=map(int,et.split(":"))
+                conn.execute("UPDATE schedule_slots SET day_id=?,slot_name=?,slot_type=?,start_time=?,end_time=?,duration_minutes=?,allows_timetable_entry=? WHERE id=? AND school_id=? AND tenant_id=?",
+                             (day_id,name,typ,st,et,(eh*60+em)-(sh*60+sm),1 if typ=="TEACHING" else 0,slot_id,sid,tid))
+            elif action=="slot":
                 day_id=int(request.form["day_id"]); name=request.form["slot_name"].strip(); st=request.form["start_time"]; et=request.form["end_time"]; typ=request.form.get("slot_type","TEACHING")
                 session_id=request.form.get("academic_session_id",type=int); term_id=request.form.get("term_id",type=int)
-                day_row=conn.execute("SELECT id FROM school_days_v2 WHERE id=? AND school_id=? AND tenant_id=? AND is_active=1",
-                                     (day_id,sid,tid)).fetchone()
-                if not day_row: raise ValueError("Select a valid school day.")
                 if session_id and not conn.execute("SELECT 1 FROM sessions WHERE id=? AND school_id=?",(session_id,sid)).fetchone(): raise ValueError("Select a valid academic session.")
                 if term_id and not conn.execute("SELECT 1 FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,sid)).fetchone(): raise ValueError("Select a valid academic term.")
                 if st>=et: raise ValueError("Start time must be earlier than end time.")
@@ -4195,7 +4209,7 @@ def timetable_setup():
                     conn.execute("INSERT INTO schedule_templates(tenant_id,school_id,name,is_default,status) VALUES(?,?,?,?,?)",(tid,sid,"Standard School Schedule",1,"active")); tmpl=conn.execute("SELECT last_insert_rowid() id").fetchone()
                 sh,sm=map(int,st.split(":")); eh,em=map(int,et.split(":")); duration=(eh*60+em)-(sh*60+sm)
                 maxno=conn.execute("SELECT COALESCE(MAX(slot_number),0) n FROM schedule_slots WHERE day_id=?",(day_id,)).fetchone()["n"]
-                conn.execute("INSERT INTO schedule_slots(tenant_id,school_id,academic_session_id,term_id,day_id,schedule_template_id,slot_number,slot_name,slot_type,start_time,end_time,duration_minutes,is_active,is_fixed,allows_timetable_entry) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",(tid,sid,session_id,term_id,day_id,tmpl["id"],maxno+1,name,typ,st,et,duration,1,0 if typ=="TEACHING" else 1))
+                conn.execute("INSERT INTO schedule_slots(tenant_id,school_id,academic_session_id,term_id,day_id,schedule_template_id,slot_number,slot_name,slot_type,start_time,end_time,duration_minutes,is_active,is_fixed,allows_timetable_entry) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",(tid,sid,session_id,term_id,day_id,tmpl["id"],maxno+1,name,typ,st,et,duration,0 if typ=="TEACHING" else 1,1 if typ=="TEACHING" else 0))
             elif action=="requirement":
                 cid=int(request.form["class_id"]); sub=int(request.form["subject_id"]); teacher_id=request.form.get("teacher_id",type=int); ppw=max(1,min(40,int(request.form.get("periods_per_week",1)))); daily=max(1,min(8,int(request.form.get("periods_per_day_limit",1)))); dbl=1 if request.form.get("requires_double_period") else 0; tri=1 if request.form.get("requires_triple_period") else 0
                 if not class_in_school(conn,cid) or not subject_in_school(conn,sub): raise ValueError("Class or subject is outside this school.")
@@ -4218,10 +4232,11 @@ def timetable_setup():
             conn.rollback(); flash(str(exc) if isinstance(exc,ValueError) else "The timetable setup could not be saved. Please review the values.","error")
         conn.close(); return redirect(url_for("timetable_setup"))
     days=conn.execute("SELECT * FROM school_days_v2 WHERE school_id=? AND tenant_id=? AND is_active=1 ORDER BY day_order",(sid,tid)).fetchall()
+    all_days=conn.execute("SELECT * FROM school_days_v2 WHERE school_id=? AND tenant_id=? ORDER BY day_order",(sid,tid)).fetchall()
     sessions=conn.execute("SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC",(sid,)).fetchall(); active_session=next((x for x in sessions if x["is_active"]), sessions[0] if sessions else None)
     terms=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? ORDER BY t.id DESC",(sid,)).fetchall(); active_term=next((x for x in terms if x["is_active"]), terms[0] if terms else None)
     slots=_tt_slots(conn); classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall(); subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall(); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(sid,)).fetchall(); rooms=conn.execute("SELECT * FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? ORDER BY room_name",(sid,tid)).fetchall(); reqs=conn.execute("SELECT r.*,c.name class_name,s.name subject_name FROM class_subject_requirements_v2 r JOIN classes c ON c.id=r.class_id JOIN subjects s ON s.id=r.subject_id WHERE r.school_id=? AND r.tenant_id=? ORDER BY c.name,s.name",(sid,tid)).fetchall()
-    conn.close(); return render_template("timetable_setup_v2.html",days=days,slots=slots,classes=classes,subjects=subjects,teachers=teachers,rooms=rooms,requirements=reqs,sessions=sessions,terms=terms,active_session=active_session,active_term=active_term)
+    conn.close(); return render_template("timetable_setup_v2.html",days=days,all_days=all_days,slots=slots,classes=classes,subjects=subjects,teachers=teachers,rooms=rooms,requirements=reqs,sessions=sessions,terms=terms,active_session=active_session,active_term=active_term)
 
 
 @app.route("/timetable/generate",methods=["GET","POST"])
@@ -4269,6 +4284,14 @@ def timetable_edit(version_id):
         slot=conn.execute("SELECT * FROM schedule_slots WHERE id=? AND school_id=? AND tenant_id=? AND is_active=1",(slot_id,current_school_id(),_tt_tenant(conn))).fetchone()
         if not entry or not slot or slot["slot_type"]!="TEACHING":
             conn.close(); flash("Invalid timetable edit.","error"); return redirect(url_for("timetable_edit",version_id=version_id))
+        _sid_,_tid_=current_school_id(),_tt_tenant(conn)
+        if teacher_id and not conn.execute("SELECT 1 FROM users WHERE id=? AND school_id=? AND role='teacher'",(teacher_id,_sid_)).fetchone():
+            conn.close(); flash("Choose a teacher from this school.","error"); return redirect(url_for("timetable_edit",version_id=version_id))
+        if room_id and not conn.execute("SELECT 1 FROM timetable_rooms_v2 WHERE id=? AND school_id=? AND tenant_id=? AND status='active'",(room_id,_sid_,_tid_)).fetchone():
+            conn.close(); flash("Choose a room from this school.","error"); return redirect(url_for("timetable_edit",version_id=version_id))
+        for col,val,label in (("teacher_id",teacher_id,"This teacher is already teaching another class"),("class_id",entry["class_id"],"This class already has a lesson"),("room_id",room_id,"This room is already booked")):
+            if val and conn.execute(f"SELECT 1 FROM timetable_entries_v2 WHERE timetable_version_id=? AND slot_id=? AND {col}=? AND id<>? AND school_id=?",(version_id,slot_id,val,entry_id,_sid_)).fetchone():
+                conn.close(); flash(label+" in that slot. Nothing was changed.","error"); return redirect(url_for("timetable_edit",version_id=version_id))
         conn.execute("UPDATE timetable_entries_v2 SET day_id=?,slot_id=?,teacher_id=?,room_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(slot["day_id"],slot_id,teacher_id,room_id,entry_id)); conn.execute("UPDATE timetable_versions_v2 SET status='DRAFT',validation_status='PENDING',updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(session.get("user_id"),version_id)); conn.commit(); errors,_=_tt_validate(conn,version_id); conn.close(); flash("Timetable change saved and revalidated." if not errors else f"Change saved; {len(errors)} blocking conflict(s) detected.","success" if not errors else "error"); return redirect(url_for("timetable_edit",version_id=version_id))
     entries=conn.execute("SELECT te.*,c.name class_name,s.name subject_name,u.name teacher_name,ss.slot_name,ss.start_time,ss.end_time,sd.day_name FROM timetable_entries_v2 te JOIN classes c ON c.id=te.class_id JOIN subjects s ON s.id=te.subject_id LEFT JOIN users u ON u.id=te.teacher_id JOIN schedule_slots ss ON ss.id=te.slot_id JOIN school_days_v2 sd ON sd.id=te.day_id WHERE te.timetable_version_id=? ORDER BY sd.day_order,ss.slot_number,c.name",(version_id,)).fetchall(); slots=_tt_slots(conn); teachers=conn.execute("SELECT id,name FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1 ORDER BY name",(current_school_id(),)).fetchall(); rooms=conn.execute("SELECT id,room_name FROM timetable_rooms_v2 WHERE school_id=? AND tenant_id=? AND status='active' ORDER BY room_name",(current_school_id(),_tt_tenant(conn))).fetchall(); conn.close(); return render_template("timetable_edit_v2.html",version=v,entries=entries,slots=slots,teachers=teachers,rooms=rooms)
 
@@ -4820,7 +4843,11 @@ def score_entry(class_id, subject_id):
             if errs:
                 bad_rows.append(f"student {sid}: " + "; ".join(errs))
                 continue
-            save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"], request.form.get("change_reason") or None)
+            try:
+                save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"],
+                           reason=request.form.get("change_reason"))
+            except ScoreChangeError as exc:
+                bad_rows.append(f"student {sid}: {exc}")
         conn.commit()
         if bad_rows:
             flash("Some rows were not saved — " + " | ".join(bad_rows[:5]), "error")
@@ -4958,7 +4985,12 @@ def score_csv_upload(class_id, subject_id):
             skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): " + "; ".join(row_errors))
             continue
 
-        save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"], request.form.get("change_reason") or None)
+        try:
+            save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"],
+                       reason=request.form.get("change_reason"), source="csv_import")
+        except ScoreChangeError as exc:
+            skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): {exc}")
+            continue
         updated += 1
 
     conn.commit()
@@ -4992,21 +5024,22 @@ def score_history_view(class_id, subject_id):
         flash("You are not assigned to teach this subject/class.", "error")
         return redirect(url_for("dashboard"))
 
+    term_id = request.args.get("term_id", type=int)
+    term_row = None
+    if term_id:
+        term_row = conn.execute("SELECT t.* FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?",
+                                (term_id, current_school_id())).fetchone()
+    if not term_row:
+        term_row = resolve_term(conn, None)
     history = conn.execute(
-        "SELECT h.*, s.first_name, s.last_name, s.other_names, u.name as changed_by_name, "
-        "u.role as changed_by_role_current, c.name as class_name, t.name as term_name, se.name as session_name "
-        "FROM score_history h JOIN students s ON s.id=h.student_id "
-        "JOIN classes c ON c.id=s.class_id JOIN terms t ON t.id=h.term_id JOIN sessions se ON se.id=t.session_id "
-        "LEFT JOIN users u ON u.id=h.changed_by "
-        "WHERE h.subject_id=? AND c.id=? AND c.school_id=? AND "
-        "COALESCE(h.tenant_id,c.tenant_id,?)=? "
-        "ORDER BY h.changed_at DESC",
-        (subject_id, class_id, current_school_id(), current_tenant_id(), current_tenant_id())
+        "SELECT * FROM score_audit WHERE school_id=? AND tenant_id=? AND class_id=? AND subject_id=? AND term_id=? ORDER BY id DESC",
+        (current_school_id(), session.get("tenant_id"), class_id, subject_id, term_row["id"] if term_row else -1)
     ).fetchall()
+    terms = all_terms_for_school(conn)
     conn.close()
     return render_template(
         "score_history.html", class_row=class_row, subject_row=subject_row, history=history,
-        student_full_name=student_full_name,
+        student_full_name=student_full_name, term=term_row, all_terms=terms,
     )
 
 
@@ -5054,35 +5087,8 @@ def build_broadsheet_data(conn, class_id, term_id):
         })
 
     rows.sort(key=lambda r: r["total"], reverse=True)
-
-    # Competition ranking for tied overall scores: 1st, 1st, 3rd.
-    previous = None
-    rank = 0
     for i, r in enumerate(rows, start=1):
-        if previous is None or r["total"] != previous:
-            rank = i
-            previous = r["total"]
-        r["position"] = rank
-        r["subject_positions"] = {}
-
-    # Subject positions use the same class/session scope as the result and
-    # competition ranking, with missing scores excluded.
-    for subj in subjects:
-        scored = sorted(
-            [(r["student"]["id"], r["scores"][subj["id"]]["total"])
-             for r in rows if isinstance(r["scores"][subj["id"]]["total"], (int, float))],
-            key=lambda x: x[1], reverse=True
-        )
-        prev = None
-        srank = 0
-        for idx, (student_id, score) in enumerate(scored, start=1):
-            if prev is None or score != prev:
-                srank = idx
-                prev = score
-            for r in rows:
-                if r["student"]["id"] == student_id:
-                    r["subject_positions"][subj["id"]] = srank
-                    break
+        r["position"] = i
 
     return subjects, rows
 
@@ -5162,7 +5168,7 @@ def build_cumulative_result_data(conn, student_id, session_id):
     return {
         "student": student, "class_row": class_row, "terms": terms, "subjects": subject_details,
         "average": average, "grade": grade, "remark": remark,
-        "position": my_row["position"] if my_row else "-", "position_label": ordinal(my_row["position"]) if my_row else "—", "class_size": len(rows),
+        "position": my_row["position"] if my_row else "-", "class_size": len(rows),
     }
 
 
@@ -5310,6 +5316,76 @@ def email_class_results(class_id):
 
 # ---------- terminal result ----------
 
+def compute_subject_positions(conn, student_ids, subject_ids, term_id):
+    """{subject_id: {student_id: position}} using standard competition ranking (1,2,2,4): equal totals share a
+    position. Only students with a recorded score in that subject are ranked. Calculated on every render, so the
+    school can switch the display on later without recalculating anything."""
+    out = {sj: {} for sj in subject_ids}
+    if not student_ids or not subject_ids:
+        return out
+    ph_s, ph_j = ",".join("?" * len(student_ids)), ",".join("?" * len(subject_ids))
+    rows = conn.execute(
+        f"SELECT student_id, subject_id, ca1, ca2, ca3, exam FROM scores WHERE term_id=? AND student_id IN ({ph_s}) AND subject_id IN ({ph_j})",
+        (term_id, *student_ids, *subject_ids)).fetchall()
+    per = {}
+    for r in rows:
+        per.setdefault(r["subject_id"], []).append((r["student_id"], compute_total(r["ca1"], r["ca2"], r["exam"], r["ca3"])))
+    for sj, lst in per.items():
+        lst.sort(key=lambda x: -x[1])
+        pos, prev, rank = 0, None, 0
+        for i, (stu, tot) in enumerate(lst, 1):
+            if tot != prev:
+                rank = i
+                prev = tot
+            out[sj][stu] = rank
+    return out
+
+
+def _file_data_uri(path):
+    """Inline an image so the printable sheet is self-contained (print preview == PDF == screen)."""
+    import base64, mimetypes
+    try:
+        if not path or not os.path.exists(path) or os.path.getsize(path) > 600 * 1024:
+            return None
+        mime = mimetypes.guess_type(path)[0] or "image/png"
+        if not mime.startswith("image/"):
+            return None
+        with open(path, "rb") as fh:
+            return f"data:{mime};base64," + base64.b64encode(fh.read()).decode()
+    except OSError:
+        return None
+
+
+def ordinal_text(n):
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return str(n)
+    suf = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suf}"
+
+
+def result_sheet_settings(conn, school_id):
+    sc = get_school(conn, school_id)
+    k = sc.keys() if sc else []
+    g = lambda name, default=None: (sc[name] if sc is not None and name in k and sc[name] is not None else default)
+    logo = None
+    if sc is not None and g("logo_filename"):
+        logo = _file_data_uri(os.path.join(INSTANCE_DIR, sc["logo_filename"]))
+    contact = " · ".join(x for x in (g("school_address"), g("registered_phone"), g("registered_email")) if x)
+    return {
+        "school_name": g("name", ""), "tagline": g("school_tagline"), "logo": logo,
+        "show_overall_position": bool(g("show_overall_position", 1)), "show_subject_position": bool(g("show_subject_position", 0)),
+        "template": g("result_template", "classic") if g("result_template", "classic") in ("classic", "modern", "compact", "detailed") else "classic",
+        "title": g("result_title") or "Terminal Report Sheet", "footer": g("result_footer_text"),
+        "watermark": (g("result_watermark_text") or g("name", "")) if g("result_show_watermark", 0) else None,
+        "show_passport": bool(g("result_show_passport", 1)), "show_contact": bool(g("result_show_contact", 1)), "contact": contact,
+        "show_grading_key": bool(g("result_show_grading_key", 1)), "show_promotion": bool(g("result_show_promotion", 1)),
+        "accent": g("result_accent_color") or "#1f3a5f", "secondary": g("result_secondary_color") or "#c9a227",
+        "header_layout": g("result_header_layout", "logo-left"), "signature_layout": g("result_signature_layout", "split"),
+    }
+
+
 def build_result_data(conn, student_id, term_id):
     student = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     historical_class_id = student_class_for_term(conn, student_id, term_id)
@@ -5320,6 +5396,8 @@ def build_result_data(conn, student_id, term_id):
     class_size = len(rows)
     school_id = current_school_id()
 
+    cohort_ids = [r["student"]["id"] for r in rows]
+    subj_pos = compute_subject_positions(conn, cohort_ids, [x["id"] for x in subjects], term_id)
     subject_details = []
     subjects_written = 0
     for subj in subjects:
@@ -5332,15 +5410,14 @@ def build_result_data(conn, student_id, term_id):
             total = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
             grade, remark = grade_for(total, conn, school_id)
             subject_details.append({
-                "id": subj["id"], "name": subj["name"], "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"] or 0,
+                "name": subj["name"], "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"] or 0,
                 "exam": score["exam"], "total": total, "grade": grade, "remark": remark,
-                "position": (my_row.get("subject_positions", {}) if my_row else {}).get(subj["id"]),
-                "position_label": ordinal((my_row.get("subject_positions", {}) if my_row else {}).get(subj["id"]))
+                "position": subj_pos.get(subj["id"], {}).get(student_id), "position_text": ordinal_text(subj_pos[subj["id"]][student_id]) if student_id in subj_pos.get(subj["id"], {}) else "-",
             })
         else:
             subject_details.append({
                 "name": subj["name"], "ca1": "-", "ca2": "-", "ca3": "-", "exam": "-",
-                "total": "-", "grade": "-", "remark": "-"
+                "total": "-", "grade": "-", "remark": "-", "position": None, "position_text": "-"
             })
 
     info_row = conn.execute(
@@ -5369,9 +5446,17 @@ def build_result_data(conn, student_id, term_id):
 
     ratings = conn.execute(
         "SELECT st.name, st.category, r.rating FROM student_skill_ratings r "
-        "JOIN skill_traits st ON st.id=r.trait_id WHERE r.student_id=? AND r.term_id=?",
+        "JOIN skill_traits st ON st.id=r.trait_id WHERE r.student_id=? AND r.term_id=? AND COALESCE(st.is_active,1)=1 "
+        "ORDER BY st.sort_order, st.name",
         (student_id, term_id),
     ).fetchall()
+    ensure_school_v61_defaults(conn, school_id)
+    domain_rows = conn.execute("SELECT * FROM educational_domains WHERE school_id=? AND is_active=1 ORDER BY sort_order, id", (school_id,)).fetchall()
+    domain_groups = []
+    for d in domain_rows:
+        items = [(r["name"], r["rating"]) for r in ratings if r["category"] == d["domain_key"]]
+        if items:
+            domain_groups.append({"label": d["label"], "items": items})
 
     # Digital signatures: only shown when the specific signer recorded on
     # *this* result has one uploaded AND has turned it on — never "whoever
@@ -5404,11 +5489,22 @@ def build_result_data(conn, student_id, term_id):
     teacher_name = teacher_signature_user["name"] if teacher_signature_user and (not school or school["show_form_teacher_name"] if "show_form_teacher_name" in school.keys() else True) else None
     principal_name = principal_signature_user["name"] if principal_signature_user and (not school or school["show_principal_name"] if "show_principal_name" in school.keys() else True) else None
 
+    rs = result_sheet_settings(conn, school_id)
+    rs["passport_path"] = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"]) if student["photo_filename"] and rs["show_passport"] else None
+    rs["passport"] = _file_data_uri(os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])) if student["photo_filename"] and rs["show_passport"] else None
+    rs["teacher_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"])) if teacher_signature_user else None
+    rs["principal_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"])) if principal_signature_user else None
+    rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
+    promotion = None
+    if info is not None and "promotion_status" in info.keys():
+        promotion = info["promotion_status"]
     return {
+        "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
+        "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
         "average": my_row["average"] if my_row else 0,
-        "position": my_row["position"] if my_row else "-", "position_label": ordinal(my_row["position"]) if my_row else "—",
+        "position": my_row["position"] if my_row else "-",
         "class_size": class_size, "info": info, "ratings": ratings,
         "subjects_written": subjects_written,
         "show_ca3": ca3_enabled(conn.execute(
@@ -5423,10 +5519,6 @@ def build_result_data(conn, student_id, term_id):
         "show_form_teacher_signature": bool(school["show_form_teacher_signature"]) if school and "show_form_teacher_signature" in school.keys() else True,
         "show_principal_name": bool(school["show_principal_name"]) if school and "show_principal_name" in school.keys() else True,
         "show_principal_signature": bool(school["show_principal_signature"]) if school and "show_principal_signature" in school.keys() else True,
-        "show_overall_position": bool(school["show_overall_position"]) if school and "show_overall_position" in school.keys() else True,
-        "show_subject_position": bool(school["show_subject_position"]) if school and "show_subject_position" in school.keys() else False,
-        "result_template": school["result_template"] if school and "result_template" in school.keys() else "modern",
-        "school_logo_url": url_for("school_logo") if school and school["logo_filename"] else None,
     }
 
 
@@ -5452,10 +5544,19 @@ def result(student_id):
     data = build_result_data(conn, student_id, term["id"])
     all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? ORDER BY category, name", (current_school_id(),)).fetchall()
     all_terms = all_terms_for_school(conn)
+    # Rating inputs: every active trait, grouped under its configured domain, with the student's current rating.
+    current = {r["trait_id"]: r["rating"] for r in conn.execute(
+        "SELECT trait_id, rating FROM student_skill_ratings WHERE student_id=? AND term_id=?", (student_id, term["id"]))}
+    rating_groups = []
+    for d in conn.execute("SELECT * FROM educational_domains WHERE school_id=? AND is_active=1 ORDER BY sort_order, id", (current_school_id(),)):
+        items = [{"id": t["id"], "name": t["name"], "rating": current.get(t["id"])} for t in conn.execute(
+            "SELECT * FROM skill_traits WHERE school_id=? AND category=? AND COALESCE(is_active,1)=1 ORDER BY sort_order, name", (current_school_id(), d["domain_key"]))]
+        if items:
+            rating_groups.append({"label": d["label"], "items": items})
     conn.close()
     return render_template(
         "result.html", term=term, all_traits=all_traits, student_full_name=student_full_name,
-        all_terms=all_terms, **data
+        all_terms=all_terms, rating_groups=rating_groups, **data
     )
 
 
@@ -5649,7 +5750,12 @@ def result_extra(student_id):
     if denied:
         conn.close()
         return denied
-    term_id = request.form["term_id"]
+    term_id = request.form.get("term_id", type=int)
+    if not term_id or not conn.execute("SELECT 1 FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?", (term_id, current_school_id())).fetchone():
+        conn.close()
+        flash("That term does not belong to your school.", "error")
+        return redirect(url_for("result", student_id=student_id))
+    promotion_status = (request.form.get("promotion_status", "") or "").strip()[:80] or None
     days_present = int(request.form.get("days_present") or 0)
     days_absent = int(request.form.get("days_absent") or 0)
     days_school_opened = int(request.form.get("days_school_opened") or 0)
@@ -5689,14 +5795,14 @@ def result_extra(student_id):
     conn.execute(
         "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, "
         "days_school_opened, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date, "
-        "teacher_signed_by, principal_signed_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+        "teacher_signed_by, principal_signed_by, promotion_status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(student_id, term_id) DO UPDATE SET "
         "days_present=excluded.days_present, days_absent=excluded.days_absent, "
         "days_school_opened=excluded.days_school_opened, "
         "teacher_comment=excluded.teacher_comment, principal_comment=excluded.principal_comment, "
         "teacher_signed_date=excluded.teacher_signed_date, principal_signed_date=excluded.principal_signed_date, "
-        "teacher_signed_by=excluded.teacher_signed_by, principal_signed_by=excluded.principal_signed_by",
+        "teacher_signed_by=excluded.teacher_signed_by, principal_signed_by=excluded.principal_signed_by, promotion_status=excluded.promotion_status",
         (
             student_id, term_id, days_present, days_absent, days_school_opened,
             request.form.get("teacher_comment", ""),
@@ -5705,12 +5811,13 @@ def result_extra(student_id):
             principal_signed_date,
             teacher_signed_by,
             principal_signed_by,
+            promotion_status,
         ),
     )
-    all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=?", (current_school_id(),)).fetchall()
+    all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? AND COALESCE(is_active,1)=1", (current_school_id(),)).fetchall()
     for trait in all_traits:
         val = request.form.get(f"trait_{trait['id']}")
-        if val:
+        if val and val.isdigit() and 1 <= int(val) <= 5:
             conn.execute(
                 "INSERT INTO student_skill_ratings (student_id, term_id, trait_id, rating) "
                 "VALUES (?,?,?,?) ON CONFLICT(student_id, term_id, trait_id) "
@@ -6416,76 +6523,6 @@ def student_login_required(f):
     return wrapped
 
 
-
-def _class_code_can_manage(conn, class_id):
-    c = conn.execute("SELECT id,school_id,tenant_id FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
-                     (class_id, current_school_id(), current_tenant_id())).fetchone()
-    if not c:
-        return None
-    if session.get("role") in ("admin", "sub_admin"):
-        return c
-    if session.get("role") == "teacher" and class_id in form_teacher_class_ids(conn, session.get("user_id")):
-        return c
-    return None
-
-
-def _class_login_code_row(conn, class_id):
-    return conn.execute(
-        "SELECT * FROM class_login_codes WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1",
-        (class_id, current_school_id(), current_tenant_id())
-    ).fetchone()
-
-
-@app.route("/class/<int:class_id>/student-login-code", methods=["GET", "POST"])
-@login_required()
-def class_student_login_code(class_id):
-    conn = get_db()
-    school_class = _class_code_can_manage(conn, class_id)
-    if not school_class:
-        conn.close()
-        flash("You do not have permission to manage student login codes for this class.", "error")
-        return redirect(url_for("dashboard"))
-    current = _class_login_code_row(conn, class_id)
-    if request.method == "POST":
-        action = request.form.get("action", "generate")
-        if action == "revoke":
-            if current:
-                conn.execute("UPDATE class_login_codes SET is_active=0, revoked_at=CURRENT_TIMESTAMP WHERE id=?", (current["id"],))
-                log_audit(conn, session.get("user_id"), "student_class_login_code_revoked",
-                          details=f"Class {class_id} login code revoked", school_id=current_school_id())
-                conn.commit()
-                flash("The class login code has been revoked.", "success")
-        else:
-            code = secrets.token_urlsafe(8).replace("-", "").replace("_", "").upper()[:10]
-            if current:
-                conn.execute(
-                    "UPDATE class_login_codes SET code=?,created_by=?,regenerated_at=CURRENT_TIMESTAMP,revoked_at=NULL,is_active=1 "
-                    "WHERE id=? AND school_id=? AND tenant_id=?",
-                    (code, session.get("user_id"), current["id"], current_school_id(), current_tenant_id())
-                )
-                action_name = "student_class_login_code_regenerated"
-            else:
-                conn.execute(
-                    "INSERT INTO class_login_codes(school_id,tenant_id,class_id,code,created_by,is_active) VALUES(?,?,?,?,?,1)",
-                    (current_school_id(), current_tenant_id(), class_id, code, session.get("user_id"))
-                )
-                action_name = "student_class_login_code_created"
-            log_audit(conn, session.get("user_id"), action_name,
-                      details=f"Class {class_id} student login code changed", school_id=current_school_id())
-            conn.commit()
-            flash("Class student login code generated.", "success")
-        current = _class_login_code_row(conn, class_id)
-    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
-                             (class_id, current_school_id(), current_tenant_id())).fetchone()
-    students = conn.execute(
-        "SELECT id,first_name,last_name,admission_no,username,first_login_required FROM students "
-        "WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1 ORDER BY last_name,first_name",
-        (class_id, current_school_id(), current_tenant_id())
-    ).fetchall()
-    conn.close()
-    return render_template("class_student_login_code.html", class_row=class_row, code=current, students=students)
-
-
 @app.route("/student/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def student_login():
@@ -6500,97 +6537,135 @@ def student_login():
     return render_template("student_login.html")
 
 
+STUDENT_MAX_FAILS = 8
+STUDENT_LOCK_MINUTES = 15
+_DUMMY_PASSWORD_HASH = generate_password_hash("dummy-password-for-timing")
+GENERIC_STUDENT_LOGIN_ERROR = "Invalid login details. Please check them and try again."
+
+
+def normalize_class_code(raw):
+    return re.sub(r"[^A-Z0-9]", "", str(raw or "").upper())
+
+
+def find_active_class_code(conn, raw_code):
+    """Return the class_login_codes row for a live code, or None. Expired codes are retired on sight."""
+    code = normalize_class_code(raw_code)
+    if len(code) < 6:
+        return None
+    row = conn.execute("SELECT * FROM class_login_codes WHERE code=? AND status='active'", (code,)).fetchone()
+    if not row:
+        return None
+    if row["expires_at"] and row["expires_at"] < datetime.datetime.utcnow().isoformat(timespec="seconds"):
+        conn.execute("UPDATE class_login_codes SET status='expired', ended_at=CURRENT_TIMESTAMP, end_reason='expired' WHERE id=? AND status='active'", (row["id"],))
+        conn.commit()
+        return None
+    return row
+
+
 def _student_login_post():
-    identifier = request.form.get("username", "").strip()
+    identifier = (request.form.get("identifier") or request.form.get("username") or "").strip()[:60]
     password = request.form.get("password", "")
-    requested_school_code = request.form.get("school_code", "").strip()
-    class_login_code = request.form.get("class_login_code", "").strip().upper()
+    class_code_raw = request.form.get("class_code", "")
+    hint = request.form.get("school_code", "").strip().lower()
+    now = datetime.datetime.utcnow()
+    now_iso = now.isoformat(timespec="seconds")
+
+    def fail(msg=GENERIC_STUDENT_LOGIN_ERROR):
+        flash(msg, "error")
+        return render_template("student_login.html")
+
     conn = get_db()
     try:
-        # Resolve school scope first. A tenant/school identifier supplied by the
-        # browser is only used to select an existing school; authorization still
-        # comes from the server-side school record.
-        scoped_school_id = None
-        if g.portal_school:
-            scoped_school_id = g.portal_school["id"]
-        elif requested_school_code:
-            school = conn.execute(
-                "SELECT id FROM schools WHERE activation_status='active' AND is_suspended=0 AND is_archived=0 "
-                "AND (LOWER(school_code)=LOWER(?) OR LOWER(tenant_id)=LOWER(?) OR LOWER(school_id_public)=LOWER(?))",
-                (requested_school_code, requested_school_code, requested_school_code)
-            ).fetchone()
-            if school:
-                scoped_school_id = school["id"]
-            else:
-                flash("Invalid username or password.", "error")
-                return render_template("student_login.html")
-
-        where_scope = ""
-        params = [identifier, identifier, identifier, identifier]
-        if scoped_school_id is not None:
-            where_scope = " AND s.school_id=? AND s.tenant_id=(SELECT tenant_id FROM schools WHERE id=?)"
-            params.extend([scoped_school_id, scoped_school_id])
-        candidates = conn.execute(
-            "SELECT s.* FROM students s "
-            "WHERE s.is_active=1 AND s.password_hash IS NOT NULL AND s.password_hash<>'' AND "
-            "(LOWER(s.username)=LOWER(?) OR LOWER(s.admission_no)=LOWER(?) "
-            "OR (s.register_no IS NOT NULL AND LOWER(s.register_no)=LOWER(?)) "
-            "OR (s.email IS NOT NULL AND LOWER(s.email)=LOWER(?)))" + where_scope,
-            tuple(params)
-        ).fetchall() if identifier else []
-
-        matches = [st for st in candidates if check_password_hash(st["password_hash"], password)]
+        candidates = []
+        if identifier and password:
+            ident = identifier.lower()
+            candidates = conn.execute(
+                "SELECT st.*, c.school_id AS cls_school, c.id AS cls_id FROM students st JOIN classes c ON c.id=st.class_id "
+                "WHERE st.is_active=1 AND (LOWER(st.username)=? OR LOWER(TRIM(st.admission_no))=? "
+                "OR LOWER(TRIM(COALESCE(st.register_no,'')))=?)", (ident, ident, ident)).fetchall()
+        code_row = find_active_class_code(conn, class_code_raw) if normalize_class_code(class_code_raw) else None
+        if normalize_class_code(class_code_raw) and not code_row:
+            # A wrong/expired/revoked code must not leak whether the student exists: same generic answer.
+            candidates = []
+        # The tenant always comes from the matched student's own class/school, never from the browser.
+        # A school hint or a class code can only NARROW the candidates; it never grants access.
+        schools = {}
+        scoped = []
+        for st in candidates:
+            sc = schools.get(st["cls_school"]) or get_school(conn, st["cls_school"])
+            schools[st["cls_school"]] = sc
+            if not sc:
+                continue
+            if hint and hint not in {str(sc["school_code"] or "").lower(), str(sc["tenant_id"] or "").lower(),
+                                     str(sc["school_id_public"] or "").lower(), str(sc["id"])}:
+                continue
+            if code_row and (code_row["class_id"] != st["cls_id"] or code_row["school_id"] != sc["id"]):
+                continue
+            scoped.append(st)
+        matches = []
+        locked_seen = False
+        for st in scoped:
+            locked = bool(st["locked_until"] and st["locked_until"] > now_iso)
+            locked_seen = locked_seen or locked
+            has_pw = bool(st["password_hash"])
+            ok = check_password_hash(st["password_hash"] if has_pw else _DUMMY_PASSWORD_HASH, password)
+            if ok and has_pw and not locked:
+                matches.append(st)
+        if not scoped:
+            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")   # constant-ish timing for unknown identifiers
+        if len(matches) > 1:
+            # Several schools have a student with this number AND this exact password. Only reachable with a correct
+            # password, so it leaks nothing; we refuse rather than guess whose account to open.
+            return fail("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
+        # Count failures against the accounts this identifier points to (only when the password was wrong).
         if len(matches) != 1:
-            # Never disclose whether a specific username/admission/register number exists.
-            if len(matches) > 1:
-                app.logger.warning("Student login refused: ambiguous identifier across tenants")
-            flash("Invalid username or password.", "error")
-            return render_template("student_login.html")
-
+            for st in scoped:
+                if st in matches:
+                    continue
+                fails = (st["failed_logins"] or 0) + 1
+                lock = (now + datetime.timedelta(minutes=STUDENT_LOCK_MINUTES)).isoformat(timespec="seconds") if fails >= STUDENT_MAX_FAILS else st["locked_until"]
+                conn.execute("UPDATE students SET failed_logins=?, locked_until=? WHERE id=?", (0 if fails >= STUDENT_MAX_FAILS else fails, lock, st["id"]))
+            if scoped:
+                conn.commit()
+            try:
+                security_event(conn, "STUDENT_LOGIN_FAILED", "failed", f"identifier_len={len(identifier)} candidates={len(scoped)} locked={locked_seen}", "student")
+                conn.commit()
+            except Exception:
+                pass
+            return fail()
         student = matches[0]
-        class_row = conn.execute(
-            "SELECT * FROM classes WHERE id=? AND school_id=? AND tenant_id=?",
-            (student["class_id"], student["school_id"], student["tenant_id"])
-        ).fetchone()
-        school = get_school(conn, student["school_id"])
-        if not class_row or not school:
-            app.logger.error("Student %s has no valid tenant-scoped class/school link", student["id"])
-            flash("Invalid username or password.", "error")
-            return render_template("student_login.html")
-
-        if school["activation_status"] != "active" or school["is_archived"] or school["is_suspended"] or not subscription_login_allowed(school):
-            flash("This school's student portal is not currently available.", "error")
-            return render_template("student_login.html")
+        school = schools[student["cls_school"]]
+        # ---- first login needs the class code of the student's OWN class ----
+        first_time = not student["first_login_completed_at"]
+        if first_time:
+            if not code_row or code_row["class_id"] != student["cls_id"]:
+                return fail("This is your first login. Enter the Class Login Code your Class/Form Teacher gave you.")
+        # ---- school state (only reported after the credentials proved who this is) ----
+        if school["activation_status"] != "active":
+            return fail("This school hasn't been activated yet.")
+        if school["is_archived"]:
+            return fail("This school's account has been archived. Contact the platform administrator.")
+        if school["is_suspended"]:
+            return fail("This school's account has been suspended. Contact the platform administrator.")
+        if not subscription_login_allowed(school):
+            return fail("This school's subscription or trial has expired. Contact the platform administrator.")
         if g.portal_school and school["id"] != g.portal_school["id"]:
-            flash("Invalid username or password.", "error")
-            return render_template("student_login.html")
-
-        # First login requires the code belonging to the student's current class.
-        if int(student["first_login_required"] or 0):
-            code_row = conn.execute(
-                "SELECT code FROM class_login_codes WHERE class_id=? AND school_id=? AND tenant_id=? AND is_active=1",
-                (student["class_id"], student["school_id"], student["tenant_id"])
-            ).fetchone()
-            if not code_row or not class_login_code or not secrets.compare_digest(str(code_row["code"]), class_login_code):
-                flash("Invalid username or password.", "error")
-                return render_template("student_login.html")
-            conn.execute(
-                "UPDATE students SET first_login_required=0, first_login_completed_at=CURRENT_TIMESTAMP, class_login_code_used_at=CURRENT_TIMESTAMP "
-                "WHERE id=? AND school_id=? AND tenant_id=?",
-                (student["id"], student["school_id"], student["tenant_id"])
-            )
-            log_audit(conn, student["id"], "student_first_login_completed",
-                      details="Student completed first login using class login code", school_id=student["school_id"])
-
+            return fail(GENERIC_STUDENT_LOGIN_ERROR)
+        if not school["tenant_id"]:
+            app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
+            return fail("This school's account setup is incomplete. Please contact the platform administrator.")
+        conn.execute("UPDATE students SET failed_logins=0, locked_until=NULL, last_login_at=?, "
+                     "first_login_completed_at=COALESCE(first_login_completed_at, ?) WHERE id=?", (now_iso, now_iso, student["id"]))
+        if first_time and code_row:
+            conn.execute("UPDATE class_login_codes SET use_count=use_count+1 WHERE id=?", (code_row["id"],))
+        conn.commit()
         session.clear()
         session["student_id"] = student["id"]
         session["role"] = "student"
         session["school_id"] = school["id"]
         session["tenant_id"] = school["tenant_id"]
         session["school_code"] = school["school_code"]
-        session["name"] = student_full_name(student)
-        session["login_time"] = datetime.datetime.utcnow().isoformat(timespec="seconds")
-        conn.commit()
+        session["login_time"] = now_iso
         return redirect(url_for("student_dashboard"))
     finally:
         conn.close()
@@ -6859,72 +6934,70 @@ def platform_dashboard():
 @app.route("/platform/control-center")
 @platform_admin_required
 def platform_control_center():
-    try:
-        """Platform-wide non-sensitive health/readiness view for all schools."""
-        conn = get_db()
-        schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
-        rows = []
-        totals = {"ready": 0, "pending": 0, "suspended": 0, "archived": 0, "attention": 0}
-        for school in schools:
+    """Platform-wide non-sensitive health/readiness view for all schools."""
+    conn = get_db()
+    schools = conn.execute("SELECT * FROM schools ORDER BY name").fetchall()
+    rows = []
+    totals = {"ready": 0, "pending": 0, "suspended": 0, "archived": 0, "attention": 0}
+    for school in schools:
+        try:
             checks, ready = school_readiness_checks(conn, school["id"])
-            identity = [
-                bool((school["school_code"] or "").strip()),
-                bool((school["tenant_id"] or "").strip()),
-                (conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False),
-                (conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False),
-            ]
-            admin_mismatch = conn.execute(
-                "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)",
+        except Exception:
+            app.logger.exception("Readiness check failed for school %s", school["id"])
+            checks, ready = [], False
+        identity = [
+            bool((school["school_code"] or "").strip()),
+            bool((school["tenant_id"] or "").strip()),
+            (conn.execute("SELECT COUNT(*) n FROM schools WHERE school_code=?", (school["school_code"],)).fetchone()["n"] == 1 if school["school_code"] else False),
+            (conn.execute("SELECT COUNT(*) n FROM schools WHERE tenant_id=?", (school["tenant_id"],)).fetchone()["n"] == 1 if school["tenant_id"] else False),
+        ]
+        admin_mismatch = conn.execute(
+            "SELECT COUNT(*) n FROM users WHERE school_id=? AND role='admin' AND (tenant_id IS NULL OR tenant_id<>?)",
+            (school["id"], school["tenant_id"]),
+        ).fetchone()["n"]
+        role_mismatch = 0
+        if table_exists(conn, "role_assignments"):
+            role_mismatch = conn.execute(
+                "SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)",
                 (school["id"], school["tenant_id"]),
             ).fetchone()["n"]
-            role_mismatch = 0
-            if table_exists(conn, "role_assignments"):
-                role_mismatch = conn.execute(
-                    "SELECT COUNT(*) n FROM role_assignments WHERE school_id=? AND (tenant_id IS NULL OR tenant_id<>?)",
-                    (school["id"], school["tenant_id"]),
-                ).fetchone()["n"]
-            identity_ok = all(identity) and admin_mismatch == 0 and role_mismatch == 0
-            failed_readiness = sum(1 for _, ok in checks if not ok)
-            status = school["readiness_status"] or ("ready" if ready else "pending")
-            archived = bool(school["is_archived"])
-            suspended = bool(school["is_suspended"])
-            attention = (not identity_ok) or failed_readiness > 0 or archived or suspended or school["activation_status"] != "active"
-            if status == "ready": totals["ready"] += 1
-            else: totals["pending"] += 1
-            if suspended: totals["suspended"] += 1
-            if archived: totals["archived"] += 1
-            if attention: totals["attention"] += 1
-            total_checks = len(checks) or 1
-            passed = total_checks - failed_readiness
-            rows.append({
-                "school": school,
-                "ready": ready,
-                "status": status,
-                "identity_ok": identity_ok,
-                "failed_readiness": failed_readiness,
-                "readiness_percent": round(passed * 100 / total_checks),
-                "attention": attention,
-                "admin_mismatch": admin_mismatch,
-                "role_mismatch": role_mismatch,
-            })
-        conn.close()
-        return render_template("platform_control_center.html", rows=rows, totals=totals)
-    except sqlite3.Error:
-        app.logger.exception("Multi-School Control Centre database error")
+        identity_ok = all(identity) and admin_mismatch == 0 and role_mismatch == 0
+        failed_readiness = sum(1 for _, ok in checks if not ok)
+        status = school["readiness_status"] or ("ready" if ready else "pending")
+        archived = bool(school["is_archived"])
+        suspended = bool(school["is_suspended"])
+        attention = (not identity_ok) or failed_readiness > 0 or archived or suspended or school["activation_status"] != "active"
+        if status == "ready": totals["ready"] += 1
+        else: totals["pending"] += 1
+        if suspended: totals["suspended"] += 1
+        if archived: totals["archived"] += 1
+        if attention: totals["attention"] += 1
+        total_checks = len(checks) or 1
+        passed = total_checks - failed_readiness
+        rows.append({
+            "school": school,
+            "ready": ready,
+            "status": status,
+            "identity_ok": identity_ok,
+            "failed_readiness": failed_readiness,
+            "readiness_percent": round(passed * 100 / total_checks),
+            "attention": attention,
+            "admin_mismatch": admin_mismatch,
+            "role_mismatch": role_mismatch,
+        })
+    conn.close()
+    # Subscription breakdown uses the same rules as the Subscriptions page (expiry dates beat stale status text).
+    sub_totals = {"total": len(rows), "Active": 0, "Trial": 0, "Expired": 0, "Suspended": 0}
+    for r in rows:
         try:
-            conn.close()
+            r["sub_status"] = app.jinja_env.globals["subscription_label"](r["school"])
         except Exception:
-            pass
-        flash("Multi-School Control Centre could not open because a required platform database component is unavailable. The technical error was recorded in the server log.", "error")
-        return redirect(url_for("platform_dashboard"))
-    except Exception:
-        app.logger.exception("Multi-School Control Centre unexpected error")
-        try:
-            conn.close()
-        except Exception:
-            pass
-        flash("Multi-School Control Centre could not open. The technical error was recorded in the server log.", "error")
-        return redirect(url_for("platform_dashboard"))
+            app.logger.exception("Could not work out subscription status for school %s", r["school"]["id"])
+            r["sub_status"] = "Unknown"
+        if r["sub_status"] in sub_totals:
+            sub_totals[r["sub_status"]] += 1
+    sub_totals["active_schools"] = sum(1 for r in rows if (r["school"]["activation_status"] == "active") and not r["school"]["is_suspended"] and not r["school"]["is_archived"])
+    return render_template("platform_control_center.html", rows=rows, totals=totals, sub_totals=sub_totals)
 
 
 @app.route("/platform/plans", methods=["GET", "POST"])
@@ -8874,50 +8947,6 @@ def school_dashboard_alias(): return redirect(url_for("dashboard"))
 @login_required("admin","sub_admin")
 def school_setup_alias(): return redirect(url_for("admin_school"))
 
-@app.route("/reports/analytics")
-@login_required("admin", "sub_admin")
-def reports_analytics():
-    conn=get_db(); sid=current_school_id()
-    term=resolve_term(conn,request.args.get("term_id",type=int)) or current_term(conn)
-    class_id=request.args.get("class_id",type=int); subject_id=request.args.get("subject_id",type=int)
-    date_from=request.args.get("date_from","").strip(); date_to=request.args.get("date_to","").strip()
-    if class_id and not class_in_school(conn,class_id): class_id=None
-    if subject_id and not subject_in_school(conn,subject_id): subject_id=None
-    try:
-        if date_from: datetime.date.fromisoformat(date_from)
-        if date_to: datetime.date.fromisoformat(date_to)
-    except ValueError:
-        date_from=date_to=""
-    classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY level,name,arm",(sid,)).fetchall()
-    subjects=conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name",(sid,)).fetchall()
-    terms=all_terms_for_school(conn)
-    students=conn.execute("SELECT COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1",(sid,)).fetchone()["n"]
-    teachers=conn.execute("SELECT COUNT(*) n FROM users WHERE school_id=? AND role='teacher' AND COALESCE(is_active,1)=1",(sid,)).fetchone()["n"]
-    class_rows=[]; subject_rows=[]; grade_rows=[]; arm_rows=[]
-    attendance_summary={"present":0,"absent":0,"late":0,"opened":0}; result_summary={"published":0,"pending":0}
-    attendance_trend=[]; staff_rows=[]
-    if term:
-        base_params=[term["id"],sid]; q="SELECT c.id,c.name,c.arm,AVG(COALESCE(sc.ca1,0)+COALESCE(sc.ca2,0)+COALESCE(sc.ca3,0)+COALESCE(sc.exam,0)) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? AND st.is_active=1"
-        if class_id:q+=" AND c.id=?";base_params.append(class_id)
-        if subject_id:q+=" AND sc.subject_id=?";base_params.append(subject_id)
-        q+=" GROUP BY c.id,c.name,c.arm ORDER BY c.name"; class_rows=conn.execute(q,base_params).fetchall()
-        base_params=[term["id"],sid]; q="SELECT sub.id,sub.name,AVG(COALESCE(sc.ca1,0)+COALESCE(sc.ca2,0)+COALESCE(sc.ca3,0)+COALESCE(sc.exam,0)) avg FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.term_id=? AND c.school_id=? AND st.is_active=1"
-        if class_id:q+=" AND c.id=?";base_params.append(class_id)
-        if subject_id:q+=" AND sub.id=?";base_params.append(subject_id)
-        q+=" GROUP BY sub.id,sub.name ORDER BY sub.name"; subject_rows=conn.execute(q,base_params).fetchall()
-        grade_rows=conn.execute("SELECT CASE WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=70 THEN 'A' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=60 THEN 'B' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=50 THEN 'C' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=45 THEN 'D' WHEN (COALESCE(ca1,0)+COALESCE(ca2,0)+COALESCE(ca3,0)+COALESCE(exam,0))>=40 THEN 'E' ELSE 'F' END grade,COUNT(*) n FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE sc.term_id=? AND c.school_id=? GROUP BY grade ORDER BY grade",(term["id"],sid)).fetchall()
-        arm_rows=conn.execute("SELECT COALESCE(NULLIF(c.arm,''),'—') arm,COUNT(DISTINCT st.id) students,COUNT(sc.id) score_rows FROM classes c LEFT JOIN students st ON st.class_id=c.id AND st.is_active=1 LEFT JOIN scores sc ON sc.student_id=st.id AND sc.term_id=? WHERE c.school_id=? GROUP BY c.arm ORDER BY c.arm",(term["id"],sid)).fetchall()
-        att_params=[term["id"],sid]; aq="SELECT ar.date, SUM(CASE WHEN LOWER(ar.status)='present' THEN 1 ELSE 0 END) present, SUM(CASE WHEN LOWER(ar.status)='absent' THEN 1 ELSE 0 END) absent, SUM(CASE WHEN LOWER(ar.status)='late' THEN 1 ELSE 0 END) late FROM attendance_records ar JOIN students st ON st.id=ar.student_id JOIN classes c ON c.id=st.class_id WHERE ar.term_id=? AND c.school_id=?"
-        if class_id: aq+=" AND c.id=?";att_params.append(class_id)
-        if date_from: aq+=" AND ar.date>=?";att_params.append(date_from)
-        if date_to: aq+=" AND ar.date<=?";att_params.append(date_to)
-        aq+=" GROUP BY ar.date ORDER BY ar.date"; attendance_trend=conn.execute(aq,att_params).fetchall()
-        ar={"present":sum(r["present"] or 0 for r in attendance_trend),"absent":sum(r["absent"] or 0 for r in attendance_trend),"late":sum(r["late"] or 0 for r in attendance_trend),"opened":len(attendance_trend)}; attendance_summary=ar
-        pubs=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=? AND t.is_published=1",(sid,)).fetchone()["n"]; allpub=conn.execute("SELECT COUNT(*) n FROM terms t JOIN sessions se ON se.id=t.session_id WHERE se.school_id=?",(sid,)).fetchone()["n"]; result_summary={"published":pubs,"pending":max(0,allpub-pubs)}
-    staff_rows=conn.execute("SELECT u.id,u.name,u.rbac_role,u.position,COUNT(sa.id) recorded,SUM(CASE WHEN sa.status='Present' THEN 1 ELSE 0 END) present,SUM(CASE WHEN sa.status='Absent' THEN 1 ELSE 0 END) absent,SUM(CASE WHEN sa.status='Late' THEN 1 ELSE 0 END) late FROM users u LEFT JOIN staff_attendance sa ON sa.user_id=u.id AND sa.school_id=u.school_id AND (?='' OR sa.date>=?) AND (?='' OR sa.date<=?) WHERE u.school_id=? AND u.role='teacher' GROUP BY u.id,u.name,u.rbac_role,u.position ORDER BY u.name",(date_from,date_from,date_to,date_to,sid)).fetchall()
-    conn.close()
-    return render_template("reports_analytics.html",students=students,teachers=teachers,classes=classes,subjects=subjects,terms=terms,term=term,class_id=class_id,subject_id=subject_id,date_from=date_from,date_to=date_to,class_rows=class_rows,subject_rows=subject_rows,grade_rows=grade_rows,arm_rows=arm_rows,attendance_summary=attendance_summary,result_summary=result_summary,attendance_trend=attendance_trend,staff_rows=staff_rows)
-
 @app.route("/platform/activation-requests")
 @platform_admin_required
 def platform_activation_requests():
@@ -8954,6 +8983,26 @@ def platform_approve_activation(school_id):
 def platform_notification_inbox():
     conn=get_db(); rows=conn.execute("SELECT n.*,s.name school_name FROM platform_notifications n LEFT JOIN schools s ON s.id=n.school_id ORDER BY n.id DESC LIMIT 200").fetchall(); conn.close(); return render_template("platform_notification_inbox.html",notifications=rows)
 
+
+def AUTO_ADVANCE(conn, term_id):
+    return _AUTO_ADVANCE_IMPL(conn, term_id)
+
+
+# ---------- V61 ----------
+from v61_routes import register_v61_routes
+_v61_helpers = dict(
+    get_db=get_db, login_required=login_required, student_login_required=student_login_required,
+    platform_admin_required=platform_admin_required, current_school_id=current_school_id,
+    form_teacher_class_ids=form_teacher_class_ids, active_role_assignments=active_role_assignments,
+    validate_password_policy=validate_password_policy, student_full_name=student_full_name, security_event=security_event,
+    all_terms_for_school=all_terms_for_school, log_audit=log_audit, _actor_role_label=_actor_role_label,
+    ensure_school_v61_defaults=ensure_school_v61_defaults, table_exists=table_exists,
+    build_result_data=build_result_data, student_in_school=student_in_school, resolve_term=resolve_term,
+    student_class_for_term=student_class_for_term, require_class_result_access=require_class_result_access,
+    parent_child=parent_child, parent_login_required=parent_login_required, current_term=current_term,
+)
+register_v61_routes(app, _v61_helpers)
+_AUTO_ADVANCE_IMPL = _v61_helpers["auto_advance_after_publish"]
 
 # ---------- V60: profiles, custom fields, audit views ----------
 from profile_routes import register_profile_routes

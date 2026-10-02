@@ -10,7 +10,6 @@ import uuid
 from functools import wraps
 
 from flask import (abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for)
-from werkzeug.security import generate_password_hash
 
 import profile_core as pc
 from werkzeug.exceptions import HTTPException
@@ -280,60 +279,6 @@ def register_profile_routes(app, h):
             entity_id=student["id"], today=pc._today().isoformat(),
         )
 
-    @app.route("/student/account", methods=["GET", "POST"])
-    @student_login_required
-    def student_account():
-        conn = get_db()
-        try:
-            student = student_row(conn, session["student_id"])
-            if not student:
-                session.clear()
-                return redirect(url_for("student_login"))
-            if request.method == "POST":
-                username = request.form.get("username", "").strip()
-                new_password = request.form.get("new_password", "")
-                confirm = request.form.get("confirm_password", "")
-                errors = []
-                if not username:
-                    errors.append("Username is required.")
-                elif len(username) > 40:
-                    errors.append("Username must be 40 characters or fewer.")
-                if new_password:
-                    if len(new_password) < 8:
-                        errors.append("Password must be at least 8 characters.")
-                    if new_password != confirm:
-                        errors.append("Password and confirmation do not match.")
-                if not errors:
-                    clash = conn.execute(
-                        "SELECT 1 FROM students WHERE LOWER(username)=LOWER(?) AND id<>? AND tenant_id=?",
-                        (username, student["id"], tenant_id())
-                    ).fetchone()
-                    if clash or conn.execute(
-                        "SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)", (username,)
-                    ).fetchone():
-                        errors.append("That username is already in use.")
-                if errors:
-                    return render_template("student_account.html", student=student, errors=errors), 422
-                if new_password:
-                    conn.execute(
-                        "UPDATE students SET username=?, password_hash=? WHERE id=? AND school_id=? AND tenant_id=?",
-                        (username, generate_password_hash(new_password),
-                         student["id"], school_id(), tenant_id())
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE students SET username=? WHERE id=? AND school_id=? AND tenant_id=?",
-                        (username, student["id"], school_id(), tenant_id())
-                    )
-                pc.audit(conn, actor(), "student_account_credentials_updated", "student", student["id"],
-                         {"username": username, "password_changed": bool(new_password)}, ip=ip())
-                conn.commit()
-                flash("Student account settings updated.", "success")
-                return redirect(url_for("student_account"))
-            return render_template("student_account.html", student=student, errors=[])
-        finally:
-            conn.close()
-
     @app.route("/student/profile", methods=["GET", "POST"])
     @student_login_required
     def student_self_profile():
@@ -476,6 +421,20 @@ def register_profile_routes(app, h):
                 if target["signature_filename"]:
                     olds.append(os.path.join(SIGNATURES_DIR, target["signature_filename"]))
                 media["signature"] = "changed"
+            # Name changes are never silent: previous and new values, who, when, plus a notice to the School Admin.
+            old_parts = (target["first_name"], target["surname"], target["other_names"])
+            new_parts = (new.get("first_name"), new.get("surname"), new.get("other_names"))
+            name_changed = bool(full_name) and (target["name"] or "").strip() != full_name.strip()
+            if name_changed and mode in ("self", "admin"):
+                conn.execute(
+                    "INSERT INTO staff_name_history(school_id,tenant_id,user_id,previous_first_name,previous_surname,previous_other_names,previous_name,"
+                    "new_first_name,new_surname,new_other_names,new_name,changed_by,changed_by_name,admin_notified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                    (school_id(), tenant_id(), uid, *old_parts, target["name"], *new_parts, full_name, session.get("user_id"), session.get("name")))
+                if mode == "self":
+                    conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",
+                                 ("System", school_id(), "admin", "Staff name changed",
+                                  f"{target['name']} changed their name to {full_name} on {pc._today().isoformat()}. See the staff profile history."))
+                pc.audit(conn, actor(), "staff_name_changed", "staff", uid, {"name": [target["name"], full_name], "changed_by": session.get("name")}, ip=ip())
             cerr2, written, replaced = pc.save_custom(conn, school_id(), tenant_id(), "staff", uid, updates, fields,
                                                        session.get("user_id"), CUSTOM_FILES_DIR)
             if cerr2:
