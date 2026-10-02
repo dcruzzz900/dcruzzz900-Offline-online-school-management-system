@@ -18,6 +18,7 @@
     </p>
     <a class="btn btn-small" href="{{ url_for('score_csv_template', class_id=class_row.id, subject_id=subject_row.id) }}">Download CSV Template</a>
     <form method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
+<label>Reason for change <span class="muted">(required if results are published)</span><input type="text" name="change_reason" maxlength="300"></label>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Upload Completed CSV</label>
         <input type="file" name="csv_file" accept=".csv" required>
@@ -31,6 +32,7 @@
 </div>
 
 <form method="POST">
+<label class="no-print">Reason for change <span class="muted">(required when the term's results are already published)</span><input type="text" name="change_reason" maxlength="300" placeholder="e.g. Score correction"></label>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <table id="scoreTable">
         <tr>

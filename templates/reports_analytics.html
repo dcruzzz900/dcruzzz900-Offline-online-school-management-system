@@ -1,53 +1,24 @@
-{% extends "base.html" %}
-{% block title %}Reports & Analytics{% endblock %}
-{% block content %}
-<div class="page-heading"><div><div class="eyebrow">INSIGHTS</div><h1>Reports & Analytics</h1><p>Live school-scoped statistics, attendance trends, class/arm performance, subjects, grades and result status.</p></div></div>
-
-<form class="card form-grid" method="GET" style="align-items:end">
-  <label>Session / Term<select name="term_id"><option value="">Current term</option>{% for t in terms %}<option value="{{ t.id }}" {% if term and t.id==term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}</select></label>
-  <label>Class / Arm<select name="class_id"><option value="">All classes</option>{% for c in classes %}<option value="{{ c.id }}" {% if c.id==class_id %}selected{% endif %}>{{ c.name }}{% if c.arm %} — {{ c.arm }}{% endif %}</option>{% endfor %}</select></label>
-  <label>Subject<select name="subject_id"><option value="">All subjects</option>{% for s in subjects %}<option value="{{ s.id }}" {% if s.id==subject_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
-  <label>Attendance from<input type="date" name="date_from" value="{{ date_from or '' }}"></label>
-  <label>Attendance to<input type="date" name="date_to" value="{{ date_to or '' }}"></label>
-  <button class="btn">Apply filters</button>
-</form>
-
-<div class="dashboard-grid">
-  <div class="stat-card"><span>Students</span><strong>{{ students }}</strong></div>
-  <div class="stat-card"><span>Active Teachers</span><strong>{{ teachers }}</strong></div>
-  <div class="stat-card"><span>Classes / Arms</span><strong>{{ classes|length }}</strong></div>
-  <div class="stat-card"><span>Published Terms</span><strong>{{ result_summary.published }}</strong></div>
-  <div class="stat-card"><span>Attendance Days</span><strong>{{ attendance_summary.opened }}</strong></div>
-</div>
-
-<div class="analytics-grid">
-  <div class="card"><div class="section-title"><h3>Class Performance</h3><span class="muted">Average score</span></div><canvas id="classBar" height="230"></canvas></div>
-  <div class="card"><div class="section-title"><h3>Attendance Trend</h3><span class="muted">Present / absent / late</span></div><canvas id="attendanceLine" height="230"></canvas></div>
-  <div class="card"><div class="section-title"><h3>Grade Distribution</h3><span class="muted">Current filter</span></div><canvas id="gradePie" height="230"></canvas></div>
-  <div class="card"><div class="section-title"><h3>Subject Performance Area</h3><span class="muted">Average score</span></div><canvas id="subjectArea" height="230"></canvas></div>
-</div>
-
-<div class="analytics-grid">
-  <div class="card"><h3>Subject Performance</h3>{% for r in subject_rows %}<div class="analytics-row"><b>{{ r.name }}</b><span>{{ '%.1f'|format(r.avg or 0) }}%</span><div class="bar"><i style="width:{{ [r.avg or 0,100]|min }}%"></i></div></div>{% else %}<p class="muted">No subject score data for this filter.</p>{% endfor %}</div>
-  <div class="card"><h3>Class / Arm Statistics</h3>{% for r in arm_rows %}<div class="analytics-row"><b>Arm {{ r.arm }}</b><span>{{ r.students }} students</span><small>{{ r.score_rows }} score entries</small></div>{% else %}<p class="muted">No class/arm data yet.</p>{% endfor %}</div>
-  <div class="card"><h3>Result Status</h3><div class="result-summary"><div><span>Published</span><strong>{{ result_summary.published }}</strong></div><div><span>Pending</span><strong>{{ result_summary.pending }}</strong></div></div></div>
-  <div class="card"><h3>Staff Statistics</h3>{% for r in staff_rows %}<div class="analytics-row"><b>{{ r.name }}</b><span>{{ r.present or 0 }} present</span><small>{{ r.absent or 0 }} absent · {{ r.late or 0 }} late · {{ r.recorded or 0 }} records</small></div>{% else %}<p class="muted">No staff attendance data for the selected dates.</p>{% endfor %}</div>
-</div>
-
-<script>
-(function(){
-const classData={{ class_rows|map(attribute='name')|list|tojson }}; const classValues={{ class_rows|map(attribute='avg')|list|tojson }};
-const subjectData={{ subject_rows|map(attribute='name')|list|tojson }}; const subjectValues={{ subject_rows|map(attribute='avg')|list|tojson }};
-const trendLabels={{ attendance_trend|map(attribute='date')|list|tojson }}; const trendPresent={{ attendance_trend|map(attribute='present')|list|tojson }}; const trendAbsent={{ attendance_trend|map(attribute='absent')|list|tojson }}; const trendLate={{ attendance_trend|map(attribute='late')|list|tojson }};
-const gradeLabels={{ grade_rows|map(attribute='grade')|list|tojson }}; const gradeValues={{ grade_rows|map(attribute='n')|list|tojson }};
-function ctx(id){const c=document.getElementById(id);return c&&c.getContext('2d')}
-function clear(c){c.clearRect(0,0,c.canvas.width,c.canvas.height)}
-function fit(c){const r=c.canvas.getBoundingClientRect(),d=devicePixelRatio||1;c.canvas.width=r.width*d;c.canvas.height=r.height*d;c.scale(d,d);return [r.width,r.height]}
-function bar(id,labels,values){const c=ctx(id);if(!c)return;const [w,h]=fit(c),pad=35,max=Math.max(100,...values.map(Number));clear(c);c.font='12px system-ui';values.forEach((v,i)=>{const bw=Math.max(8,(w-pad*2)/Math.max(values.length,1)-10),x=pad+i*((w-pad*2)/Math.max(values.length,1))+5,y=h-pad-(Number(v)/max)*(h-pad*2);c.fillRect(x,y,bw,h-pad-y);c.fillText(String(labels[i]).slice(0,14),x,h-10);c.fillText(Number(v||0).toFixed(0),x,y-5)})}
-function line(id,labels,series){const c=ctx(id);if(!c)return;const [w,h]=fit(c),pad=35,max=Math.max(1,...series.flat().map(Number));clear(c);c.font='11px system-ui';series.forEach((vals,si)=>{c.beginPath();vals.forEach((v,i)=>{const x=pad+(i*Math.max(1,w-pad*2))/Math.max(vals.length-1,1),y=h-pad-(Number(v)/max)*(h-pad*2);i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();});labels.forEach((l,i)=>{if(i%Math.max(1,Math.ceil(labels.length/7))===0){const x=pad+(i*Math.max(1,w-pad*2))/Math.max(labels.length-1,1);c.fillText(String(l).slice(5),x,h-10)}})}
-function pie(id,labels,values){const c=ctx(id);if(!c)return;const [w,h]=fit(c),cx=w/2,cy=h/2,r=Math.min(w,h)/3,total=Math.max(1,values.reduce((a,b)=>a+Number(b),0));let a=-Math.PI/2;clear(c);values.forEach((v,i)=>{const n=Number(v),b=a+n/total*Math.PI*2;c.beginPath();c.moveTo(cx,cy);c.arc(cx,cy,r,a,b);c.closePath();c.fill();a=b;c.fillText(labels[i]+': '+n,cx+r+8,30+i*18)});}
-function area(id,labels,values){const c=ctx(id);if(!c)return;const [w,h]=fit(c),pad=35,max=Math.max(100,...values.map(Number));clear(c);c.beginPath();values.forEach((v,i)=>{const x=pad+i*Math.max(1,w-pad*2)/Math.max(values.length-1,1),y=h-pad-(Number(v)/max)*(h-pad*2);i?c.lineTo(x,y):c.moveTo(x,y)});c.lineTo(w-pad,h-pad);c.lineTo(pad,h-pad);c.closePath();c.fill();c.beginPath();values.forEach((v,i)=>{const x=pad+i*Math.max(1,w-pad*2)/Math.max(values.length-1,1),y=h-pad-(Number(v)/max)*(h-pad*2);i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();labels.forEach((l,i)=>{if(i%Math.max(1,Math.ceil(labels.length/7))===0){const x=pad+i*Math.max(1,w-pad*2)/Math.max(labels.length-1,1);c.fillText(String(l).slice(0,10),x,h-10)}})}
-function render(){bar('classBar',classData,classValues);line('attendanceLine',trendLabels,[trendPresent,trendAbsent,trendLate]);pie('gradePie',gradeLabels,gradeValues);area('subjectArea',subjectData,subjectValues)}
-render();addEventListener('resize',render);})();
-</script>
+{% extends "base.html" %}{% block title %}Reports & Analytics{% endblock %}{% block content %}
+<style>.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}.kpi{background:#fff;border-radius:10px;padding:.8rem 1rem;box-shadow:0 1px 4px rgba(0,0,0,.1)}.kpi span{display:block;color:#666;font-size:.8rem;text-transform:uppercase}.kpi strong{font-size:1.7rem}.kpi em{font-style:normal;font-size:.85rem;font-weight:700}.up{color:#1a7f37}.down{color:#b3261e}
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}.chart-card{background:#fff;border-radius:10px;padding:.8rem 1rem;box-shadow:0 1px 4px rgba(0,0,0,.1)}.chart-card h3{margin:.1rem 0 .5rem;font-size:1rem}.chart{width:100%;height:auto;max-height:340px}.chart text{fill:#222;font-family:Arial,sans-serif}.chart-empty{padding:1rem}</style>
+<div class="page-heading"><div><div class="eyebrow">INSIGHTS</div><h1>Reports &amp; Analytics</h1><p>Live statistics for your school only{% if term %} · {{ term.session_name }} — {{ term.name }}{% endif %}.</p></div><button class="btn btn-secondary no-print" onclick="window.print()">Print</button></div>
+<form class="card form-grid no-print" method="GET" style="align-items:end">
+<label>Session / Term<select name="term_id"><option value="">Current term</option>{% for t in terms %}<option value="{{ t.id }}" {{ 'selected' if term and t.id == term.id }}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}</select></label>
+<label>Class / Arm<select name="class_id"><option value="">All classes</option>{% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if c.id == class_id }}>{{ c.name }}</option>{% endfor %}</select></label>
+<label>Subject<select name="subject_id"><option value="">All subjects</option>{% for s in subjects %}<option value="{{ s.id }}" {{ 'selected' if s.id == subject_id }}>{{ s.name }}</option>{% endfor %}</select></label><button class="btn">Apply</button></form>
+<div class="kpi-grid">{% for label, value, delta in kpis %}<div class="kpi"><span>{{ label }}</span><strong>{{ value }}</strong>{% if delta is not none %}<em class="{{ 'up' if delta >= 0 else 'down' }}"> {{ '▲' if delta >= 0 else '▼' }} {{ delta|abs }} vs last term</em>{% endif %}</div>{% endfor %}</div>
+{% if not has_scores %}<div class="card"><p class="muted">No scores have been entered for this term yet, so the performance charts are empty. Enrollment and attendance charts still show live data.</p></div>{% endif %}
+<div class="chart-grid">
+<div class="chart-card"><h3>Gender distribution</h3>{{ charts.gender }}</div>
+<div class="chart-card"><h3>Class enrollment</h3>{{ charts.enrol }}</div>
+<div class="chart-card"><h3>Subject performance (average)</h3>{{ charts.subject }}</div>
+<div class="chart-card"><h3>Class performance comparison</h3>{{ charts.class }}</div>
+<div class="chart-card"><h3>Grade distribution</h3>{{ charts.grades }}</div>
+<div class="chart-card"><h3>Pass / fail rate</h3>{{ charts.passfail }}</div>
+<div class="chart-card"><h3>Term-to-term performance trend</h3>{{ charts.trend }}</div>
+<div class="chart-card"><h3>Student attendance trend</h3>{{ charts.attendance }}</div>
+<div class="chart-card"><h3>Staff attendance (last 30 days)</h3>{{ charts.staff_att }}</div>
+<div class="chart-card"><h3>Result completion by class</h3>{{ charts.completion }}</div>
+<div class="chart-card"><h3>Published vs unpublished terms</h3>{{ charts.published }}</div></div>
+{% if class_perf %}<div class="card" style="margin-top:12px;overflow:auto"><h3>Class performance table</h3><table><thead><tr><th>Class</th><th>Average score</th></tr></thead><tbody>{% for r in class_perf %}<tr><td>{{ r.name }}</td><td>{{ '%.1f'|format(r.a) if r.a is not none else '—' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endblock %}

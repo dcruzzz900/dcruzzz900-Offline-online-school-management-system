@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ student_full_name(student) }} — {{ term.name }} Result</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}">
+<style>body{margin:0;background:#e9ecef}.rs-toolbar{position:sticky;top:0;display:flex;gap:8px;justify-content:center;padding:8px;background:#222}.rs-toolbar button,.rs-toolbar a{padding:8px 16px;border-radius:6px;border:0;background:#fff;color:#111;font:600 14px Arial;text-decoration:none;cursor:pointer}.rs-wrap{padding:12px 0}.rs-wrap .rs-sheet{box-shadow:0 2px 10px rgba(0,0,0,.25)}@media print{body{background:#fff}.rs-toolbar{display:none}.rs-wrap{padding:0}}</style></head>
+<body class="rs-print-page">
+<div class="rs-toolbar no-print"><button type="button" onclick="window.print()">Print</button><a href="{{ pdf_url }}">Download PDF</a><a href="{{ back_url }}">Close</a></div>
+<div class="rs-wrap">{% include "_result_sheet.html" %}</div>
+{% if autoprint %}<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},350);});</script>{% endif %}
+</body></html>

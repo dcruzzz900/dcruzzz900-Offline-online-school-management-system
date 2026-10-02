@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Result Sheet Settings{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1>Result Sheet Settings</h1><p>Choose what appears on every result sheet and how it looks. Positions are always calculated, so you can switch them on later.</p></div></div>
+{% if errors %}<div class="card" style="border:1px solid #b3261e"><b>Nothing was saved.</b> {{ errors._form or 'Please correct the highlighted items.' }}</div>{% endif %}
+<form method="POST" class="card" style="max-width:760px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<h3>Positions</h3>
+<label><input type="checkbox" name="show_overall_position" value="1" {{ 'checked' if s.show_overall_position in (1,'1') }}> Show Overall Position <small class="muted">(e.g. “2nd”)</small></label>
+<label><input type="checkbox" name="show_subject_position" value="1" {{ 'checked' if s.show_subject_position in (1,'1') }}> Show Subject Position <small class="muted">(a Position column beside each subject)</small></label>
+<h3>Template</h3>{% if errors.result_template %}<div style="color:#b3261e">{{ errors.result_template }}</div>{% endif %}
+{% for key, name, desc in templates %}<label style="display:block;border:1px solid #ddd;border-radius:8px;padding:8px;margin:6px 0"><input type="radio" name="result_template" value="{{ key }}" {{ 'checked' if s.result_template == key }}> <b>{{ name }}</b> — <span class="muted">{{ desc }}</span></label>{% endfor %}
+<h3>Branding</h3>
+<label>Result title<input name="result_title" maxlength="80" value="{{ s.result_title or '' }}" placeholder="Terminal Report Sheet"></label>
+<div class="form-grid"><label>Main colour<input type="color" name="result_accent_color" value="{{ s.result_accent_color or '#1f3a5f' }}"></label><label>Second colour<input type="color" name="result_secondary_color" value="{{ s.result_secondary_color or '#c9a227' }}"></label></div>
+{% if errors.result_accent_color or errors.result_secondary_color %}<div style="color:#b3261e">{{ errors.result_accent_color or errors.result_secondary_color }}</div>{% endif %}
+<label>Header layout<select name="result_header_layout">{% for v,l in [('logo-left','Logo left'),('logo-center','Logo centre'),('logo-right','Logo right'),('no-logo','No logo')] %}<option value="{{ v }}" {{ 'selected' if s.result_header_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
+<label>School address / contact line<textarea name="school_address" rows="2" maxlength="200">{{ s.school_address or '' }}</textarea></label>
+<label>Footer text<textarea name="result_footer_text" rows="2" maxlength="300">{{ s.result_footer_text or '' }}</textarea></label>
+<label><input type="checkbox" name="result_show_watermark" value="1" {{ 'checked' if s.result_show_watermark in (1,'1') }}> Show watermark</label><label>Watermark text<input name="result_watermark_text" maxlength="40" value="{{ s.result_watermark_text or '' }}" placeholder="Defaults to the school name"></label>
+<label>Signature placement<select name="result_signature_layout">{% for v,l in [('split','Teacher left, Principal right'),('stacked','Stacked'),('right','Right-aligned')] %}<option value="{{ v }}" {{ 'selected' if s.result_signature_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
+<h3>Show on the sheet</h3>
+{% for k,l in [('result_show_passport','Student passport'),('result_show_contact','School contact information'),('result_show_grading_key','Grading key'),('result_show_promotion','Promotion / status')] %}<label><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if s[k] in (1,'1') }}> {{ l }}</label>{% endfor %}
+<br><button class="btn">Save settings</button> <a class="btn btn-secondary" href="{{ url_for('result_design_preview') }}">Preview</a></form>
+{% endblock %}
