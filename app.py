@@ -18,7 +18,7 @@ import hmac
 import hashlib
 from collections import defaultdict, deque
 
-from db import (
+from db import (generate_school_code, 
     get_db, init_db, grade_for, get_school, INSTANCE_DIR, table_exists, ensure_school_v61_defaults,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
@@ -55,6 +55,7 @@ MATERIAL_EXTENSIONS = {
 MATERIALS_DIR = os.path.join(INSTANCE_DIR, "materials")
 STUDENT_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "student_photos")
 STAFF_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "staff_photos")
+PARENT_PHOTOS_DIR = os.path.join(INSTANCE_DIR, "parent_photos")
 SIGNATURES_DIR = os.path.join(INSTANCE_DIR, "signatures")
 STAFF_DOCUMENTS_DIR = os.path.join(INSTANCE_DIR, "staff_documents")
 CUSTOM_FILES_DIR = os.path.join(INSTANCE_DIR, "custom_field_files")
@@ -143,6 +144,9 @@ def _check_csrf():
     submitted = request.form.get("csrf_token", "")
     expected = session.get("_csrf_token", "")
     if not expected or not secrets.compare_digest(submitted, expected):
+        app.logger.warning(
+            "CSRF/session check failed: path=%s method=%s user_id=%s has_session_token=%s form_token_present=%s",
+            request.path, request.method, session.get("user_id"), bool(expected), bool(submitted))
         flash("Your session timed out or that page was open too long — please try again.", "error")
         return redirect(request.referrer or "/")
     return None
@@ -250,6 +254,45 @@ LEGACY_ROLE_ALIASES = {
     "Guidance/Counselor": "Guidance/Counselling Officer", "Finance/Bursar": "Bursar / Accountant",
     "ICT Officer": "ICT / System Support Officer",
 }
+
+
+ROLE_TO_POSITION = {"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal",
+    "Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher",
+    "Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer",
+    "Vice Principal / Deputy Principal":"vice_principal","Subject Teacher":"subject_teacher"}
+
+
+def change_staff_role(conn, user_id, school_id, new_role, actor_id, actor_name, school_level="All", reason=None):
+    """Make `new_role` the staff member's ONE active role, immediately.
+
+    * users.rbac_role / position are updated (these drive the permission checks),
+    * every earlier active assignment is retired (so Teacher + Librarian never stack up),
+    * a single active assignment with the new role's permissions is created,
+    * the change is written to role_assignment_audit.
+    Tenant isolation: the user must belong to `school_id` (never a client-supplied id).
+    Caller commits."""
+    user = conn.execute("SELECT id, rbac_role FROM users WHERE id=? AND school_id=?", (user_id, school_id)).fetchone()
+    if not user or new_role not in ROLE_CATALOG:
+        return None
+    previous = user["rbac_role"]
+    school = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()
+    conn.execute("UPDATE role_assignments SET status='revoked', updated_at=CURRENT_TIMESTAMP "
+                 "WHERE user_id=? AND school_id=? AND status='active'", (user_id, school_id))
+    conn.execute("UPDATE users SET rbac_role=?, position=? WHERE id=? AND school_id=?",
+                 (new_role, ROLE_TO_POSITION.get(new_role), user_id, school_id))
+    aid = conn.execute(
+        "INSERT INTO role_assignments (user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at,reason) "
+        "VALUES (?,?,?,?,?,'active',?,?,CURRENT_TIMESTAMP,?)",
+        (user_id, school_id, school["tenant_id"] if school else None, school_level, new_role, actor_id, actor_id,
+         reason or "Role changed by School Admin")).lastrowid
+    for perm in ROLE_CATALOG.get(new_role, []):
+        conn.execute("INSERT INTO role_assignment_permissions (assignment_id,permission,granted) VALUES (?,?,1)", (aid, perm))
+    conn.execute(
+        "INSERT INTO role_assignment_audit (assignment_id,user_id,school_id,actor_user_id,actor_name,action,previous_role,new_role,new_scope,approval_status,reason) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (aid, user_id, school_id, actor_id, actor_name, "role_changed", previous, new_role, school_level, "approved",
+         reason or "Role changed by School Admin; active immediately"))
+    return aid
 
 def assignable_roles():
     return sorted(r for r in ROLE_CATALOG if r not in LEGACY_ROLE_ALIASES)
@@ -508,7 +551,7 @@ def _public_auth_school(conn=None):
 
         username = (request.values.get("username") or "").strip()
         if username and _table_exists_safe(conn, "users"):
-            row = conn.execute("SELECT school_id FROM users WHERE username=? LIMIT 1", (username,)).fetchone()
+            row = conn.execute("SELECT school_id FROM users WHERE LOWER(username)=LOWER(?) LIMIT 1", (username,)).fetchone()
             if row:
                 return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
         return None
@@ -651,10 +694,15 @@ def login_required(*roles):
             # A session must not outlive its account: if an admin deactivated
             # or deleted this user since they logged in, end it now.
             _conn = get_db()
-            _u = _conn.execute("SELECT is_active,school_id,tenant_id FROM users WHERE id=?",(session["user_id"],)).fetchone()
+            _u = _conn.execute("SELECT is_active,school_id,tenant_id,rbac_role,position FROM users WHERE id=?",(session["user_id"],)).fetchone()
             _school=_conn.execute("SELECT id,tenant_id,activation_status,is_suspended,is_archived FROM schools WHERE id=?",(session.get("school_id"),)).fetchone()
             tenant_ok=bool(_u and _school and _u["school_id"]==_school["id"] and _u["tenant_id"]==_school["tenant_id"] and session.get("tenant_id")==_school["tenant_id"])
             _conn.close()
+            if _u is not None and _u["is_active"]:
+                # The CURRENT active role in the database always wins over whatever was cached at login,
+                # so a role change by the School Admin takes effect on the very next request.
+                session["rbac_role"] = _u["rbac_role"]
+                session["position"] = _u["position"]
             if _u is None or not _u["is_active"]:
                 session.clear()
                 flash("This account is no longer active. Contact your school admin.", "error")
@@ -1218,17 +1266,16 @@ def login():
                 return render_template("login.html")
             if requested_school_code and school and requested_school_code.lower() not in {str(school["school_code"] or "").lower(), str(school["tenant_id"] or "").lower()}:
                 conn.close(); flash("That School ID / Tenant ID does not match this account.", "error"); return render_template("login.html")
-            conn.close()
             if school and school["activation_status"] != "active":
-                flash("This school hasn't been activated yet.", "error"); return render_template("login.html")
+                conn.close(); flash("This school hasn't been activated yet.", "error"); return render_template("login.html")
             if school and school["is_archived"]:
-                flash("This school's account has been archived.", "error"); return render_template("login.html")
+                conn.close(); flash("This school's account has been archived.", "error"); return render_template("login.html")
             if school and school["is_suspended"]:
-                flash("This school's account has been suspended.", "error"); return render_template("login.html")
+                conn.close(); flash("This school's account has been suspended.", "error"); return render_template("login.html")
             if school and not subscription_login_allowed(school):
-                flash("This school's subscription or trial has expired.", "error"); return render_template("login.html")
+                conn.close(); flash("This school's subscription or trial has expired.", "error"); return render_template("login.html")
             if g.portal_school and (not school or school["id"] != g.portal_school["id"]):
-                flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error"); return render_template("login.html")
+                conn.close(); flash(f"That account isn't registered under {g.portal_school['name']}'s portal.", "error"); return render_template("login.html")
             verified_count=conn.execute("SELECT COUNT(*) AS n FROM parent_students WHERE parent_id=? AND school_id=? AND status='verified'",(parent["id"],parent["school_id"])).fetchone()["n"]
             conn.close()
             # Parent may sign in before a child is verified; student data remains inaccessible until a verified link exists.
@@ -1242,7 +1289,7 @@ def login():
             session["scope"] = "school"
             return redirect(url_for("parent_dashboard"))
         user = conn.execute(
-            "SELECT * FROM users WHERE username=? "
+            "SELECT * FROM users WHERE LOWER(username)=LOWER(?) "
             "OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) "
             "OR (phone IS NOT NULL AND phone=?)",
             (identifier, identifier, identifier),
@@ -1359,8 +1406,8 @@ def register_school():
             return render_template("register_school.html")
         conn=get_db()
         try:
-            tenant="TEN-"+secrets.token_hex(6).upper(); base=re.sub(r"[^A-Za-z0-9]+","",school_name.upper())[:18] or "SCHOOL"; code=base; n=2
-            while conn.execute("SELECT 1 FROM schools WHERE school_code=? OR tenant_id=?",(code,tenant)).fetchone(): code=base[:16]+str(n); n+=1
+            tenant="TEN-"+secrets.token_hex(6).upper(); code=generate_school_code(conn, school_name)
+            while conn.execute("SELECT 1 FROM schools WHERE tenant_id=?",(tenant,)).fetchone(): tenant="TEN-"+secrets.token_hex(6).upper()
             sid=conn.execute("INSERT INTO schools(name,registered_email,registered_phone,activation_status,tenant_id,school_code) VALUES(?,?,?,?,?,?)",(school_name,email,phone or None,"pending",tenant,code)).lastrowid
             conn.execute("INSERT INTO users(school_id,tenant_id,name,username,password_hash,role,first_login_required) VALUES(?,?,?,?,?,'admin',1)",(sid,tenant,admin_name,username,generate_password_hash(secrets.token_urlsafe(24))))
             conn.execute("INSERT INTO platform_activation_requests(school_id,status) VALUES (?, 'pending')",(sid,))
@@ -1397,6 +1444,9 @@ def register():
             full=" ".join(x for x in (first,last,other) if x)
             cur=conn.execute("INSERT INTO users(school_id,tenant_id,name,first_name,surname,other_names,username,password_hash,role,first_login_required,account_status,signup_status,activation_status) VALUES(?,?,?,?,?,?,?, ?,'teacher',1,'active','approved','active')",(row["school_id"],row["tenant_id"],full,first,last,other or None,username,generate_password_hash(password)))
             uid=cur.lastrowid
+            conn.execute("UPDATE users SET rbac_role='Teacher' WHERE id=?",(uid,))
+            _ra=conn.execute("INSERT INTO role_assignments(user_id,school_id,tenant_id,school_level,role,status,reason) VALUES(?,?,?,'All','Teacher','active','Default role on staff signup')",(uid,row["school_id"],row["tenant_id"])).lastrowid
+            for _perm in ROLE_CATALOG.get("Teacher",[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES(?,?,1)",(_ra,_perm))
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id) VALUES(?,?,?,?,?,?,?,?)",(uid,"staff","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id()))
             verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True)
             security_event(conn,"STAFF_SIGNUP_COMPLETED",details="Staff account created using school-issued signup code",resource_type="user",resource_id=uid,school_id=row["school_id"],tenant_id=row["tenant_id"])
@@ -1472,7 +1522,7 @@ def recover():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username,)).fetchone()
         conn.close()
         if not user or not user["security_question"]:
             flash("We couldn't find a recoverable account with that username. Ask your admin for help resetting it.", "error")
@@ -1666,16 +1716,14 @@ def admin_school():
                 "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
                 "result_accent_color=?, result_header_layout=?, "
                 "auto_teacher_comment=?, auto_principal_comment=?, "
-                "web_font=?, pdf_font=?, show_result_date=?, "
+                "web_font=?, pdf_font=?, "
                 "auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
-                "auth_show_school_name=?, auth_branding_enabled=?, show_form_teacher_name=?, show_form_teacher_signature=?, "
-                "show_principal_name=?, show_principal_signature=? WHERE id=?",
+                "auth_show_school_name=?, auth_branding_enabled=? WHERE id=?",
                 (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format,
                  result_accent_color, result_header_layout,
                  auto_teacher_comment, auto_principal_comment, web_font, pdf_font,
-                 show_result_date, auth_logo_opacity, auth_logo_position,
-                 auth_background_style, auth_show_school_name, auth_branding_enabled, show_form_teacher_name, show_form_teacher_signature,
-                 show_principal_name, show_principal_signature, school_id),
+                 auth_logo_opacity, auth_logo_position,
+                 auth_background_style, auth_show_school_name, auth_branding_enabled, school_id),
             )
             conn.commit()
             flash("School profile updated.", "success")
@@ -1852,7 +1900,7 @@ def update_my_username():
         conn.close()
         flash("That's already your username.", "error")
         return redirect(url_for("settings_hub"))
-    if conn.execute("SELECT 1 FROM users WHERE username=? AND id!=?", (new_username, session["user_id"])).fetchone():
+    if conn.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?) AND id!=?", (new_username, session["user_id"])).fetchone():
         conn.close()
         flash("That username is already taken — please choose another.", "error")
         return redirect(url_for("settings_hub"))
@@ -1943,6 +1991,9 @@ def staff_photo(user_id):
     staff = conn.execute("SELECT photo_filename, school_id FROM users WHERE id=?", (user_id,)).fetchone()
     conn.close()
     if not staff or staff["school_id"] != current_school_id() or not staff["photo_filename"]:
+        return "", 404
+    # A staff passport is personal data: only School Admin / Sub-Admin (and the person themself) may see it.
+    if session.get("role") not in ("admin", "sub_admin") and user_id != session.get("user_id"):
         return "", 404
     return send_from_directory(STAFF_PHOTOS_DIR, staff["photo_filename"])
 
@@ -2829,9 +2880,14 @@ def parent_profile(student_id):
             "WHERE c.school_id=? AND s.parent_email=? AND s.is_active=1 ORDER BY s.first_name",
             (school_id, student["parent_email"]),
         ).fetchall()
+    accounts = conn.execute(
+        "SELECT pa.id, pa.name, pa.username, pa.email, pa.phone, pa.photo_filename FROM parent_accounts pa "
+        "JOIN parent_students ps ON ps.parent_id=pa.id WHERE ps.student_id=? AND ps.school_id=? AND pa.school_id=? "
+        "AND ps.status='verified' AND ps.revoked_at IS NULL", (student_id, school_id, school_id)).fetchall()
     conn.close()
     return render_template(
         "parent_profile.html", student=student, siblings=siblings, student_full_name=student_full_name,
+        accounts=accounts, can_see_parent_photo=session["role"] in ("admin", "sub_admin"),
     )
 
 
@@ -2987,6 +3043,55 @@ def parent_dashboard():
             except Exception: analysis=None
         cards.append({"student":child,"analysis":analysis})
     conn.close(); return render_template("parent_dashboard.html",children=children,cards=cards)
+
+@app.route("/parents/<int:parent_id>/photo")
+def parent_photo(parent_id):
+    """Parent passport: School Admin / Sub-Admin of the same school, or the parent themself."""
+    if "school_id" not in session:
+        return "", 404
+    own = session.get("parent_id") == parent_id
+    if not own and session.get("role") not in ("admin", "sub_admin"):
+        return "", 404
+    conn = get_db()
+    row = conn.execute("SELECT photo_filename, school_id FROM parent_accounts WHERE id=?", (parent_id,)).fetchone()
+    conn.close()
+    if not row or row["school_id"] != session["school_id"] or not row["photo_filename"]:
+        return "", 404
+    return send_from_directory(PARENT_PHOTOS_DIR, row["photo_filename"])
+
+
+@app.route("/parent/profile", methods=["GET", "POST"])
+@parent_login_required
+def parent_my_profile():
+    conn = get_db()
+    me = conn.execute("SELECT * FROM parent_accounts WHERE id=? AND school_id=?", (session["parent_id"], session.get("school_id"))).fetchone()
+    if request.method == "POST":
+        file = request.files.get("photo")
+        if not file or not file.filename:
+            flash("Please choose an image file to upload.", "error")
+        else:
+            err = _reject_oversize(file, "passport") or _verify_image(file, 500 * 1024, "Passport photograph")
+            ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+            if not err and ext not in ALLOWED_LOGO_EXTENSIONS:
+                err = "Photo must be a PNG, JPG, or GIF image."
+            if err:
+                flash(err, "error")
+            else:
+                if me["photo_filename"]:
+                    old = os.path.join(PARENT_PHOTOS_DIR, me["photo_filename"])
+                    if os.path.exists(old):
+                        os.remove(old)
+                os.makedirs(PARENT_PHOTOS_DIR, exist_ok=True)
+                fn = f"parent_{me['id']}.{ext}"
+                file.save(os.path.join(PARENT_PHOTOS_DIR, fn))
+                conn.execute("UPDATE parent_accounts SET photo_filename=? WHERE id=? AND school_id=?", (fn, me["id"], me["school_id"]))
+                conn.commit()
+                flash("Passport photo updated.", "success")
+        conn.close()
+        return redirect(url_for("parent_my_profile"))
+    conn.close()
+    return render_template("parent_my_profile.html", me=me)
+
 
 @app.route("/parent/children")
 @parent_login_required
@@ -3401,7 +3506,7 @@ def admin_teachers():
             flash(message, "error")
             return redirect(url_for("admin_teachers"))
         name = request.form["name"].strip()
-        username = " ".join(request.form["username"].strip().split()).lower()
+        username = " ".join(request.form["username"].strip().split())  # keep the case the admin typed; uniqueness is checked case-insensitively
         email = request.form.get("email", "").strip() or None
         phone = request.form.get("phone", "").strip() or None
         password = request.form["password"]
@@ -3495,16 +3600,11 @@ def set_teacher_position(teacher_id):
         flash("Teacher not found.", "error")
         return redirect(url_for("admin_teachers"))
     rbac_role=request.form.get("rbac_role","Teacher").strip()
-    if rbac_role not in ROLE_CATALOG:
+    if rbac_role not in ROLE_CATALOG or rbac_role == "School Admin":
         conn.close(); flash("Not a valid RBAC role.","error"); return redirect(url_for("admin_teachers"))
-    position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer","Vice Principal / Deputy Principal":"vice_principal"}.get(rbac_role)
-    conn.execute("UPDATE users SET rbac_role=?,position=? WHERE id=?",(rbac_role,position,teacher_id))
-    ra=conn.execute("SELECT id FROM role_assignments WHERE user_id=? AND school_id=? AND status='active' ORDER BY id DESC LIMIT 1",(teacher_id,current_school_id())).fetchone()
-    if ra:
-        conn.execute("UPDATE role_assignments SET role=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(rbac_role,ra["id"]))
-        conn.execute("DELETE FROM role_assignment_permissions WHERE assignment_id=?",(ra["id"],))
-        for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra["id"],perm))
-    conn.commit(); conn.close(); flash("RBAC role updated.","success")
+    change_staff_role(conn, teacher_id, current_school_id(), rbac_role, session.get("user_id"), session.get("name"),
+                      reason="Role changed on staff list; active immediately")
+    conn.commit(); conn.close(); flash("Role updated and active immediately.","success")
     return redirect(url_for("admin_teachers"))
 
 
@@ -4783,6 +4883,21 @@ def my_class_edit_student(class_id, student_id):
 
 # ---------- score entry (teacher) ----------
 
+SCORE_ENTRY_ROLES = {"Teacher", "Subject Teacher", "Class Teacher / Form Teacher", "HOD / Head of Department", "HOD",
+                     "Examination Officer", "Examination/Result Officer", "Vice Principal / Deputy Principal", "Vice Principal",
+                     "Deputy Head", "Principal", "Head Teacher", "Discipline Master", "Sub-Admin", "School Admin"}
+
+
+def may_enter_scores():
+    """A staff account can enter scores only while its CURRENT active role is a teaching/academic one.
+    (So a Teacher who is re-assigned as Librarian stops being able to enter scores at once, even if an old
+    class-subject assignment still names them.) School Admin / Sub-Admin accounts are always allowed."""
+    if session.get("role") != "teacher":
+        return True
+    role = canonical_rbac_role(session.get("rbac_role")) or "Teacher"
+    return role in SCORE_ENTRY_ROLES
+
+
 @app.route("/scores/<int:class_id>/<int:subject_id>", methods=["GET", "POST"])
 @login_required()
 def score_entry(class_id, subject_id):
@@ -4801,7 +4916,7 @@ def score_entry(class_id, subject_id):
         return redirect(url_for("dashboard"))
     level = class_row["level"] if "level" in class_row.keys() else None
     needed = "edit" if request.method == "POST" else "view"
-    if not can_access_scope(session.get("user_id"), current_school_id(), needed,
+    if not may_enter_scores() or not can_access_scope(session.get("user_id"), current_school_id(), needed,
                             school_level=level, class_id=class_id, subject_id=subject_id):
         conn.close()
         flash("You do not have permission for this class and subject.", "error")
@@ -4932,7 +5047,7 @@ def score_csv_upload(class_id, subject_id):
         flash("Class, subject, or active term not found.", "error")
         return redirect(url_for("dashboard"))
     level = class_row["level"] if "level" in class_row.keys() else None
-    if not can_access_scope(session.get("user_id"), current_school_id(), "edit", school_level=level, class_id=class_id, subject_id=subject_id):
+    if not may_enter_scores() or not can_access_scope(session.get("user_id"), current_school_id(), "edit", school_level=level, class_id=class_id, subject_id=subject_id):
         conn.close()
         flash("You do not have permission for this class and subject.", "error")
         return redirect(url_for("dashboard"))
@@ -5195,6 +5310,55 @@ def broadsheet(class_id):
     )
 
 
+@app.route("/broadsheet/<int:class_id>/print")
+@login_required()
+def broadsheet_print(class_id):
+    """Print-only broadsheet: a standalone landscape A4 page with no sidebar, menus, buttons or dashboard."""
+    conn = get_db()
+    denied = require_class_result_access(conn, class_id)
+    if denied:
+        conn.close()
+        return denied
+    term = resolve_term(conn, request.args.get("term_id", type=int))
+    if not term:
+        conn.close()
+        flash("No term set yet.", "error")
+        return redirect(url_for("dashboard"))
+    subjects, rows = build_broadsheet_data(conn, class_id, term["id"])
+    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, current_school_id())).fetchone()
+    rs = result_sheet_settings(conn, current_school_id())
+    conn.close()
+    return render_template("broadsheet_print.html", kind="term", title="Broadsheet", subjects=subjects, rows=rows,
+                           class_row=class_row, subtitle=f"{term['session_name']} — {term['name']}", logo=rs["logo"],
+                           school_name=rs["school_name"], student_full_name=student_full_name,
+                           back_url=url_for("broadsheet", class_id=class_id, term_id=term["id"]),
+                           autoprint=bool(request.args.get("auto")))
+
+
+@app.route("/cumulative/<int:class_id>/print")
+@login_required()
+def cumulative_broadsheet_print(class_id):
+    conn = get_db()
+    denied = require_class_result_access(conn, class_id) or require_cumulative_enabled(conn)
+    if denied:
+        conn.close()
+        return denied
+    session_row = resolve_session(conn, request.args.get("session_id", type=int))
+    if not session_row:
+        conn.close()
+        flash("No academic session set up yet.", "error")
+        return redirect(url_for("dashboard"))
+    subjects, terms, rows = build_cumulative_broadsheet_data(conn, class_id, session_row["id"])
+    class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, current_school_id())).fetchone()
+    rs = result_sheet_settings(conn, current_school_id())
+    conn.close()
+    return render_template("broadsheet_print.html", kind="cumulative", title="Annual / Cumulative Broadsheet", subjects=subjects,
+                           rows=rows, class_row=class_row, subtitle=session_row["name"], logo=rs["logo"],
+                           school_name=rs["school_name"], student_full_name=student_full_name,
+                           back_url=url_for("cumulative_broadsheet", class_id=class_id, session_id=session_row["id"]),
+                           autoprint=bool(request.args.get("auto")))
+
+
 @app.route("/broadsheet/<int:class_id>/pdf")
 @login_required()
 def broadsheet_pdf(class_id):
@@ -5366,24 +5530,53 @@ def ordinal_text(n):
 
 
 def result_sheet_settings(conn, school_id):
+    """Everything the result sheet needs from School Setup -> Result Display Settings.
+    `rs["d"]` holds the on/off switches (see result_display.py); the HTML sheet, print page and PDF
+    all read it, so a setting can never apply to one and not the others."""
+    import result_display as RD
     sc = get_school(conn, school_id)
     k = sc.keys() if sc else []
     g = lambda name, default=None: (sc[name] if sc is not None and name in k and sc[name] is not None else default)
+    d = RD.display_settings(sc)
     logo = None
-    if sc is not None and g("logo_filename"):
-        logo = _file_data_uri(os.path.join(INSTANCE_DIR, sc["logo_filename"]))
+    logo_path = None
+    if sc is not None and g("logo_filename") and d["logo"]:
+        logo_path = os.path.join(INSTANCE_DIR, sc["logo_filename"])
+        logo = _file_data_uri(logo_path)
+        if not logo:
+            logo_path = None
     contact = " · ".join(x for x in (g("school_address"), g("registered_phone"), g("registered_email")) if x)
+    tmpl = g("result_template", "classic")
     return {
-        "school_name": g("name", ""), "tagline": g("school_tagline"), "logo": logo,
-        "show_overall_position": bool(g("show_overall_position", 1)), "show_subject_position": bool(g("show_subject_position", 0)),
-        "template": g("result_template", "classic") if g("result_template", "classic") in ("classic", "modern", "compact", "detailed") else "classic",
+        "d": d, "school_name": g("name", ""), "tagline": g("school_tagline"), "logo": logo, "logo_path": logo_path,
+        "show_overall_position": d["overall_position"], "show_subject_position": d["subject_position"],
+        "template": tmpl if tmpl in RD.TEMPLATE_KEYS else "classic",
         "title": g("result_title") or "Terminal Report Sheet", "footer": g("result_footer_text"),
-        "watermark": (g("result_watermark_text") or g("name", "")) if g("result_show_watermark", 0) else None,
-        "show_passport": bool(g("result_show_passport", 1)), "show_contact": bool(g("result_show_contact", 1)), "contact": contact,
-        "show_grading_key": bool(g("result_show_grading_key", 1)), "show_promotion": bool(g("result_show_promotion", 1)),
+        "watermark": (g("result_watermark_text") or g("name", "")) if d["watermark"] else None,
+        "show_passport": d["passport"], "show_contact": d["contact"], "contact": contact,
+        "show_grading_key": d["grading_key"], "show_promotion": d["promotion"],
         "accent": g("result_accent_color") or "#1f3a5f", "secondary": g("result_secondary_color") or "#c9a227",
         "header_layout": g("result_header_layout", "logo-left"), "signature_layout": g("result_signature_layout", "split"),
     }
+
+
+def attendance_for_result(conn, student_id, term_id, info):
+    """Days opened / present / absent for one result.
+    The daily roll call is the source of truth: when it has records for this student and term the
+    figures come straight from it (so nobody types them twice). Otherwise the manually entered values
+    are used. Present + Absent always equals Days School Opened."""
+    r = conn.execute(
+        "SELECT COUNT(*) n, SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) p, "
+        "SUM(CASE WHEN status='absent' THEN 1 ELSE 0 END) a FROM attendance_records WHERE student_id=? AND term_id=? AND COALESCE(is_deleted,0)=0",
+        (student_id, term_id)).fetchone()
+    if r and r["n"]:
+        return {"opened": r["n"], "present": r["p"] or 0, "absent": r["a"] or 0, "source": "roll_call"}
+    if info is not None:
+        ks = info.keys()
+        if "days_school_opened" in ks and info["days_school_opened"] is not None:
+            return {"opened": info["days_school_opened"], "present": info["days_present"],
+                    "absent": info["days_absent"], "source": "manual"}
+    return {"opened": None, "present": None, "absent": None, "source": None}
 
 
 def build_result_data(conn, student_id, term_id):
@@ -5484,14 +5677,17 @@ def build_result_data(conn, student_id, term_id):
         fallback=conn.execute("SELECT u.id,u.name,u.signature_filename,u.use_digital_signature FROM users u WHERE u.school_id=? AND u.role='teacher' AND (u.rbac_role IN ('Principal','Head Teacher') OR u.position IN ('principal')) AND COALESCE(u.is_active,1)=1 ORDER BY u.id LIMIT 1",(school_id,)).fetchone()
         if fallback:
             info=dict(info); info["principal_signed_by"]=fallback["id"]
-    teacher_signature_user = _signature_user("teacher_signed_by") if (not school or school["show_form_teacher_signature"] if "show_form_teacher_signature" in school.keys() else True) else None
-    principal_signature_user = _signature_user("principal_signed_by") if (not school or school["show_principal_signature"] if "show_principal_signature" in school.keys() else True) else None
-    teacher_name = teacher_signature_user["name"] if teacher_signature_user and (not school or school["show_form_teacher_name"] if "show_form_teacher_name" in school.keys() else True) else None
-    principal_name = principal_signature_user["name"] if principal_signature_user and (not school or school["show_principal_name"] if "show_principal_name" in school.keys() else True) else None
+    _d = result_sheet_settings(conn, school_id)["d"]
+    teacher_signature_user = _signature_user("teacher_signed_by") if _d["teacher_signature"] else None
+    principal_signature_user = _signature_user("principal_signed_by") if _d["principal_signature"] else None
+    teacher_name = teacher_signature_user["name"] if teacher_signature_user and _d["teacher_name"] else None
+    principal_name = principal_signature_user["name"] if principal_signature_user and _d["principal_name"] else None
 
     rs = result_sheet_settings(conn, school_id)
-    rs["passport_path"] = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"]) if student["photo_filename"] and rs["show_passport"] else None
+    # Passport: shown only when the setting is ON *and* the student has an uploaded photo. No photo -> a
+    # blank passport area (never an avatar, initial, silhouette or placeholder).
     rs["passport"] = _file_data_uri(os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])) if student["photo_filename"] and rs["show_passport"] else None
+    rs["passport_path"] = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"]) if rs["passport"] else None
     rs["teacher_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"])) if teacher_signature_user else None
     rs["principal_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"])) if principal_signature_user else None
     rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
@@ -5509,16 +5705,17 @@ def build_result_data(conn, student_id, term_id):
         "subjects_written": subjects_written,
         "show_ca3": ca3_enabled(conn.execute(
             "SELECT ca3_max FROM grading_config WHERE school_id=? LIMIT 1", (school_id,)).fetchone()),
-        "result_date": format_dmy(datetime.date.today().isoformat()) if school and school["show_result_date"] else None,
+        # The date saved on this student's result (never "today" and never an automatic issue date).
+        "result_date": (format_dmy(info["result_date"]) if info is not None and "result_date" in info.keys() and info["result_date"] and _d["result_date"] else None),
+        "result_date_raw": (info["result_date"] if info is not None and "result_date" in info.keys() else None),
+        "attendance": attendance_for_result(conn, student_id, term_id, info),
         "teacher_signature_user": teacher_signature_user,
         "principal_signature_user": principal_signature_user,
         "teacher_signature_path": os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"]) if teacher_signature_user else None,
         "principal_signature_path": os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"]) if principal_signature_user else None,
         "teacher_name": teacher_name, "principal_name": principal_name,
-        "show_form_teacher_name": bool(school["show_form_teacher_name"]) if school and "show_form_teacher_name" in school.keys() else True,
-        "show_form_teacher_signature": bool(school["show_form_teacher_signature"]) if school and "show_form_teacher_signature" in school.keys() else True,
-        "show_principal_name": bool(school["show_principal_name"]) if school and "show_principal_name" in school.keys() else True,
-        "show_principal_signature": bool(school["show_principal_signature"]) if school and "show_principal_signature" in school.keys() else True,
+        "show_form_teacher_name": _d["teacher_name"], "show_form_teacher_signature": _d["teacher_signature"],
+        "show_principal_name": _d["principal_name"], "show_principal_signature": _d["principal_signature"],
     }
 
 
@@ -5553,10 +5750,11 @@ def result(student_id):
             "SELECT * FROM skill_traits WHERE school_id=? AND category=? AND COALESCE(is_active,1)=1 ORDER BY sort_order, name", (current_school_id(), d["domain_key"]))]
         if items:
             rating_groups.append({"label": d["label"], "items": items})
+    edit_perm = result_edit_permissions(conn, historical_class_id)
     conn.close()
     return render_template(
         "result.html", term=term, all_traits=all_traits, student_full_name=student_full_name,
-        all_terms=all_terms, rating_groups=rating_groups, **data
+        all_terms=all_terms, rating_groups=rating_groups, edit_perm=edit_perm, **data
     )
 
 
@@ -5737,6 +5935,25 @@ def email_result(student_id):
     return redirect(url_for("result", student_id=student_id))
 
 
+def result_edit_permissions(conn, class_id):
+    """Who may change which part of a result. Teacher comment and Principal comment are separate fields
+    with separate permissions: a class teacher cannot write the principal's comment (or sign date) and
+    vice versa. The role is read from the current session, which is refreshed from the database on every
+    request, so a role change by the School Admin applies immediately."""
+    role = session.get("role")
+    pos = session.get("position") or ""
+    rbac = canonical_rbac_role(session.get("rbac_role")) or ""
+    admin = role in ("admin", "sub_admin")
+    principal = admin or rbac in ("Principal", "Head Teacher", "Vice Principal", "Vice Principal / Deputy Principal") \
+        or pos in ("principal", "vice_principal")
+    is_ft = False
+    if role == "teacher" and class_id:
+        is_ft = int(class_id) in set(form_teacher_class_ids(conn, session.get("user_id")))
+    can_ft = admin or principal or is_ft
+    return {"teacher": can_ft, "principal": principal, "attendance": can_ft, "date": can_ft, "promotion": can_ft,
+            "ratings": can_ft, "any": can_ft}
+
+
 @app.route("/result/<int:student_id>/extra", methods=["POST"])
 @login_required()
 def result_extra(student_id):
@@ -5755,66 +5972,101 @@ def result_extra(student_id):
         conn.close()
         flash("That term does not belong to your school.", "error")
         return redirect(url_for("result", student_id=student_id))
-    promotion_status = (request.form.get("promotion_status", "") or "").strip()[:80] or None
-    days_present = int(request.form.get("days_present") or 0)
-    days_absent = int(request.form.get("days_absent") or 0)
-    days_school_opened = int(request.form.get("days_school_opened") or 0)
-
-    if days_present < 0 or days_absent < 0 or days_school_opened < 0:
+    back = url_for("result", student_id=student_id, term_id=term_id)
+    perm = result_edit_permissions(conn, student_class_for_term(conn, student_id, term_id))
+    if not perm["any"]:
         conn.close()
-        flash("Attendance figures can't be negative.", "error")
-        return redirect(url_for("result", student_id=student_id))
-    if days_present + days_absent > days_school_opened:
-        conn.close()
-        flash(
-            f"Invalid attendance: Present ({days_present}) + Absent ({days_absent}) = "
-            f"{days_present + days_absent}, which is more than Days School Opened ({days_school_opened}). "
-            "Please correct the figures before saving.",
-            "error",
-        )
-        return redirect(url_for("result", student_id=student_id))
+        flash("You do not have permission to change this result.", "error")
+        return redirect(back)
+    existing = conn.execute("SELECT * FROM student_term_info WHERE student_id=? AND term_id=?", (student_id, term_id)).fetchone()
+    cur = dict(existing) if existing else {}
 
-    existing = conn.execute(
-        "SELECT teacher_signed_by, principal_signed_by FROM student_term_info WHERE student_id=? AND term_id=?",
-        (student_id, term_id),
-    ).fetchone()
-    teacher_signed_date = request.form.get("teacher_signed_date", "").strip() or None
-    principal_signed_date = request.form.get("principal_signed_date", "").strip() or None
-    # Whoever is saving a signed date is credited as that signer — but only
-    # if their own role matches (a subject teacher saving a date can never
-    # end up recorded as the principal's signature, or vice versa).
-    teacher_signed_by = existing["teacher_signed_by"] if existing else None
-    if teacher_signed_date and session.get("role") == "teacher":
-        teacher_signed_by = session["user_id"]
-    principal_signed_by = existing["principal_signed_by"] if existing else None
-    if principal_signed_date and (
-        session.get("role") in ("admin", "sub_admin") or session.get("position") in ("principal", "vice_principal")
-    ):
-        principal_signed_by = session["user_id"]
+    def keep(field, default=None):
+        return cur.get(field, default)
+
+    def whole_number(name):
+        raw = (request.form.get(name) or "").strip()
+        if raw == "":
+            return None
+        if not re.fullmatch(r"-?\d{1,4}", raw):
+            raise ValueError(f"{name.replace('_', ' ').title()} must be a whole number.")
+        return int(raw)
+
+    # --- attendance: only when the roll call has nothing for this student/term (otherwise it is automatic) ---
+    roll = conn.execute("SELECT COUNT(*) n FROM attendance_records WHERE student_id=? AND term_id=? AND COALESCE(is_deleted,0)=0", (student_id, term_id)).fetchone()["n"]
+    days_opened, days_present, days_absent = keep("days_school_opened"), keep("days_present"), keep("days_absent")
+    attendance_source = keep("attendance_source")
+    if perm["attendance"] and not roll and any(k in request.form for k in ("days_school_opened", "days_present", "days_absent")):
+        try:
+            o, p_, a_ = whole_number("days_school_opened"), whole_number("days_present"), whole_number("days_absent")
+        except ValueError as exc:
+            conn.close(); flash(str(exc), "error"); return redirect(back)
+        if o is not None or p_ is not None or a_ is not None:
+            o, p_, a_ = (o or 0), (p_ or 0), (a_ or 0)
+            if o < 0 or p_ < 0 or a_ < 0:
+                conn.close(); flash("Attendance figures can't be negative.", "error"); return redirect(back)
+            if p_ > o:
+                conn.close(); flash(f"Invalid attendance: Days Present ({p_}) cannot be more than Days School Opened ({o}).", "error"); return redirect(back)
+            if a_ > o:
+                conn.close(); flash(f"Invalid attendance: Days Absent ({a_}) cannot be more than Days School Opened ({o}).", "error"); return redirect(back)
+            if p_ + a_ != o:
+                conn.close()
+                flash(f"Attendance figures do not agree: Days Present ({p_}) + Days Absent ({a_}) = {p_ + a_}, "
+                      f"but Days School Opened is {o}. They must add up exactly.", "error")
+                return redirect(back)
+            days_opened, days_present, days_absent, attendance_source = o, p_, a_, "manual"
+
+    promotion_status = keep("promotion_status")
+    if perm["promotion"] and "promotion_status" in request.form:
+        promotion_status = (request.form.get("promotion_status", "") or "").strip()[:80] or None
+
+    # --- teacher part: comment + sign date (never touched by someone without the teacher permission) ---
+    teacher_comment, teacher_signed_date, teacher_signed_by = keep("teacher_comment"), keep("teacher_signed_date"), keep("teacher_signed_by")
+    if perm["teacher"] and "teacher_comment" in request.form:
+        teacher_comment = request.form.get("teacher_comment", "").strip()[:1000]
+    if perm["teacher"] and "teacher_signed_date" in request.form:
+        new_td = request.form.get("teacher_signed_date", "").strip() or None
+        if new_td and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_td):
+            conn.close(); flash("Teacher sign date is not a valid date.", "error"); return redirect(back)
+        teacher_signed_date = new_td
+        if new_td and session.get("role") == "teacher":
+            teacher_signed_by = session["user_id"]
+
+    # --- principal part: its OWN comment field, its OWN sign date, its OWN permission ---
+    principal_comment, principal_signed_date, principal_signed_by = keep("principal_comment"), keep("principal_signed_date"), keep("principal_signed_by")
+    if perm["principal"] and "principal_comment" in request.form:
+        principal_comment = request.form.get("principal_comment", "").strip()[:1000]
+    if perm["principal"] and "principal_signed_date" in request.form:
+        new_pd = request.form.get("principal_signed_date", "").strip() or None
+        if new_pd and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_pd):
+            conn.close(); flash("Principal sign date is not a valid date.", "error"); return redirect(back)
+        principal_signed_date = new_pd
+        if new_pd:
+            principal_signed_by = session["user_id"]
+
+    # --- result date: stored per student per term so it survives saving and reopening ---
+    result_date = keep("result_date")
+    if perm["date"] and "result_date" in request.form:
+        new_rd = request.form.get("result_date", "").strip() or None
+        if new_rd and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_rd):
+            conn.close(); flash("Result date is not a valid date.", "error"); return redirect(back)
+        result_date = new_rd
 
     conn.execute(
-        "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, "
-        "days_school_opened, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date, "
-        "teacher_signed_by, principal_signed_by, promotion_status) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) "
-        "ON CONFLICT(student_id, term_id) DO UPDATE SET "
-        "days_present=excluded.days_present, days_absent=excluded.days_absent, "
-        "days_school_opened=excluded.days_school_opened, "
+        "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, days_school_opened, attendance_source, "
+        "teacher_comment, principal_comment, teacher_signed_date, principal_signed_date, teacher_signed_by, principal_signed_by, "
+        "promotion_status, result_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(student_id, term_id) DO UPDATE SET days_present=excluded.days_present, days_absent=excluded.days_absent, "
+        "days_school_opened=excluded.days_school_opened, attendance_source=excluded.attendance_source, "
         "teacher_comment=excluded.teacher_comment, principal_comment=excluded.principal_comment, "
         "teacher_signed_date=excluded.teacher_signed_date, principal_signed_date=excluded.principal_signed_date, "
-        "teacher_signed_by=excluded.teacher_signed_by, principal_signed_by=excluded.principal_signed_by, promotion_status=excluded.promotion_status",
-        (
-            student_id, term_id, days_present, days_absent, days_school_opened,
-            request.form.get("teacher_comment", ""),
-            request.form.get("principal_comment", ""),
-            teacher_signed_date,
-            principal_signed_date,
-            teacher_signed_by,
-            principal_signed_by,
-            promotion_status,
-        ),
+        "teacher_signed_by=excluded.teacher_signed_by, principal_signed_by=excluded.principal_signed_by, "
+        "promotion_status=excluded.promotion_status, result_date=excluded.result_date",
+        (student_id, term_id, days_present if days_present is not None else 0, days_absent if days_absent is not None else 0,
+         days_opened if days_opened is not None else 0, attendance_source, teacher_comment, principal_comment,
+         teacher_signed_date, principal_signed_date, teacher_signed_by, principal_signed_by, promotion_status, result_date),
     )
-    all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? AND COALESCE(is_active,1)=1", (current_school_id(),)).fetchall()
+    all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? AND COALESCE(is_active,1)=1", (current_school_id(),)).fetchall() if perm["ratings"] else []
     for trait in all_traits:
         val = request.form.get(f"trait_{trait['id']}")
         if val and val.isdigit() and 1 <= int(val) <= 5:
@@ -5827,7 +6079,7 @@ def result_extra(student_id):
     conn.commit()
     conn.close()
     flash("Report card details updated.", "success")
-    return redirect(url_for("result", student_id=student_id))
+    return redirect(back)
 
 
 @app.route("/class/<int:class_id>/results")
@@ -7991,18 +8243,7 @@ def platform_new_school():
             while conn.execute("SELECT 1 FROM schools WHERE tenant_id=?", (tenant_id,)).fetchone():
                 tenant_id = "TEN-" + secrets.token_hex(6).upper()
 
-            code_base = re.sub(r"[^A-Za-z0-9]+", "", school_name.upper())[:18] or "SCHOOL"
-            code = code_base
-            n = 2
-            while conn.execute("SELECT 1 FROM schools WHERE school_code=?", (code,)).fetchone():
-                suffix = str(n)
-                code = code_base[:max(1, 18-len(suffix))] + suffix
-                n += 1
-                if n > 100000:
-                    code = code_base[:10] + "-" + secrets.token_hex(4).upper()
-                    while conn.execute("SELECT 1 FROM schools WHERE school_code=?", (code,)).fetchone():
-                        code = code_base[:10] + "-" + secrets.token_hex(4).upper()
-                    break
+            code = generate_school_code(conn, school_name)
 
             cur = conn.execute(
                 "INSERT INTO schools (name, registered_email, activation_status, tenant_id, school_code, subscription_plan, subscription_status, trial_started_at, trial_ends_at) VALUES (?,?, 'pending', ?, ?, 'trial', 'trial', ?, ?)",
@@ -8198,7 +8439,7 @@ def activate_school():
         confirm = request.form.get("confirm_password", "")
 
         conn = get_db()
-        user = conn.execute("SELECT * FROM users WHERE username=? AND role='admin'", (username,)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?) AND role='admin'", (username,)).fetchone()
         if not user:
             conn.close()
             flash("No pending school admin account found with that username.", "error")
@@ -8608,9 +8849,16 @@ def admin_roles():
         FROM role_assignments ra JOIN users u ON u.id=ra.user_id
         WHERE ra.school_id=? ORDER BY ra.id DESC
     """,(sid,)).fetchall()
+    # Saved permissions per assignment (the checkboxes must show what is really granted).
+    granted = {}
+    for r in conn.execute("""SELECT rap.assignment_id, rap.permission FROM role_assignment_permissions rap
+                             JOIN role_assignments ra ON ra.id=rap.assignment_id
+                             WHERE ra.school_id=? AND rap.granted=1""", (sid,)).fetchall():
+        granted.setdefault(r["assignment_id"], set()).add(r["permission"])
     conn.close()
     return render_template("admin_roles.html", users=users, assignments=assignments,
-                           roles=assignable_roles(), levels=SCHOOL_LEVELS)
+                           roles=assignable_roles(), levels=SCHOOL_LEVELS,
+                           ROLE_CATALOG=ROLE_CATALOG, granted=granted)
 
 @app.route("/admin/roles", methods=["POST"])
 @login_required("admin")
@@ -8628,6 +8876,12 @@ def admin_role_assign():
     school = conn.execute("SELECT * FROM schools WHERE id=?",(sid,)).fetchone()
     if not user:
         conn.close(); flash("User not found in your school.", "error"); return redirect(url_for("admin_roles"))
+    if user["role"] == "teacher":
+        change_staff_role(conn, user_id, sid, role, session["user_id"], session.get("name"), school_level=level,
+                          reason=reason or "Assigned by School Admin")
+        conn.commit(); conn.close()
+        flash("Role changed and active immediately.", "success")
+        return redirect(url_for("admin_roles"))
     cur = conn.execute("""
         INSERT INTO role_assignments
         (user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at,reason)
@@ -8935,7 +9189,7 @@ def admin_theme():
         show_form_teacher_signature=1 if request.form.get("show_form_teacher_signature","1") == "1" else 0
         show_principal_name=1 if request.form.get("show_principal_name","1") == "1" else 0
         show_principal_signature=1 if request.form.get("show_principal_signature","1") == "1" else 0
-        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,school_tagline=?,result_accent_color=?,result_header_layout=?,auth_logo_opacity=?,auth_logo_position=?,auth_background_style=?,auth_show_school_name=?,auth_branding_enabled=?,show_form_teacher_name=?,show_form_teacher_signature=?,show_principal_name=?,show_principal_signature=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),request.form.get("school_tagline","").strip()[:120],result_accent,result_header,auth_logo_opacity,auth_logo_position,auth_background_style,auth_show_school_name,auth_branding_enabled,show_form_teacher_name,show_form_teacher_signature,show_principal_name,show_principal_signature,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
+        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,school_tagline=?,auth_logo_opacity=?,auth_logo_position=?,auth_background_style=?,auth_show_school_name=?,auth_branding_enabled=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),request.form.get("school_tagline","").strip()[:120],auth_logo_opacity,auth_logo_position,auth_background_style,auth_show_school_name,auth_branding_enabled,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
     conn.close(); return render_template("theme_branding.html",school=school,presets=presets)
 
 

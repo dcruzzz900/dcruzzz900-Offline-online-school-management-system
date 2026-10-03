@@ -108,15 +108,30 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
     return buf
 
 
+def _default_display():
+    import result_display as RD
+    return {f[1]: bool(f[4]) for f in RD.FIELDS}
+
+
+def _sig_image(sig, fallback_text, normal, cm_h=1.1 * cm):
+    """Signature picture (aspect ratio kept) or a blank signing line."""
+    if sig and sig.get("path") and os.path.exists(sig["path"]):
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(sig["path"]) as im:
+                im.load(); w, h = im.size
+            return Image(sig["path"], width=cm_h * (w / h), height=cm_h)
+        except Exception:
+            pass
+    return Paragraph(fallback_text, normal)
+
+
 def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#1f3a5f",
                       name_align=None, teacher_signature=None, principal_signature=None):
-    """Builds the flowable elements for one student's terminal result —
-    shared by the single-student PDF and the whole-class PDF.
-    teacher_signature/principal_signature, if given, are dicts with
-    "path" (image file) and "name" (signer's name) — used only when that
-    specific signer has uploaded a signature AND turned on automatic
-    stamping; otherwise a blank line is left for a manual signature, exactly
-    as before."""
+    """Flowables for one student's terminal result (single-student PDF and whole-class PDF).
+
+    Every on/off decision comes from data["rs"]["d"] -- the same School Setup -> Result Display Settings
+    that drive the on-screen sheet and the print page -- so the three outputs always agree."""
     section_style = ParagraphStyle("section", parent=styles["Heading3"])
     regular = styles["Normal"].fontName
     bold = styles["Heading1"].fontName
@@ -126,33 +141,52 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
 
     rs = data.get("rs") or {}
+    d = {**_default_display(), **(rs.get("d") or {})}
+    if "d" in rs:
+        logo_path = rs.get("logo_path")          # None when "Show School Logo" is off or no logo was uploaded
     accent_color = rs.get("accent") or accent_color
     template = rs.get("template", "classic")
     compact = template == "compact"
+    sub_bits = []
+    if d["session"]:
+        sub_bits.append(str(term["session_name"]))
+    if d["term"]:
+        sub_bits.append(str(term["name"]))
     elements = _header_elements(
         school_name, logo_path, (rs.get("title") or "Terminal Report Sheet").upper(),
-        f"{term['session_name']} &mdash; {term['name']}",
-        styles, accent_color=accent_color, name_align=name_align,
+        " &mdash; ".join(sub_bits), styles, accent_color=accent_color, name_align=name_align,
     )
-    if rs.get("show_contact") and rs.get("contact"):
+    if d["contact"] and rs.get("contact"):
         elements.append(Paragraph(rs["contact"].replace("&", "&amp;"), ParagraphStyle(
             "contactLine", parent=styles["Normal"], alignment=TA_CENTER, fontSize=8, textColor=colors.grey)))
         elements.append(Spacer(1, 0.15 * cm))
     if data.get("result_date"):
         elements.append(Paragraph(f"Date: {data['result_date']}", ParagraphStyle(
-            "resultDate", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9, textColor=colors.grey,
-        )))
+            "resultDate", parent=styles["Normal"], alignment=TA_CENTER, fontSize=9, textColor=colors.grey)))
         elements.append(Spacer(1, 0.2 * cm))
 
-    show_overall = rs.get("show_overall_position", True)
-    show_subj_pos = bool(rs.get("show_subject_position", False))
-    info_rows = [
-        ["Name:", name, "Adm./Reg. No.:", student["admission_no"]],
-        ["Class / Arm:", class_row["name"], "Session / Term:", f"{term['session_name']} / {term['name']}"],
-        ["Total Score:", str(data["total"]), "Average:", str(data["average"])],
-        ["No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}",
-         "Overall Position:" if show_overall else "", (f"{data.get('position_text', data['position'])} of {data['class_size']}") if show_overall else ""],
-    ]
+    cells = [("Name:", name)]
+    if d["admission_no"]:
+        cells.append(("Adm./Reg. No.:", student["admission_no"]))
+    if d["class"]:
+        cells.append(("Class / Arm:", class_row["name"]))
+    if d["session"] or d["term"]:
+        cells.append(("Session / Term:" if d["session"] and d["term"] else ("Session:" if d["session"] else "Term:"),
+                      " / ".join(sub_bits)))
+    if d["score"]:
+        cells += [("Total Score:", str(data["total"])), ("Average:", str(data["average"]))]
+    cells.append(("No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}"))
+    if d["overall_position"]:
+        cells.append(("Overall Position:", f"{data.get('position_text', data['position'])} of {data['class_size']}"))
+    info_rows = []
+    for k in range(0, len(cells), 2):
+        pair = cells[k:k + 2]
+        row = []
+        for lab, val in pair:
+            row += [lab, val]
+        while len(row) < 4:
+            row.append("")
+        info_rows.append(row)
     info_table = Table(info_rows, colWidths=[3 * cm, 5 * cm, 3.5 * cm, 5.5 * cm])
     info_table.setStyle(TableStyle([
         ("FONTSIZE", (0, 0), (-1, -1), 9),
@@ -161,33 +195,60 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         ("FONTNAME", (2, 0), (2, -1), bold),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
-    passport_path = rs.get("passport_path")
-    if passport_path and os.path.exists(passport_path):
-        try:
-            pp = Image(passport_path, width=2.4 * cm, height=3 * cm)
-            wrapper = Table([[info_table, pp]], colWidths=[17 * cm, 2.6 * cm])
-            wrapper.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-            elements.append(wrapper)
-        except Exception:
-            elements.append(info_table)
+    passport_path = rs.get("passport_path") if d["passport"] else None
+    if d["passport"]:
+        # Passport area is reserved whenever the setting is ON. With a photo it is filled; with none it stays
+        # blank -- never an avatar, initial, silhouette or placeholder.
+        pp = ""
+        if passport_path and os.path.exists(passport_path):
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(passport_path) as im:
+                    im.load(); w, h = im.size
+                box_w, box_h = 2.4 * cm, 3 * cm
+                r = min(box_w / w, box_h / h)
+                pp = Image(passport_path, width=w * r, height=h * r)
+            except Exception:
+                pp = ""
+        wrapper = Table([[info_table, pp]], colWidths=[17 * cm, 2.6 * cm])
+        wrapper.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+        elements.append(wrapper)
     else:
         elements.append(info_table)
     elements.append(Spacer(1, 0.4 * cm if compact else 0.5 * cm))
 
     elements.append(Paragraph("Academic Performance", section_style))
-    show_ca3 = bool(data.get("show_ca3"))
-    with_remark = not compact
-    subj_header = ["Subject", "CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total", "Grade"] + (["Position"] if show_subj_pos else []) + (["Remark"] if with_remark else [])
-    subj_data = [subj_header]
-    for s in data["subjects"]:
-        subj_data.append([s["name"], str(s["ca1"]), str(s["ca2"])] + ([str(s.get("ca3", "-"))] if show_ca3 else []) +
-                          [str(s["exam"]), str(s["total"]), str(s["grade"])] + ([str(s.get("position_text", "-"))] if show_subj_pos else []) +
-                          ([str(s["remark"])] if with_remark else []))
-    n_num = 5 + (1 if show_ca3 else 0) + (1 if show_subj_pos else 0)
+    show_ca3 = bool(data.get("show_ca3")) and d["score"]
+    show_subj_pos = d["subject_position"]
+    with_remark = d["remarks"] and not compact
+    header = ["Subject"]
+    if d["score"]:
+        header += ["CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total"]
+    if d["grade"]:
+        header.append("Grade")
+    if show_subj_pos:
+        header.append("Position")
+    if with_remark:
+        header.append("Remark")
+    subj_data = [header]
+    for s_ in data["subjects"]:
+        row = [s_["name"]]
+        if d["score"]:
+            row += [str(s_["ca1"]), str(s_["ca2"])] + ([str(s_.get("ca3", "-"))] if show_ca3 else []) + [str(s_["exam"]), str(s_["total"])]
+        if d["grade"]:
+            row.append(str(s_["grade"]))
+        if show_subj_pos:
+            row.append(str(s_.get("position_text", "-")))
+        if with_remark:
+            row.append(str(s_["remark"]))
+        subj_data.append(row)
+    n_num = len(header) - 1 - (1 if with_remark else 0)
     name_w = 4.6 * cm
     rem_w = 2.8 * cm if with_remark else 0
-    num_w = max(1.2 * cm, (18.4 * cm - name_w - rem_w) / n_num)
+    num_w = max(1.2 * cm, (18.4 * cm - name_w - rem_w) / max(1, n_num)) if n_num else 0
     subj_col_widths = [name_w] + [num_w] * n_num + ([rem_w] if with_remark else [])
+    if not n_num and not with_remark:
+        subj_col_widths = [name_w]
     subj_table = Table(subj_data, repeatRows=1, colWidths=subj_col_widths)
     subj_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
@@ -224,80 +285,81 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         elements.append(Spacer(1, 0.25 * cm))
 
     info = data["info"]
-    elements.append(Paragraph("Attendance", section_style))
+    att = data.get("attendance") or {}
     promo = data.get("promotion_status")
-    show_promo = bool(rs.get("show_promotion", True) and promo)
-    att_table = Table([
-        ["Days School Opened", "Days Present", "Days Absent"] + (["Promotion / Status"] if show_promo else []),
-        [
-            str(info["days_school_opened"]) if info else "-",
-            str(info["days_present"]) if info else "-",
-            str(info["days_absent"]) if info else "-",
-        ] + ([str(promo)] if show_promo else []),
-    ])
-    att_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("FONTNAME", (0, 0), (-1, -1), regular),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-    ]))
-    elements.append(att_table)
-    elements.append(Spacer(1, 0.5 * cm))
+    show_promo = bool(d["promotion"] and promo)
+    att_cols = []
+    if d["attendance"]:
+        if d["days_opened"]:
+            att_cols.append(("Days School Opened", att.get("opened")))
+        if d["days_present"]:
+            att_cols.append(("Days Present", att.get("present")))
+        if d["days_absent"]:
+            att_cols.append(("Days Absent", att.get("absent")))
+    if show_promo:
+        att_cols.append(("Promotion / Status", promo))
+    if att_cols:
+        if d["attendance"] and any(c[0].startswith("Days") for c in att_cols):
+            elements.append(Paragraph("Attendance", section_style))
+        att_table = Table([[c[0] for c in att_cols], [("-" if c[1] is None else str(c[1])) for c in att_cols]])
+        att_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTNAME", (0, 0), (-1, -1), regular),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        elements.append(att_table)
+        elements.append(Spacer(1, 0.5 * cm))
 
     normal = styles["Normal"]
-    teacher_comment = info["teacher_comment"] if info and info["teacher_comment"] else "_" * 70
-    elements.append(Paragraph(f"<b>Teacher's Comment:</b> {teacher_comment}", normal))
-    elements.append(Spacer(1, 0.3 * cm))
-    teacher_date = format_dmy(info["teacher_signed_date"]) if info and info["teacher_signed_date"] else "________________"
-    if data.get("teacher_name") and data.get("show_form_teacher_name", True):
-        elements.append(Paragraph(f"<b>Form Teacher:</b> {data['teacher_name']}", normal))
-    if data.get("show_form_teacher_signature", True):
-        if teacher_signature and teacher_signature.get("path") and os.path.exists(teacher_signature["path"]):
-            try:
-                from PIL import Image as PILImage
-                with PILImage.open(teacher_signature["path"]) as im:
-                    im.load(); w, h = im.size
-                sig_h = 1.1 * cm; sig_w = sig_h * (w / h)
-                elements.append(Image(teacher_signature["path"], width=sig_w, height=sig_h))
-            except Exception:
-                elements.append(Paragraph("Teacher's Signature: ________________________________", normal))
-            elements.append(Paragraph(f"Date: {teacher_date}", normal))
-        else:
-            elements.append(Paragraph(f"Teacher's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {teacher_date}", normal))
-    elements.append(Spacer(1, 0.6 * cm))
 
-    principal_comment = info["principal_comment"] if info and info["principal_comment"] else "_" * 70
-    elements.append(Paragraph(f"<b>Principal's Comment:</b> {principal_comment}", normal))
-    elements.append(Spacer(1, 0.3 * cm))
-    principal_date = format_dmy(info["principal_signed_date"]) if info and info["principal_signed_date"] else "________________"
-    if data.get("principal_name") and data.get("show_principal_name", True):
-        elements.append(Paragraph(f"<b>Principal:</b> {data['principal_name']}", normal))
-    if data.get("show_principal_signature", True):
-        if principal_signature and principal_signature.get("path") and os.path.exists(principal_signature["path"]):
-            try:
-                from PIL import Image as PILImage
-                with PILImage.open(principal_signature["path"]) as im:
-                    im.load(); w, h = im.size
-                sig_h = 1.1 * cm; sig_w = sig_h * (w / h)
-                elements.append(Image(principal_signature["path"], width=sig_w, height=sig_h))
-            except Exception:
-                elements.append(Paragraph("Principal's Signature: ________________________________", normal))
+    def _esc(t):
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    if d["teacher_comment"]:
+        tc = _esc(info["teacher_comment"]) if info and info["teacher_comment"] else "_" * 70
+        elements.append(Paragraph(f"<b>Class/Form Teacher's Comment:</b> {tc}", normal))
+        elements.append(Spacer(1, 0.3 * cm))
+    if d["teacher_name"] or d["teacher_signature"] or d["teacher_sign_date"]:
+        teacher_date = format_dmy(info["teacher_signed_date"]) if info and info["teacher_signed_date"] else "________________"
+        if data.get("teacher_name") and d["teacher_name"]:
+            elements.append(Paragraph(f"<b>Class/Form Teacher:</b> {_esc(data['teacher_name'])}", normal))
+        if d["teacher_signature"]:
+            elements.append(_sig_image(teacher_signature, "Teacher's Signature: ________________________________", normal))
+        if d["teacher_sign_date"]:
+            elements.append(Paragraph(f"Date: {teacher_date}", normal))
+        elements.append(Spacer(1, 0.5 * cm))
+
+    if d["principal_comment"]:
+        pc_ = _esc(info["principal_comment"]) if info and info["principal_comment"] else "_" * 70
+        elements.append(Paragraph(f"<b>Principal's Comment:</b> {pc_}", normal))
+        elements.append(Spacer(1, 0.3 * cm))
+    if d["principal_name"] or d["principal_signature"] or d["principal_sign_date"]:
+        principal_date = format_dmy(info["principal_signed_date"]) if info and info["principal_signed_date"] else "________________"
+        if data.get("principal_name") and d["principal_name"]:
+            elements.append(Paragraph(f"<b>Principal:</b> {_esc(data['principal_name'])}", normal))
+        if d["principal_signature"]:
+            elements.append(_sig_image(principal_signature, "Principal's Signature: ________________________________", normal))
+        if d["principal_sign_date"]:
             elements.append(Paragraph(f"Date: {principal_date}", normal))
-        else:
-            elements.append(Paragraph(f"Principal's Signature: ________________________________&nbsp;&nbsp;&nbsp;&nbsp; Date: {principal_date}", normal))
 
     small = ParagraphStyle("rsSmall", parent=normal, fontSize=7.5, textColor=colors.HexColor("#444444"))
     scale = rs.get("grading_scale") or []
-    if scale and (rs.get("show_grading_key", True) or template == "detailed"):
+    if scale and (d["grading_key"] or template == "detailed"):
         elements.append(Spacer(1, 0.3 * cm))
         key = "; ".join(f"{g['grade']} = {g['min_score']:g}-{g['max_score']:g} ({g['remark']})" for g in scale)
         elements.append(Paragraph(f"<b>Grading key:</b> {key}", small))
-    footer_bits = [x for x in (rs.get("footer"), f"Issued {data['result_date']}" if data.get("result_date") else None) if x]
-    if footer_bits:
+    if rs.get("footer"):      # the school's own footer text only -- no automatic "Issued <date>"
         elements.append(Spacer(1, 0.2 * cm))
-        elements.append(Paragraph(" &nbsp;|&nbsp; ".join(b.replace("&", "&amp;") for b in footer_bits), small))
+        elements.append(Paragraph(rs["footer"].replace("&", "&amp;"), small))
 
     return elements
+
+
+def _one_page(doc, elements):
+    """Shrink a result's flowables so the whole sheet fits on a single A4 page."""
+    from reportlab.platypus import KeepInFrame
+    return [KeepInFrame(doc.width, doc.height, list(elements), mode="shrink")]
 
 
 def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
@@ -307,13 +369,13 @@ def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_
     if principal_signature is None and data.get("principal_signature_path"):
         principal_signature = {"path": data.get("principal_signature_path"), "name": data.get("principal_name")}
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1.2 * cm, rightMargin=1.2 * cm)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
     elements = _result_elements(data, term, school_name, logo_path, student_full_name, styles,
                                  accent_color=accent_color, name_align=name_align,
                                  teacher_signature=teacher_signature, principal_signature=principal_signature)
-    doc.build(elements)
+    doc.build(_one_page(doc, elements))
     buf.seek(0)
     return buf
 
@@ -323,15 +385,15 @@ def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, s
     """One combined, printable PDF containing every student's terminal
     result in a class, each starting on its own page."""
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm, leftMargin=1.2 * cm, rightMargin=1.2 * cm)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
     elements = []
     for i, data in enumerate(data_list):
         if i > 0:
             elements.append(PageBreak())
-        elements.extend(_result_elements(data, term, school_name, logo_path, student_full_name, styles,
-                                          accent_color=accent_color, name_align=name_align))
+        elements.extend(_one_page(doc, _result_elements(data, term, school_name, logo_path, student_full_name, styles,
+                                                        accent_color=accent_color, name_align=name_align)))
     doc.build(elements)
     buf.seek(0)
     return buf

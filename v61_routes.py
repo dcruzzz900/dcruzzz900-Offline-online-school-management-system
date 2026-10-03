@@ -324,7 +324,7 @@ def register_v61_routes(app, h):
             add("Students", "admin_students", ("admin", "sub_admin")); add("Teachers", "admin_teachers", ("admin", "sub_admin"))
             add("Classes", "admin_classes", ("admin", "sub_admin")); add("Subjects", "admin_subjects", ("admin", "sub_admin"))
             add("School Setup", "admin_school", ("admin", "sub_admin")); add("Custom Fields", "admin_custom_fields", ("admin",))
-            add("Result Sheet Settings", "result_settings", ("admin", "sub_admin")); add("Educational Domains", "admin_domains", ("admin", "sub_admin"))
+            add("Result Display Settings", "result_settings", ("admin", "sub_admin")); add("Additional School Info", "school_info_fields", ("admin",)); add("Educational Domains", "admin_domains", ("admin", "sub_admin"))
             add("Class Login Codes", "class_login_codes", ("admin", "sub_admin", "teacher"))
             add("Score Change History", "score_history_all", ("admin", "sub_admin"))
             add("Audit History", "admin_audit_history", ("admin",)); add("Timetable", "timetable_hub")
@@ -506,9 +506,12 @@ def register_v61_routes(app, h):
                  ("detailed", "Detailed", "Adds remarks, class statistics and the grading key.")]
     COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
-    @app.route("/admin/result-settings", methods=["GET", "POST"])
+    @app.route("/admin/result-display", methods=["GET", "POST"])
     @login_required("admin", "sub_admin")
     def result_settings():
+        """School Setup -> Result Display Settings: the ONE place that controls what a result sheet shows
+        (HTML preview, print page and PDF all read these values). Scoped to the signed-in admin's own school."""
+        import result_display as RD
         conn = get_db()
         try:
             school = conn.execute("SELECT * FROM schools WHERE id=?", (sid(),)).fetchone()
@@ -516,7 +519,7 @@ def register_v61_routes(app, h):
             if request.method == "POST":
                 f = request.form
                 tmpl = f.get("result_template", "classic")
-                if tmpl not in {t[0] for t in TEMPLATES}:
+                if tmpl not in RD.TEMPLATE_KEYS:
                     errors["result_template"] = "Choose one of the available templates."
                 prim, sec = f.get("result_accent_color", "").strip(), f.get("result_secondary_color", "").strip()
                 if prim and not COLOR_RE.match(prim):
@@ -531,22 +534,17 @@ def register_v61_routes(app, h):
                 if sig not in ("split", "stacked", "right"):
                     errors["result_signature_layout"] = "Choose a signature placement."
                 layout = f.get("result_header_layout", "logo-left")
-                if layout not in ("logo-left", "logo-center", "logo-right", "no-logo"):
+                if layout not in ("logo-left", "logo-top-center", "logo-center", "logo-right", "no-logo"):
                     layout = "logo-left"
                 if any(c in (title + footer + wm + address) for c in "<>"):
                     errors["result_title"] = "Angle brackets are not allowed."
                 if not errors:
                     before = dict(school)
-                    vals = dict(
-                        show_overall_position=1 if f.get("show_overall_position") else 0,
-                        show_subject_position=1 if f.get("show_subject_position") else 0,
-                        result_template=tmpl, result_title=title or None, result_footer_text=footer or None,
-                        result_watermark_text=wm or None, result_show_watermark=1 if f.get("result_show_watermark") else 0,
-                        result_show_passport=1 if f.get("result_show_passport") else 0, result_show_contact=1 if f.get("result_show_contact") else 0,
-                        result_show_grading_key=1 if f.get("result_show_grading_key") else 0,
-                        result_show_promotion=1 if f.get("result_show_promotion") else 0,
-                        result_accent_color=prim or school["result_accent_color"], result_secondary_color=sec or None,
-                        result_signature_layout=sig, result_header_layout=layout, school_address=address or None)
+                    vals = RD.form_values(f)
+                    vals.update(result_template=tmpl, result_title=title or None, result_footer_text=footer or None,
+                                result_watermark_text=wm or None,
+                                result_accent_color=prim or school["result_accent_color"], result_secondary_color=sec or None,
+                                result_signature_layout=sig, result_header_layout=layout, school_address=address or None)
                     try:
                         conn.execute("BEGIN IMMEDIATE")
                         conn.execute("UPDATE schools SET " + ",".join(f"{k}=?" for k in vals) + " WHERE id=?", [*vals.values(), sid()])
@@ -554,14 +552,77 @@ def register_v61_routes(app, h):
                         if ch:
                             pc.audit(conn, actor(), "result_settings_changed", "school", sid(), ch, ip=ip())
                         conn.commit()
-                        flash("Result sheet settings saved.", "success")
+                        flash("Result Display Settings saved. They apply to the preview, printing and PDF.", "success")
                         return redirect(url_for("result_settings"))
                     except Exception:
                         conn.rollback()
                         app.logger.exception("Result settings save failed")
                         errors["_form"] = "The settings could not be saved. Please try again."
-                school = {**dict(school), **{k: v for k, v in request.form.items()}}
-            return render_template("result_settings.html", s=school, templates=TEMPLATES, errors=errors), (422 if errors else 200)
+                merged = dict(school)
+                merged.update({k: v for k, v in request.form.items() if not k.startswith("d_")})
+                school = merged
+                checked = {k: bool(request.form.get("d_" + k)) for k in RD.KEYS}
+            else:
+                checked = RD.display_settings(school)
+            return render_template("result_settings.html", s=school, templates=RD.TEMPLATES, errors=errors,
+                                   groups=RD.groups(), checked=checked), (422 if errors else 200)
+        finally:
+            conn.close()
+
+    @app.route("/admin/result-settings")
+    @login_required("admin", "sub_admin")
+    def result_settings_legacy():
+        return redirect(url_for("result_settings"))
+
+    @app.route("/admin/school-info", methods=["GET", "POST"])
+    @login_required("admin")
+    def school_info_fields():
+        """School Setup -> Additional School Information: custom label/value pairs (e.g. Education Domain)
+        that the School Admin manages without any developer change. Always scoped to the signed-in school."""
+        conn = get_db()
+        try:
+            school_id = sid()
+            school = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()
+            if request.method == "POST":
+                action = request.form.get("action", "")
+                label = pc.clean(request.form.get("label"))[:60]
+                value = pc.clean_multiline(request.form.get("value"))[:300]
+                fid = request.form.get("field_id", type=int)
+                if any(c in (label + value) for c in "<>"):
+                    flash("Angle brackets are not allowed.", "error")
+                    return redirect(url_for("school_info_fields"))
+                if action == "add":
+                    if not label:
+                        flash("Give the field a name, e.g. Education Domain.", "error")
+                    elif conn.execute("SELECT 1 FROM school_info_fields WHERE school_id=? AND LOWER(label)=LOWER(?)", (school_id, label)).fetchone():
+                        flash(f"A field called “{label}” already exists.", "error")
+                    else:
+                        n = conn.execute("SELECT COALESCE(MAX(display_order),0)+1 FROM school_info_fields WHERE school_id=?", (school_id,)).fetchone()[0]
+                        conn.execute("INSERT INTO school_info_fields(school_id,tenant_id,label,value,display_order) VALUES(?,?,?,?,?)",
+                                     (school_id, school["tenant_id"] if school else None, label, value or None, n))
+                        pc.audit(conn, actor(), "school_info_field_added", "school_info_field", None, {"label": label}, ip=ip())
+                        conn.commit(); flash("Field added.", "success")
+                elif action in ("save", "delete") and fid:
+                    row = conn.execute("SELECT * FROM school_info_fields WHERE id=? AND school_id=?", (fid, school_id)).fetchone()
+                    if not row:
+                        flash("Field not found.", "error")
+                    elif action == "delete":
+                        conn.execute("DELETE FROM school_info_fields WHERE id=? AND school_id=?", (fid, school_id))
+                        pc.audit(conn, actor(), "school_info_field_removed", "school_info_field", fid, {"label": row["label"]}, ip=ip())
+                        conn.commit(); flash("Field removed.", "success")
+                    else:
+                        if not label:
+                            flash("A field needs a name.", "error")
+                        elif conn.execute("SELECT 1 FROM school_info_fields WHERE school_id=? AND LOWER(label)=LOWER(?) AND id!=?", (school_id, label, fid)).fetchone():
+                            flash(f"A field called “{label}” already exists.", "error")
+                        else:
+                            conn.execute("UPDATE school_info_fields SET label=?, value=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=?",
+                                         (label, value or None, fid, school_id))
+                            pc.audit(conn, actor(), "school_info_field_changed", "school_info_field", fid, {"label": label}, ip=ip())
+                            conn.commit(); flash("Field saved.", "success")
+                return redirect(url_for("school_info_fields"))
+            fields = conn.execute("SELECT * FROM school_info_fields WHERE school_id=? ORDER BY display_order, id", (school_id,)).fetchall()
+            return render_template("school_info_fields.html", fields=fields)
         finally:
             conn.close()
 

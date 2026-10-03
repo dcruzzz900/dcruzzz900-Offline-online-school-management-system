@@ -3451,3 +3451,72 @@ def ensure_school_v61_defaults(conn, school_id):
         conn.execute("INSERT OR IGNORE INTO educational_domains(school_id,tenant_id,domain_key,label,sort_order) VALUES(?,?,?,?,?)",
                      (school_id, tenant, key, label, i))
     conn.commit()
+
+
+def migration_061_v62_result_display(conn):
+    """V62: every result-sheet visibility switch lives in schools.* (see result_display.py); the saved
+    result date is stored per student per term; attendance is linked to the roll call."""
+    import result_display
+    result_display.migrate(conn, ensure_column)
+    ensure_column(conn, "student_term_info", "result_date", "TEXT")
+    ensure_column(conn, "student_term_info", "attendance_source", "TEXT")
+    ensure_column(conn, "schools", "result_template", "TEXT DEFAULT 'classic'")
+    ensure_column(conn, "parent_accounts", "photo_filename", "TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_info_fields (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        tenant_id TEXT,
+        label TEXT NOT NULL,
+        value TEXT,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(school_id) REFERENCES schools(id))""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_school_info_label ON school_info_fields(school_id, LOWER(label))")
+    # A School ID is permanent: once issued it can never be changed by any user or code path.
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_school_code_permanent
+        BEFORE UPDATE OF school_code ON schools
+        WHEN OLD.school_code IS NOT NULL AND OLD.school_code <> '' AND NEW.school_code IS NOT OLD.school_code
+        BEGIN SELECT RAISE(ABORT, 'School ID is permanent and cannot be changed'); END""")
+
+
+STEPS.append(("v62_result_display", migration_061_v62_result_display))
+
+
+_CODE_STOP = {"SCHOOL", "SCHOOLS", "THE", "OF", "AND", "FOR", "IN", "AT", "A"}
+
+
+def school_code_prefix(name):
+    """Readable 3-5 letter abbreviation of a school name (letters only), e.g.
+    'Government Secondary School Goni' -> 'GSG', 'Goni' -> 'GONI'."""
+    import re as _re
+    words = [w for w in _re.findall(r"[A-Za-z]+", (name or "").upper()) if w not in _CODE_STOP]
+    if not words:
+        return "SCH"
+    if len(words) == 1:
+        ab = words[0][:5]
+    else:
+        ab = "".join(w[0] for w in words)[:5]
+        if len(ab) < 3:
+            ab = (ab + words[0][1:])[:4]
+    return (ab + "XXX")[:max(3, len(ab))]
+
+
+def generate_school_code(conn, name):
+    """Unique, permanent, readable School ID such as 'SCH-GONI-0001'.
+    The number is a per-abbreviation sequence (not the database id) and the code is never regenerated:
+    existing schools keep the ID they already have."""
+    import re as _re
+    ab = school_code_prefix(name)
+    stem = f"SCH-{ab}-"
+    highest = 0
+    for r in conn.execute("SELECT school_code FROM schools WHERE school_code LIKE ?", (stem + "%",)).fetchall():
+        m = _re.fullmatch(_re.escape(stem) + r"(\d+)", r["school_code"] or "")
+        if m:
+            highest = max(highest, int(m.group(1)))
+    n = highest + 1
+    while True:
+        code = f"{stem}{n:04d}"
+        if not conn.execute("SELECT 1 FROM schools WHERE UPPER(school_code)=?", (code,)).fetchone():
+            return code
+        n += 1
