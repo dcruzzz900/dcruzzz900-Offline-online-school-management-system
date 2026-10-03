@@ -49,7 +49,7 @@
     <p class="muted">Only the School Admin can change this readiness state by completing the checklist again after a future reset/reconfiguration.</p>
   {% elif ready %}
     <p>All required checks are complete. The School Admin can now mark this school <strong>READY FOR LIVE DATA</strong>.</p>
-    <form method="post" onsubmit="return confirm('Mark this school READY FOR LIVE DATA?');">
+    <form method="post" onsubmit="return confirm('Mark this school READY FOR LIVE DATA?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn" type="submit">Mark READY FOR LIVE DATA</button>
     </form>
   {% else %}

@@ -20,7 +20,7 @@
       <li>Complete the setup verification before entering live records.</li>
     </ol>
   </div>
-  <form method="post" style="margin-top:1rem;">
+  <form method="post" style="margin-top:1rem;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-primary">Continue to School Setup</button>
   </form>
 </div>

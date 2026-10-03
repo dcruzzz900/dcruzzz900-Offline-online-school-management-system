@@ -18,7 +18,7 @@
         </select>
     </form>
     <a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
-    <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
+    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>
     {% if cumulative_enabled %}
     <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id) }}">📊 Annual / Cumulative Broadsheet</a>
     {% endif %}
