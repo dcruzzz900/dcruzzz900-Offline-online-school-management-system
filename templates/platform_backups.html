@@ -5,7 +5,7 @@
 <div class="card">
   <h3>Create Backup</h3>
   <p>Create a consistent snapshot of the current database. The backup is integrity-checked before it is retained.</p>
-  <form method="post" action="{{ url_for('platform_backup_create') }}"><button class="btn" type="submit">Create Verified Backup</button></form>
+  <form method="post" action="{{ url_for('platform_backup_create') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit">Create Verified Backup</button></form>
 </div>
 <div class="card"><h3>Backup History</h3>
 {% if backups %}<div style="overflow-x:auto"><table><tr><th>Backup</th><th>Size</th><th>Schools</th><th>Integrity</th><th>Action</th></tr>

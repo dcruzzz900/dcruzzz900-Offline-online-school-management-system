@@ -5,7 +5,7 @@
 <div class="card"><p>Changing a plan changes its configuration for future assignments and for schools currently using that plan. Existing legacy schools remain legacy.</p></div>
 {% for p in plans %}
 <div class="card">
-<form method="post" style="display:grid;gap:12px">
+<form method="post" style="display:grid;gap:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <input type="hidden" name="code" value="{{ p.code }}">
 <h2>{{ p.name }} <code>{{ p.code }}</code></h2>
 <div class="form-grid">
