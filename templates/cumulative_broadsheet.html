@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Cumulative Broadsheet{% endblock %}
 {% block content %}
+{% if th %}<style>.broadsheet-themed th{background:{{ th.accent }}!important;color:#fff!important}.broadsheet-themed{font-family:{{ th.font_css|safe }}}</style>{% endif %}
 <div class="report-header">
     {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
     <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
@@ -18,7 +19,7 @@
         </select>
     </form>
     <a class="btn" href="{{ url_for('broadsheet', class_id=class_row.id) }}">&larr; Back to Term Broadsheet</a>
-    <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
+    <a class="btn btn-gold" href="{{ url_for('cumulative_broadsheet_print', class_id=class_row.id, session_id=academic_session.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>
 </div>
 
 <p style="color:#666; font-size:0.85rem;">
@@ -28,7 +29,7 @@
 </p>
 
 <div style="overflow-x:auto;">
-<table>
+<table class="broadsheet-themed">
     <tr>
         <th>S/N</th>
         <th>Student</th>

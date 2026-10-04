@@ -17,7 +17,7 @@
         <input type="text" name="phone">
         <label>Password</label>
         <input type="password" name="password" required minlength="6">
-        <label>RBAC Role</label><select name="rbac_role" required>{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
+        <label>Roles (tick every role this person holds)</label><div class="role-checks">{% for role in rbac_roles %}<label class="role-check"><input type="checkbox" name="rbac_roles" value="{{ role }}" {{ "checked" if role == "Teacher" }}> {{ role }}</label>{% endfor %}</div><select name="rbac_role" style="display:none" aria-hidden="true">{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
         <button class="btn" type="submit">Add Teacher</button>
     </form>
 </div>
@@ -42,7 +42,9 @@
             <td>
                 <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
+                    <details class="role-picker"><summary>{% for r in staff_roles.get(t.id, []) %}<span class="role-chip">{{ r }}</span> {% else %}<span class="role-chip">Teacher</span>{% endfor %}</summary>
+                    <div class="role-checks">{% for role in rbac_roles %}<label class="role-check"><input type="checkbox" name="rbac_roles" value="{{ role }}" {{ "checked" if role in staff_roles.get(t.id, []) }}> {{ role }}</label>{% endfor %}</div>
+                    <button class="btn btn-small" type="submit">Save roles</button></details>
                 </form>
             </td>
             <td>
