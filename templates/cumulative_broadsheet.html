@@ -18,7 +18,7 @@
         </select>
     </form>
     <a class="btn" href="{{ url_for('broadsheet', class_id=class_row.id) }}">&larr; Back to Term Broadsheet</a>
-    <a class="btn btn-gold" href="{{ url_for('cumulative_broadsheet_print', class_id=class_row.id, session_id=academic_session.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>
+    <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
 </div>
 
 <p style="color:#666; font-size:0.85rem;">

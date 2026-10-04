@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% block title %}Result Display Settings{% endblock %}{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}">
+<style>.rds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px}.rds-grid label.sw{display:flex;gap:.5rem;align-items:center;font-weight:500;padding:.35rem 0}
+.rds-tpl{display:block;border:2px solid #ddd;border-radius:10px;padding:.6rem .8rem;margin:.4rem 0}.rds-tpl input:checked+span b{color:var(--accent,#1f6feb)}.rds-prev{overflow:auto;background:#e9ecef;padding:10px;border-radius:10px}.rds-prev .rs-sheet{transform-origin:top left;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.rds-err{color:#b3261e;font-weight:600}.rds-sticky{position:sticky;bottom:0;background:#fff;padding:.6rem;border-top:1px solid #ddd;z-index:5}</style>
+<div class="page-heading"><div><div class="eyebrow">SCHOOL SETUP</div><h1>Result Display Settings</h1>
+<p>The one place that controls what appears on every result sheet. These settings apply to the preview, printed results and PDFs.</p></div></div>
+{% if errors %}<div class="card" style="border:1px solid #b3261e"><b>Nothing was saved.</b> {{ errors._form or 'Please correct the highlighted items.' }}</div>{% endif %}
+<form method="POST" id="rdsForm"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{% for title, keys in sections %}<div class="card"><h3>{{ title }}</h3><div class="rds-grid">
+{% for k in keys %}<label class="sw"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if cfg[k] in (1, '1', True) }}> {{ labels[k] }} <small class="muted">{{ 'ON' if cfg[k] in (1,'1',True) else 'OFF' }}</small></label>{% endfor %}</div>
+{% if title == 'Student details' %}<p class="muted">Student name is always shown. The result date value is chosen per term below or per result in the result editor — no date is ever added automatically.</p>{% endif %}
+{% if title == 'Identity & header' %}<p class="muted">Passport: ON with no photo leaves the box blank (no avatar). Logo: your uploaded school logo only, blank if none.</p>{% endif %}</div>{% endfor %}
+<div class="card"><h3>Result sheet style</h3>{% if errors.template %}<div class="rds-err">{{ errors.template }}</div>{% endif %}
+{% for key, name, desc in templates %}<label class="rds-tpl"><input type="radio" name="template" value="{{ key }}" {{ 'checked' if cfg.template == key }}> <span><b>{{ name }}</b> — <span class="muted">{{ desc }}</span></span></label>{% endfor %}</div>
+<div class="card"><h3>Branding &amp; layout</h3><div class="form-grid">
+<label>Result title<input name="title" maxlength="80" value="{{ cfg.title or '' }}" placeholder="Terminal Report Sheet"></label>
+<label>Footer text<input name="footer_text" maxlength="300" value="{{ cfg.footer_text or '' }}"></label>
+<label>Watermark text<input name="watermark_text" maxlength="40" value="{{ cfg.watermark_text or '' }}" placeholder="Defaults to the school name"></label>
+<label>Main colour<input type="color" name="accent_color" value="{{ cfg.accent_color or '#1f3a5f' }}"></label>
+<label>Second colour<input type="color" name="secondary_color" value="{{ cfg.secondary_color or '#c9a227' }}"></label>
+<label>Header arrangement<select name="header_layout">{% for v,l in header_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.header_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
+<label>Signature placement<select name="signature_layout">{% for v,l in signature_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.signature_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
+<label>PDF / report font<select name="pdf_font">{% for f in pdf_fonts %}<option {{ 'selected' if school.pdf_font == f }}>{{ f }}</option>{% endfor %}</select></label></div>
+{% for k in ('title','accent_color','secondary_color','header_layout','signature_layout','pdf_font') %}{% if errors[k] %}<div class="rds-err">{{ errors[k] }}</div>{% endif %}{% endfor %}</div>
+<div class="card"><h3>Comments</h3><label class="sw" style="display:flex;gap:.5rem"><input type="checkbox" name="auto_teacher_comment" value="1" {{ 'checked' if school.auto_teacher_comment }}> Suggest a Class Teacher's comment when none has been written</label>
+<label class="sw" style="display:flex;gap:.5rem"><input type="checkbox" name="auto_principal_comment" value="1" {{ 'checked' if school.auto_principal_comment }}> Suggest a Principal's comment when none has been written</label>
+<p class="muted">A saved comment is never replaced by a suggestion. Teacher and Principal comments are separate fields with separate permissions.</p></div>
+<div class="card"><h3>Result date by term</h3><p class="muted">Optional. Shown on the sheet only when “Show Result Date” is ON. A date set on an individual result overrides this.</p>
+<div class="form-grid">{% for t in terms %}<label>{{ t.session_name }} — {{ t.name }}<input type="date" name="term_result_date_{{ t.id }}" value="{{ term_dates[t.id] or '' }}"></label>{% if errors['term_' ~ t.id] %}<div class="rds-err">{{ errors['term_' ~ t.id] }}</div>{% endif %}{% endfor %}</div></div>
+<div class="rds-sticky"><button class="btn btn-gold" id="rdsSave">Save Result Display Settings</button></div></form>
+{% if preview %}<div class="card" id="preview"><h3>Preview <small class="muted">(sample data — shows the settings last saved)</small></h3><div class="rds-prev" id="rdsPrev"><div id="rdsPrevInner">{% with rs=preview.rs, term=preview.term, student=preview.student, class_row=preview.class_row, subjects=preview.subjects, total=preview.total, average=preview.average, position_text=preview.position_text, class_size=preview.class_size, subjects_written=preview.subjects_written, show_ca3=preview.show_ca3, info=preview.info, domain_groups=preview.domain_groups, promotion_status=preview.promotion_status, result_date=preview.result_date, teacher_name=preview.teacher_name, principal_name=preview.principal_name, student_full_name=preview.student_full_name %}{% include "_result_sheet.html" %}{% endwith %}</div></div></div>
+<script>(function(){function fit(){var w=document.getElementById('rdsPrev'),i=document.getElementById('rdsPrevInner');if(!w||!i)return;var s=i.querySelector('.rs-sheet');if(!s)return;var k=Math.min(1,(w.clientWidth-20)/s.offsetWidth);s.style.zoom=k;}window.addEventListener('load',fit);window.addEventListener('resize',fit);})();
+document.getElementById('rdsForm').addEventListener('submit',function(){var b=document.getElementById('rdsSave');b.disabled=true;b.textContent='Saving…';});</script>{% endif %}
+{% endblock %}
