@@ -78,18 +78,7 @@
             <option value="ymd" {% if settings and settings.date_format == 'ymd' %}selected{% endif %}>Year-Month-Day (2026-12-31)</option>
         </select>
 
-        <label style="margin-top:1rem;">Result Comments</label>
-        <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem; margin-top:0.4rem;">
-            <input type="checkbox" name="auto_teacher_comment" style="width:auto;"
-                {% if settings and settings.auto_teacher_comment %}checked{% endif %}>
-            Automatically Generate Teacher's Comment
-        </label>
-        <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem;">
-            <input type="checkbox" name="auto_principal_comment" style="width:auto;"
-                {% if settings and settings.auto_principal_comment %}checked{% endif %}>
-            Automatically Generate Principal's Comment
-        </label>
-        <p style="font-size:0.85rem; color:#999; margin-top:0.6rem;">What appears on the result sheet (passport, logo, positions, dates, signatures…) is controlled in <a href="{{ url_for('result_settings') }}">School Setup → Result Display Settings</a>.</p>
+        
         <p style="font-size:0.85rem; color:#999; margin-top:0.3rem;">
             When on, this term's comment is generated from the student's grade/average instead of
             what's typed on the result — handy when scores come in by CSV upload and no one
@@ -103,12 +92,7 @@
             <option value="{{ key }}" {% if settings and settings.web_font == key %}selected{% endif %}>{{ f.label }}</option>
             {% endfor %}
         </select>
-        <label>Result Sheet / Report Font</label>
-        <select name="pdf_font">
-            {% for f in pdf_fonts %}
-            <option value="{{ f }}" {% if settings and settings.pdf_font == f %}selected{% endif %}>{{ f }}</option>
-            {% endfor %}
-        </select>
+
 
         <div class="card" style="margin:1.2rem 0 0; background:#f7fbff; border:1px solid #dce9f8;">
             <h3>School-Branded Login &amp; Signup</h3>
@@ -147,19 +131,7 @@
             </div>
         </div>
 
-        <label style="margin-top:1rem;">Result Sheet Accent Colour</label>
-        <div style="display:flex; align-items:center; gap:0.6rem;">
-            <input type="color" name="result_accent_color" style="width:3.5rem; padding:0.2rem;"
-                   value="{{ settings.result_accent_color if settings and settings.result_accent_color else '#1f3a5f' }}">
-            <span style="font-size:0.85rem; color:#666;">Used for the result header rule, table headings and signature lines.</span>
-        </div>
-
-        <label style="margin-top:1rem;">Result Header Arrangement</label>
-        <select name="result_header_layout">
-            {% for value, display in header_layouts %}
-            <option value="{{ value }}" {% if (settings.result_header_layout if settings else 'logo-left') == value %}selected{% endif %}>{{ display }}</option>
-            {% endfor %}
-        </select>
+        <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Result sheet</b><p style="margin:.3rem 0 .6rem">Everything that controls what appears on a result sheet (passport, logo, positions, attendance, comments, signatures, dates, template, colours, fonts) now lives in one place.</p><a class="btn btn-gold" href="{{ url_for('result_display_settings') }}">Open Result Display Settings →</a> <a class="btn btn-secondary" href="{{ url_for('admin_school_info') }}">Custom school information</a></div>
 
         <button class="btn" type="submit" style="margin-top:1rem;">Save Changes</button>
     </form>
