@@ -22,8 +22,8 @@ def test_stable_pages_have_routes():
     assert '@app.route("/result/<int:student_id>")' in APP
 
 def test_subject_teacher_is_blocked_from_full_results():
-    assert 'session.get("rbac_role") or "") == "Subject Teacher"' in APP
-    assert 'Subject Teachers can access only their assigned subject scores.' in APP
+    assert 'You can view results and the broadsheet only for the class you are Class Teacher / Form Teacher of.' in APP
+    assert 'ft_here = ' in APP   # V63: results need the Class Teacher / Form Teacher role AND that class
 
 def test_staff_attendance_self_routes_exist():
     assert '@app.route("/staff-attendance/check-in", methods=["POST"])' in APP

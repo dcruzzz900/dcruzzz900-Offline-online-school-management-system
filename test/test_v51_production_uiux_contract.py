@@ -11,7 +11,7 @@ def test_railway_checklist_and_config_docs_exist():
 def test_uiux_static_audit_passes():
     tree = ast.parse((ROOT / 'app.py').read_text())
     endpoints = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-    for _extra in ('profile_routes.py', 'v61_routes.py', 'v62_routes.py'):
+    for _extra in ('profile_routes.py', 'v61_routes.py', 'registrar.py'):
         endpoints |= {n.name for n in ast.walk(ast.parse((ROOT / _extra).read_text())) if isinstance(n, ast.FunctionDef)}
     refs = set()
     for p in (ROOT / 'templates').rglob('*.html'):
