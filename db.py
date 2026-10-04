@@ -2037,6 +2037,8 @@ def seed(conn):
     )
     school_id = cur.lastrowid
     cur.execute("UPDATE schools SET tenant_id=COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) WHERE id=?", (school_id,))
+    cur.execute("UPDATE schools SET school_code=COALESCE(NULLIF(school_code,''),?), school_id_public=COALESCE(NULLIF(school_id_public,''),?) WHERE id=?",
+                (generate_school_id(conn, "My School"),) * 2 + (school_id,))
     seed_tenant = cur.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()[0]
 
     cur.execute(
@@ -3453,70 +3455,151 @@ def ensure_school_v61_defaults(conn, school_id):
     conn.commit()
 
 
-def migration_061_v62_result_display(conn):
-    """V62: every result-sheet visibility switch lives in schools.* (see result_display.py); the saved
-    result date is stored per student per term; attendance is linked to the roll call."""
-    import result_display
-    result_display.migrate(conn, ensure_column)
+# ---------------------------------------------------------------------------
+# V62: central Result Display Settings, result date, attendance source, professional School ID
+# ---------------------------------------------------------------------------
+import re as _re_v62
+import secrets as _secrets_v62
+
+RESULT_BOOL_SETTINGS = [
+    # key, label, default
+    ("show_passport", "Show Student Passport", 1),
+    ("show_logo", "Show School Logo", 1),
+    ("show_overall_position", "Show Overall Position", 1),
+    ("show_subject_position", "Show Subject Position", 0),
+    ("show_attendance", "Show Attendance", 1),
+    ("show_days_opened", "Show Days School Opened", 1),
+    ("show_days_present", "Show Days Present", 1),
+    ("show_days_absent", "Show Days Absent", 1),
+    ("show_teacher_comment", "Show Teacher / Class Teacher Comment", 1),
+    ("show_principal_comment", "Show Principal Comment", 1),
+    ("show_teacher_signature", "Show Teacher Signature", 1),
+    ("show_teacher_sign_date", "Show Teacher Sign Date", 1),
+    ("show_principal_signature", "Show Principal Signature", 1),
+    ("show_principal_sign_date", "Show Principal Sign Date", 1),
+    ("show_score", "Show Score / Mark", 1),
+    ("show_grade", "Show Grade", 1),
+    ("show_remarks", "Show Remarks", 1),
+    ("show_admission_no", "Show Student Admission No. / Register No.", 1),
+    ("show_class", "Show Class / Arm", 1),
+    ("show_session", "Show Academic Session", 1),
+    ("show_term", "Show Term", 1),
+    ("show_result_date", "Show Result Date", 0),
+    ("show_teacher_name", "Show Class Teacher's name under the signature", 1),
+    ("show_principal_name", "Show Principal's name under the signature", 1),
+    ("show_contact", "Show School contact information", 1),
+    ("show_grading_key", "Show Grading key", 1),
+    ("show_promotion", "Show Promotion / Status", 1),
+    ("show_domains", "Show Educational Domain ratings", 1),
+    ("show_watermark", "Show Watermark", 0),
+]
+RESULT_TEMPLATES = [
+    ("professional_classic", "Professional Classic", "Traditional bordered layout with a strong header rule."),
+    ("modern_academic", "Modern Academic", "Coloured header band, soft cards and clean tables."),
+    ("formal_school", "Formal School", "Serif typography and a double-ruled border for a formal certificate feel."),
+    ("compact_academic", "Compact Academic", "Tight rows so long subject lists stay on one page."),
+    ("detailed_report", "Detailed Report", "Adds the grading key and fuller remarks."),
+]
+_LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
+
+
+def migration_061_v62(conn):
+    cols = ", ".join(f"{k} INTEGER NOT NULL DEFAULT {d}" for k, _l, d in RESULT_BOOL_SETTINGS)
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS result_display_settings (
+            school_id INTEGER PRIMARY KEY,
+            tenant_id TEXT,
+            template TEXT NOT NULL DEFAULT 'professional_classic',
+            title TEXT, footer_text TEXT, watermark_text TEXT, accent_color TEXT, secondary_color TEXT,
+            header_layout TEXT NOT NULL DEFAULT 'logo-left', signature_layout TEXT NOT NULL DEFAULT 'split',
+            {cols},
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_by TEXT
+        )""")
+    # Carry every previously scattered setting into the single table (once, per school).
+    for sch in conn.execute("SELECT * FROM schools").fetchall():
+        if conn.execute("SELECT 1 FROM result_display_settings WHERE school_id=?", (sch["id"],)).fetchone():
+            continue
+        k = sch.keys()
+        g = lambda name, default=None: (sch[name] if name in k and sch[name] is not None else default)
+        tpl = _LEGACY_TEMPLATE.get(g("result_template", "classic"), g("result_template", "professional_classic"))
+        vals = {
+            "show_passport": g("result_show_passport", 1), "show_logo": 1, "show_overall_position": g("show_overall_position", 1),
+            "show_subject_position": g("show_subject_position", 0), "show_result_date": g("show_result_date", 0),
+            "show_teacher_signature": g("show_form_teacher_signature", 1), "show_principal_signature": g("show_principal_signature", 1),
+            "show_teacher_name": g("show_form_teacher_name", 1), "show_principal_name": g("show_principal_name", 1),
+            "show_contact": g("result_show_contact", 1), "show_grading_key": g("result_show_grading_key", 1),
+            "show_promotion": g("result_show_promotion", 1), "show_watermark": g("result_show_watermark", 0),
+        }
+        names = ["school_id", "tenant_id", "template", "title", "footer_text", "watermark_text", "accent_color", "secondary_color", "header_layout", "signature_layout"] + list(vals)
+        params = [sch["id"], g("tenant_id"), tpl if tpl in {t[0] for t in RESULT_TEMPLATES} else "professional_classic", g("result_title"), g("result_footer_text"),
+                  g("result_watermark_text"), g("result_accent_color"), g("result_secondary_color"), g("result_header_layout", "logo-left") or "logo-left",
+                  g("result_signature_layout", "split") or "split"] + [int(v) for v in vals.values()]
+        conn.execute(f"INSERT INTO result_display_settings({','.join(names)}) VALUES({','.join('?'*len(names))})", params)
+
+    # Result date (per student per term, with an optional term-wide default) and attendance source
     ensure_column(conn, "student_term_info", "result_date", "TEXT")
-    ensure_column(conn, "student_term_info", "attendance_source", "TEXT")
-    ensure_column(conn, "schools", "result_template", "TEXT DEFAULT 'classic'")
+    ensure_column(conn, "student_term_info", "attendance_source", "TEXT NOT NULL DEFAULT 'auto'")
+    ensure_column(conn, "terms", "result_date", "TEXT")
+    # Anyone who already typed attendance keeps it as a manual entry; everyone else follows recorded attendance.
+    conn.execute("UPDATE student_term_info SET attendance_source='manual' WHERE COALESCE(days_school_opened,0)>0 AND attendance_source='auto'")
+
+    # Parent passport photo + free-form school information (School Admin adds fields without a developer)
     ensure_column(conn, "parent_accounts", "photo_filename", "TEXT")
-    conn.execute("""CREATE TABLE IF NOT EXISTS school_info_fields (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        school_id INTEGER NOT NULL,
-        tenant_id TEXT,
-        label TEXT NOT NULL,
-        value TEXT,
-        display_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(school_id) REFERENCES schools(id))""")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_school_info_label ON school_info_fields(school_id, LOWER(label))")
-    # A School ID is permanent: once issued it can never be changed by any user or code path.
-    conn.execute("""CREATE TRIGGER IF NOT EXISTS trg_school_code_permanent
-        BEFORE UPDATE OF school_code ON schools
-        WHEN OLD.school_code IS NOT NULL AND OLD.school_code <> '' AND NEW.school_code IS NOT OLD.school_code
-        BEGIN SELECT RAISE(ABORT, 'School ID is permanent and cannot be changed'); END""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_custom_info (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT,
+        label TEXT NOT NULL, value TEXT, sort_order INTEGER NOT NULL DEFAULT 0, created_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_school_custom_info_label ON school_custom_info(school_id, LOWER(label))")
+
+    # Professional, permanent School IDs (old code stays valid as a login alias in school_id_public)
+    for sch in conn.execute("SELECT id, name, school_code, school_id_public FROM schools ORDER BY id").fetchall():
+        if _re_v62.fullmatch(r"SCH-[A-Z0-9]{2,6}-\d{4}", sch["school_code"] or ""):
+            continue
+        if not (sch["school_id_public"] or "").strip():
+            conn.execute("UPDATE schools SET school_id_public=? WHERE id=?", (sch["school_code"], sch["id"]))
+        conn.execute("UPDATE schools SET school_code=? WHERE id=?", (generate_school_id(conn, sch["name"]), sch["id"]))
+    conn.execute("DROP TRIGGER IF EXISTS trg_schools_school_code_permanent")
+    conn.execute("""CREATE TRIGGER trg_schools_school_code_permanent BEFORE UPDATE OF school_code ON schools FOR EACH ROW
+        WHEN OLD.school_code IS NOT NULL AND OLD.school_code<>'' AND NEW.school_code IS NOT OLD.school_code
+        BEGIN SELECT RAISE(ABORT,'The School ID is permanent'); END""")
 
 
-STEPS.append(("v62_result_display", migration_061_v62_result_display))
+def school_id_prefix(name):
+    stop = {"THE", "OF", "AND", "SCHOOL", "SCHOOLS", "COLLEGE", "ACADEMY", "INTERNATIONAL", "NURSERY", "PRIMARY", "SECONDARY", "COMPREHENSIVE", "GOVERNMENT", "SENIOR", "JUNIOR", "SECONDARY", "HIGH", "GIRLS", "BOYS", "MODEL", "STAFF", "MY"}
+    words = [w for w in _re_v62.split(r"[^A-Za-z0-9]+", (name or "").upper()) if w]
+    pick = [w for w in words if w not in stop and not w.isdigit()] or words
+    base = (pick[0] if pick else "SCH")
+    if len(base) < 3 and len(pick) > 1:
+        base = "".join(pick)[:5]
+    base = _re_v62.sub(r"[^A-Z0-9]", "", base)[:5] or "SCH"
+    return base
 
 
-_CODE_STOP = {"SCHOOL", "SCHOOLS", "THE", "OF", "AND", "FOR", "IN", "AT", "A"}
-
-
-def school_code_prefix(name):
-    """Readable 3-5 letter abbreviation of a school name (letters only), e.g.
-    'Government Secondary School Goni' -> 'GSG', 'Goni' -> 'GONI'."""
-    import re as _re
-    words = [w for w in _re.findall(r"[A-Za-z]+", (name or "").upper()) if w not in _CODE_STOP]
-    if not words:
-        return "SCH"
-    if len(words) == 1:
-        ab = words[0][:5]
-    else:
-        ab = "".join(w[0] for w in words)[:5]
-        if len(ab) < 3:
-            ab = (ab + words[0][1:])[:4]
-    return (ab + "XXX")[:max(3, len(ab))]
-
-
-def generate_school_code(conn, name):
-    """Unique, permanent, readable School ID such as 'SCH-GONI-0001'.
-    The number is a per-abbreviation sequence (not the database id) and the code is never regenerated:
-    existing schools keep the ID they already have."""
-    import re as _re
-    ab = school_code_prefix(name)
-    stem = f"SCH-{ab}-"
-    highest = 0
-    for r in conn.execute("SELECT school_code FROM schools WHERE school_code LIKE ?", (stem + "%",)).fetchall():
-        m = _re.fullmatch(_re.escape(stem) + r"(\d+)", r["school_code"] or "")
-        if m:
-            highest = max(highest, int(m.group(1)))
-    n = highest + 1
+def generate_school_id(conn, name):
+    """SCH-<NAME>-<NNNN>: readable, unique, permanent, and not derived from the database row id."""
+    prefix = school_id_prefix(name)
+    used = {r[0] for r in conn.execute("SELECT school_code FROM schools WHERE school_code LIKE ?", (f"SCH-{prefix}-%",))}
+    used |= {r[0] for r in conn.execute("SELECT school_id_public FROM schools WHERE school_id_public LIKE ?", (f"SCH-{prefix}-%",))}
+    n = 1
     while True:
-        code = f"{stem}{n:04d}"
-        if not conn.execute("SELECT 1 FROM schools WHERE UPPER(school_code)=?", (code,)).fetchone():
+        code = f"SCH-{prefix}-{n:04d}"
+        if code not in used:
             return code
         n += 1
+
+
+def get_result_display(conn, school_id):
+    """The single source of truth for what appears on a result sheet (plain dict, defaults filled in)."""
+    row = conn.execute("SELECT * FROM result_display_settings WHERE school_id=?", (school_id,)).fetchone()
+    if row is None:
+        sch = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()
+        conn.execute("INSERT OR IGNORE INTO result_display_settings(school_id, tenant_id) VALUES(?,?)", (school_id, sch["tenant_id"] if sch else None))
+        conn.commit()
+        row = conn.execute("SELECT * FROM result_display_settings WHERE school_id=?", (school_id,)).fetchone()
+    d = dict(row)
+    if d.get("template") not in {t[0] for t in RESULT_TEMPLATES}:
+        d["template"] = _LEGACY_TEMPLATE.get(d.get("template"), "professional_classic")
+    return d
+
+
+STEPS.append(("result_display_settings_v62", migration_061_v62))

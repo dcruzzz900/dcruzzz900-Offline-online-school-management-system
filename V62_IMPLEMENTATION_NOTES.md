@@ -1,43 +1,27 @@
-# V62 — consolidated bug fixes and enhancements
+# V62 — notes
 
-Test status: `python tests/v62_scenarios.py` → 380 checks, 0 failed. `python tests/v60_scenarios.py` → 213 checks, 0 failed.
-The 47 pytest-style files in `tests/test_*.py` also pass (run with pytest, or any runner that calls each `test_*` function).
-`tests/v61_scenarios.py` was replaced by `tests/v62_scenarios.py` because the settings page moved.
+## Install (same as before)
+1. Back up your database. 2. Unzip over the project folder (leave `instance/` alone). 3. Reload the web app — the database upgrades itself.
+`select * from migration_notes;` lists any unique index skipped because old data already had duplicates.
 
-## Fixed (verified by tests)
-| # | Item | What was wrong / what changed |
-|---|------|-------------------------------|
-| 1 | Roles & Scope 500 | Template used `ROLE_CATALOG`, which the route never passed. Passed now; checkboxes show saved permissions. |
-| 1 | "Session timed out" on Make Ready for Live Data / Continue to School Setup | Both forms lacked the CSRF token. Added to those and 16 other POST forms. CSRF failures are now logged. |
-| 5, 29 | Role changes active immediately | One function (`change_staff_role`) updates the role, retires the old assignment, writes the audit log. Session role is refreshed from the database on every request. Staff signup gives the default Teacher role. |
-| 6 | Subject Teacher | Can enter scores only for assigned subjects; no results/broadsheet access. Score entry and CSV upload require a current teaching role. |
-| 7 | Class/Form Teacher | Own class results and broadsheet only. |
-| 2, 14 | Result Display Settings | One page (`/admin/result-display`) with every switch, five templates and the look/wording options. Duplicates removed from Theme & Branding and School Profile. |
-| 3, 18 | Passport and logo | OFF = hidden; ON without photo = blank area (no avatar). Logo keeps its aspect ratio and follows its toggle. |
-| 8, 9 | Comments / Principal sign date | Separate fields, inputs, permissions and display. Principal sign date saved and shown. |
-| 10, 11 | Result date / "Issued" | Date stored per student per term; "Issued" line removed. |
-| 12, 13 | Attendance | Comes from the daily register when present, else manual. Validation: Present + Absent = Opened; no negatives; neither exceeds Opened. |
-| 15 | Templates | Classic, Modern, Formal, Compact, Detailed — same data and settings. |
-| 16 | One-page printing | Print page and PDF fit one A4 page. Checked in real Chromium PDFs for all five templates with 26 subjects: 1 page, signatures and grading key visible. |
-| 17 | Broadsheet printing | Dedicated landscape print pages (term and cumulative), no app chrome. |
-| 4 | Passport visibility | Staff passport: School Admin/Sub-Admin and the person only. Parent passport (new upload page): School Admin/Sub-Admin and the parent. Student passport: School Admin and the class's Form Teacher. All scoped to the school. |
-| 19 | Custom school fields | `/admin/school-info`: add / rename / edit / remove, case-insensitive unique names, audited. |
-| 20 | School ID | `SCH-<ABBR>-0001` style, per-abbreviation sequence, database trigger prevents any later change. Existing schools keep their current IDs. |
-| 22 | Greeting | Morning / afternoon / evening from the viewer's own clock. |
-| 23 | AI cards | Wrapping, larger text, higher contrast, no clipping. |
-| 24, 25 | Super Admin menu | Toggle works at every size (remembered on wide screens); text un-clipped and high contrast. |
-| 21 | Login/signup | No horizontal overflow at 320, 360, 768, 1366, 1920 px (measured in Chromium). Hero heading contrast fixed; short screens compacted. |
-| 26 | Usernames | Case preserved; lookups and uniqueness are case-insensitive. |
-| — | Existing bug found | Parent login crashed (database connection closed then reused). Fixed. |
+## Root causes found
+* **Roles & Scope 500** — the template used `ROLE_CATALOG`, which was never registered as a template global (it only broke once an assignment existed).
+* **"Session timed out" on Make Ready for Live Data and Continue to School Setup** — those forms (18 in total, including several Super Admin forms) were posted
+  without the hidden security token, so the CSRF check rejected them. All 18 now send it, a test fails if any POST form ever lacks one, and every refusal is logged
+  with the real reason (no session / form sent no token / token mismatch).
+* **Parent login crashed** — the code queried a database connection it had just closed. Fixed.
+* **Role changes were only visual** — they now close the old assignment, create an ACTIVE one with its permissions, update the open session on the very next request,
+  and write to both the role audit table and the protected audit history. No Super Admin approval step.
+* **Result date vanished** — it was never stored (the sheet used today's date). It is now saved per result, with an optional per-term default.
 
-## Behaviour changes to be aware of
-* A School Admin role change replaces the old role (roles no longer stack).
-* School Admin and Sub-Admin keep access to staff passports; other staff no longer see them.
-* Result settings moved to `/admin/result-display`; the old URL redirects.
-* Run on startup: migration `v62_result_display` (new columns, `school_info_fields` table, School ID trigger).
+## New / changed
+* School Setup → **Result Display Settings** (`/admin/result-display-settings`): the only place for result visibility/presentation; old controls removed from School Setup.
+* 5 result styles, one-page print and PDF, dedicated print pages for results and broadsheets, shrink-to-fit rather than cut-off.
+* Teacher and Principal comments: separate columns, inputs, permissions and boxes. Principal sign date added.
+* Attendance flows from the daily register; manual entry is validated (Present + Absent = Opened).
+* Professional School ID (`SCH-GONI-0001`), permanent, not editable. The old code keeps working as a login alias.
+* Custom school information, parent passports (School Admin can view), time-based greeting, readable AI card, collapsible Super Admin menu, responsive login CSS.
+* Staff usernames keep their case; uniqueness and login are case-insensitive.
 
-## Not verified
-* The acceptance matrix was not run in full across all nine roles on real phones/tablets. Role coverage in tests: School Admin, Class/Form Teacher, Subject Teacher, other-school Admin, parent, anonymous. Not covered: Super Admin result views, Sub-Admin, Principal and Student against every new route.
-* Login pages were measured at five widths and spot-viewed; signup pages other than New School were not screenshot-reviewed. `/staff/signup` returned 404 at the path I guessed, so staff signup layout was not reviewed.
-* Super Admin menu and AI card were verified by CSS/markup checks, not by clicking in a browser.
-* Browser print of the result was tested by generating PDFs in headless Chromium, not by pressing Print in Safari/Firefox.
+## Tests
+`tests/v62_scenarios.py` (248), `tests/v61_scenarios.py` (292), `tests/v60_scenarios.py` (213), plus the original suite (47).
