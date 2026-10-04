@@ -11,10 +11,11 @@
 {% if errors.result_title %}<div style="color:#b3261e">{{ errors.result_title }}</div>{% endif %}
 <div class="form-grid"><label>Main colour<input type="color" name="result_accent_color" value="{{ s.result_accent_color or '#1f3a5f' }}"></label><label>Second colour<input type="color" name="result_secondary_color" value="{{ s.result_secondary_color or '#c9a227' }}"></label></div>
 {% if errors.result_accent_color or errors.result_secondary_color %}<div style="color:#b3261e">{{ errors.result_accent_color or errors.result_secondary_color }}</div>{% endif %}
-<label>Header layout<select name="result_header_layout">{% for v,l in [('logo-left','Logo left'),('logo-top-center','Logo top centre'),('logo-right','Logo right'),('no-logo','No logo')] %}<option value="{{ v }}" {{ 'selected' if s.result_header_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
+<div class="form-grid"><label>Logo alignment <small class="muted">(moves only the logo)</small><select name="logo_align">{% for v,l in [('left','Left'),('center','Center'),('right','Right')] %}<option value="{{ v }}" {{ 'selected' if (s.logo_align or 'left') == v }}>{{ l }}</option>{% endfor %}</select></label>
+<label>School text alignment <small class="muted">(name, address, title — moves only the text)</small><select name="name_align">{% for v,l in [('left','Left'),('center','Center'),('right','Right')] %}<option value="{{ v }}" {{ 'selected' if (s.name_align or 'center') == v }}>{{ l }}</option>{% endfor %}</select></label></div>{% if errors.logo_align %}<div style="color:#b3261e">{{ errors.logo_align }}</div>{% endif %}
 <label>Signature placement<select name="result_signature_layout">{% for v,l in [('split','Teacher left, Principal right'),('stacked','Stacked'),('right','Right-aligned')] %}<option value="{{ v }}" {{ 'selected' if s.result_signature_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
 <label>School address / contact line<textarea name="school_address" rows="2" maxlength="200">{{ s.school_address or '' }}</textarea></label>
 <label>Footer text <small class="muted">(only the text you type here appears; no issue date is ever added automatically)</small><textarea name="result_footer_text" rows="2" maxlength="300">{{ s.result_footer_text or '' }}</textarea></label>
 <label>Watermark text<input name="result_watermark_text" maxlength="40" value="{{ s.result_watermark_text or '' }}"></label>
-<br><button class="btn">Save settings</button> <a class="btn btn-secondary" href="{{ url_for('result_design_preview') }}">Preview</a></form>
+<br><button class="btn">Save settings</button> <a class="btn btn-secondary" href="{{ url_for('result_design_preview') }}">Preview the real result sheet</a></form>
 {% endblock %}
