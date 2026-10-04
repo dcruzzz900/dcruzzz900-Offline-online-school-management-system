@@ -92,6 +92,21 @@ def is_in(c):
         return "student_id" in s
 
 
+ALL_TOGGLES = ["show_passport","show_logo","show_overall_position","show_subject_position","show_attendance","show_days_opened","show_days_present","show_days_absent",
+               "show_teacher_comment","show_principal_comment","show_teacher_signature","show_teacher_sign_date","show_principal_signature","show_principal_sign_date",
+               "show_score","show_grade","show_remarks","show_admission_no","show_class","show_session","show_term","show_result_date","show_teacher_name","show_principal_name",
+               "show_contact","show_grading_key","show_promotion","show_domains","show_watermark"]
+
+
+def rds(client, on=None, **kw):
+    """Save the central Result Display Settings. `on` = toggles that are ON; everything else OFF."""
+    on = set(on if on is not None else [k for k in ALL_TOGGLES if k not in ("show_subject_position", "show_result_date", "show_watermark")])
+    d = {"template": "professional_classic", "accent_color": "#1f3a5f", "secondary_color": "#c9a227", "header_layout": "logo-left", "signature_layout": "split", "pdf_font": "Helvetica"}
+    d.update({k: "1" for k in on})
+    d.update(kw)
+    return post(client, "/admin/result-display-settings", d, "/admin/result-display-settings")
+
+
 def blocked(sql, args=()):
     """True when the database refuses the statement (append-only protection)."""
     cc = db()
@@ -437,9 +452,10 @@ conn.close()
 pos_cases = [(1, 1, "Overall ON+Subject ON"), (1, 0, "Overall ON+Subject OFF"), (0, 1, "Overall OFF+Subject ON"), (0, 0, "Overall OFF+Subject OFF")]
 rs_url = f"/result/1?term_id={term_id}"
 for ov, sb, label in pos_cases:
-    r = post(a_c, "/admin/result-settings", {"show_overall_position": "1" if ov else "", "show_subject_position": "1" if sb else "", "result_template": "classic",
-                                            "result_accent_color": "#1f3a5f", "result_secondary_color": "#c9a227", "result_signature_layout": "split", "result_header_layout": "logo-left",
-                                            "result_show_passport": "1", "result_show_contact": "1", "result_show_grading_key": "1", "result_show_promotion": "1"}, "/admin/result-settings")
+    on = [k for k in ALL_TOGGLES if k not in ("show_overall_position", "show_subject_position", "show_result_date", "show_watermark")]
+    if ov: on.append("show_overall_position")
+    if sb: on.append("show_subject_position")
+    r = rds(a_c, on)
     check(f"settings saved [{label}]", r.status_code == 302, r.status_code)
     page = html(a_c.get(rs_url))
     sheet = page[page.index('class="rs-sheet'):] if 'class="rs-sheet' in page else page
@@ -448,7 +464,7 @@ for ov, sb, label in pos_cases:
     pdf = a_c.get(f"/result/1/pdf?term_id={term_id}")
     check(f"[{label}] PDF generated", pdf.status_code == 200 and pdf.data[:4] == b"%PDF", pdf.status_code)
 # ordinals + ties
-post(a_c, "/admin/result-settings", {"show_overall_position": "1", "show_subject_position": "1", "result_template": "classic", "result_signature_layout": "split", "result_header_layout": "logo-left"}, "/admin/result-settings")
+rds(a_c, [k for k in ALL_TOGGLES if k not in ("show_result_date", "show_watermark")])
 sheet = html(a_c.get(rs_url))
 check("positions use ordinals (1st)", "1st" in sheet)
 sheet2 = html(a_c.get(f"/result/2?term_id={term_id}"))
@@ -464,20 +480,21 @@ conn.close()
 conn = db(); pos = compute_subject_positions(conn, [zed], [eng], term_id); conn.close()
 check("other school's students never enter a ranking", pos[eng] == {})
 # templates
-for tmpl in ("classic", "modern", "compact", "detailed"):
-    post(a_c, "/admin/result-settings", {"show_overall_position": "1", "result_template": tmpl, "result_accent_color": "#aa2200", "result_secondary_color": "#00aa88", "result_signature_layout": "split", "result_header_layout": "logo-left",
-                                        "result_title": "Annual Report", "result_footer_text": "Thank you", "result_show_watermark": "1", "result_watermark_text": "MYSCHOOL"}, "/admin/result-settings")
+for tmpl in ("professional_classic", "modern_academic", "formal_school", "compact_academic", "detailed_report"):
+    rds(a_c, template=tmpl, accent_color="#aa2200", secondary_color="#00aa88", title="Annual Report", footer_text="Thank you", watermark_text="MYSCHOOL",
+        on=[k for k in ALL_TOGGLES if k != "show_result_date"])
     page = html(a_c.get(rs_url))
     check(f"template '{tmpl}' is used", f'rs-{tmpl}' in page and f'data-template="{tmpl}"' in page)
     check(f"[{tmpl}] branding: title, footer, watermark, colours", "Annual Report" in page and "Thank you" in page and "MYSCHOOL" in page and "#aa2200" in page)
     check(f"[{tmpl}] PDF built", a_c.get(f"/result/1/pdf?term_id={term_id}").data[:4] == b"%PDF")
-r = post(a_c, "/admin/result-settings", {"result_template": "evil", "result_accent_color": "red", "result_signature_layout": "split"}, "/admin/result-settings")
+r = rds(a_c, template="evil", accent_color="red")
 check("invalid template/colour rejected", r.status_code == 422)
-r = post(a_c, "/admin/result-settings", {"result_template": "classic", "result_title": "<script>x</script>", "result_signature_layout": "split"}, "/admin/result-settings")
+r = rds(a_c, title="<script>x</script>")
 check("markup in branding text rejected", r.status_code == 422)
-check("teacher cannot change result settings", staff("bmusa").get("/admin/result-settings").status_code in (302, 403) and post(staff("bmusa"), "/admin/result-settings", {"result_template": "modern"}, "/dashboard").status_code in (302, 403) and db().execute("SELECT result_template FROM schools WHERE id=1").fetchone()[0] != "modern")
-check("other school's settings unaffected", db().execute("SELECT result_template FROM schools WHERE id=?", (sid2,)).fetchone()[0] == "classic")
-check("result settings changes are audited", "result_settings_changed" in {r_[0] for r_ in db().execute("SELECT action FROM rbac_audit_log")})
+check("teacher cannot change result display settings", staff("bmusa").get("/admin/result-display-settings").status_code in (302, 403) and rds(staff("bmusa"), template="modern_academic").status_code in (302, 403) and db().execute("SELECT template FROM result_display_settings WHERE school_id=1").fetchone()[0] != "modern_academic")
+oc.get("/admin/result-display-settings")
+check("other school's settings unaffected", db().execute("SELECT template FROM result_display_settings WHERE school_id=?", (sid2,)).fetchone()[0] == "professional_classic")
+check("result display settings changes are audited", "result_display_settings_changed" in {r_[0] for r_ in db().execute("SELECT action FROM rbac_audit_log")})
 # domains
 page = html(a_c.get("/admin/domains"))
 check("educational domains screen lists default domains", "Affective Domain" in page and "Psychomotor Domain" in page)
@@ -505,7 +522,7 @@ check("print page uses A4 @page and print stylesheet", "result-sheet.css" in pt)
 css = open(os.path.join(ROOT, "static/css/result-sheet.css")).read()
 check("CSS declares A4 page size and 210mm sheet", "size:A4" in css and "210mm" in css and "@media print" in css and "print-color-adjust" in css)
 check("print page has screen-only toolbar hidden when printing", "rs-toolbar" in pt and "@media print{body{background:#fff}.rs-toolbar{display:none}" in pt)
-check("auto-print only when asked", "addEventListener('load'" not in pt and "addEventListener('load'" in html(a_c.get(f"/result/1/print?term_id={term_id}&auto=1")))
+check("auto-print only when asked", "setTimeout(function(){window.print()" not in pt and "setTimeout(function(){window.print()" in html(a_c.get(f"/result/1/print?term_id={term_id}&auto=1")))
 check("print is not available across schools", oc.get(f"/result/1/print?term_id={term_id}").status_code in (302, 403, 404))
 check("unauthenticated print refused", A.app.test_client().get(f"/result/1/print?term_id={term_id}").status_code in (302, 401, 403))
 check("staff result page links to the dedicated print page, not window.print()", "result_print" in open(os.path.join(ROOT, "templates/result.html")).read() or "/print" in html(a_c.get(rs_url)))
@@ -754,10 +771,10 @@ for href in re.findall(r'href="(/platform/[^"]+)"', navb):
 check("hub pages need Super Admin", a_c.get("/platform/reports").status_code in (302, 403))
 
 # ------------------------------------------------------------------ 26/27 tenant + RBAC sweep
-for url in (f"/students/1/profile/edit", "/staff/2/edit", f"/result/1/print?term_id={term_id}", f"/scores/{first_class}/{subj}/history", "/class-login-codes", "/admin/result-settings", "/admin/domains"):
+for url in (f"/students/1/profile/edit", "/staff/2/edit", f"/result/1/print?term_id={term_id}", f"/scores/{first_class}/{subj}/history", "/class-login-codes", "/admin/result-display-settings", "/admin/domains"):
     r = oc.get(url)
-    check(f"other school cannot read: {url}", r.status_code in (302, 403, 404) or ("Chinedu" not in html(r) and "Mathematics" not in html(r)), r.status_code)
-for url in ("/admin/result-settings", "/admin/domains", "/scores/history", "/reports/analytics", "/admin/custom-fields", "/platform/subscription-manager"):
+    check(f"other school cannot read: {url}", r.status_code in (302, 403, 404) or ("Chinedu" not in html(r) and "Late correction" not in html(r)), r.status_code)
+for url in ("/admin/result-display-settings", "/admin/domains", "/scores/history", "/reports/analytics", "/admin/custom-fields", "/platform/subscription-manager"):
     r = A.app.test_client().get(url)
     check(f"anonymous blocked: {url}", r.status_code in (302, 401, 403))
 
