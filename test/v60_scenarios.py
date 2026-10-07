@@ -166,7 +166,7 @@ conn.execute("PRAGMA foreign_keys=OFF")
 conn.execute("UPDATE students SET class_id=9999 WHERE id=3")
 conn.commit(); conn.close()
 c_o, r = student_login("orphan")
-check("broken class link gives a clear message, not a 500", r.status_code == 200 and "not linked to a class" in html(r))
+check("broken class link gives the generic error, not a 500", r.status_code == 200 and "Invalid login details" in html(r))
 conn = db(); conn.execute("UPDATE students SET class_id=? WHERE id=3", (first_class,)); conn.commit(); conn.close()
 # a phone number is not a login identifier any more
 conn = db(); conn.execute("UPDATE students SET phone='08055550000' WHERE id IN (1,2)"); conn.commit(); conn.close()

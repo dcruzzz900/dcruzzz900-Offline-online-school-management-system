@@ -14,7 +14,8 @@ def test_student_online_save_is_tenant_stamped_and_safe():
 
 def test_staff_attendance_has_check_times_and_filters():
     assert 'check_in_at' in DB and 'check_out_at' in DB
-    assert 'name="check_in_' not in ATT and 'name="check_out_' not in ATT   # V63: times are stamped by the server, never typed
+    # V63: attendance times are stamped by the server; the form must NOT accept manual times or dates.
+    assert 'name="check_in_' not in ATT and 'name="check_out_' not in ATT and 'type="date"' not in ATT
     assert 'name="q"' in ATT and 'name="status"' in ATT
 
 
@@ -26,7 +27,7 @@ def test_assign_subjects_online_route_and_duplicate_protection():
 
 def test_class_form_teacher_is_single_canonical_role():
     assert '"Class Teacher / Form Teacher"' in APP
-    assert 'Class Teacher / Form Teacher" in roles' in APP   # V63: checked against the whole role set
+    assert 'rbac_role == "Class Teacher / Form Teacher"' in APP
     assert 'UPDATE role_assignments SET role=\'Class Teacher / Form Teacher\'' in DB
 
 

@@ -12,9 +12,11 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="v61_")
 sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "tests"))
 os.chdir(ROOT)
 
 import app as A
+import wf_helper as W
 from db import get_db
 from flask.testing import FlaskClient
 from werkzeug.datastructures import MultiDict
@@ -215,7 +217,8 @@ conn.execute("UPDATE students SET first_login_completed_at=NULL WHERE id IN (1,2
 conn.execute("UPDATE students SET admission_no='001' WHERE id=1")
 conn.commit(); conn.close()
 c, r = student_login("chinedu")
-check("first login WITHOUT a class code is refused", not is_in(c) and "first login" in html(r).lower())
+check("a normal sign-in does NOT need a class code (the code is for enrolment/linking)", is_in(c), html(r)[-200:])
+conn = db(); conn.execute("UPDATE students SET first_login_completed_at=NULL WHERE id=1"); conn.commit(); conn.close()
 c, r = student_login("chinedu", code="WRONGCODE")
 check("first login with a wrong code is refused with a generic message", not is_in(c) and "Invalid login details" in html(r))
 c, r = student_login("chinedu", password="bad", code=code1)
@@ -417,13 +420,12 @@ check("score history cannot be edited", not ok)
 ok = not blocked("DELETE FROM score_audit")
 check("score history cannot be deleted", not ok)
 # published term requires a reason
-conn = db(); conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (term_id,)); conn.commit(); conn.close()
+W.publish(A, term_id)
 r = post_list(t_c, url, score_form({1: (13, 10, 53), 2: (8, 9, 30)}, ""), url)
-check("changing a published score without a reason is refused", db().execute("SELECT ca1 FROM scores WHERE student_id=1 AND subject_id=?", (subj,)).fetchone()[0] == 12)
+check("a published result is locked: the score cannot be changed without reopening", db().execute("SELECT ca1 FROM scores WHERE student_id=1 AND subject_id=?", (subj,)).fetchone()[0] == 12)
 r = post_list(t_c, url, score_form({1: (13, 10, 53), 2: (8, 9, 30)}, "Late correction"), url)
-last = db().execute("SELECT result_status, reason FROM score_audit ORDER BY id DESC LIMIT 1").fetchone()
-check("with a reason the published-score change is saved and marked Published", last["result_status"] == "Published" and last["reason"] == "Late correction")
-conn = db(); conn.execute("UPDATE terms SET is_published=0 WHERE id=?", (term_id,)); conn.commit(); conn.close()
+check("even with a reason a published score cannot be changed (reopen first)", db().execute("SELECT ca1 FROM scores WHERE student_id=1 AND subject_id=?", (subj,)).fetchone()[0] == 12)
+W.unpublish(A, term_id)
 # CSV import goes through the same audit
 csv_data = "admission_no,ca1,ca2,exam\n001,14,10,53\n"
 tk = tok(t_c, url)
@@ -451,6 +453,7 @@ tr = conn.execute("SELECT id FROM skill_traits WHERE school_id=1 AND category='a
 conn.close()
 pos_cases = [(1, 1, "Overall ON+Subject ON"), (1, 0, "Overall ON+Subject OFF"), (0, 1, "Overall OFF+Subject ON"), (0, 0, "Overall OFF+Subject OFF")]
 rs_url = f"/result/1?term_id={term_id}"
+W.publish(A, term_id)
 for ov, sb, label in pos_cases:
     on = [k for k in ALL_TOGGLES if k not in ("show_overall_position", "show_subject_position", "show_result_date", "show_watermark")]
     if ov: on.append("show_overall_position")
@@ -513,7 +516,7 @@ check("sheet shows school identity, class, term, student", all(w in sheet for w 
 r = post(a_c, "/result/1/extra", {"term_id": 99999, "days_school_opened": "1", "days_present": "1", "days_absent": "0"}, f"/result/1?term_id={term_id}")
 check("result details cannot be written against another school's term", db().execute("SELECT COUNT(*) FROM student_term_info WHERE term_id=99999").fetchone()[0] == 0)
 # print page
-conn = db(); conn.execute("UPDATE terms SET is_published=1 WHERE id=?", (term_id,)); conn.commit(); conn.close()
+W.publish(A, term_id)
 pp = a_c.get(f"/result/1/print?term_id={term_id}")
 pt = html(pp)
 check("dedicated print page renders", pp.status_code == 200 and 'class="rs-sheet' in pt)
@@ -553,15 +556,15 @@ conn.execute("UPDATE sessions SET name='2025/2026' WHERE id=?", (cur_term["sessi
 conn.commit(); conn.close()
 n_students = db().execute("SELECT COUNT(*) FROM students WHERE school_id=1").fetchone()[0]
 n_scores = db().execute("SELECT COUNT(*) FROM scores").fetchone()[0]
-r = post(a_c, "/admin/terms", {"action": "publish_term", "term_id": term_id}, "/admin/terms")
+W.publish(A, term_id)
 names = [r_[0] for r_ in db().execute("SELECT name FROM terms WHERE session_id=? ORDER BY id", (cur_term["session_id"],))]
 check("publishing First Term automatically creates Second Term", "Second Term" in names, names)
 t2 = db().execute("SELECT * FROM terms WHERE name='Second Term' AND session_id=?", (cur_term["session_id"],)).fetchone()
 check("auto-created term is inactive, unpublished and flagged", t2 and t2["is_active"] == 0 and t2["is_published"] == 0 and t2["is_auto_created"] == 1 and t2["created_from_term_id"] == term_id)
 check("students, staff and historical results are not duplicated or altered", db().execute("SELECT COUNT(*) FROM students WHERE school_id=1").fetchone()[0] == n_students and db().execute("SELECT COUNT(*) FROM scores").fetchone()[0] == n_scores)
 check("previous-term results preserved and still published", db().execute("SELECT is_published FROM terms WHERE id=?", (term_id,)).fetchone()[0] == 1)
-post(a_c, "/admin/terms", {"action": "unpublish_term", "term_id": term_id}, "/admin/terms")
-post(a_c, "/admin/terms", {"action": "publish_term", "term_id": term_id}, "/admin/terms")
+W.unpublish(A, term_id)
+W.publish(A, term_id)
 check("re-publishing does not create a duplicate term", db().execute("SELECT COUNT(*) FROM terms WHERE name='Second Term' AND session_id=?", (cur_term["session_id"],)).fetchone()[0] == 1)
 r = post(a_c, "/admin/terms", {"action": "edit_term", "term_id": t2["id"], "name": "Second Term", "start_date": "2026-01-12", "end_date": "2026-04-03", "next_term_begins": "2026-04-27"}, "/admin/terms")
 e = db().execute("SELECT * FROM terms WHERE id=?", (t2["id"],)).fetchone()
@@ -579,7 +582,7 @@ for nm, expect in (("1st Term", "2nd Term"), ("Term 2", "Term 3"), ("2nd Term", 
 conn.commit(); conn.close()
 for nm, expect in (("1st Term", "2nd Term"), ("Term 2", "Term 3"), ("2nd Term", "3rd Term")):
     tx = db().execute("SELECT t.id, t.session_id FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.name=?", ("S-" + nm,)).fetchone()
-    post(a_c, "/admin/terms", {"action": "publish_term", "term_id": tx[0]}, "/admin/terms")
+    W.publish(A, tx[0])
     got = [r_[0] for r_ in db().execute("SELECT name FROM terms WHERE session_id=? ORDER BY id", (tx[1],))]
     check(f"naming: publishing '{nm}' creates '{expect}'", expect in got, got)
 # third term -> next session
@@ -587,13 +590,13 @@ conn = db()
 conn.execute("INSERT INTO terms(name,session_id,is_active,is_published) VALUES('Third Term',?,0,0)", (cur_term["session_id"],))
 t3 = conn.execute("SELECT id FROM terms WHERE name='Third Term' AND session_id=?", (cur_term["session_id"],)).fetchone()[0]
 conn.commit(); conn.close()
-post(a_c, "/admin/terms", {"action": "publish_term", "term_id": t3}, "/admin/terms")
+W.publish(A, t3)
 ns = db().execute("SELECT * FROM sessions WHERE school_id=1 AND name='2026/2027'").fetchone()
 check("publishing the last term creates the next session 2026/2027", ns is not None and ns["is_active"] == 0 and ns["is_auto_created"] == 1)
 check("new session carries the term structure (3 inactive terms)", ns and db().execute("SELECT COUNT(*) FROM terms WHERE session_id=? AND is_active=0 AND is_published=0", (ns["id"],)).fetchone()[0] == 3)
 check("old session and its results are untouched", db().execute("SELECT COUNT(*) FROM sessions WHERE name='2025/2026'").fetchone()[0] == 1 and db().execute("SELECT COUNT(*) FROM scores").fetchone()[0] == n_scores)
-post(a_c, "/admin/terms", {"action": "unpublish_term", "term_id": t3}, "/admin/terms")
-post(a_c, "/admin/terms", {"action": "publish_term", "term_id": t3}, "/admin/terms")
+W.unpublish(A, t3)
+W.publish(A, t3)
 check("no duplicate session on re-publish", db().execute("SELECT COUNT(*) FROM sessions WHERE school_id=1 AND name='2026/2027'").fetchone()[0] == 1)
 r = post(a_c, "/admin/terms", {"action": "edit_session", "session_id": ns["id"], "name": "2026/2027", "start_date": "2026-09-14", "end_date": "2027-07-23"}, "/admin/terms")
 check("School Admin can edit the auto-created session", db().execute("SELECT start_date FROM sessions WHERE id=?", (ns["id"],)).fetchone()[0] == "2026-09-14")
