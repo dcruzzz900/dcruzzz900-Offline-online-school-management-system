@@ -9,8 +9,9 @@
     var timeEl = document.getElementById('datetime-card-time');
     var dateEl = document.getElementById('datetime-card-date');
 
+    var serverOffset = {{ (server_now_ms or 0) }} ? ({{ (server_now_ms or 0) }} - Date.now()) : 0;
     function render() {
-        var now = new Date();
+        var now = new Date(Date.now() + serverOffset);
         try {
             timeEl.textContent = new Intl.DateTimeFormat('en-GB', {
                 timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
@@ -25,7 +26,9 @@
                 var mm = new Intl.DateTimeFormat('en-GB', { timeZone: tz, month: '2-digit' }).format(now);
                 dateText = parts.year + '-' + mm + '-' + parts.day + ' (' + parts.weekday + ')';
             } else {
-                dateText = parts.weekday + ', ' + parts.day + ' ' + parts.month + ' ' + parts.year;
+                var mm2 = new Intl.DateTimeFormat('en-GB', { timeZone: tz, month: '2-digit' }).format(now);
+                var hm = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true }).format(now);
+                dateText = parts.weekday + ', ' + parts.day + '/' + mm2 + '/' + parts.year + ' \u2014 ' + hm;
             }
             dateEl.textContent = dateText;
         } catch (e) {
