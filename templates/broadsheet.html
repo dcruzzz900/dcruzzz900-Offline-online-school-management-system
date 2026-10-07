@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Broadsheet{% endblock %}
 {% block content %}
-{% if th %}<style>.broadsheet-themed th{background:{{ th.accent }}!important;color:#fff!important}.broadsheet-themed{font-family:{{ th.font_css|safe }}}</style>{% endif %}
 <div class="report-header">
     {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
     <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
@@ -18,8 +17,8 @@
             {% endfor %}
         </select>
     </form>
-    <a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
-    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>
+    {% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
+    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only</span>{% endif %}
     {% if cumulative_enabled %}
     <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id) }}">📊 Annual / Cumulative Broadsheet</a>
     {% endif %}
@@ -35,7 +34,7 @@
 </div>
 
 <div style="overflow-x:auto;">
-<table class="broadsheet-themed">
+<table>
     <tr>
         <th>S/N</th>
         <th>Student</th>
