@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Staff roles{% endblock %}
+{% block content %}
+<h1>Roles — {{ user.name }}</h1>
+<p class="muted">A staff member can hold several roles at once. Their permissions are the combination of every active role. Adding or removing a role takes effect immediately. Score entry still depends on the subject and class actually assigned to them.</p>
+<div class="card"><h3>Active roles</h3>
+<table><tr><th>Role</th><th>Scope</th><th></th></tr>
+{% for a in assignments %}<tr><td>{{ a.role }}</td><td>{{ [a.school_level, ('class #' ~ a.class_id) if a.class_id else '', ('subject #' ~ a.subject_id) if a.subject_id else '']|select|join(' · ') }}</td>
+<td><form method="POST" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="assignment_id" value="{{ a.id }}"><button class="btn btn-small btn-secondary" type="submit">Remove</button></form></td></tr>
+{% else %}<tr><td colspan="3" class="muted">No role assignments yet.</td></tr>{% endfor %}</table></div>
+<div class="card"><h3>Add a role</h3>
+<form method="POST" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add">
+<label>Role<select name="role" required>{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></label>
+<label>Class/arm (optional)<select name="class_id"><option value="">All</option>{% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
+<label>Subject (optional)<select name="subject_id"><option value="">All</option>{% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+<button class="btn" type="submit">Add role</button></form></div>
+<p><a class="btn btn-secondary" href="{{ url_for('admin_teachers') }}">Back to staff</a></p>
+{% endblock %}

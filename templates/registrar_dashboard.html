@@ -1,10 +1,29 @@
-{% extends "base.html" %}{% block title %}Registrar{% endblock %}{% block content %}
-<div class="page-heading"><div><div class="eyebrow">REGISTRAR / ADMISSIONS</div><h1>Admissions &amp; Student Records</h1><p>Register students, manage their status and process transfers. Every change keeps the student's full history.</p></div>
-<a class="btn" href="{{ url_for('registrar_register') }}">+ Register a student</a></div>
-<div class="stat-grid">{% for st in statuses %}<a class="stat-box" href="{{ url_for('registrar_students', status=st) }}"><div class="num">{{ counts.get(st, 0) }}</div><div class="label">{{ st }}</div></a>{% endfor %}</div>
-<div class="card"><h3>Recently registered</h3><div class="table-wrap"><table><tr><th>Admission No.</th><th>Register No.</th><th>Student</th><th>Class</th><th>Status</th></tr>
-{% for s in recent %}<tr><td>{{ s.admission_no }}</td><td>{{ s.register_no or '—' }}</td><td><a href="{{ url_for('registrar_student', student_id=s.id) }}">{{ student_full_name(s) }}</a></td><td>{{ s.class_name }}</td><td>{{ s.status or 'Active' }}</td></tr>{% else %}<tr><td colspan="5" class="muted">No students yet.</td></tr>{% endfor %}</table></div></div>
-<div class="card"><h3>Latest status changes</h3><div class="table-wrap"><table><tr><th>Date</th><th>Student</th><th>Change</th><th>Reason / destination</th></tr>
-{% for m in moves %}<tr><td>{{ m.effective_date }}</td><td>{{ m.last_name }} {{ m.first_name }}</td><td>{{ m.old_status or '—' }} → <b>{{ m.new_status }}</b></td><td>{{ m.destination_school or m.reason or '' }}</td></tr>{% else %}<tr><td colspan="4" class="muted">Nothing yet.</td></tr>{% endfor %}</table></div></div>
-<div class="card" style="max-width:640px"><h3>Add a school-defined status</h3><form method="POST" action="{{ url_for('registrar_add_status') }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Status name<input name="label" maxlength="30" required placeholder="e.g. On Leave of Absence"></label><label class="role-check"><input type="checkbox" name="active_like" value="1"> Student stays on class lists</label><div><button class="btn">Add status</button></div></form></div>
-<p><a href="{{ url_for('registrar_students') }}">All students →</a></p>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Registrar &amp; Admissions{% endblock %}
+{% block content %}
+<h1>Registrar &amp; Admissions</h1>
+<div class="card"><h3>Students by status</h3>
+{% for c in counts %}<span class="badge" style="margin-right:.5rem">{{ c.status }}: {{ c.c }}</span>{% else %}<span class="muted">No students yet.</span>{% endfor %}</div>
+<div class="card"><h3>Register a new student</h3>
+<form method="POST" action="{{ url_for('registrar_register_student') }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>First name<input name="first_name" required></label><label>Last name<input name="last_name" required></label><label>Other names<input name="other_names"></label>
+<label>Gender<select name="gender" required><option value="M">Male</option><option value="F">Female</option></select></label>
+<label>Class / arm<select name="class_id" required>{% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
+<label>Admission No. (blank = {{ suggestion }})<input name="admission_no" placeholder="{{ suggestion }}"></label>
+<label>Register No. (blank = next in class)<input name="register_no"></label>
+<label>Date of birth<input type="date" name="date_of_birth"></label><label>Previous school<input name="previous_school"></label>
+<label>Parent / guardian<input name="parent_name"></label><label>Parent phone<input name="parent_phone"></label><label>Parent email<input type="email" name="parent_email"></label>
+<label>Admission notes<input name="admission_notes"></label>
+<button class="btn" type="submit">Admit student</button></form></div>
+<div class="card"><h3>Change a student's status</h3>
+<form method="POST" id="statusForm" class="form-grid" onsubmit="this.action='{{ url_for('registrar_change_status', student_id=0) }}'.replace('/0/','/'+this.student.value+'/')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Student<select name="student" required>{% for s in students %}<option value="{{ s.id }}">{{ s.class_name }} — {{ s.last_name }} {{ s.first_name }} ({{ s.admission_no }}, {{ s.status }})</option>{% endfor %}</select></label>
+<label>New status<select name="new_status">{% for s in statuses %}<option>{{ s }}</option>{% endfor %}</select></label>
+<label>Effective date (default today)<input type="date" name="effective_date"></label>
+<label>Destination school (transfers)<input name="destination_school"></label>
+<label>Reason<input name="reason"></label><button class="btn" type="submit">Update status</button></form>
+<form method="POST" action="{{ url_for('registrar_add_status') }}" class="form-grid" style="margin-top:1rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>School-defined status<input name="name" placeholder="e.g. Deferred"></label><label><input type="checkbox" name="keeps_enrolled"> stays on the class list</label><button class="btn btn-secondary" type="submit">Add status</button></form></div>
+<div class="card" style="overflow-x:auto"><h3>Recent status history</h3><table><tr><th>Server time</th><th>Student</th><th>From</th><th>To</th><th>Destination / previous school</th><th>Reason</th><th>By</th></tr>
+{% for r in history %}<tr><td>{{ r.server_timestamp }}</td><td><a href="{{ url_for('student_status_history_view', student_id=r.student_id) }}">{{ r.last_name }} {{ r.first_name }}</a></td><td>{{ r.previous_status or '—' }}</td><td>{{ r.new_status }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }}</td></tr>{% else %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}
