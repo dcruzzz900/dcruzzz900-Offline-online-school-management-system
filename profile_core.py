@@ -164,8 +164,9 @@ def check_value(spec, raw, *, dob_context=None):
         if not PHONE_RE.match(v):
             return None, f"{label}: enter digits only, 7 to 15 long, optionally starting with +."
     elif kind == "username":
-        v = v.lower()
-        if not re.fullmatch(r"[a-z0-9._\-]{3,40}", v):
+        # Case is preserved as typed. Uniqueness is enforced case-insensitively (database trigger + index), so two
+        # usernames that differ only by case can never exist and login stays unambiguous.
+        if not re.fullmatch(r"[A-Za-z0-9._\-]{3,40}", v):
             return None, f"{label} must be 3-40 characters: letters, numbers, dot, underscore or hyphen."
     elif kind == "gender":
         v = v.upper()[:1] if v.upper() in ("M", "F", "MALE", "FEMALE") else v

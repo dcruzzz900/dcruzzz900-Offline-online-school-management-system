@@ -1,46 +1,28 @@
-# V63 — consolidated requirements (second round)
+# V63 — functional-spec integration (built on v62)
 
-Tests: `python tests/v62_scenarios.py` → 622 checks, 0 failed (it is the cumulative scenario suite; name kept for continuity).
-`python tests/v60_scenarios.py` → 213 passed. The 47 pytest-style files in `tests/test_*.py` pass.
-Also checked in headless Chromium: result PDFs for all 5 templates (one page each), Super Admin header at 1366 px and 375 px (hamburger opens/closes).
+## New / changed in this release
+| Spec | What was done |
+|---|---|
+| 28–30 Publication workflow | `result_publication` (one row per school+class+term) with DRAFT → SUBMITTED → UNDER REVIEW → APPROVED → PUBLISHED, RETURNED, and PUBLISHED → REOPENED → SUBMITTED. Submission validates missing scores, ranges, totals and grades. Return and reopen need a reason. Append-only `result_publication_audit` (actor, role, tenant, previous/new status, reason, event date, server timestamp). Page: **Result approval** (`/results/workflow`). |
+| 28 Explicit publication RBAC | `result_workflow_permissions` (submit / review / approve / publish / reopen). A title such as Principal grants nothing. School Admin accounts start with explicit, revocable grants. Manage at **Workflow permissions** (`/admin/result-permissions`, School Admin only). |
+| 29 Backend publication guard | `before_request` hook in `v63_spec.py` rejects (403) result PDF/print/e-mail, cumulative PDF, broadsheet PDF/print, class bulk PDF/e-mail, `/reports/broadsheet` export, and the student/parent result pages (view too) unless that class+term is PUBLISHED. Staff may still view/preview; the page carries a banner and a print-neutralising stylesheet. Buttons are hidden when unpublished, but the guard is the control. |
+| 28 Score lock | Scores are locked while SUBMITTED / UNDER REVIEW / APPROVED / PUBLISHED (`save_score` and the score-entry page). The old "edit a published score with a reason" path is replaced by Reopen. |
+| 28 Legacy toggle | The term-wide Publish/Unpublish buttons no longer publish; they redirect to the workflow. `terms.is_published` now means "at least one class is published" (older screens read it); real decisions use `result_publication`. Terms already published before this release migrate to PUBLISHED classes. |
+| 9–12 Attendance | The server decides the date (school timezone, default Africa/Lagos). The submitted date must equal today or is refused with the exact future/backdated messages. No date picker, no manual check-in/out times. Statuses present/absent/late/excused. Duplicates are refused; changes go through a correction (reason required). `server_recorded_at` is immutable (DB trigger). `attendance_audit` is append-only. Staff attendance and self check-in follow the same rules. |
+| 3–5 Multiple roles | `/admin/staff/<id>/roles` adds/removes roles without replacing the others; permissions combine; effective immediately; audited. "School Admin" is excluded from selectable roles and rejected on the create/assign paths. Scope check rewritten: score entry needs the real subject+class assignment whatever other roles the person holds; class-wide access needs the Form Teacher class. |
+| 6 Score audit | Added action (entered / edited / cleared / changed after return), roles held, class arm and server timestamp to `score_audit`; shown in the audit table. |
+| 7, 27 Registrar + status | `/registrar` dashboard: admit students (unique admission number per school, generated if blank; register number per class), change status (Active, Suspended, Withdrawn, Transferred, Graduated, Expelled + school-defined) with effective date, destination/previous school and reason; append-only `student_status_history`. Class/Form Teachers manage register numbers for their own class (`/my-class/<id>/register`). |
+| 13–14 | Unread notifications are green with a red dot; read ones neutral; red count badge in the sidebar and header. The dashboard clock is anchored to server time in the school timezone, format `Friday, 03/10/2026 — 7:02 PM`. Teacher dashboard lists all roles. |
+| 31 | A student with valid credentials signs in without a class code (the code is only for enrolment/linking). |
 
-## Done (requirement → what changed)
-| # | Requirement | Status |
-|---|---|---|
-| 1 | Super Admin menu/header | Taller header (72 px) with search, notification bell (red count) and avatar; hamburger on phones; active item highlighted; every menu link tested (200); header search filters schools. |
-| 2, 30 | No duplicate settings | Auth branding only in Theme & Branding; result colours/alignment/header only in Result Display Settings; School Profile keeps school information only (and says where the others live). A scan of all settings templates found no remaining duplicate controls except signup forms and Super Admin billing/subscription pages (see "Not done"). |
-| 3 | Multiple roles | A staff member can hold any number of roles. Permissions combine; adding/removing a role is immediate and audited; all roles show on the staff dashboard and staff list. |
-| 4 | School Admin | Not an assignable role anywhere (form and server both refuse). |
-| 5 | Subject-based score entry | Score entry/CSV upload depend only on the class+subject assignment (and the school admin). A Discipline Master without an assignment cannot; with one, can. Other roles don't block entry. |
-| 6 | Score audit | Every entered/edited/cleared/deleted/after-publication change records staff name, staff ID, all roles, subject, class, arm, student, previous/new score, action, date and time. School Admin sees it in Audit History; append-only. |
-| 7 | Registrar / Admissions Officer | Dashboard, registration with generated admission and register numbers, class/arm, admission details, statuses (Active, Suspended, Transferred, Withdrawn, Graduated, Expelled + school-defined), transfers (date, destination, history kept), append-only status history, unique numbers per school. |
-| 8 | Class Teacher / Form Teacher | Own class only: register (view/number), attendance, history, results, individual sheets, broadsheet (view/print). No score entry unless assigned the subject; no settings access. |
-| 9–13 | Attendance | Server date/time in the school's timezone; future and backdated dates rejected with the exact messages; no date picker or time inputs; one record per student/staff per day; corrections need a reason and keep the original record/timestamp; the original timestamp/date are protected by database triggers; audit log of records, corrections and rejected attempts; statuses Present/Absent/Late/Excused. |
-| 14, 15 | Notifications, date/time | Dashboard + menu show the unread count (red); unread items green, read neutral; mark one/all read updates every counter at once (staff, student, parent, Super Admin). Dashboard shows "Friday, 03/10/2026 — 7:02 PM" from the server clock in the school timezone (the device clock is not used). |
-| 17 | Comments | Subject-teacher, Class-teacher and Principal comments are separate fields with separate auto-comment rules (carried over from V62). |
-| 18–25 | Result sheet | Preview now renders the real result sheet (same template/settings/data) — the old mock preview is gone. Logo and text alignment are independent. Logo/passport/signature images over 600 KB used to vanish silently; they are now scaled instead (this was why the logo did not appear). Principal signature/date work before or after the class teacher saves. Passport is fitted without stretching or cropping. Every display toggle is tested for the sheet and the PDF. |
-| 26 | Broadsheet styling | Screen, print and PDF broadsheets inherit the result sheet's colours, font, logo (same on/off switch) and alignments. |
-| 27 | Student login | Username, Admission No. or Register No. + password. No class code. Account status is checked after the credentials (Suspended/Withdrawn/Transferred etc. get a clear message). Students with a missing class link get a clear message instead of "Invalid login details". |
-| 28, 29 | Custom result fields | Admin adds/edits/enables/deletes fields (text, number, date, choice, yes/no; per-term or fixed); choose result sheet and/or student profile; values entered in the result editor; tenant-specific; a field holding data can only be switched off, not deleted. |
-| 31 | Tenant isolation | Each new route/table is scoped by the session's school; cross-school attempts are tested for registrar, status, registers, attendance, custom fields, notifications, score audit, broadsheet. |
+## Already present in v62 and left unchanged (verified by the existing suites, not re-implemented)
+Single rendering engine for preview/PDF/print, result styles, logo/passport/signature handling, display toggles, custom fields, educational domains, broadsheet styling, tenant checks, Super Admin responsive menu.
 
-## Bugs found and fixed along the way
-* Parent login crashed (database connection closed then reused).
-* Three parent-message routes were accidentally removed during editing and were restored; a new test now fails if any template links to a route that does not exist.
-* The CSRF check now also accepts the `X-CSRF-Token` header (needed by the new fetch() calls).
+## Known limits / decisions to confirm
+* Printing from the browser's own menu cannot be blocked server-side; the preview page hides itself in print media, and every print/PDF *endpoint* is blocked.
+* Excused absence is stored as `absent` in the legacy `status` column (detail kept in `detail_status`), so totals on result sheets count it as an absence.
+* Cumulative PDF is gated by the resolved term's publication.
+* Existing tests that published by flipping `terms.is_published` now use `tests/wf_helper.py`; the real workflow is tested in `tests/v63_scenarios.py` (107 checks).
 
-## Behaviour changes
-* Roles now stack (V62 replaced the old role); score entry no longer looks at job titles.
-* Class codes are no longer used for sign-in. The class-code pages still exist but nothing reads them (see below).
-* Manual check-in/out times were removed from the staff attendance page (the self check-in button stamps server time).
-* Result Display Settings URL: `/admin/result-display`. New pages: `/admin/result-fields`, `/registrar`, `/my-class/<id>/register`.
-* Migrations (run automatically): `v63_attendance_integrity`, `v63_score_audit_fields`, `v63_custom_result_fields`, `v63_registrar`, `v63_notification_reads`.
-* Admission and register number uniqueness is enforced per school by new database indexes; if an existing database already contains duplicates, the index is skipped (the registrar form still blocks duplicates).
-
-## Not done / not verified
-* Class Login Codes: kept as-is but now unused. The requirement says they are for "enrollment/linking"; no enrolment flow uses them yet — decide what they should do.
-* Offline/device sync: the attendance and role changes were tested online only. If devices sync attendance offline, the sync code needs the same date rule.
-* Super Admin billing vs subscription pages both set a plan/days; I did not merge them.
-* The acceptance matrix was not run on real phones/tablets. Browser checks were headless Chromium only (result printing, Super Admin header). Safari/Firefox print was not tested.
-* Result PDF is drawn by ReportLab, the on-screen sheet by HTML/CSS: the same data and settings feed both and tests compare their content, but they are not pixel-identical.
-* Not exercised: Sub-Admin and Principal against every new page; staff signup page layout.
+## Tests
+`python tests/v63_scenarios.py` (107), `v62` (248), `v61` (292), `v60` (213), plus the 45 contract tests — all pass.
