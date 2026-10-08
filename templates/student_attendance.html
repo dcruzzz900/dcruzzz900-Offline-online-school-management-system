@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}My Attendance{% endblock %}
+{% block content %}<h1>My Attendance</h1>
+<div class="card" style="overflow-x:auto"><table><tr><th>Session</th><th>Term</th><th>Days recorded</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>
+{% for r in rows %}<tr><td>{{ r.session_name }}</td><td>{{ r.term_name }}</td><td>{{ r.days }}</td><td>{{ r.present }}</td><td>{{ r.absent }}</td><td>{{ r.late }}</td><td>{{ r.excused }}</td></tr>{% else %}<tr><td colspan="7" class="muted">No attendance recorded yet.</td></tr>{% endfor %}</table></div>
+<p><a class="btn btn-secondary" href="{{ url_for('student_dashboard') }}">Back</a></p>{% endblock %}

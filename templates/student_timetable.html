@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}My Timetable{% endblock %}
+{% block content %}<h1>My Timetable</h1>
+{% if not version %}<div class="card"><p class="muted">No timetable has been published yet.</p></div>{% else %}
+<div class="card" style="overflow-x:auto"><table><tr><th>Day</th><th>Time</th><th>Subject</th><th>Teacher</th></tr>
+{% for e in entries %}<tr><td>{{ e.day_name }}</td><td>{{ e.start_time }}–{{ e.end_time }}</td><td>{{ e.subject_name }}</td><td>{{ e.teacher_name or '—' }}</td></tr>{% else %}<tr><td colspan="4" class="muted">No lessons for your class yet.</td></tr>{% endfor %}</table></div>{% endif %}
+<p><a class="btn btn-secondary" href="{{ url_for('student_dashboard') }}">Back</a></p>{% endblock %}

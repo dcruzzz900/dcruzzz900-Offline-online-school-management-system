@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block title %}My Subjects{% endblock %}
+{% block content %}<h1>My Subjects — {{ cls.name if cls else '' }}</h1>
+<div class="card"><table><tr><th>Subject</th><th>Teacher</th></tr>{% for r in rows %}<tr><td>{{ r.subject_name }}</td><td>{{ ((r.teacher_title ~ ' ') if r.teacher_title else '') ~ (r.teacher_name or '—') }}</td></tr>{% else %}<tr><td colspan="2" class="muted">No subjects assigned yet.</td></tr>{% endfor %}</table></div>
+<p><a class="btn btn-secondary" href="{{ url_for('student_dashboard') }}">Back</a></p>{% endblock %}

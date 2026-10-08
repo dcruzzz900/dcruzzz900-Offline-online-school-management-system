@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Student status history{% endblock %}
 {% block content %}
-<h1>Status history — {{ student_full_name(st) }}</h1><p class="muted">{{ st.class_name }} · Admission No. {{ st.admission_no }} · Current status: <strong>{{ st.status }}</strong></p>
+<h1>Status history — {{ student_full_name(st) }}</h1><p class="muted">{{ st.class_name }} · Admission No. {{ st.admission_no }} · Current status: {{ st.status|status_badge }}</p>
 <div class="card" style="overflow-x:auto"><table><tr><th>Server time (UTC)</th><th>From</th><th>To</th><th>Effective</th><th>Destination / previous school</th><th>Reason</th><th>By</th></tr>
-{% for r in rows %}<tr><td>{{ r.server_timestamp }}</td><td>{{ r.previous_status or '—' }}</td><td>{{ r.new_status }}</td><td>{{ r.effective_date }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }} ({{ r.changed_by_role }})</td></tr>{% else %}<tr><td colspan="7" class="muted">No history.</td></tr>{% endfor %}</table></div>
+{% for r in rows %}<tr><td>{{ r.server_timestamp }}</td><td>{{ r.previous_status|status_badge if r.previous_status else '—' }}</td><td>{{ r.new_status|status_badge }}</td><td>{{ r.effective_date }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }} ({{ r.changed_by_role }})</td></tr>{% else %}<tr><td colspan="7" class="muted">No history.</td></tr>{% endfor %}</table></div>
 {% endblock %}

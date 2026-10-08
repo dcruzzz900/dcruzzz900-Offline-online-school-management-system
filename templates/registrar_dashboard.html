@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Registrar &amp; Admissions</h1>
 <div class="card"><h3>Students by status</h3>
-{% for c in counts %}<span class="badge" style="margin-right:.5rem">{{ c.status }}: {{ c.c }}</span>{% else %}<span class="muted">No students yet.</span>{% endfor %}</div>
+{% for c in counts %}<span style="margin-right:.6rem">{{ c.status|status_badge }} <b>{{ c.c }}</b></span>{% else %}<span class="muted">No students yet.</span>{% endfor %}</div>
 <div class="card"><h3>Register a new student</h3>
 <form method="POST" action="{{ url_for('registrar_register_student') }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>First name<input name="first_name" required></label><label>Last name<input name="last_name" required></label><label>Other names<input name="other_names"></label>
@@ -25,5 +25,5 @@
 <form method="POST" action="{{ url_for('registrar_add_status') }}" class="form-grid" style="margin-top:1rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>School-defined status<input name="name" placeholder="e.g. Deferred"></label><label><input type="checkbox" name="keeps_enrolled"> stays on the class list</label><button class="btn btn-secondary" type="submit">Add status</button></form></div>
 <div class="card" style="overflow-x:auto"><h3>Recent status history</h3><table><tr><th>Server time</th><th>Student</th><th>From</th><th>To</th><th>Destination / previous school</th><th>Reason</th><th>By</th></tr>
-{% for r in history %}<tr><td>{{ r.server_timestamp }}</td><td><a href="{{ url_for('student_status_history_view', student_id=r.student_id) }}">{{ r.last_name }} {{ r.first_name }}</a></td><td>{{ r.previous_status or '—' }}</td><td>{{ r.new_status }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }}</td></tr>{% else %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endfor %}</table></div>
+{% for r in history %}<tr><td>{{ r.server_timestamp }}</td><td><a href="{{ url_for('student_status_history_view', student_id=r.student_id) }}">{{ r.last_name }} {{ r.first_name }}</a></td><td>{{ (r.previous_status or '—')|status_badge if r.previous_status else '—' }}</td><td>{{ r.new_status|status_badge }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }}</td></tr>{% else %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endfor %}</table></div>
 {% endblock %}

@@ -3,6 +3,11 @@
 {% block content %}
 <h1>Roles — {{ user.name }}</h1>
 <p class="muted">A staff member can hold several roles at once. Their permissions are the combination of every active role. Adding or removing a role takes effect immediately. Score entry still depends on the subject and class actually assigned to them.</p>
+<div class="card"><h3>Title (optional)</h3>
+<form method="POST" action="{{ url_for('staff_set_title', user_id=user.id) }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Title<select name="title"><option value="">No title</option>{% for t in staff_title_options() %}<option {% if user.title == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+<label>Or add a school-defined title<input name="custom_title" maxlength="20" placeholder="e.g. Engr., Rev., Alhaji"></label>
+<button class="btn" type="submit">Save title</button></form><p class="muted">Shown as: <b>{{ user|staff_name }}</b></p></div>
 <div class="card"><h3>Active roles</h3>
 <table><tr><th>Role</th><th>Scope</th><th></th></tr>
 {% for a in assignments %}<tr><td>{{ a.role }}</td><td>{{ [a.school_level, ('class #' ~ a.class_id) if a.class_id else '', ('subject #' ~ a.subject_id) if a.subject_id else '']|select|join(' · ') }}</td>
