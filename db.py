@@ -2299,8 +2299,9 @@ def attendance_percentage(present, opened):
 # by the school's own grade-scale "remark" (e.g. "Excellent", "Fail") so
 # they always match whatever grading system (Nigerian, British, or
 # custom) the school has configured — the same remark text that already
-# drives per-subject grades. The same short comment is used for both the
-# teacher's and principal's remark; there's no separate "formal" register.
+# drives per-subject grades. The class teacher's comment and the principal's
+# comment use SEPARATE banks (different voice and wording), so the two never
+# read as the same sentence on a result sheet. Schools can still edit either.
 _COMMENT_BANK = {
     "excellent": "Excellent performance. Keep it up.",
     "very good": "Very good performance. Keep it up.",
@@ -2334,8 +2335,26 @@ def generate_teacher_comment(remark, average, subjects_written):
     return _bank_comment(remark, average, subjects_written)
 
 
+_PRINCIPAL_BANK = {
+    "excellent": "A commendable result that reflects the school's standards. The school expects this to be sustained.",
+    "very good": "A strong result. The school encourages continued focus and consistency.",
+    "good": "A fair result with clear potential. The school urges greater effort in the weaker subjects.",
+    "fair": "An average result. Closer attention to studies is needed to reach the expected standard.",
+    "pass": "The result is below expectation. Parents are advised to support more regular study at home.",
+    "fail": "The result is unsatisfactory. The school recommends close supervision and a plan for improvement.",
+}
+
+
 def generate_principal_comment(remark, average, subjects_written):
-    return _bank_comment(remark, average, subjects_written)
+    if not subjects_written:
+        return "No result is available for this term."
+    text = _PRINCIPAL_BANK.get((remark or "").strip().lower())
+    if text:
+        return text
+    for floor, key in ((70, "excellent"), (60, "very good"), (50, "good"), (45, "fair"), (40, "pass")):
+        if average >= floor:
+            return _PRINCIPAL_BANK[key]
+    return _PRINCIPAL_BANK["fail"]
 
 
 POSITION_LABELS = {
@@ -3499,6 +3518,11 @@ RESULT_TEMPLATES = [
     ("formal_school", "Formal School", "Serif typography and a double-ruled border for a formal certificate feel."),
     ("compact_academic", "Compact Academic", "Tight rows so long subject lists stay on one page."),
     ("detailed_report", "Detailed Report", "Adds the grading key and fuller remarks."),
+    ("executive_band", "Executive Band", "Full-width colour band header, left-aligned, ruled rows and accent-edged information cells."),
+    ("minimal_clean", "Minimal Clean", "Airy, borderless layout: hairline rules, a two-column information list and a plain table."),
+    ("ledger_classic", "Ledger Grid", "Accounting-ledger look: monospaced type, heavy full grid and a boxed information table on cream paper."),
+    ("vibrant_cards", "Vibrant Cards", "Rounded gradient header, tinted information cards and pill section headings."),
+    ("split_header", "Split Header", "Two-tone header with the school block on colour and the passport on a light panel."),
 ]
 _LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
 
@@ -3715,3 +3739,16 @@ def migration_062_v63_spec(conn):
 
 
 STEPS.append(("spec_workflow_attendance_status_v63", migration_062_v63_spec))
+
+
+# ---------------------------------------------------------------------------
+# V64 — optional staff titles (Mr., Mrs., Dr. ... or school-defined)
+# ---------------------------------------------------------------------------
+def migration_063_v64_titles(conn):
+    ensure_column(conn, "users", "title", "TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_staff_titles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, name TEXT NOT NULL,
+        UNIQUE(school_id, name))""")
+
+
+STEPS.append(("staff_titles_v64", migration_063_v64_titles))

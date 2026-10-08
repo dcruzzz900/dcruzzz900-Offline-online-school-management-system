@@ -1688,19 +1688,6 @@ def admin_school():
         date_format = request.form.get("date_format", "dmy")
         if date_format not in ("dmy", "mdy", "ymd"):
             date_format = "dmy"
-        try:
-            auth_logo_opacity = float(request.form.get("auth_logo_opacity", "0.10"))
-        except (TypeError, ValueError):
-            auth_logo_opacity = 0.10
-        auth_logo_opacity = max(0.03, min(0.35, auth_logo_opacity))
-        auth_logo_position = request.form.get("auth_logo_position", "center")
-        if auth_logo_position not in ("left", "center", "right"):
-            auth_logo_position = "center"
-        auth_background_style = request.form.get("auth_background_style", "watermark")
-        if auth_background_style not in ("watermark", "soft", "plain"):
-            auth_background_style = "watermark"
-        auth_show_school_name = 1 if request.form.get("auth_show_school_name") else 0
-        auth_branding_enabled = 1 if request.form.get("auth_branding_enabled") else 0
         web_font = request.form.get("web_font", "system")
         if web_font not in WEB_FONTS:
             web_font = "system"
@@ -1709,10 +1696,8 @@ def admin_school():
         else:
             conn.execute(
                 "UPDATE schools SET name=?, registered_email=?, registered_phone=?, logo_align=?, name_align=?, timezone=?, date_format=?, "
-                "web_font=?, auth_logo_opacity=?, auth_logo_position=?, auth_background_style=?, "
-                "auth_show_school_name=?, auth_branding_enabled=? WHERE id=?",
-                (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format, web_font,
-                 auth_logo_opacity, auth_logo_position, auth_background_style, auth_show_school_name, auth_branding_enabled, school_id),
+                "web_font=? WHERE id=?",
+                (name, registered_email, registered_phone, logo_align, name_align, timezone, date_format, web_font, school_id),
             )
             conn.commit()
             flash("School profile updated.", "success")
@@ -2351,6 +2336,9 @@ def admin_setup_wizard():
         flash("Your school could not be found.", "error")
         return redirect(url_for("login"))
 
+    if request.method == "GET" and auto_activate_school(conn, school_id):
+        school = get_school(conn, school_id)       # setup is at 100%: the school was just activated automatically
+        flash("Setup is 100% complete — your school is now LIVE / ACTIVE.", "success")
     checks, ready = school_readiness_checks(conn, school_id)
     labels = {
         "profile":"School profile", "identity":"School/Tenant identity", "activation":"School activation",
@@ -3022,6 +3010,10 @@ def parent_dashboard():
                 analysis=analyze_student(analysis_rows)
             except Exception: analysis=None
         cards.append({"student":child,"analysis":analysis})
+    # Several children: show the SELECTED child only (default = first). Only children linked to this parent can be selected.
+    _ids={c["id"] for c in children}; _sel=request.args.get("child",type=int)
+    _sel=_sel if _sel in _ids else (children[0]["id"] if children else None)
+    cards=[c for c in cards if c["student"]["id"]==_sel]
     conn.close(); return render_template("parent_dashboard.html",children=children,cards=cards)
 
 @app.route("/parent/children")
@@ -4137,9 +4129,12 @@ def _tt_validate(conn, version_id):
         WHERE te.timetable_version_id=? AND te.school_id=? AND te.tenant_id=?""",(version_id,sid,tid)).fetchall()
     errors=[]; warnings=[]
     def add(kind,severity,entity,desc,action):
-        msg=f"{severity} — {entity} — {desc} — {action}"
+        # entity is {"id": <row id>}; the table stores a text entity_type and a numeric entity_id (a dict cannot be bound).
+        entity_id=entity.get("id") if isinstance(entity,dict) else None
+        entity_type="REQUIREMENT" if kind in ("REQUIREMENT","DAILY_LIMIT","BLOCK") else "ENTRY"
+        msg=f"{severity} — {kind.replace('_',' ').title()} — {desc} — {action}"
         (errors if severity=="ERROR" else warnings).append(msg)
-        conn.execute("INSERT INTO timetable_conflicts_v2(tenant_id,school_id,timetable_version_id,conflict_type,severity,entity_type,entity_id,description,suggested_action,resolved) VALUES(?,?,?,?,?,?,?,?,?,0)",(tid,sid,version_id,kind,severity,entity,entity.get("id") if isinstance(entity,dict) else None,desc,action))
+        conn.execute("INSERT INTO timetable_conflicts_v2(tenant_id,school_id,timetable_version_id,conflict_type,severity,entity_type,entity_id,description,suggested_action,resolved) VALUES(?,?,?,?,?,?,?,?,?,0)",(tid,sid,version_id,kind,severity,entity_type,entity_id,desc,action))
     # Hard conflicts by resource/slot.
     for key,label in [("teacher_id","Teacher"),("class_id","Class"),("room_id","Room")]:
         seen={}
@@ -4168,7 +4163,10 @@ def _tt_validate(conn, version_id):
     for r in reqs:
         count=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"])
         if count<r["periods_per_week"]:
-            add("REQUIREMENT","ERROR",{"id":r["id"]},f"{r['class_id']} subject {r['subject_id']} has {count}/{r['periods_per_week']} required periods","Add the missing periods")
+            _names=conn.execute("SELECT c.name cn, s.name sn, (SELECT COUNT(*) FROM class_subjects cs WHERE cs.class_id=c.id AND cs.subject_id=s.id AND cs.teacher_id IS NOT NULL) assigned FROM classes c, subjects s WHERE c.id=? AND s.id=?",(r["class_id"],r["subject_id"])).fetchone()
+            _label=f"{_names['cn']} {_names['sn']}" if _names else f"class {r['class_id']} subject {r['subject_id']}"
+            add("REQUIREMENT","ERROR",{"id":r["id"]},f"{_label} has {count}/{r['periods_per_week']} required periods",
+                "Assign a teacher to this subject and class (Assign Subjects), then regenerate" if _names and not _names["assigned"] else "Add more teaching slots or free the teacher, then regenerate")
         if r["periods_per_day_limit"]:
             for day in range(1,7):
                 c=sum(1 for e in entries if e["class_id"]==r["class_id"] and e["subject_id"]==r["subject_id"] and e["day_id"]==day)
@@ -4211,7 +4209,7 @@ def _tt_generate_greedy(conn, version_id):
             for sl in slots:
                 day=sl["day_id"]; sk=(req["class_id"],sl["id"])
                 if sk in class_used: continue
-                for teacher_id in teachers_for or [None]:
+                for teacher_id in teachers_for:   # only real subject assignments are scheduled (no teacher => reported as missing, never invented)
                     if teacher_id and (teacher_id,sl["id"]) in teacher_used: continue
                     if teacher_id:
                         av=conn.execute("SELECT availability_status,is_hard_constraint FROM teacher_availability_v2 WHERE teacher_id=? AND day_id=? AND slot_id=? AND school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 1",(teacher_id,day,sl["id"],sid,tid)).fetchone()
@@ -5170,6 +5168,21 @@ def score_history_view(class_id, subject_id):
 
 # ---------- broadsheet ----------
 
+def _ca3_on():
+    """True only while the school's assessment configuration has CA3 activated (drives every broadsheet view)."""
+    try:
+        c = get_db()
+        try:
+            return bool(ca3_enabled(get_grading_config(c)))
+        finally:
+            c.close()
+    except Exception:
+        return False
+
+
+app.jinja_env.globals["ca3_on"] = _ca3_on
+
+
 def build_broadsheet_data(conn, class_id, term_id):
     school_id = current_school_id()
     subjects = conn.execute(
@@ -5201,11 +5214,11 @@ def build_broadsheet_data(conn, class_id, term_id):
             if score:
                 t = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
                 grade, remark = grade_for(t, conn, school_id)
-                subj_scores[subj["id"]] = {"total": t, "grade": grade}
+                subj_scores[subj["id"]] = {"total": t, "grade": grade, "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"], "exam": score["exam"]}
                 total += t
                 count += 1
             else:
-                subj_scores[subj["id"]] = {"total": "-", "grade": "-"}
+                subj_scores[subj["id"]] = {"total": "-", "grade": "-", "ca1": "-", "ca2": "-", "ca3": "-", "exam": "-"}
         average = round(total / count, 2) if count else 0
         rows.append({
             "student": st, "scores": subj_scores, "total": total, "average": average
@@ -5347,6 +5360,7 @@ def broadsheet_pdf(class_id):
         school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
+        use_ca3=_ca3_on(),
     )
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                       download_name=f"broadsheet_{class_row['name']}_{term['name']}.pdf".replace(" ", "_"))
@@ -7158,6 +7172,14 @@ def platform_dashboard():
         "admins": conn.execute("SELECT COUNT(*) c FROM users WHERE role IN ('admin','sub_admin')").fetchone()["c"],
         "classes": conn.execute("SELECT COUNT(*) c FROM classes").fetchone()["c"],
         "published_terms": conn.execute("SELECT COUNT(*) c FROM terms WHERE is_published=1").fetchone()["c"],
+        "schools_trial": conn.execute("SELECT COUNT(*) c FROM schools WHERE subscription_status='trial'").fetchone()["c"],
+        "parents": conn.execute("SELECT COUNT(*) c FROM parent_accounts").fetchone()["c"],
+        # a "result generated" = one student's scores for one term; "published" = classes whose results are officially published
+        "results_generated": conn.execute("SELECT COUNT(*) c FROM (SELECT DISTINCT student_id, term_id FROM scores)").fetchone()["c"],
+        "results_published": conn.execute("SELECT COUNT(*) c FROM result_publication WHERE status='published'").fetchone()["c"],
+        "pending_tasks": (conn.execute("SELECT COUNT(*) c FROM result_publication WHERE status IN ('submitted','under_review','approved')").fetchone()["c"]
+                          + conn.execute("SELECT COUNT(*) c FROM schools WHERE COALESCE(readiness_status,'pending')<>'ready'").fetchone()["c"]),
+        "notifications": conn.execute("SELECT COUNT(*) c FROM platform_notifications").fetchone()["c"],
     }
     recent_audit = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 10").fetchall()
     conn.close()
@@ -9246,6 +9268,16 @@ register_v63(app, dict(
     score_range_errors=score_range_errors, compute_total=compute_total, grade_for=grade_for, all_terms_for_school=all_terms_for_school,
     AUTO_ADVANCE=AUTO_ADVANCE, assignable_roles=assignable_roles, plan_limit_check=plan_limit_check, upsert_enrollment=upsert_enrollment,
 ))
+
+from v64_spec import register_v64
+_v64_helpers = dict(
+    get_db=get_db, login_required=login_required, log_audit=log_audit, current_school_id=current_school_id, current_term=current_term,
+    form_teacher_class_ids=form_teacher_class_ids, active_role_assignments=active_role_assignments, canonical_rbac_role=canonical_rbac_role,
+    student_full_name=student_full_name, parent_children=parent_children, student_login_required=student_login_required,
+    parent_login_required=parent_login_required, get_school=get_school, school_readiness_checks=school_readiness_checks,
+)
+register_v64(app, _v64_helpers)
+auto_activate_school = _v64_helpers["auto_activate"]
 
 # ---------- V60: profiles, custom fields, audit views ----------
 from profile_routes import register_profile_routes

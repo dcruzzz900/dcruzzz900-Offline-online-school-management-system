@@ -198,7 +198,7 @@ def register_v63(app, h):
     @app.context_processor
     def _v63_context():
         """pub_state for result pages (buttons are only an aid - the guard above is the real control) + school clock."""
-        out = {"pub_state": None, "school_now_label": None, "my_roles": [], "server_now_ms": int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)}
+        out = {"pub_state": None, "school_now_label": None, "school_tz_name": None, "my_roles": [], "server_now_ms": int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000)}
         school_id = session.get("school_id")
         if not school_id or request.endpoint in (None, "static"):
             return out
@@ -206,6 +206,7 @@ def register_v63(app, h):
             conn = get_db()
             try:
                 out["school_now_label"] = core.friendly_now(conn, school_id)
+                out["school_tz_name"] = getattr(core.school_tz(conn, school_id), "key", None)
                 if session.get("user_id"):
                     out["my_roles"] = sorted(roles_of(conn, session["user_id"], school_id))
                 for pattern, kind in STAFF_VIEW_PATTERNS:

@@ -66,7 +66,7 @@ def _header_elements(school_name, logo_path, document_title, subtitle_text, styl
     return elements
 
 
-def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica", accent_color="#1f3a5f"):
+def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica", accent_color="#1f3a5f", use_ca3=False):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=landscape(A4), topMargin=1 * cm, bottomMargin=1 * cm)
     styles = getSampleStyleSheet()
@@ -79,29 +79,46 @@ def build_broadsheet_pdf(class_row, term, subjects, rows, school_name=None, logo
         styles, accent_color=accent_color,
     )
 
-    header = ["S/N", "Student Name"] + [s["name"] for s in subjects] + ["Total", "Average", "Position"]
-    data = [header]
+    # Assessment columns follow the school's configuration: 1st CA | 2nd CA | (3rd CA) | Exam | Total per subject.
+    comp = [("ca1", "1st CA"), ("ca2", "2nd CA")] + ([("ca3", "3rd CA")] if use_ca3 else []) + [("exam", "Exam"), ("total", "Total")]
+    width = len(comp)
+    top = ["S/N", "Student Name"]
+    sub = ["", ""]
+    for s in subjects:
+        top += [s["name"]] + [""] * (width - 1)
+        sub += [label for _k, label in comp]
+    top += ["Total", "Average", "Position"]
+    sub += ["", "", ""]
+    data = [top, sub]
     for i, r in enumerate(rows, start=1):
         name = student_full_name(r["student"]) if student_full_name else f"{r['student']['last_name']} {r['student']['first_name']}"
         row = [str(i), name]
         for subj in subjects:
-            row.append(str(r["scores"][subj["id"]]["total"]))
+            cell = r["scores"][subj["id"]]
+            row += [str(cell.get(k, "-")) for k, _label in comp]
         row.append(str(r["total"]))
         row.append(str(r["average"]))
         row.append(str(r["position"]))
         data.append(row)
 
-    table = Table(data, repeatRows=1)
+    table = Table(data, repeatRows=2)
+    spans = [("SPAN", (0, 0), (0, 1)), ("SPAN", (1, 0), (1, 1))]
+    for i in range(len(subjects)):
+        c0 = 2 + i * width
+        spans.append(("SPAN", (c0, 0), (c0 + width - 1, 0)))
+    last = 2 + len(subjects) * width
+    spans += [("SPAN", (last + k, 0), (last + k, 1)) for k in range(3)]
     table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 0), (-1, 1), colors.HexColor(accent_color)),
+        ("TEXTCOLOR", (0, 0), (-1, 1), colors.white),
         ("FONTNAME", (0, 0), (-1, -1), regular),
-        ("FONTNAME", (0, 0), (-1, 0), bold),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTNAME", (0, 0), (-1, 1), bold),
+        ("FONTSIZE", (0, 0), (-1, -1), 6 if width > 4 else 7),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
-    ]))
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
+    ] + spans))
     elements.append(table)
     doc.build(elements)
     buf.seek(0)
@@ -132,6 +149,20 @@ def _hex(c, fallback):
         return colors.HexColor(fallback)
 
 
+# Layout differences for the V64 styles; the HTML/print CSS in static/css/result-sheet.css mirrors the same choices.
+STYLE_SPECS = {
+    "executive_band": {"header": "band", "head_align": "left", "id": "strip", "table": "rows"},
+    "minimal_clean": {"header": "plain", "id": "minimal", "table": "minimal"},
+    "ledger_classic": {"header": "ledger", "id": "ledger", "table": "ledger", "mono": True, "paper": "#fffdf5"},
+    "vibrant_cards": {"header": "band", "id": "cards", "table": "cards"},
+    "split_header": {"header": "split", "head_align": "left", "id": "topbar", "table": "rows"},
+}
+
+
+def _tint(color, amount):
+    return colors.Color(1 - (1 - color.red) * amount, 1 - (1 - color.green) * amount, 1 - (1 - color.blue) * amount)
+
+
 def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#1f3a5f",
                       name_align=None, teacher_signature=None, principal_signature=None):
     """One student's terminal result as flowables. Mirrors templates/_result_sheet.html: the same Result Display
@@ -146,15 +177,22 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     compact = template == "compact_academic"
     formal = template == "formal_school"
     modern = template == "modern_academic"
+    spec = STYLE_SPECS.get(template, {})
+    dark_head = modern or spec.get("header") in ("band", "split")
     regular, bold = styles["Normal"].fontName, styles["Heading1"].fontName
+    if spec.get("mono"):
+        regular, bold = "Courier", "Courier-Bold"
+        for _n in ("Normal", "Heading1", "Heading2", "Heading3"):
+            styles[_n].fontName = bold if _n.startswith("Heading") else regular
+    head_align = TA_LEFT if spec.get("head_align") == "left" else TA_CENTER
     base = 8.5 if compact else 9
     pad = 2 if compact else 4
     small = ParagraphStyle("rsSmall", parent=styles["Normal"], fontSize=7.5, textColor=colors.HexColor("#444444"))
     normal = ParagraphStyle("rsNormal", parent=styles["Normal"], fontSize=base, leading=base + 2)
     h3 = ParagraphStyle("rsH3", parent=styles["Heading3"], fontSize=10.5, textColor=accent, spaceBefore=4, spaceAfter=2)
-    school_style = ParagraphStyle("rsSchool", parent=styles["Heading1"], fontSize=16, textColor=colors.white if modern else accent, alignment=TA_CENTER, spaceAfter=0)
-    title_style = ParagraphStyle("rsTitle", parent=styles["Heading2"], fontSize=12, alignment=TA_CENTER, textColor=colors.white if modern else colors.black, spaceAfter=0)
-    sub_style = ParagraphStyle("rsSub", parent=styles["Normal"], fontSize=8.5, alignment=TA_CENTER, textColor=colors.white if modern else colors.HexColor("#444444"))
+    school_style = ParagraphStyle("rsSchool", parent=styles["Heading1"], fontSize=16, textColor=colors.white if dark_head else accent, alignment=head_align, spaceAfter=0)
+    title_style = ParagraphStyle("rsTitle", parent=styles["Heading2"], fontSize=12, alignment=head_align, textColor=colors.white if dark_head else colors.black, spaceAfter=0)
+    sub_style = ParagraphStyle("rsSub", parent=styles["Normal"], fontSize=8.5, alignment=head_align, textColor=colors.white if dark_head else colors.HexColor("#444444"))
     elements = []
 
     # ---- header: logo (only if enabled AND uploaded) | school text | passport (blank frame if none) ----------------
@@ -183,8 +221,18 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
           ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]
     if rs.get("show_passport"):
         hs += [("BOX", (2, 0), (2, 0), 0.8, colors.grey)]          # the frame stays even when empty: blank, never an avatar
-    if modern:
+    if modern or spec.get("header") == "band":
         hs += [("BACKGROUND", (0, 0), (-1, -1), accent), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]
+        if template == "vibrant_cards":
+            hs += [("LINEBELOW", (0, 0), (-1, -1), 5, second)]
+    elif spec.get("header") == "split":
+        hs += [("BACKGROUND", (0, 0), (1, 0), accent), ("BACKGROUND", (2, 0), (2, 0), colors.HexColor("#e9edf4")),
+               ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]
+    elif spec.get("header") == "plain":
+        hs += [("LINEBELOW", (0, 0), (-1, -1), 0.6, colors.HexColor("#bbbbbb")), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
+    elif spec.get("header") == "ledger":
+        hs += [("LINEABOVE", (0, 0), (-1, -1), 1.8, colors.black), ("LINEBELOW", (0, 0), (-1, -1), 1.8, colors.black),
+               ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
     else:
         hs += [("LINEBELOW", (0, 0), (-1, -1), 2.2 if not formal else 3, accent), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
     head.setStyle(TableStyle(hs))
@@ -217,10 +265,22 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             r += ["", ""]
         rows.append(r)
     idt = Table(rows, colWidths=[3.2 * cm, 5.6 * cm, 3.4 * cm, 5.6 * cm])
-    idt.setStyle(TableStyle([("FONTNAME", (0, 0), (0, -1), bold), ("FONTNAME", (2, 0), (2, -1), bold), ("FONTSIZE", (0, 0), (-1, -1), base),
-                             ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                             ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f4f9") if modern else colors.white),
-                             ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc"))]))
+    id_style = [("FONTNAME", (0, 0), (0, -1), bold), ("FONTNAME", (2, 0), (2, -1), bold), ("FONTSIZE", (0, 0), (-1, -1), base),
+                ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1), ("VALIGN", (0, 0), (-1, -1), "TOP")]
+    id_mode = spec.get("id")
+    if id_mode == "strip":
+        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f7f9")), ("LINEBEFORE", (0, 0), (0, -1), 2.2, second), ("LINEBEFORE", (2, 0), (2, -1), 2.2, second)]
+    elif id_mode == "minimal":
+        id_style += [("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd"))]
+    elif id_mode == "ledger":
+        id_style += [("GRID", (0, 0), (-1, -1), 1.0, colors.black)]
+    elif id_mode == "cards":
+        id_style += [("BACKGROUND", (0, 0), (-1, -1), _tint(accent, 0.11)), ("GRID", (0, 0), (-1, -1), 3, colors.white)]
+    elif id_mode == "topbar":
+        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f7f9")), ("LINEABOVE", (0, 0), (-1, 0), 2.5, accent)]
+    else:
+        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f4f9") if modern else colors.white), ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc"))]
+    idt.setStyle(TableStyle(id_style))
     elements += [idt, Spacer(1, 0.25 * cm)]
 
     # ---- subjects ---------------------------------------------------------------------------------------------------------
@@ -261,6 +321,19 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
           ("GRID", (0, 0), (-1, -1), 0.5, accent if formal else colors.HexColor("#999999")),
           ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1),
           ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f6f8")])]
+    tmode = spec.get("table")
+    if tmode == "rows":
+        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS")] + [("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#d5d9e0"))]
+    elif tmode == "minimal":
+        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS", "BACKGROUND", "TEXTCOLOR")] + [
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black), ("LINEBELOW", (0, 0), (-1, 0), 1.4, colors.black), ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e2e2"))]
+    elif tmode == "ledger":
+        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS", "BACKGROUND", "TEXTCOLOR")] + [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#efe9d2")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.black), ("GRID", (0, 0), (-1, -1), 0.9, colors.black),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#fffdf5"), colors.HexColor("#faf5e1")])]
+    elif tmode == "cards":
+        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS")] + [
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_tint(accent, 0.07), colors.white]), ("LINEBELOW", (0, 1), (-1, -1), 0.8, colors.white)]
     if with_remarks:
         ts.append(("ALIGN", (-1, 1), (-1, -1), "LEFT"))
     subj.setStyle(TableStyle(ts))
