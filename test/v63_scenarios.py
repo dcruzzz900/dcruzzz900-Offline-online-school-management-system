@@ -227,9 +227,7 @@ check("cannot publish before approval", one("SELECT status FROM result_publicati
 post(ADMIN, f"{WF}/1/{TERM}/approve", {}, f"{WF}?term_id={TERM}")
 check("approved", one("SELECT status FROM result_publication WHERE class_id=1") == "approved")
 check("approved result is still not printable", code(ADMIN.get(f"/result/1/pdf?term_id={TERM}")) == 403)
-post(ADMIN, f"{WF}/1/{TERM}/publish", {}, f"{WF}?term_id={TERM}")
-check("publishing needs the school to be READY FOR LIVE DATA", one("SELECT status FROM result_publication WHERE class_id=1") == "approved")
-run("UPDATE schools SET readiness_status='ready' WHERE id=1")
+check("the school was activated automatically when setup reached 100% (the publish gate is satisfied)", one("SELECT readiness_status FROM schools WHERE id=1") == "ready")
 # a title is not a permission
 check("a Principal-titled account without the explicit grant cannot publish", (post(PRIN, f"{WF}/1/{TERM}/publish", {}, "/dashboard"), one("SELECT status FROM result_publication WHERE class_id=1"))[1] == "approved")
 # Admin revokes own publish permission => blocked; grant to prin => allowed
