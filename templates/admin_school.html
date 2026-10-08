@@ -94,42 +94,7 @@
         </select>
 
 
-        <div class="card" style="margin:1.2rem 0 0; background:#f7fbff; border:1px solid #dce9f8;">
-            <h3>School-Branded Login &amp; Signup</h3>
-            <p style="font-size:0.85rem; color:#53677f; line-height:1.55;">Once this school is active and a logo is uploaded, the logo is automatically used on this school's Admin, Staff, Student and Parent login/signup screens. The branding is tenant-scoped and never becomes a global logo.</p>
-            <label>Authentication Branding
-                <label style="font-weight:normal; display:flex; align-items:center; gap:.45rem; margin-top:.45rem;">
-                    <input type="checkbox" name="auth_branding_enabled" style="width:auto;" {% if not settings or settings.auth_branding_enabled %}checked{% endif %}>
-                    Enable school branding on authentication screens
-                </label>
-            </label>
-            <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0 14px;">
-                <label>Background Logo Opacity
-                    <input type="number" name="auth_logo_opacity" min="0.03" max="0.35" step="0.01" value="{{ settings.auth_logo_opacity if settings and settings.auth_logo_opacity is not none else 0.10 }}">
-                    <small style="color:#6b7d93;">0.03–0.35. Lower values create a subtler watermark.</small>
-                </label>
-                <label>Logo Position
-                    <select name="auth_logo_position">
-                        <option value="left" {% if settings and settings.auth_logo_position=='left' %}selected{% endif %}>Left</option>
-                        <option value="center" {% if not settings or settings.auth_logo_position=='center' %}selected{% endif %}>Center</option>
-                        <option value="right" {% if settings and settings.auth_logo_position=='right' %}selected{% endif %}>Right</option>
-                    </select>
-                </label>
-                <label>Background Style
-                    <select name="auth_background_style">
-                        <option value="watermark" {% if not settings or settings.auth_background_style=='watermark' %}selected{% endif %}>Watermark</option>
-                        <option value="soft" {% if settings and settings.auth_background_style=='soft' %}selected{% endif %}>Soft</option>
-                        <option value="plain" {% if settings and settings.auth_background_style=='plain' %}selected{% endif %}>Plain</option>
-                    </select>
-                </label>
-                <label>School Name
-                    <label style="font-weight:normal; display:flex; align-items:center; gap:.45rem; margin-top:.45rem;">
-                        <input type="checkbox" name="auth_show_school_name" style="width:auto;" {% if not settings or settings.auth_show_school_name %}checked{% endif %}>
-                        Show school name on authentication screens
-                    </label>
-                </label>
-            </div>
-        </div>
+        <p class="muted" style="margin:1rem 0 0">Login &amp; signup branding is managed in <a href="{{ url_for('admin_theme') }}">Theme &amp; Branding</a> (the single place for it).</p>
 
         <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Result sheet</b><p style="margin:.3rem 0 .6rem">Everything that controls what appears on a result sheet (passport, logo, positions, attendance, comments, signatures, dates, template, colours, fonts) now lives in one place.</p><a class="btn btn-gold" href="{{ url_for('result_display_settings') }}">Open Result Display Settings →</a> <a class="btn btn-secondary" href="{{ url_for('admin_school_info') }}">Custom school information</a></div>
 

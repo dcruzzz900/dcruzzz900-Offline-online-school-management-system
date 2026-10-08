@@ -28,7 +28,7 @@
         <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr>
         {% for t in teachers %}
         <tr>
-            <td>{{ t.name }}<br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
+            <td>{{ t|staff_name }}<br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
             <td>{{ t.username }}</td>
             <td>
                 <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"

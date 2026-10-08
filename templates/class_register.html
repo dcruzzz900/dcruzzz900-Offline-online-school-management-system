@@ -2,7 +2,7 @@
 {% block title %}Class register{% endblock %}
 {% block content %}
 <h1>Class register — {{ cls.name }}</h1><p class="muted">Register numbers must be unique within the class.</p>
-<form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card"><table><tr><th>Admission No.</th><th>Student</th><th>Register No.</th></tr>
-{% for s in students %}<tr><td>{{ s.admission_no }}</td><td>{{ student_full_name(s) }}</td><td><input name="reg_{{ s.id }}" value="{{ s.register_no or '' }}" maxlength="12" style="width:6rem"></td></tr>{% else %}<tr><td colspan="3" class="muted">No active students.</td></tr>{% endfor %}</table></div>
+<form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><div class="card"><table><tr><th>Admission No.</th><th>Student</th><th>Status</th><th>Register No.</th></tr>
+{% for s in students %}<tr><td>{{ s.admission_no }}</td><td>{{ student_full_name(s) }}</td><td>{{ s.status|status_badge }}</td><td><input name="reg_{{ s.id }}" value="{{ s.register_no or '' }}" maxlength="12" style="width:6rem"></td></tr>{% else %}<tr><td colspan="4" class="muted">No active students.</td></tr>{% endfor %}</table></div>
 <button class="btn" type="submit">Save register numbers</button> <a class="btn btn-secondary" href="{{ url_for('roll_call', class_id=cls.id) }}">Take attendance</a></form>
 {% endblock %}
