@@ -473,3 +473,16 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:480px){.container{padding-left:12px;padding-right:12px}.beautiful-auth{border-radius:14px}.beautiful-auth-form{padding:18px 16px}.beautiful-auth-form label{margin:12px 0}.hub-primary-btn{width:100%}}
 @media(min-height:900px) and (min-width:901px){.beautiful-auth{min-height:min(720px,calc(100dvh - 36px))}}
 @media(min-width:1500px){.beautiful-auth{max-width:1180px}}
+
+
+/* ===== V62.1: header, clock, notification badges ===== */
+.topbar{min-height:72px;padding-top:.75rem;padding-bottom:.75rem;gap:.9rem;flex-wrap:wrap;align-items:center;position:relative}
+.top-search input{min-height:46px;font-size:16px}
+.top-actions{display:flex;align-items:center;gap:.8rem;margin-left:auto;flex-wrap:wrap}
+.top-bell{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:46px;min-height:46px;font-size:1.3rem;text-decoration:none}
+.nav-badge,.notif-badge{background:#dc2626;color:#fff;border-radius:999px;padding:0 .45rem;font-weight:700;font-size:.78rem;font-style:normal;line-height:1.35rem;min-width:1.35rem;text-align:center;display:inline-block}
+.top-badge{position:absolute;top:2px;right:0}
+.top-clock{font-weight:600;font-size:.95rem;white-space:nowrap}
+.top-avatar-link{width:46px;height:46px}
+@media(max-width:700px){.topbar{min-height:64px}.top-clock{order:5;flex-basis:100%;white-space:normal;font-size:.85rem}.top-search{order:4;flex-basis:100%;max-width:none}}
+main.container{padding-top:1rem;clear:both}
