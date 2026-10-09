@@ -81,3 +81,6 @@
 .rs-split_header .rs-id div{border:0;border-top:3px solid var(--rs-accent);background:#f6f7f9;border-radius:0}
 .rs-split_header .rs-table th{border-bottom:3px solid var(--rs-second)}.rs-split_header .rs-comments p{border:0;border-top:3px solid var(--rs-accent);background:#f6f7f9;border-radius:0}
 @media print{.rs-executive_band .rs-head,.rs-vibrant_cards .rs-head,.rs-split_header .rs-head{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+/* the dark "Overall position" card must stay readable in every style */
+.rs-executive_band .rs-pos,.rs-vibrant_cards .rs-pos,.rs-split_header .rs-pos{background:var(--rs-accent);color:#fff;border-radius:2mm}
+.rs-executive_band .rs-pos span,.rs-vibrant_cards .rs-pos span,.rs-split_header .rs-pos span,.rs-ledger_classic .rs-pos span{color:#fff!important}
