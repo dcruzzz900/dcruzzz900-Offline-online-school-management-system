@@ -5,7 +5,7 @@ import ast, glob, re, sys
 app_path='app.py'
 tree=ast.parse(open(app_path,encoding='utf-8').read())
 endpoints={n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
-for extra in ('profile_routes.py','v61_routes.py','v62_routes.py','billing_finalization.py'):
+for extra in ('profile_routes.py','v61_routes.py','v62_routes.py','workflow_routes.py','registrar_routes.py','billing_finalization.py'):
     endpoints |= {n.name for n in ast.walk(ast.parse(open(extra,encoding='utf-8').read())) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
 refs=set()
 for path in glob.glob('templates/**/*.html',recursive=True):
