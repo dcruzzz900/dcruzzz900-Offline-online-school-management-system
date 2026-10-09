@@ -36,6 +36,41 @@ from db import (
 import datetime
 import json
 from pdf_utils import build_broadsheet_pdf, build_result_pdf, build_class_results_pdf, build_cumulative_result_pdf, build_generic_table_pdf
+import html_pdf
+import pdf_utils as _pdf_utils
+
+_reportlab_result_pdf = build_result_pdf
+_reportlab_class_pdf = build_class_results_pdf
+
+
+def _html_sheets(data_list, term):
+    """The exact HTML the print view renders for each student (same template, same CSS)."""
+    docs = []
+    for data in data_list:
+        docs.append(render_template("result_print.html", term=term, student_full_name=student_full_name, pdf_url="", back_url="",
+                                    autoprint=False, **data))
+    return docs
+
+
+def _session_for_pdf():
+    return {k: v for k, v in session.items() if not str(k).startswith("_")}
+
+
+def build_result_pdf(data, term, **kw):
+    """Preview = Print = PDF: the PDF is the print page, printed by Chromium. Falls back to the old builder only if
+    no Chromium is installed on the host."""
+    pdfs = html_pdf.render_documents(app, _session_for_pdf(), _html_sheets([data], term))
+    if pdfs:
+        return io.BytesIO(pdfs[0])
+    return _reportlab_result_pdf(data, term, **kw)
+
+
+def build_class_results_pdf(data_list, term, **kw):
+    pdfs = html_pdf.render_documents(app, _session_for_pdf(), _html_sheets(data_list, term))
+    if pdfs:
+        return html_pdf.merge(pdfs)
+    return _reportlab_class_pdf(data_list, term, **kw)
+
 from email_utils import send_email, send_platform_email
 from reports import build_csv, build_xlsx
 from security_audit import run_security_audit

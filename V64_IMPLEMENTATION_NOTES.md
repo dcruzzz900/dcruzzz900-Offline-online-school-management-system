@@ -24,3 +24,15 @@
 * Student-facing "Messages" and "Assignments" have no feature behind them in this codebase, so there is no Quick Action for them (the spec says "where implemented").
 
 Tests: `python tests/v64_scenarios.py` (94), v63 (107), v62 (248), v61 (292), v60 (213), 45 contract tests.
+
+## Update — Preview = Print = PDF (screenshots: downloaded PDF looked different from the print view)
+Cause: the PDF was drawn by a separate reportlab layout, so it could never match the HTML print page.
+Fix: `html_pdf.py` now produces every result PDF (single, class bulk, parent, student, e-mail attachment) by printing the
+**same print page** (`result_print.html` + `result-sheet.css`) with headless Chromium in print mode. Subresources (CSS, logo,
+passport, signatures) are fetched through the app with the caller's own session, so tenant/permission checks still apply; other
+hosts are blocked. Bulk PDFs print one sheet per student and merge them.
+* Deploy: `requirements.txt` now lists `playwright` and `pypdf`; `nixpacks.toml` installs Chromium on Railway
+  (`playwright install chromium`). PythonAnywhere cannot run Chromium — there the code falls back to the older reportlab
+  builder (not identical); on such hosts use Print → "Save as PDF" from the print page, which is identical.
+* Fixed: the "Overall position" card was unreadable (white on light) in Executive Band, Vibrant Cards and Split Header.
+Tests: v64 now 105 checks (adds PDF parity: one A4 page, same content as the print page, class PDF = one page per student, fallback when no Chromium).
