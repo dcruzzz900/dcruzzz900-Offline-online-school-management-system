@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Admit Student{% endblock %}{% block content %}
+<h1>Admit New Student</h1>
+{% if errors %}<div class="card" style="border:1px solid #b3261e"><b>Nothing was saved.</b> Please correct the highlighted fields.</div>{% endif %}
+<form method="POST" class="card" style="max-width:720px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="form-grid">
+<label>First Name *<input name="first_name" value="{{ form.first_name or '' }}" maxlength="60" required>{% if errors.first_name %}<div class="pf-err" style="color:#b3261e">{{ errors.first_name }}</div>{% endif %}</label>
+<label>Surname *<input name="last_name" value="{{ form.last_name or '' }}" maxlength="60" required>{% if errors.last_name %}<div style="color:#b3261e">{{ errors.last_name }}</div>{% endif %}</label>
+<label>Other Names<input name="other_names" value="{{ form.other_names or '' }}" maxlength="60"></label>
+<label>Gender *<select name="gender"><option value="">— Select —</option><option value="M" {{ 'selected' if form.gender=='M' }}>Male</option><option value="F" {{ 'selected' if form.gender=='F' }}>Female</option></select>{% if errors.gender %}<div style="color:#b3261e">{{ errors.gender }}</div>{% endif %}</label>
+<label>Date of Birth<input type="date" name="date_of_birth" value="{{ form.date_of_birth or '' }}">{% if errors.date_of_birth %}<div style="color:#b3261e">{{ errors.date_of_birth }}</div>{% endif %}</label>
+<label>Class / Arm *<select name="class_id"><option value="">— Select —</option>{% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if form.class_id==c.id|string }}>{{ c.name }}</option>{% endfor %}</select>{% if errors.class_id %}<div style="color:#b3261e">{{ errors.class_id }}</div>{% endif %}</label>
+<label>Admission No. <small class="muted">(leave blank to auto-generate)</small><input name="admission_no" value="{{ form.admission_no or suggested_adm }}" maxlength="40">{% if errors.admission_no %}<div style="color:#b3261e">{{ errors.admission_no }}</div>{% endif %}</label>
+<label>Register No. <small class="muted">(leave blank to auto-generate)</small><input name="register_no" value="{{ form.register_no or '' }}" maxlength="40"></label>
+<label>Date of Admission<input type="date" name="date_of_admission" value="{{ form.date_of_admission or '' }}"></label>
+<label>Previous School <small class="muted">(if transferring in)</small><input name="previous_school" value="{{ form.previous_school or '' }}" maxlength="120"></label>
+<label>Parent/Guardian Name<input name="parent_name" value="{{ form.parent_name or '' }}" maxlength="120"></label>
+<label>Parent/Guardian Phone<input name="parent_phone" value="{{ form.parent_phone or '' }}" maxlength="30"></label>
+</div>
+<label>Admission Notes<textarea name="admission_notes" rows="2" maxlength="500">{{ form.admission_notes or '' }}</textarea></label>
+<button class="btn btn-gold" style="margin-top:1rem">Admit Student</button></form>
+{% endblock %}

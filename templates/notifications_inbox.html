@@ -1,30 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Notifications{% endblock %}
 {% block content %}
-<h1>Notifications</h1>
-{% if session.get('role') in ['admin', 'sub_admin'] %}
-<div class="no-print" style="margin-bottom:1rem;">
-    <a class="btn" href="{{ url_for('notifications_compose') }}">Compose Notification</a>
-</div>
-{% endif %}
-
-<div class="card">
-    {% if notifications %}
-    {% for n in notifications %}
-    {% set is_unread = n.id > (seen_before or 0) %}
-    <div class="notif-item {{ 'notif-unread' if is_unread else 'notif-read' }}" style="padding:0.75rem; margin-bottom:.4rem; border-radius:8px; border:1px solid {{ '#2e7d32' if is_unread else 'var(--border)' }}; background:{{ '#e8f5e9' if is_unread else 'transparent' }}; color:#1b1b1b;">
-        <div style="display:flex; justify-content:space-between; align-items:baseline;">
-            <h3 style="margin:0;">{% if is_unread %}<span class="notif-dot" style="display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:#d32f2f;margin-right:.4rem" title="Unread"></span>{% endif %}{{ n.title }}</h3>
-            <span style="font-size:0.8rem; color:#999;">{{ n.created_at|dmy }}</span>
-        </div>
+<style>.notif{padding:.75rem .9rem;border-bottom:1px solid var(--border,#e5e7eb);border-left:5px solid transparent;border-radius:6px;margin-bottom:6px;background:#f8fafc}
+.notif.unread{background:#dcfce7;border-left-color:#16a34a}.notif.read{background:#f8fafc;color:#475569}
+.notif-badge,.nav-badge{background:#dc2626;color:#fff;border-radius:999px;padding:0 .5rem;font-weight:700;font-size:.8rem;font-style:normal;min-width:1.4rem;text-align:center;display:inline-block}</style>
+<div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap"><h1 style="margin:0">Notifications</h1>{% if unread_notifications %}<span class="notif-badge" id="notifCount">{{ unread_notifications }}</span>{% else %}<span class="notif-badge" id="notifCount" style="display:none">0</span>{% endif %}
+<button class="btn btn-small btn-secondary" id="markAll" type="button" {{ '' if unread_notifications else 'disabled' }}>Mark all as read</button></div>
+{% if session.get('role') in ['admin', 'sub_admin'] %}<div class="no-print" style="margin:1rem 0;"><a class="btn" href="{{ url_for('notifications_compose') }}">Compose Notification</a></div>{% endif %}
+<div class="card" id="notifList">
+    {% if notifications %}{% for n in notifications %}
+    <div class="notif {{ 'read' if n.is_read else 'unread' }}" data-id="{{ n.id }}">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:.5rem; flex-wrap:wrap;"><h3 style="margin:0;">{{ n.title }}</h3><span style="font-size:0.8rem; color:#64748b;">{{ n.created_at|dmy }}</span></div>
         <p style="margin:0.3rem 0; white-space:pre-wrap;">{{ n.message }}</p>
-        <p style="font-size:0.8rem; color:#999; margin:0;">
-            From: {{ n.sender_label }}{% if n.school_name %} — {{ n.school_name }}{% elif n.school_id is none %} — All Schools{% endif %}
-        </p>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p style="color:#999;">No notifications yet.</p>
-    {% endif %}
+        <p style="font-size:0.8rem; color:#64748b; margin:0;">From: {{ n.sender_label }}{% if n.school_name %} · {{ n.school_name }}{% elif n.school_id is none %} · All Schools{% endif %}
+        {% if not n.is_read %}<button type="button" class="btn btn-small mark-one" style="margin-left:.6rem">Mark as read</button>{% endif %}</p>
+    </div>{% endfor %}
+    {% else %}<p style="color:#64748b;">No notifications yet.</p>{% endif %}
 </div>
+<script>
+(function(){var token="{{ csrf_token() }}";
+function setCount(n){document.querySelectorAll('#notifCount,.nav-badge').forEach(function(e){e.textContent=n;e.style.display=n>0?'inline-block':'none';});var b=document.getElementById('markAll');if(b)b.disabled=n<=0;}
+function post(body,done){fetch('{{ url_for("notifications_mark_read") }}',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},body:body+'&csrf_token='+encodeURIComponent(token)}).then(function(r){return r.json();}).then(done).catch(function(){alert('Cannot reach the server. Nothing was changed.');});}
+document.querySelectorAll('.mark-one').forEach(function(btn){btn.addEventListener('click',function(){var row=btn.closest('.notif');post('id='+row.dataset.id,function(j){if(j.ok){row.classList.remove('unread');row.classList.add('read');btn.remove();setCount(j.unread);}});});});
+var all=document.getElementById('markAll');if(all)all.addEventListener('click',function(){post('all=1',function(j){if(j.ok){document.querySelectorAll('.notif.unread').forEach(function(r){r.classList.remove('unread');r.classList.add('read');var b=r.querySelector('.mark-one');if(b)b.remove();});setCount(j.unread);}});});})();
+</script>
 {% endblock %}

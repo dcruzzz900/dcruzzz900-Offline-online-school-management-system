@@ -31,6 +31,7 @@
     <input type="text" id="studentSearch" placeholder="Type a name or Admission No. / Register No..." autocomplete="off">
 </div>
 
+{% if locked %}<div class="card" style="border:1px solid #b3261e"><b>Scores are locked.</b> {{ locked }}</div>{% endif %}
 <form method="POST">
 <label class="no-print">Reason for change <span class="muted">(required when the term's results are already published)</span><input type="text" name="change_reason" maxlength="300" placeholder="e.g. Score correction"></label>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -43,6 +44,7 @@
             {% if config.ca3_max %}<th>CA3 (/{{ config.ca3_max }})</th>{% endif %}
             <th>Exam (/{{ config.exam_max }})</th>
             <th>Total</th>
+            <th>Subject Teacher's Comment</th>
         </tr>
         {% for s in students %}
         <tr class="student-row" data-search="{{ (s.admission_no ~ ' ' ~ student_full_name(s))|lower }}">
@@ -68,6 +70,7 @@
             <td><output id="total_{{ s.id }}" style="font-weight:600;">
                 {{ (existing[s.id].ca1 + existing[s.id].ca2 + (existing[s.id].ca3 or 0) + existing[s.id].exam) if s.id in existing else 0 }}
             </output></td>
+            <td><input type="text" maxlength="300" name="comment_{{ s.id }}" value="{{ existing[s.id].teacher_comment if s.id in existing and existing[s.id].teacher_comment else '' }}" placeholder="Optional" style="min-width:12rem"></td>
         </tr>
         {% endfor %}
     </table>

@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Result history{% endblock %}{% block content %}
+<h1>Result publication history{% if cls %} — {{ cls.name }}{% endif %}{% if term %} · {{ term.name }}{% endif %}</h1><p class="muted">Append-only. Server time in the school's timezone.</p>
+<div class="card" style="overflow:auto">{% if rows %}<table><thead><tr><th>Server time</th>{% if not cls %}<th>Class</th><th>Term</th>{% endif %}<th>Action</th><th>From</th><th>To</th><th>By</th><th>Roles</th><th>Reason</th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.server_timestamp }}</td>{% if not cls %}<td>{{ r.class_name }}</td><td>{{ r.term_name }}</td>{% endif %}<td>{{ r.action.replace('_',' ')|title }}</td><td>{{ r.previous_status }}</td><td>{{ r.new_status }}</td><td>{{ r.actor_name }}</td><td>{{ r.actor_role }}</td><td>{{ r.reason or '' }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="muted">No workflow actions yet.</p>{% endif %}</div>{% endblock %}

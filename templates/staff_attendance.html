@@ -1,37 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Staff Attendance{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Attendance is saved directly to the school server.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
-
+<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Recorded on the server for today's school date only.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History &amp; Reports</a></div>
+<div class="card" style="border-left:4px solid #2563eb"><b>Today: {{ now.strftime('%A, %d/%m/%Y') }}</b> <span class="muted">— {{ now.strftime('%I:%M %p').lstrip('0') }} ({{ tzname }})</span>
+<p class="muted" style="margin:.3rem 0 0">No date or time can be typed in: the server stamps every record with the school's current date and time. A day can be recorded once; mistakes go through the correction workflow.</p></div>
 <div class="card attendance-self-actions">
-  <div class="section-title"><div><h3>My Attendance</h3><p class="muted">Record your own check-in and check-out without creating duplicate daily records.</p></div><span id="staffAttendanceStatus" class="badge"></span></div>
+  <div class="section-title"><div><h3>My Attendance</h3><p class="muted">Check in and out once per day. The time is taken from the server, not your device.</p></div><span id="staffAttendanceStatus" class="badge"></span></div>
   <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:12px"><button type="button" class="btn" onclick="staffAttendanceAction('/staff-attendance/check-in')">Check In</button><button type="button" class="btn btn-secondary" onclick="staffAttendanceAction('/staff-attendance/check-out')">Check Out</button></div>
 </div>
-
 <div class="card">
-  <p class="muted" style="margin:0 0 .6rem">Recording for <strong>today only</strong> — {{ now_label }} (school time). The date and time come from the server; the device clock is ignored.</p>
   <form method="GET" class="form-grid" style="align-items:end">
     <label>Search staff<input type="search" name="q" value="{{ search or '' }}" placeholder="Name, username or role"></label>
     <label>Status<select name="status"><option value="">All statuses</option>{% for st in statuses %}<option value="{{ st }}" {% if filter_status==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></label>
-    <button class="btn">Apply filters</button>
+    <button class="btn">Apply filters</button>{% if can_correct %}<a class="btn btn-secondary" href="{{ url_for('attendance_corrections', kind='staff') }}">Corrections</a>{% endif %}
   </form>
 </div>
-
 <div class="card" style="overflow-x:auto">
-  <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="q" value="{{ search or '' }}"><input type="hidden" name="filter_status" value="{{ filter_status or '' }}">
+  <form method="POST" id="staffForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if staff %}
     <table class="responsive-table"><caption>Staff Attendance</caption><thead><tr><th>Staff</th><th>Role</th><th>Status</th><th>Check-in</th><th>Check-out</th></tr></thead><tbody>
-    {% for m in staff %}{% set row=existing.get(m.id) %}{% set current=row.status if row else 'Present' %}
-    <tr><td data-label="Staff"><strong>{{ m.name }}</strong><br><small>{{ m.username }}</small></td><td data-label="Role">{{ position_labels.get(m.position, m.rbac_role or m.role.replace('_',' ')|title) }}</td><td data-label="Status"><select name="status_{{ m.id }}">{% for st in statuses %}<option value="{{ st }}" {% if current==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></td><td data-label="Check-in">{{ (row.check_in_at or '—')[:5] if row else '—' }}</td><td data-label="Check-out">{{ (row.check_out_at or '—')[:5] if row else '—' }}</td></tr>
+    {% for m in staff %}{% set row=existing.get(m.id) %}
+    <tr><td data-label="Staff"><strong>{{ m.name }}</strong><br><small>{{ m.username }}</small></td><td data-label="Role">{{ position_labels.get(m.position, m.rbac_role or m.role.replace('_',' ')|title) }}</td>
+    <td data-label="Status">{% if row %}{{ row.status }}{% if row.corrected_at %} <small class="muted">(corrected from {{ row.original_status }})</small>{% endif %}{% else %}<select name="status_{{ m.id }}">{% for st in statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}</select>{% endif %}</td>
+    <td data-label="Check-in">{{ row.check_in_at if row and row.check_in_at else '—' }}</td><td data-label="Check-out">{{ row.check_out_at if row and row.check_out_at else '—' }}</td></tr>
     {% endfor %}</tbody></table>
-    <label style="display:block;margin-top:1rem"><input type="checkbox" name="mode" value="correct"> This is a correction of attendance already recorded today</label>
-    <label>Reason for correction<input type="text" name="correction_reason" maxlength="300" placeholder="Required for corrections"></label>
-    <button class="btn" type="submit" style="margin-top:1rem">Save Attendance for {{ date_str|dmy }}</button>
-    {% else %}<p class="muted">No staff matched the selected filters.</p>{% endif %}
+    <button class="btn" id="staffSave" style="margin-top:1rem">Save Staff Attendance for Today</button>
+    {% else %}<p class="muted">No staff match.</p>{% endif %}
   </form>
 </div>
 <script>
-async function staffAttendanceAction(path){const el=document.getElementById('staffAttendanceStatus');el.textContent='Saving…';try{const r=await fetch(path,{method:'POST',headers:{'X-CSRF-Token':'{{ csrf_token() }}','Accept':'application/json'}});const d=await r.json();el.textContent=d.ok?(' '+d.status.replace('_',' ')+' at '+d.time):(' '+(d.error||'Unable to save attendance'));}catch(e){el.textContent='Cannot reach the server. Check your internet connection and try again. Nothing was saved.';}}
+document.getElementById('staffForm').addEventListener('submit',function(){var b=document.getElementById('staffSave');if(b){b.disabled=true;b.textContent='Saving…';}});
+function staffAttendanceAction(url){var t=document.querySelector('input[name=csrf_token]').value,el=document.getElementById('staffAttendanceStatus');
+ fetch(url,{method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':t,'Accept':'application/json'}}).then(function(r){return r.json().then(function(j){return [r.ok,j];});}).then(function(x){el.textContent=x[0]?('Recorded at '+x[1].time+' ('+x[1].timezone+')'):x[1].error;if(x[0])setTimeout(function(){location.reload();},900);}).catch(function(){el.textContent='Cannot reach the server. Nothing was recorded.';});}
 </script>
 {% endblock %}

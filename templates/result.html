@@ -6,7 +6,7 @@
 <div class="screen-shell">
   <div class="page-heading">
     <div><div class="eyebrow">ACADEMIC RECORD</div><h1>Terminal Result</h1><p>{{ term.session_name }} · {{ term.name }} · {{ class_row.name }}</p></div>
-    <div class="action-row no-print"><a class="btn btn-secondary" href="{{ url_for('classes_list') }}">← Results</a>{% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('result_pdf', student_id=student.id, term_id=term.id) }}">Download PDF</a><a class="btn btn-gold" href="{{ url_for('result_print', student_id=student.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">Print</a>{% else %}<span class="badge" title="Printing and download unlock after official publication">{{ pub_state.label }} — preview only</span>{% endif %}</div>
+    <div class="action-row no-print"><a class="btn btn-secondary" href="{{ url_for('classes_list') }}">← Results</a>{% set st = result_state(class_row.id, term.id) %}{% if output_allowed(class_row.id, term.id) %}<a class="btn" href="{{ url_for('result_pdf', student_id=student.id, term_id=term.id) }}">Download PDF</a><a class="btn btn-gold" href="{{ url_for('result_print', student_id=student.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">Print</a>{% else %}<span class="badge" title="Printing, downloading and PDF unlock after the result is approved and published">{{ st.label }} — preview only</span>{% endif %}<a class="btn btn-secondary" href="{{ url_for('results_workflow', term_id=term.id) }}">Results Workflow</a></div>
   </div>
   <div class="result-hero card">
     <div class="student-identity">
