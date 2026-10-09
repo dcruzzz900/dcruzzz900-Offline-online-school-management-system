@@ -1,9 +1,13 @@
-# Railway: install headless Chromium so result PDFs are printed from the SAME HTML as the print view.
-[phases.setup]
-aptPkgs = ["...", "libnss3", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2", "libdrm2", "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxfixes3", "libxrandr2", "libgbm1", "libasound2", "libpango-1.0-0", "libcairo2", "fonts-liberation"]
+# Railway: headless Chromium, so result PDFs are printed from the SAME HTML as the print view.
+# `playwright install --with-deps` chooses the correct system packages for the build image's Ubuntu release
+# (e.g. libasound2t64 on 24.04), so no package names are hard-coded here. If the system libraries cannot be installed the
+# build still succeeds and the app falls back to the older PDF builder (see html_pdf.py).
 
 [phases.build]
-cmds = ["pip install -r requirements.txt", "PLAYWRIGHT_BROWSERS_PATH=/app/.browsers playwright install chromium"]
+cmds = [
+  "pip install -r requirements.txt",
+  "PLAYWRIGHT_BROWSERS_PATH=/app/.browsers playwright install --with-deps chromium || PLAYWRIGHT_BROWSERS_PATH=/app/.browsers playwright install chromium || true"
+]
 
 [variables]
 PLAYWRIGHT_BROWSERS_PATH = "/app/.browsers"

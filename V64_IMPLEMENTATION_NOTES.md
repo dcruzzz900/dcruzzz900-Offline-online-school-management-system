@@ -36,3 +36,5 @@ hosts are blocked. Bulk PDFs print one sheet per student and merge them.
   builder (not identical); on such hosts use Print → "Save as PDF" from the print page, which is identical.
 * Fixed: the "Overall position" card was unreadable (white on light) in Executive Band, Vibrant Cards and Split Header.
 Tests: v64 now 105 checks (adds PDF parity: one A4 page, same content as the print page, class PDF = one page per student, fallback when no Chromium).
+
+* Railway build fix: the first `nixpacks.toml` hard-coded apt names (`libasound2` has no candidate on Ubuntu 24.04). It now uses `playwright install --with-deps chromium`, which selects the right packages for the image; if that step fails the build still completes and PDFs fall back to the older builder.
