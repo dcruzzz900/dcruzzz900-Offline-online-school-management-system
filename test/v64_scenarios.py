@@ -314,6 +314,32 @@ run("UPDATE result_display_settings SET template='professional_classic' WHERE sc
 W.unpublish(A, 1)
 run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
 
+# ---------------- Preview = Print = PDF (the PDF is the print page printed by Chromium)
+import html_pdf, io as _io
+from pypdf import PdfReader
+W.publish(A, 1)
+run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,1,1,11,12,0,40)")
+for tp in ("professional_classic", "vibrant_cards", "ledger_classic"):
+    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
+    pr = html(ADMIN.get("/result/1/print?term_id=1"))
+    rp = ADMIN.get("/result/1/pdf?term_id=1")
+    reader = PdfReader(_io.BytesIO(rp.data))
+    ptxt = " ".join(pg.extract_text() or "" for pg in reader.pages)
+    check(f"[{tp}] PDF is one A4 page like the print page", len(reader.pages) == 1 and abs(float(reader.pages[0].mediabox.width) - 595) < 3)
+    must = ["TERMINAL REPORT SHEET", "Academic Performance", "Mathematics", "Grading key"]
+    check(f"[{tp}] PDF carries the same content as the print page", all((m.lower() in ptxt.lower()) == (m.lower() in re.sub('<[^>]+>', ' ', pr).lower()) or m.lower() in ptxt.lower() for m in must), ptxt[:200])
+    check(f"[{tp}] PDF is NOT the old reportlab layout", b"Skia/PDF" in rp.data[:2000] or b"Chromium" in rp.data[:4000] or b"Skia" in rp.data)
+cp = ADMIN.get("/class/1/results_pdf?term_id=1")
+nstud = one("SELECT COUNT(*) FROM students WHERE class_id=1 AND is_active=1")
+check("class bulk PDF has one page per student from the same sheet", len(PdfReader(_io.BytesIO(cp.data)).pages) == nstud)
+# no Chromium on the host: the download still works (older builder) instead of failing
+html_pdf._state.update(checked=True, ok=False)
+rp = ADMIN.get("/result/1/pdf?term_id=1")
+check("without Chromium the PDF endpoint still returns a PDF (fallback)", code(rp) == 200 and rp.data[:4] == b"%PDF")
+html_pdf._state.update(checked=False, ok=False)
+run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
+run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
+
 # ---------------- Score Change History shows only students whose scores really changed
 run("DELETE FROM scores"); run("DELETE FROM score_audit")
 run("INSERT OR IGNORE INTO class_subjects(class_id,subject_id,teacher_id) VALUES(1,1,2)")
