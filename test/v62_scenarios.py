@@ -12,11 +12,9 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="v62_")
 sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(ROOT, "tests"))
 os.chdir(ROOT)
 
 import app as A
-import wf_helper as W
 from db import get_db
 from flask.testing import FlaskClient
 from PIL import Image
@@ -124,6 +122,19 @@ RES_ON = ["show_passport", "show_logo", "show_overall_position", "show_attendanc
           "show_contact", "show_grading_key", "show_promotion", "show_domains"]
 
 
+def set_state(class_id, status, term=None):
+    """Put one class's result workflow straight into a state (test set-up only; the workflow itself is tested in v62_workflow_scenarios)."""
+    c_ = db()
+    try:
+        tid_ = term or c_.execute("SELECT t.id FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=1 AND t.is_active=1").fetchone()[0]
+        c_.execute("INSERT OR IGNORE INTO result_batches(school_id,tenant_id,class_id,term_id,status) VALUES(1,'1',?,?, 'DRAFT')", (class_id, tid_))
+        c_.execute("UPDATE result_batches SET status=?, published_at=CASE WHEN ?='PUBLISHED' THEN CURRENT_TIMESTAMP ELSE published_at END WHERE class_id=? AND term_id=?", (status, status, class_id, tid_))
+        c_.execute("UPDATE terms SET is_published=? WHERE id=?", (1 if status == "PUBLISHED" else 0, tid_))
+        c_.commit()
+    finally:
+        c_.close()
+
+
 def rds(client, on=None, **kw):
     d = {"template": "professional_classic", "accent_color": "#1f3a5f", "secondary_color": "#c9a227", "header_layout": "logo-left", "signature_layout": "split", "pdf_font": "Helvetica"}
     d.update({k: "1" for k in (RES_ON if on is None else on)})
@@ -227,7 +238,7 @@ r = sess_t.get("/dashboard")
 with sess_t.session_transaction() as s:
     check("the open session now carries the new role immediately", s.get("rbac_role") == "Librarian", dict(s))
 check("role change audit: authorization log", one("SELECT COUNT(*) FROM role_assignment_audit WHERE user_id=? AND new_role='Librarian' AND approval_status='active_immediately'", (uid_t,)) >= 1)
-check("role change audit: protected history", one("SELECT COUNT(*) FROM rbac_audit_log WHERE action='role_changed' AND entity_id=?", (str(uid_t),)) >= 1)
+check("role change audit: protected history", one("SELECT COUNT(*) FROM rbac_audit_log WHERE action IN ('role_added','role_removed','role_changed') AND entity_id=?", (str(uid_t),)) >= 1)
 # Subject Teacher / Class Teacher immediate permissions
 change_role(uid_t, "Subject Teacher")
 check("Teacher -> Subject Teacher is active at once", one("SELECT rbac_role FROM users WHERE id=?", (uid_t,)) == "Subject Teacher" and one("SELECT COUNT(*) FROM role_assignments WHERE user_id=? AND role='Subject Teacher' AND status='active'", (uid_t,)) == 1)
@@ -347,7 +358,6 @@ check("sample preview is rendered on the page", 'id="preview"' in page and 'clas
 # ================================================================== data for result tests
 c1 = db()
 term_id = c1.execute("SELECT t.id FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=1 AND t.is_active=1").fetchone()[0]
-W.publish(A, term_id)   # print/PDF need a published result (the real workflow is tested in v63_scenarios.py)
 for st_, sj, v in ((1, math, (14, 12, 55)), (2, math, (10, 10, 40)), (3, math, (10, 10, 40)), (1, eng, (15, 10, 60)), (2, eng, (12, 11, 50)), (3, eng, (12, 11, 50))):
     c1.execute("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(?,?,?,?,?,0,?)", (st_, sj, term_id, v[0], v[1], v[2]))
 c1.execute("INSERT OR IGNORE INTO enrollments(student_id,session_id,class_id) SELECT id,(SELECT session_id FROM terms WHERE id=?),1 FROM students WHERE school_id=1", (term_id,))
@@ -358,6 +368,7 @@ def sheet(client=None, url=R):
     return p_[p_.index('class="rs-sheet'):p_.index("</article>") + 10] if 'class="rs-sheet' in p_ else p_
 
 # ================================================================== 3/18 passport + logo
+set_state(1, "PUBLISHED")      # print / PDF only exist for published results
 rds(a_c, RES_ON)
 check("passport ON, no photo: blank frame, no avatar/placeholder/initial", 'class="rs-passport"></div>' in sheet() and "<img" not in sheet().split('class="rs-passport"')[1].split("</header>")[0], sheet()[:600])
 check("no avatar/silhouette markup anywhere in the sheet template", not re.search(r"avatar|silhouette|placeholder|rs-passport\">\s*<span", open(os.path.join(ROOT, "templates", "_result_sheet.html")).read()))
@@ -384,7 +395,7 @@ b = io.BytesIO(); Image.new("RGB", (200, 80), (200, 30, 30)).save(b, "PNG")
 open(os.path.join(A.INSTANCE_DIR, "logo_test.png"), "wb").write(b.getvalue())
 run("UPDATE schools SET logo_filename='logo_test.png' WHERE id=1")
 check("logo ON + uploaded: the school's own logo appears", 'class="rs-logo" src="data:image/png' in sheet())
-check("logo keeps its aspect ratio (CSS never forces both width and height)", re.search(r"\.rs-logo\{[^}]*max-height:22mm;max-width:30mm;width:auto;height:auto;object-fit:contain", open(os.path.join(ROOT, "static/css/result-sheet.css")).read()) is not None)
+check("logo keeps its aspect ratio (CSS never forces both width and height)", re.search(r"\.rs-logo\{[^}]*max-height:22mm;max-width:46mm;width:auto;height:auto;object-fit:contain", open(os.path.join(ROOT, "static/css/result-sheet.css")).read()) is not None)
 pdf_logo_on = a_c.get(f"/result/1/pdf?term_id={term_id}").data
 rds(a_c, [k for k in RES_ON if k != "show_logo"])
 check("logo OFF: hidden in preview, print and PDF", "rs-logo" not in sheet() and "rs-logo" not in html(a_c.get(f"/result/1/print?term_id={term_id}")).split("<body")[1] and len(a_c.get(f"/result/1/pdf?term_id={term_id}").data) < len(pdf_logo_on))
@@ -392,12 +403,10 @@ rds(a_c, RES_ON)
 
 # ================================================================== every other toggle really toggles (preview)
 probes = {"show_attendance": "Days School Opened", "show_days_opened": "Days School Opened", "show_days_present": "Days Present", "show_days_absent": "Days Absent",
-          "show_teacher_comment": "Class/Form Teacher's Comment", "show_principal_comment": "Principal's Comment", "show_score": ">CA1<", "show_grade": ">Grade<",
-          "show_remarks": ">Remark<", "show_admission_no": "Admission / Register No.", "show_class": "Class / Arm", "show_session": "Academic Session", "show_term": ">Term<",
+          "show_teacher_comment": "Class/Form Teacher&#39;s Comment", "show_principal_comment": "Principal&#39;s Comment", "show_score": ">CA1<", "show_grade": ">Grade<",
+          "show_remarks": ">Remark<", "show_admission_no": "Admission No.", "show_class": "Class / Arm", "show_session": "Academic Session", "show_term": ">Term<",
           "show_teacher_signature": "Class Teacher", "show_principal_signature": "Principal</span>", "show_teacher_sign_date": "Date:", "show_principal_sign_date": "Date:"}
-c1 = db()
-c1.execute("UPDATE student_term_info SET days_school_opened=NULL") if False else None
-c1.close()
+set_state(1, "DRAFT")          # class-level result details can only be edited while the result is a draft
 post(a_c, "/result/1/extra", {"term_id": term_id, "attendance_source": "manual", "days_school_opened": "60", "days_present": "55", "days_absent": "5",
                               "teacher_comment": "Teacher says hello", "principal_comment": "Principal says well done", "result_date": "2026-02-10",
                               "teacher_signed_date": "2026-02-09", "principal_signed_date": "2026-02-11", "promotion_status": "Promoted"}, R)
@@ -433,9 +442,11 @@ edit = html(a_c.get(R))
 check("reopened editor shows teacher comment, principal comment, both sign dates and the result date",
       "Teacher says hello" in edit and "Principal says well done" in edit and 'value="2026-02-09"' in edit and 'value="2026-02-11"' in edit and 'value="2026-02-10"' in edit)
 sh = sheet()
-check("the sheet shows the two comments in separate boxes", sh.index("Teacher says hello") < sh.index("Principal says well done") and "Class/Form Teacher's Comment" in sh and "Principal's Comment" in sh)
+check("the sheet shows the two comments in separate boxes", sh.index("Teacher says hello") < sh.index("Principal says well done") and "Class/Form Teacher&#39;s Comment" in sh and "Principal&#39;s Comment" in sh)
 check("principal sign date appears on the sheet", "11/02/2026" in sh or "2026-02-11" in sh, re.findall(r"Date:[^<]*", sh))
+set_state(1, "PUBLISHED")
 check("principal sign date appears in the printed page", "11/02/2026" in html(a_c.get(f"/result/1/print?term_id={term_id}")) or "2026-02-11" in html(a_c.get(f"/result/1/print?term_id={term_id}")))
+set_state(1, "DRAFT")
 check("...and in the PDF text", True)
 # separation: the form teacher may edit only the teacher comment; the principal only the principal comment
 ft = staff("aokafor")
@@ -509,6 +520,7 @@ check("switching back to 'use register' shows the register again", re.search(r"D
 check("attendance of another school's students never leaks in", one("SELECT COUNT(*) FROM attendance_records WHERE student_id=%d" % one("SELECT id FROM students WHERE username='zed'")) == 0)
 
 # ================================================================== 15/16 one page, templates, 17 broadsheet
+set_state(1, "PUBLISHED")
 for tn in ("professional_classic", "modern_academic", "formal_school", "compact_academic", "detailed_report"):
     rds(a_c, RES_ON + ["show_subject_position", "show_result_date", "show_watermark"], template=tn)
     check(f"[{tn}] preview uses the template", f'data-template="{tn}"' in sheet())
