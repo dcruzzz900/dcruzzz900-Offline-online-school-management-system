@@ -15,9 +15,9 @@ SIGNATURE_LAYOUTS = [("split", "Teacher left, Principal right"), ("stacked", "St
 
 # Section grouping for the settings page. Every key here is stored in result_display_settings, nowhere else.
 SECTIONS = [
-    ("Identity & header", ["show_logo", "show_passport", "show_contact", "show_watermark"]),
-    ("Student details", ["show_admission_no", "show_class", "show_session", "show_term", "show_result_date"]),
-    ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_grading_key", "show_promotion"]),
+    ("School information (from School Profile)", ["show_logo", "show_motto", "show_address", "show_contact", "show_watermark"]),
+    ("Student details", ["show_passport", "show_admission_no", "show_register_no", "show_class", "show_session", "show_term", "show_result_date", "show_custom_fields"]),
+    ("Scores", ["show_score", "show_total", "show_average", "show_grade", "show_remarks", "show_subject_comment", "show_overall_position", "show_subject_position", "show_domains", "show_domain_legend", "show_grading_key", "show_promotion"]),
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent"]),
     ("Comments & signatures", ["show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
                                "show_teacher_name", "show_principal_signature", "show_principal_sign_date", "show_principal_name"]),
@@ -59,7 +59,7 @@ def register_v62_routes(app, h):
             tot_all += total
             grade, remark = h["grade_for"](total, conn, sid())
             details.append({"name": n, "ca1": a, "ca2": b, "ca3": 0, "exam": e, "total": total, "grade": grade, "remark": remark,
-                            "position": i, "position_text": h["ordinal_text"](i)})
+                            "position": i, "position_text": h["ordinal_text"](i), "comment": "Good effort."})
         today = datetime.date.today()
         info = {"days_school_opened": 60, "days_present": 56, "days_absent": 4, "teacher_comment": "A focused and well-behaved pupil. Keep it up.",
                 "principal_comment": "An excellent result. Congratulations.", "teacher_signed_date": today.isoformat(), "principal_signed_date": today.isoformat(),
@@ -73,10 +73,14 @@ def register_v62_routes(app, h):
         rs["teacher_sig"] = None
         rs["principal_sig"] = None
         rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (sid(),)).fetchall()
-        return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=round(tot_all / len(details), 1),
-                    position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
-                    promotion_status=info["promotion_status"], result_date=(today.strftime("%d/%m/%Y") if cfg_rs["show_result_date"] else None),
-                    teacher_name=None, principal_name=None, student_full_name=lambda s: f"{s['last_name']} {s['first_name']}")
+        d = dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=round(tot_all / len(details), 1),
+                 position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
+                 promotion_status=info["promotion_status"], result_date=(today.strftime("%d/%m/%Y") if cfg_rs["show_result_date"] else None),
+                 teacher_name="Mrs A. Teacher", principal_name="Mr B. Principal", custom_result_fields=[("House", "Blue"), ("Club", "Debate")],
+                 format_date=lambda x: x[8:10] + "/" + x[5:7] + "/" + x[:4] if x else "", published_date=today.isoformat())
+        from sheet_model import build_sheet
+        d["sheet"] = build_sheet(d, term, lambda s: f"{s['last_name']} {s['first_name']}")
+        return d
 
     @app.route("/admin/result-display-settings", methods=["GET", "POST"])
     @login_required("admin", "sub_admin")
@@ -102,10 +106,28 @@ def register_v62_routes(app, h):
                 wm = pc.clean(f.get("watermark_text"))[:40]
                 if any(c in (title + footer + wm) for c in "<>"):
                     errors["title"] = "Angle brackets are not allowed."
-                layout = f.get("header_layout", "logo-left")
+                logo_align = f.get("logo_align", "left")
+                text_align = f.get("text_align", "center")
+                if logo_align not in ("left", "center", "right"):
+                    errors["logo_align"] = "Choose a logo alignment."
+                if text_align not in ("left", "center", "right"):
+                    errors["text_align"] = "Choose a text alignment."
+                layout = "logo-" + logo_align
                 sig = f.get("signature_layout", "split")
-                if layout not in {x[0] for x in HEADER_LAYOUTS}:
-                    errors["header_layout"] = "Choose a header arrangement."
+                pdm = f.get("principal_date_mode", "manual")
+                if pdm not in ("manual", "auto"):
+                    errors["principal_date_mode"] = "Choose manual or automatic."
+                import json as _json
+                tmpl_json = {}
+                for kind in ("teacher", "principal"):
+                    m = {}
+                    for g_ in ("A", "B", "C", "D", "E", "F"):
+                        txt = pc.clean(f.get(f"{kind}_tpl_{g_}"))[:300]
+                        if any(c in txt for c in "<>"):
+                            errors[f"{kind}_tpl_{g_}"] = "Angle brackets are not allowed."
+                        if txt:
+                            m[g_] = txt
+                    tmpl_json[kind] = _json.dumps(m) if m else None
                 if sig not in {x[0] for x in SIGNATURE_LAYOUTS}:
                     errors["signature_layout"] = "Choose a signature placement."
                 pdf_font = f.get("pdf_font", school["pdf_font"] or "Helvetica")
@@ -126,7 +148,9 @@ def register_v62_routes(app, h):
                 if not errors:
                     vals = {k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}
                     vals.update(template=tmpl, title=title or None, footer_text=footer or None, watermark_text=wm or None,
-                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig)
+                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig,
+                                logo_align=logo_align, text_align=text_align, principal_date_mode=pdm,
+                                teacher_templates=tmpl_json["teacher"], principal_templates=tmpl_json["principal"])
                     before = dict(cfg)
                     try:
                         conn.execute("BEGIN IMMEDIATE")
@@ -150,7 +174,8 @@ def register_v62_routes(app, h):
                         app.logger.exception("Result display settings save failed")
                         errors["_form"] = "The settings could not be saved. Please try again."
                 cfg = {**cfg, **{k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}, "template": tmpl, "title": title, "footer_text": footer,
-                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig}
+                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig,
+                       "logo_align": logo_align, "text_align": text_align, "principal_date_mode": pdm}
                 school = {**dict(school), "pdf_font": pdf_font, "auto_teacher_comment": 1 if f.get("auto_teacher_comment") else 0,
                           "auto_principal_comment": 1 if f.get("auto_principal_comment") else 0}
             # live sample through the real sheet component
@@ -160,7 +185,13 @@ def register_v62_routes(app, h):
             else:
                 preview = sample_result(conn, preview_rs)
             term_dates_now = {t["id"]: conn.execute("SELECT result_date FROM terms WHERE id=?", (t["id"],)).fetchone()[0] for t in terms}
-            return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
+            import json as _json2
+            def _tpl(col):
+                try:
+                    return _json2.loads(cfg.get(col) or "{}")
+                except ValueError:
+                    return {}
+            return render_template("result_display_settings.html", cfg=cfg, teacher_tpl=_tpl("teacher_templates"), principal_tpl=_tpl("principal_templates"), school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
                                    header_layouts=HEADER_LAYOUTS, signature_layouts=SIGNATURE_LAYOUTS, pdf_fonts=PDF_FONT_CHOICES, errors=errors,
                                    preview=preview, terms=terms, term_dates=term_dates_now), (422 if errors else 200)
         finally:
@@ -194,6 +225,9 @@ def register_v62_routes(app, h):
             class_row = conn.execute("SELECT * FROM classes WHERE id=? AND school_id=?", (class_id, sid())).fetchone()
             if not class_row:
                 abort(404)
+            blocked = h["require_published_output"](conn, class_id, term["id"])
+            if blocked:
+                return blocked
             rs = result_sheet_settings(conn, sid())
             return render_template("broadsheet_print.html", subjects=subjects, rows=rows, class_row=class_row, term=term, rs=rs,
                                    student_full_name=student_full_name, autoprint=request.args.get("auto") == "1",

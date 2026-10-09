@@ -25,3 +25,21 @@
 
 ## Tests
 `tests/v62_scenarios.py` (248), `tests/v61_scenarios.py` (292), `tests/v60_scenarios.py` (213), plus the original suite (47).
+
+
+## V62.1 – consolidated operations spec (Doc 4)
+
+Implemented and covered by `tests/v62_workflow_scenarios.py` (94 checks) plus the earlier suites (V60 213, V61 293, V62 248, legacy 48):
+
+* **Multiple simultaneous staff roles** (`/admin/teachers/<id>/roles`): all active immediately, permissions are the union, School Admin cannot be assigned as a staff role, all changes audited (append-only).
+* **Score permission by real assignment** (`can_enter_scores`): a user with any role (e.g. Discipline Master) who is assigned subject + class/arm may enter scores; nothing else. Score audit stores actor, roles, action (entered/edited/cleared/corrected), arm, server timestamp.
+* **Registrar / Admissions** (`/registrar`, `/admin/student-statuses`): admission/register numbers (unique, case-insensitive, per school), transfer/withdraw/suspend/graduate/expel/activate with reasons, immutable status history, school-defined statuses.
+* **Strict attendance**: server clock in the school's timezone; future/backdated dates refused; one record per day; corrections only via the correction workflow (reason, old/new kept, append-only log); same rules for staff check-in/out.
+* **Notifications**: per-reader read state, red unread count, green unread rows, instant mark-read (staff, students, parents).
+* **Result workflow** DRAFT → SUBMITTED → UNDER_REVIEW → APPROVED → PUBLISHED, RETURNED, REOPENED (reasons required for return/reopen). Print, PDF, broadsheet PDF, export and e-mail are blocked **on the server** for anything unpublished, for every role; publishing needs the explicit publish permission. Pre-existing published terms are migrated as PUBLISHED.
+* **One sheet model** (`sheet_model.build_sheet`) feeds the on-screen preview, the report and the PDF; five result styles; separate subject/class/principal comments.
+* Student login works without a class code (class codes remain optional).
+
+Verification notes: all suites run against a fresh database through the real Flask request cycle with CSRF tokens; a V61 database was upgraded in place (schema 68 → 70) with a published term preserved; 820 GET pages crawled as school admin / platform admin / teacher / student with no 5xx. Visual layout (CSS, mobile header, PDF look) was checked by markup/PDF generation only, not in a real browser.
+
+Test helpers: older suites use `set_state()` / `set_all()` to put a class straight into a workflow state, because printing and score edits now depend on it.
