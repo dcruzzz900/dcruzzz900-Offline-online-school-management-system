@@ -17,7 +17,8 @@
         <input type="text" name="phone">
         <label>Password</label>
         <input type="password" name="password" required minlength="6">
-        <label>RBAC Role</label><select name="rbac_role" required>{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
+        <label>Roles <small class="muted">(tick all that apply - they are all active together)</small></label>
+        <div style="display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin-bottom:.6rem">{% for role in rbac_roles %}<label style="font-weight:400;display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" name="rbac_role" value="{{ role }}" {{ 'checked' if role == 'Teacher' }}> {{ role }}</label>{% endfor %}</div>
         <button class="btn" type="submit">Add Teacher</button>
     </form>
 </div>
@@ -28,7 +29,7 @@
         <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr>
         {% for t in teachers %}
         <tr>
-            <td>{{ t|staff_name }}<br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
+            <td>{{ t.name }}</td>
             <td>{{ t.username }}</td>
             <td>
                 <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
@@ -40,10 +41,12 @@
                 </form>
             </td>
             <td>
-                <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
-                </form>
+                <div>{% for r in held_roles[t.id] %}<span class="badge" style="display:inline-block;margin:0 .25rem .25rem 0">{{ r }}</span>{% else %}<span class="muted">Teacher</span>{% endfor %}</div>
+                <details><summary class="btn btn-small btn-secondary">Edit roles</summary>
+                <form method="POST" action="{{ url_for('set_teacher_roles', teacher_id=t.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="max-height:14rem;overflow:auto;margin:.4rem 0">{% for role in rbac_roles %}<label style="display:flex;gap:.4rem;font-weight:400"><input type="checkbox" name="roles" value="{{ role }}" {{ 'checked' if role in held_roles[t.id] or (role == 'Teacher' and not held_roles[t.id]) }}> {{ role }}</label>{% endfor %}</div>
+                    <input type="text" name="reason" maxlength="200" placeholder="Reason (optional)"><button class="btn btn-small" type="submit">Save roles</button>
+                    <small class="muted" style="display:block">Takes effect immediately. Removing a role removes its permissions at once.</small></form></details>
             </td>
             <td>
                 {% if t.is_active %}<span style="color:#1a7f37;">Active</span>{% else %}<span style="color:#b3261e;">Deactivated</span>{% endif %}

@@ -94,7 +94,21 @@
         </select>
 
 
-        <p class="muted" style="margin:1rem 0 0">Login &amp; signup branding is managed in <a href="{{ url_for('admin_theme') }}">Theme &amp; Branding</a> (the single place for it).</p>
+        <div class="card" style="margin:1.2rem 0 0; background:#f7fbff; border:1px solid #dce9f8;">
+            <h3>School-Branded Login &amp; Signup</h3>
+            <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Login &amp; signup branding</b><p style="margin:.3rem 0 .6rem">The school logo shown on login and signup screens (visibility, opacity, position, background) is managed in one place.</p><a class="btn btn-secondary" href="{{ url_for('admin_theme') }}">Open Theme &amp; Branding →</a></div>
+            <label>School Motto <small class="muted">(shown on result sheets when enabled)</small>
+                <input type="text" name="school_motto" maxlength="120" value="{{ (settings.school_motto if settings else '') or '' }}" placeholder="e.g. Knowledge and Integrity">
+            </label>
+            <label>School Address <small class="muted">(shown on result sheets when enabled)</small>
+                <textarea name="school_address" rows="2" maxlength="200">{{ (settings.school_address if settings else '') or '' }}</textarea>
+            </label>
+            <div class="card" style="margin-top:1rem"><b>Student login identifiers</b><p class="muted" style="margin:.3rem 0">Choose what students may type in the login box. A student always signs in with their password; no class code is needed for normal login.</p>
+              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_username" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_username }}> Username</label>
+              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_admission" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_admission }}> Admission Number</label>
+              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_register" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_register }}> Register Number</label></div>
+            </div>
+        </div>
 
         <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Result sheet</b><p style="margin:.3rem 0 .6rem">Everything that controls what appears on a result sheet (passport, logo, positions, attendance, comments, signatures, dates, template, colours, fonts) now lives in one place.</p><a class="btn btn-gold" href="{{ url_for('result_display_settings') }}">Open Result Display Settings →</a> <a class="btn btn-secondary" href="{{ url_for('admin_school_info') }}">Custom school information</a></div>
 
