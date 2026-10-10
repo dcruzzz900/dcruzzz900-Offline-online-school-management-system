@@ -1,8 +1,8 @@
 <div class="table-wrap"><table class="score-audit-table">
-<thead><tr><th>Date / Time</th><th>Student</th><th>Subject</th><th>Class</th><th>Session · Term</th><th>Previous</th><th>New</th><th>Diff.</th><th>Changed By</th><th>Role</th><th>Status</th><th>Reason</th></tr></thead>
+<thead><tr><th>Date / Time</th><th>Student</th><th>Subject</th><th>Class</th><th>Session · Term</th><th>Previous</th><th>New</th><th>Diff.</th><th>Action</th><th>Changed By</th><th>Role(s)</th><th>Status</th><th>Reason</th></tr></thead>
 <tbody>{% for h in history %}<tr>
 <td>{{ h.changed_at }}</td><td>{{ h.student_name }}<br><small class="muted">{{ h.admission_no }}</small></td><td>{{ h.subject_name }}</td><td>{{ h.class_name }}</td><td>{{ h.session_name }} · {{ h.term_name }}</td>
 <td>{% if h.old_total is none %}<span class="muted">(new entry)</span>{% else %}<b>{{ h.old_total }}</b><br><small>{{ h.old_ca1 }}/{{ h.old_ca2 }}{% if h.old_ca3 or h.new_ca3 %}/{{ h.old_ca3 or 0 }}{% endif %}/{{ h.old_exam }}</small>{% endif %}</td>
 <td><b>{{ h.new_total }}</b><br><small>{{ h.new_ca1 }}/{{ h.new_ca2 }}{% if h.old_ca3 or h.new_ca3 %}/{{ h.new_ca3 or 0 }}{% endif %}/{{ h.new_exam }}</small></td>
 <td style="color:{{ '#1a7f37' if h.difference > 0 else ('#b3261e' if h.difference < 0 else 'inherit') }}">{{ '+' if h.difference > 0 }}{{ h.difference }}</td>
-<td>{{ h.changed_by_name or 'Unknown' }}</td><td>{{ h.changed_by_role or '—' }}</td><td>{{ h.result_status }}</td><td>{{ h.reason or '—' }}</td></tr>{% endfor %}</tbody></table></div>
+<td>{{ (h.action or 'edited')|replace('_',' ') }}</td><td>{{ h.changed_by_name or 'Unknown' }}<br><small class="muted">{{ h.server_timestamp or '' }}</small></td><td>{{ h.changed_by_role or '—' }}{% if h.roles_held %}<br><small class="muted">{{ h.roles_held }}</small>{% endif %}</td><td>{{ h.result_status }}</td><td>{{ h.reason or '—' }}</td></tr>{% endfor %}</tbody></table></div>

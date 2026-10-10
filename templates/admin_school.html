@@ -35,31 +35,11 @@
         <label>Logo Image (PNG, JPG, or GIF — leave blank to keep the current one)</label>
         <input type="file" name="logo" accept=".png,.jpg,.jpeg,.gif">
 
-        <label>Logo Alignment on Dashboard</label>
-        <div style="margin-top:0.4rem; display:flex; gap:1.5rem;">
-            {% for value, display in [('left','Left'), ('center','Center'), ('right','Right')] %}
-            <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem;">
-                <input type="radio" name="logo_align" value="{{ value }}" style="width:auto;"
-                    {% if (settings.logo_align if settings else 'center') == value %}checked{% endif %}>
-                {{ display }}
-            </label>
-            {% endfor %}
-        </div>
+        <p class="muted">Logo and header-text alignment on result sheets are set in <a href="{{ url_for('result_display_settings') }}">Result Display Settings</a>.</p>
 
-        <label style="margin-top:1rem;">School Name Alignment</label>
-        <p style="font-size:0.82rem; color:#999; margin:0 0 0.3rem;">
-            Separate from the logo above — e.g. logo on the left, name centred. Applies to the
-            dashboard header and result sheets.
-        </p>
-        <div style="margin-top:0.2rem; display:flex; gap:1.5rem;">
-            {% for value, display in [('left','Left'), ('center','Center'), ('right','Right')] %}
-            <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem;">
-                <input type="radio" name="name_align" value="{{ value }}" style="width:auto;"
-                    {% if (settings.name_align if settings else 'center') == value %}checked{% endif %}>
-                {{ display }}
-            </label>
-            {% endfor %}
-        </div>
+        <label style="margin-top:1rem;">School motto</label>
+        <input type="text" name="school_tagline" maxlength="120" value="{{ settings.school_tagline if settings and settings.school_tagline else '' }}" placeholder="e.g. Knowledge and Integrity">
+        <p class="muted" style="margin:.2rem 0 0">Shown on result sheets when “Show School Motto” is ON in Result Display Settings.</p>
 
         <label style="margin-top:1rem;">Timezone</label>
         <select name="timezone">
@@ -94,21 +74,7 @@
         </select>
 
 
-        <div class="card" style="margin:1.2rem 0 0; background:#f7fbff; border:1px solid #dce9f8;">
-            <h3>School-Branded Login &amp; Signup</h3>
-            <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Login &amp; signup branding</b><p style="margin:.3rem 0 .6rem">The school logo shown on login and signup screens (visibility, opacity, position, background) is managed in one place.</p><a class="btn btn-secondary" href="{{ url_for('admin_theme') }}">Open Theme &amp; Branding →</a></div>
-            <label>School Motto <small class="muted">(shown on result sheets when enabled)</small>
-                <input type="text" name="school_motto" maxlength="120" value="{{ (settings.school_motto if settings else '') or '' }}" placeholder="e.g. Knowledge and Integrity">
-            </label>
-            <label>School Address <small class="muted">(shown on result sheets when enabled)</small>
-                <textarea name="school_address" rows="2" maxlength="200">{{ (settings.school_address if settings else '') or '' }}</textarea>
-            </label>
-            <div class="card" style="margin-top:1rem"><b>Student login identifiers</b><p class="muted" style="margin:.3rem 0">Choose what students may type in the login box. A student always signs in with their password; no class code is needed for normal login.</p>
-              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_username" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_username }}> Username</label>
-              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_admission" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_admission }}> Admission Number</label>
-              <label style="font-weight:400;display:flex;gap:.4rem"><input type="checkbox" name="student_login_register" value="1" style="width:auto" {{ 'checked' if not settings or settings.student_login_register }}> Register Number</label></div>
-            </div>
-        </div>
+        <p class="muted" style="margin:1rem 0 0">Login &amp; signup branding is managed in <a href="{{ url_for('admin_theme') }}">Theme &amp; Branding</a> (the single place for it).</p>
 
         <div class="card" style="margin-top:1rem;background:#f4f7fb"><b>Result sheet</b><p style="margin:.3rem 0 .6rem">Everything that controls what appears on a result sheet (passport, logo, positions, attendance, comments, signatures, dates, template, colours, fonts) now lives in one place.</p><a class="btn btn-gold" href="{{ url_for('result_display_settings') }}">Open Result Display Settings →</a> <a class="btn btn-secondary" href="{{ url_for('admin_school_info') }}">Custom school information</a></div>
 

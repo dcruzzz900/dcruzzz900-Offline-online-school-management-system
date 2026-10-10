@@ -92,13 +92,14 @@
         </select>
     </form>
     <table><caption>Student List</caption>
-        <tr><th>Admission No. / Register No.</th><th>Name</th><th>Gender</th><th>Class</th><th>Parent Email</th><th>Actions</th></tr>
+        <tr><th>Admission No. / Register No.</th><th>Name</th><th>Gender</th><th>Class</th><th>Status</th><th>Parent Email</th><th>Actions</th></tr>
         {% for s in students %}
         <tr>
             <td>{{ s.admission_no }}</td>
             <td>{{ student_full_name(s) }}</td>
             <td>{{ s.gender }}</td>
             <td>{{ s.class_name }}</td>
+            <td>{{ s.status|status_badge }}</td>
             <td>{{ s.parent_email or '—' }}</td>
             <td style="white-space:nowrap;">
                 <a class="btn btn-small" href="{{ url_for('student_profile', student_id=s.id) }}">View</a>

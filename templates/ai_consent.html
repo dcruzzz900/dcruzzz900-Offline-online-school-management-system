@@ -1,1 +1,21 @@
-{% extends "base.html" %}{% block title %}AI Consent{% endblock %}{% block content %}<div class="page-heading"><div><div class="eyebrow">AI PRIVACY</div><h1>Student AI Consent</h1><p>Grant, withdraw or leave consent pending for identifiable AI processing.</p></div></div><div class="card"><table><tr><th>Student</th><th>Class</th><th>Status</th><th>Change</th></tr>{% for s in students %}<tr><td>{{ s.last_name }} {{ s.first_name }}</td><td>{{ s.class_name }}</td><td><span class="status-pill {{ s.consent_status }}">{{ s.consent_status|title }}</span></td><td><form method="POST" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="student_id" value="{{ s.id }}"><select name="status"><option value="pending" {% if s.consent_status=='pending' %}selected{% endif %}>Pending</option><option value="granted" {% if s.consent_status=='granted' %}selected{% endif %}>Granted</option><option value="withdrawn" {% if s.consent_status=='withdrawn' %}selected{% endif %}>Withdrawn</option></select><button class="btn btn-small">Save</button></form></td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends "base.html" %}{% block title %}AI Consent{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">AI PRIVACY</div><h1>Student AI Consent</h1>
+<p>AI features only process a student's identifiable data while consent is <b>Granted</b>. Record who gave the consent; every change is kept in the history below.</p></div></div>
+<div class="card" style="overflow-x:auto"><table>
+<tr><th>Student</th><th>Class</th><th>Status</th><th>Consent given by</th><th>Change</th></tr>
+{% for s in students %}
+<tr><td>{{ s.last_name }} {{ s.first_name }}</td><td>{{ s.class_name }}</td>
+<td><span class="status-pill {{ s.consent_status }}">{{ s.consent_status|title }}</span></td>
+<td>{% if s.consent_status == 'granted' and s.granted_by_name %}{{ s.granted_by_name }} <small class="muted">({{ s.relationship }})</small>{% else %}<span class="muted">—</span>{% endif %}</td>
+<td><form method="POST" class="inline consent-form" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="student_id" value="{{ s.id }}">
+<select name="status" aria-label="Consent status"><option value="pending" {% if s.consent_status=='pending' %}selected{% endif %}>Pending</option><option value="granted" {% if s.consent_status=='granted' %}selected{% endif %}>Granted</option><option value="withdrawn" {% if s.consent_status=='withdrawn' %}selected{% endif %}>Withdrawn</option></select>
+<input name="consenting_name" placeholder="Consent given by (name)" maxlength="120" value="{{ s.granted_by_name or '' }}" style="min-width:11rem">
+<select name="relationship" aria-label="Relationship"><option value="">Relationship</option>{% for r in relationships %}<option {% if s.relationship == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+<button class="btn btn-small" type="submit">Save</button></form></td></tr>
+{% else %}<tr><td colspan="5" class="muted">No active students.</td></tr>{% endfor %}</table></div>
+<div class="card" style="overflow-x:auto"><h3>Recent consent history</h3><table><tr><th>Server time (UTC)</th><th>Student</th><th>From → To</th><th>Consent from</th><th>Recorded by</th></tr>
+{% for e in history %}<tr><td>{{ e.server_timestamp }}</td><td>{{ e.last_name }} {{ e.first_name }}</td><td>{{ e.previous_status|title }} → {{ e.new_status|title }}</td><td>{{ e.consenting_name or '—' }}{% if e.relationship %} ({{ e.relationship }}){% endif %}</td><td>{{ e.recorded_by_name or e.recorded_by_type }}</td></tr>{% else %}<tr><td colspan="5" class="muted">No changes recorded yet.</td></tr>{% endfor %}</table></div>
+<script>document.querySelectorAll('.consent-form').forEach(function(f){f.addEventListener('submit',function(){var b=f.querySelector('button[type=submit]');if(f.dataset.sent){return false}f.dataset.sent='1';b.disabled=true;b.textContent='Saving…'})})</script>
+{% endblock %}

@@ -3,24 +3,7 @@
 {% block content %}
 <h1>Sessions &amp; Terms</h1>
 
-<div class="card">
-    <h3>Cumulative / Annual Result</h3>
-    <p style="font-size:0.85rem; color:#666;">
-        When enabled, an Annual/Cumulative Result becomes available for each class and student,
-        averaging every subject across 1st, 2nd and 3rd Term for the session. When disabled,
-        terms operate completely independently, as before.
-    </p>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="action" value="toggle_cumulative">
-        <label style="font-weight:normal; display:flex; align-items:center; gap:0.4rem;">
-            <input type="checkbox" name="cumulative_enabled" style="width:auto;"
-                {% if school and school.cumulative_enabled %}checked{% endif %}
-                onchange="this.form.submit()">
-            Enable Cumulative Result
-        </label>
-    </form>
-</div>
+<div class="card"><h3>Cumulative / Annual Result</h3><p class="muted">Moved: this setting now lives in <a href="{{ url_for('result_display_settings') }}">Result Display Settings</a> with the other result-sheet options.</p></div>
 
 <div class="grid-2">
     <div class="card">
@@ -83,12 +66,13 @@
         keeps parents from being emailed mid-term while scores are still being entered.
     </p>
     <table>
-        <tr><th>Term</th><th>Session</th><th>Status</th><th>Published?</th><th>Action</th></tr>
+        <tr><th>Term</th><th>Session</th><th>Status</th><th>Resumption date</th><th>Published?</th><th>Action</th></tr>
         {% for t in terms %}
         <tr>
             <td>{{ t.name }}</td>
             <td>{{ t.session_name }}</td>
             <td>{% if t.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
+            <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}"><button class="btn btn-small" type="submit">Save</button></form></td>
             <td>{% if t.is_published %}<span class="badge" style="background:#1d7a4c;">Published</span>{% else %}—{% endif %}</td>
             <td style="white-space:nowrap;">
                 {% if not t.is_active %}
@@ -99,21 +83,7 @@
                     <button class="btn btn-small" type="submit">Activate</button>
                 </form>
                 {% endif %}
-                {% if t.is_published %}
-                <form method="POST" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="unpublish_term">
-                    <input type="hidden" name="term_id" value="{{ t.id }}">
-                    <button class="btn btn-small" type="submit">Unpublish</button>
-                </form>
-                {% else %}
-                <form method="POST" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="publish_term">
-                    <input type="hidden" name="term_id" value="{{ t.id }}">
-                    <button class="btn btn-small btn-gold" type="submit">Publish Results</button>
-                </form>
-                {% endif %}
+                <a class="btn btn-small btn-gold" href="{{ url_for('result_workflow', term_id=t.id) }}">Result approval</a>
             </td>
         </tr>
         {% endfor %}

@@ -11,7 +11,7 @@
         {% endfor %}
     </select>
 </form>
-{% if output_allowed(class_row.id, term.id) %}<a class="btn" href="{{ url_for('class_results_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download All Results as One PDF</a>{% else %}<span class="badge">{{ result_state(class_row.id, term.id).label }} — preview only</span>{% endif %}
+{% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('class_results_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download All Results as One PDF</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only; PDF unlocks after publication</span>{% endif %}
 
 <div class="card">
     <table>

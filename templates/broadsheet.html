@@ -17,8 +17,8 @@
             {% endfor %}
         </select>
     </form>
-    {% if output_allowed(class_row.id, term.id) %}<a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
-    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>{% else %}<span class="badge">{{ result_state(class_row.id, term.id).label }} — preview only (print, PDF and export unlock after publication)</span>{% endif %}
+    {% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
+    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only</span>{% endif %}
     {% if cumulative_enabled %}
     <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id) }}">📊 Annual / Cumulative Broadsheet</a>
     {% endif %}
@@ -35,20 +35,14 @@
 
 <div style="overflow-x:auto;">
 <table>
-    <tr>
-        <th>S/N</th>
-        <th>Student</th>
-        {% for subj in subjects %}<th>{{ subj.name }}</th>{% endfor %}
-        <th>Total</th>
-        <th>Average</th>
-        <th>Position</th>
-    </tr>
+    <tr><th rowspan="2">S/N</th><th rowspan="2">Student</th>{% set _ca3 = ca3_on() %}{% for subj in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ subj.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Position</th></tr>
+    <tr>{% for subj in subjects %}<th>1st CA</th><th>2nd CA</th>{% if _ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}</tr>
     {% for r in rows %}
     <tr>
         <td>{{ loop.index }}</td>
         <td>{{ student_full_name(r.student) }}</td>
-        {% for subj in subjects %}
-        <td>{{ r.scores[subj.id].total }} {% if r.scores[subj.id].grade != '-' %}({{ r.scores[subj.id].grade }}){% endif %}</td>
+        {% for subj in subjects %}{% set c = r.scores[subj.id] %}
+        <td>{{ c.ca1 }}</td><td>{{ c.ca2 }}</td>{% if _ca3 %}<td>{{ c.ca3 }}</td>{% endif %}<td>{{ c.exam }}</td><td><b>{{ c.total }}</b>{% if c.grade != '-' %} ({{ c.grade }}){% endif %}</td>
         {% endfor %}
         <td>{{ r.total }}</td>
         <td>{{ r.average }}</td>
