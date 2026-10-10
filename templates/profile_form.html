@@ -86,7 +86,7 @@
   <div class="card"><h3>Profile details</h3><p class="muted"><span class="req">*</span> marks a required field. Every other field is optional.</p>
     <div class="pf-grid">{% for r in rows %}{{ sysfield(r) }}{% endfor %}</div></div>
   <datalist id="dl_states">{% for s in states %}<option value="{{ s }}">{% endfor %}</datalist>
-  <div class="card"><h3>Photograph{% if has_signature %} and signature{% endif %}</h3>
+  <div class="card"><h3>Photograph</h3>
     <div class="pf-media">
       <div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
         {% if photo_url %}<img src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}

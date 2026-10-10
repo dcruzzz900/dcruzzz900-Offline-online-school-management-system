@@ -8,7 +8,7 @@
 <div class="rs-wrap">{% include "_result_sheet.html" %}</div>
 <script>
 /* One page: if the sheet is taller than A4 (297mm) scale it down so nothing is cut off or pushed to a second page. */
-(function(){function fit(){var s=document.querySelector('.rs-sheet');if(!s)return;s.style.zoom='';s.style.height='auto';var max=297*96/25.4-2;var h=s.scrollHeight;if(h>max){var z=Math.max(0.55,max/h);s.style.zoom=z;}s.style.height='';}
+(function(){function fit(){var s=document.querySelector('.rs-sheet');if(!s)return;s.style.zoom='';s.style.height='auto';var ow=s.style.width,ob=s.style.boxSizing;s.style.boxSizing='border-box';s.style.width='210mm';var max=297*96/25.4-8;var h=s.scrollHeight;s.style.width=ow;s.style.boxSizing=ob;if(h>max){var z=Math.max(0.28,(max/h)*0.965);s.style.zoom=z;s.style.minHeight=(max/z-1)+'px';}else{s.style.minHeight=(max-1)+'px';}s.style.height='';}
 window.addEventListener('load',fit);window.addEventListener('beforeprint',fit);window.addEventListener('resize',fit);})();
 </script>
 {% if autoprint %}<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},350);});</script>{% endif %}
