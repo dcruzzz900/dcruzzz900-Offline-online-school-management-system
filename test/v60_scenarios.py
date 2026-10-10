@@ -254,9 +254,9 @@ finally:
     cc.rollback(); cc.close()
 check("signup name cannot be altered even by SQL", not ok)
 r = post(t_c, "/staff/2/edit", sp_ok, files={"signature": upload(png(size_kb=520), "s.png"), "photo": upload(png(size_kb=520), "p.png")})
-check("staff signature/passport > 500KB rejected", r.status_code == 422 and html(r).count("must not exceed 500 KB") >= 2)
+check("staff passport > 500KB rejected (the signature is not part of this form any more)", r.status_code == 422 and html(r).count("must not exceed 500 KB") >= 1)
 r = post(t_c, "/staff/2/edit", sp_ok, files={"signature": upload(png(), "s.png"), "photo": upload(png(), "p.png")})
-check("staff signature+photo saved", r.status_code == 302 and db().execute("SELECT signature_filename,photo_filename FROM users WHERE id=2").fetchone()[0] is not None)
+check("staff photo saved; the signature is managed only on the Digital Signature card (one authoritative field)", r.status_code == 302 and db().execute("SELECT signature_filename,photo_filename FROM users WHERE id=2").fetchone()[1] is not None and db().execute("SELECT signature_filename FROM users WHERE id=2").fetchone()[0] is None)
 # duplicates
 r = post(t_c, "/staff/2/edit", dict(sp_ok, email="BMUSA@example.com"))
 check("duplicate email (case-insensitive) blocked with clear message", r.status_code == 422 and "Email is already used" in html(r))
