@@ -474,15 +474,9 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(min-height:900px) and (min-width:901px){.beautiful-auth{min-height:min(720px,calc(100dvh - 36px))}}
 @media(min-width:1500px){.beautiful-auth{max-width:1180px}}
 
-
-/* ===== V62.1: header, clock, notification badges ===== */
-.topbar{min-height:72px;padding-top:.75rem;padding-bottom:.75rem;gap:.9rem;flex-wrap:wrap;align-items:center;position:relative}
-.top-search input{min-height:46px;font-size:16px}
-.top-actions{display:flex;align-items:center;gap:.8rem;margin-left:auto;flex-wrap:wrap}
-.top-bell{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:46px;min-height:46px;font-size:1.3rem;text-decoration:none}
-.nav-badge,.notif-badge{background:#dc2626;color:#fff;border-radius:999px;padding:0 .45rem;font-weight:700;font-size:.78rem;font-style:normal;line-height:1.35rem;min-width:1.35rem;text-align:center;display:inline-block}
-.top-badge{position:absolute;top:2px;right:0}
-.top-clock{font-weight:600;font-size:.95rem;white-space:nowrap}
-.top-avatar-link{width:46px;height:46px}
-@media(max-width:700px){.topbar{min-height:64px}.top-clock{order:5;flex-basis:100%;white-space:normal;font-size:.85rem}.top-search{order:4;flex-basis:100%;max-width:none}}
-main.container{padding-top:1rem;clear:both}
+/* password show/hide */
+.pw-wrap{position:relative;display:block;width:100%}
+.pw-wrap>input{width:100%;padding-right:2.9rem!important}
+.pw-toggle{position:absolute;right:.25rem;top:50%;transform:translateY(-50%);width:2.5rem;height:2.5rem;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#5b6577;cursor:pointer;border-radius:8px;padding:0}
+.pw-toggle:hover{color:#1f3a5f}.pw-toggle:focus-visible{outline:2px solid #1f3a5f;outline-offset:1px}
+.pw-wrap>input+.pw-toggle{margin-top:0}

@@ -3,12 +3,13 @@
 .rs-sheet *{box-sizing:border-box}
 .rs-watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:54pt;font-weight:800;color:rgba(0,0,0,.05);transform:rotate(-30deg);pointer-events:none;text-align:center;z-index:0}
 .rs-sheet>*{position:relative;z-index:1}
-.rs-head{border-bottom:3px solid var(--rs-accent);padding:2mm 0 5mm;margin-bottom:5mm;min-height:34mm}
-.rs-logo-row{margin-bottom:2.5mm}.rs-logo-row+.rs-head-text{margin-top:0}
-.rs-logo{max-height:22mm;max-width:46mm;width:auto;height:auto;object-fit:contain;flex:none}
+.rs-head{display:flex;align-items:center;gap:6mm;border-bottom:3px solid var(--rs-accent);padding-bottom:4mm;margin-bottom:4mm}
+.rs-head-text{flex:1;text-align:center}.rs-head-logo-left .rs-head-text{text-align:left}.rs-head-logo-right{flex-direction:row-reverse}.rs-head-logo-right .rs-head-text{text-align:right}
+.rs-head-logo-center{flex-direction:column;text-align:center}.rs-head-logo-center .rs-head-text{text-align:center}
+.rs-logo{max-height:22mm;max-width:30mm;width:auto;height:auto;object-fit:contain;flex:none}
 .rs-head h2{margin:0;font-size:16pt;color:var(--rs-accent);text-transform:uppercase}.rs-head h1{margin:2mm 0 0;font-size:12pt;letter-spacing:.06em;text-transform:uppercase}
 .rs-tag,.rs-contact,.rs-term{margin:1mm 0 0;font-size:9pt;color:#444}
-.rs-idwrap{display:flex;gap:5mm;align-items:flex-start;margin-bottom:4mm}.rs-idwrap .rs-id{flex:1;margin-bottom:0}.rs-passport{width:28mm;min-height:34mm;flex:none}.rs-passport img{display:block;width:auto;height:auto;max-width:100%;max-height:36mm;object-fit:contain;border:0;background:none}
+.rs-passport{width:26mm;height:32mm;border:1px solid #999;background:#fff;flex:none;overflow:hidden}.rs-passport img{width:100%;height:100%;object-fit:cover;display:block}
 .rs-id{display:grid;grid-template-columns:repeat(4,1fr);gap:2mm;margin-bottom:4mm}
 .rs-id div{border:1px solid #ccc;padding:1.5mm 2mm;border-radius:1.5mm}.rs-id span,.rs-att span,.rs-comments span{display:block;font-size:7.5pt;color:#555;text-transform:uppercase;letter-spacing:.03em}.rs-id b{font-size:10pt}
 .rs-pos{background:var(--rs-accent);color:#fff;border-color:var(--rs-accent)!important}.rs-pos span{color:#fff!important}
@@ -47,9 +48,92 @@
 .rs-formal_school .rs-pos{background:#fff;color:var(--rs-accent);border:2px solid var(--rs-accent)!important}.rs-formal_school .rs-pos span{color:var(--rs-accent)!important}
 .rs-professional_classic .rs-table td{border:1px solid #888}
 /* one page: the sheet is exactly one A4 page when printed */
-@media print{.rs-sheet{height:296.5mm;min-height:0;overflow:hidden;page-break-after:avoid;break-after:avoid}}
+@media print{.rs-sheet{height:auto;overflow:hidden;page-break-after:avoid;break-after:avoid}}
 .rs-fit{transform-origin:top center}
 
-.rs-custom{display:grid;grid-template-columns:repeat(4,1fr);gap:2mm;margin-top:3mm}.rs-custom div{border:1px solid #ccc;padding:1.5mm 2mm;border-radius:1.5mm}.rs-custom span{display:block;font-size:7.5pt;color:#555;text-transform:uppercase}
-.rs-id{grid-template-columns:repeat(3,1fr)}
-@media(max-width:820px){.rs-idwrap{flex-direction:column}.rs-custom{grid-template-columns:repeat(2,1fr)}.rs-id{grid-template-columns:repeat(2,1fr)}}
+/* ---- V64 styles: structurally different layouts (header, information block, table, headings) ---- */
+.rs-executive_band .rs-head{background:var(--rs-accent);color:#fff;border:0;padding:6mm;margin:-10mm -10mm 5mm}
+.rs-executive_band .rs-head h2,.rs-executive_band .rs-head h1,.rs-executive_band .rs-tag,.rs-executive_band .rs-contact,.rs-executive_band .rs-term{color:#fff}
+.rs-executive_band .rs-head-text,.rs-executive_band .rs-head-logo-center .rs-head-text{text-align:left}
+.rs-executive_band .rs-id div{border:0;border-left:3px solid var(--rs-second);background:#f6f7f9;border-radius:0}
+.rs-executive_band .rs-table th{background:var(--rs-accent)}.rs-executive_band .rs-table td{border:0;border-bottom:1px solid #d5d9e0}.rs-executive_band .rs-table tbody tr:nth-child(even){background:transparent}
+.rs-executive_band .rs-h{border:0;padding:0;text-transform:uppercase;letter-spacing:.12em;font-size:9.5pt}
+.rs-minimal_clean{color:#222}
+.rs-minimal_clean .rs-head{flex-direction:column;text-align:center;border-bottom:1px solid #bbb}.rs-minimal_clean .rs-head h2{color:#111;font-weight:600;letter-spacing:.08em}
+.rs-minimal_clean .rs-id{grid-template-columns:1fr 1fr;gap:0 10mm}.rs-minimal_clean .rs-id div{display:flex;justify-content:space-between;align-items:baseline;border:0;border-bottom:1px solid #e3e3e3;border-radius:0;padding:1.2mm 0}
+.rs-minimal_clean .rs-id span{display:inline}.rs-minimal_clean .rs-pos{background:transparent;color:#111;border-color:#e3e3e3!important}.rs-minimal_clean .rs-pos span{color:#555!important}
+.rs-minimal_clean .rs-table th{background:transparent;color:#111;border:0;border-bottom:2px solid #111}.rs-minimal_clean .rs-table td{border:0;border-bottom:1px solid #e6e6e6}.rs-minimal_clean .rs-table tbody tr:nth-child(even){background:transparent}
+.rs-minimal_clean .rs-h{border:0;padding:0;color:#111;font-weight:600;text-transform:uppercase;letter-spacing:.1em;font-size:9pt}
+.rs-ledger_classic{background:#fffdf5;font-family:"Courier New",Courier,monospace;border:2px solid #222}
+.rs-ledger_classic .rs-head{border-top:2px solid #222;border-bottom:2px solid #222;padding:3mm 0}.rs-ledger_classic .rs-head h2{color:#111}
+.rs-ledger_classic .rs-id{grid-template-columns:repeat(3,1fr);gap:0;border:2px solid #222;border-right:0;border-bottom:0}.rs-ledger_classic .rs-id div{border:0;border-right:1px solid #222;border-bottom:1px solid #222;border-radius:0}
+.rs-ledger_classic .rs-pos{background:#222;border-color:#222!important}
+.rs-ledger_classic .rs-table th{background:#efe9d2;color:#111;border:1.5px solid #222}.rs-ledger_classic .rs-table td{border:1px solid #222}.rs-ledger_classic .rs-table tbody tr:nth-child(even){background:#faf5e1}
+.rs-ledger_classic .rs-h{border:0;border-bottom:2px solid #222;padding:0;color:#111;text-transform:uppercase}
+.rs-vibrant_cards .rs-head{background:#3b5bdb;background:linear-gradient(120deg,var(--rs-accent),var(--rs-second));color:#fff;border:0;border-radius:4mm;padding:5mm}
+.rs-vibrant_cards .rs-head h2,.rs-vibrant_cards .rs-head h1,.rs-vibrant_cards .rs-tag,.rs-vibrant_cards .rs-contact,.rs-vibrant_cards .rs-term{color:#fff}
+.rs-vibrant_cards .rs-id{gap:2.5mm}.rs-vibrant_cards .rs-id div{border:0;border-radius:3mm;background:#eef2fb;background:color-mix(in srgb,var(--rs-accent) 11%,#fff)}
+.rs-vibrant_cards .rs-table{border-collapse:separate;border-spacing:0}.rs-vibrant_cards .rs-table th{border:0;background:var(--rs-accent)}.rs-vibrant_cards .rs-table th:first-child{border-radius:2mm 0 0 2mm}.rs-vibrant_cards .rs-table th:last-child{border-radius:0 2mm 2mm 0}
+.rs-vibrant_cards .rs-table td{border:0;border-bottom:1px solid #fff;background:#f3f5fc;background:color-mix(in srgb,var(--rs-accent) 7%,#fff)}.rs-vibrant_cards .rs-table tbody tr:nth-child(even) td{background:#fff}
+.rs-vibrant_cards .rs-h{display:inline-block;background:var(--rs-accent);color:#fff;border:0;border-radius:99px;padding:.7mm 4mm}.rs-vibrant_cards .rs-h small{color:#fff}
+.rs-split_header .rs-head{background:linear-gradient(90deg,var(--rs-accent) 0 76%,#e9edf4 76% 100%);color:#fff;border:0;border-radius:2mm;padding:5mm}
+.rs-split_header .rs-head h2,.rs-split_header .rs-head h1,.rs-split_header .rs-tag,.rs-split_header .rs-contact,.rs-split_header .rs-term{color:#fff}.rs-split_header .rs-head-text{text-align:left}
+.rs-split_header .rs-id div{border:0;border-top:3px solid var(--rs-accent);background:#f6f7f9;border-radius:0}
+.rs-split_header .rs-table th{border-bottom:3px solid var(--rs-second)}.rs-split_header .rs-comments p{border:0;border-top:3px solid var(--rs-accent);background:#f6f7f9;border-radius:0}
+@media print{.rs-executive_band .rs-head,.rs-vibrant_cards .rs-head,.rs-split_header .rs-head{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+/* the dark "Overall position" card must stay readable in every style */
+.rs-executive_band .rs-pos,.rs-vibrant_cards .rs-pos,.rs-split_header .rs-pos{background:var(--rs-accent);color:#fff;border-radius:2mm}
+.rs-executive_band .rs-pos span,.rs-vibrant_cards .rs-pos span,.rs-split_header .rs-pos span,.rs-ledger_classic .rs-pos span{color:#fff!important}
+
+/* header text alignment is a setting of its own: it never depends on where the logo sits (and the logo never moves the text) */
+.rs-sheet .rs-head.rs-text-left .rs-head-text{text-align:left}
+.rs-sheet .rs-head.rs-text-center .rs-head-text{text-align:center}
+.rs-sheet .rs-head.rs-text-right .rs-head-text{text-align:right}
+.rs-sheet .rs-head .rs-head-text{min-width:0;overflow-wrap:anywhere}
+.rs-sheet .rs-logo{max-width:30mm;max-height:24mm;width:auto;height:auto;object-fit:contain;flex:0 0 auto}
+
+/* passport: the whole photograph is shown (no stretching, no cropping), centred, without an extra frame; a neutral avatar stands in when there is none */
+.rs-passport.has-photo{border:0;background:transparent;display:flex;align-items:center;justify-content:center}
+.rs-passport.has-photo img{width:100%;height:100%;object-fit:contain;object-position:center}
+.rs-passport.rs-passport-empty{border:0;background:#e9edf4;display:flex;align-items:flex-end;justify-content:center}
+.rs-passport.rs-passport-empty svg{width:78%;height:78%;fill:#aab3c5}
+
+/* ================= V65: structurally different layouts (CSS grid areas over the same sections) =================
+   Each style arranges header, student details, performance table, domains, attendance, comments, signatures and key differently. */
+.rs-sheet .rs-head{grid-area:head}.rs-sheet .rs-id{grid-area:id}.rs-sheet .rs-perf{grid-area:perf;min-width:0}.rs-sheet .rs-domains{grid-area:dom;min-width:0}
+.rs-sheet .rs-att{grid-area:att}.rs-sheet .rs-comments{grid-area:com}.rs-sheet .rs-sign{grid-area:sig}.rs-sheet .rs-key{grid-area:key}.rs-sheet .rs-foot{grid-area:foot}
+.rs-modern_academic,.rs-formal_school,.rs-compact_academic,.rs-detailed_report,.rs-executive_band,.rs-minimal_clean,.rs-ledger_classic,.rs-vibrant_cards,.rs-split_header{display:grid;align-content:start;column-gap:5mm;row-gap:3mm}
+/* modern: banner, 4-up strip, wide table, then domains beside attendance+key, comments side by side */
+.rs-modern_academic{grid-template-columns:1fr 1fr;grid-template-areas:"head head" "id id" "perf perf" "dom att" "dom key" "com com" "sig sig" "foot foot"}
+.rs-modern_academic .rs-id{grid-template-columns:repeat(4,1fr)}.rs-modern_academic .rs-comments{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+/* formal: certificate order — details as a two-column list, results, comments BEFORE domains, centred signatures */
+.rs-formal_school{grid-template-columns:1fr;grid-template-areas:"head" "id" "perf" "com" "dom" "att" "sig" "key" "foot"}
+.rs-formal_school .rs-id{grid-template-columns:1fr 1fr}.rs-formal_school .rs-sign{justify-content:space-around;text-align:center}
+/* compact: narrow sidebar (details, attendance, domains, key) | main (results, comments, signatures) */
+.rs-compact_academic{grid-template-columns:56mm 1fr;grid-template-areas:"head head" "id perf" "att perf" "dom com" "key sig" "foot foot"}
+.rs-compact_academic .rs-id{grid-template-columns:1fr}.rs-compact_academic .rs-domain-grid{grid-template-columns:1fr}.rs-compact_academic .rs-att{display:grid;grid-template-columns:1fr}
+/* detailed: results first-class, domains in three columns, comments beside the grading key */
+.rs-detailed_report{grid-template-columns:1.4fr 1fr;grid-template-areas:"head head" "id id" "perf perf" "dom dom" "att att" "com key" "sig sig" "foot foot"}
+.rs-detailed_report .rs-domain-grid{grid-template-columns:repeat(3,1fr)}
+/* executive: results on the left, right-hand rail with details, domains and attendance */
+.rs-executive_band{grid-template-columns:1fr 58mm;grid-template-areas:"head head" "perf id" "perf dom" "perf att" "com com" "sig key" "foot foot"}
+.rs-executive_band .rs-id{grid-template-columns:1fr}.rs-executive_band .rs-domain-grid{grid-template-columns:1fr}.rs-executive_band .rs-att{display:grid;grid-template-columns:1fr}
+/* minimal: results right under the title, details as a 3-column ledger of facts afterwards */
+.rs-minimal_clean{grid-template-columns:1fr;grid-template-areas:"head" "perf" "id" "dom" "att" "com" "sig" "key" "foot"}
+.rs-minimal_clean .rs-id{grid-template-columns:repeat(3,1fr)}
+/* ledger: three-column bookkeeping page — domains and attendance side by side, boxed signatures */
+.rs-ledger_classic{grid-template-columns:1.2fr 1fr 1fr;grid-template-areas:"head head head" "id id id" "perf perf perf" "dom dom att" "com com com" "sig sig key" "foot foot foot"}
+.rs-ledger_classic .rs-sign{border:2px solid #222;padding:3mm}.rs-ledger_classic .rs-att{display:grid;grid-template-columns:1fr;border:1.5px solid #222;padding:2mm}
+/* vibrant: card board — details as cards, domains and comments as neighbouring cards */
+.rs-vibrant_cards{grid-template-columns:1fr 1fr 1fr;grid-template-areas:"head head head" "id id id" "perf perf perf" "dom com com" "att com com" "sig sig key" "foot foot foot"}
+.rs-vibrant_cards .rs-id{grid-template-columns:repeat(3,1fr)}.rs-vibrant_cards .rs-domain-grid{grid-template-columns:1fr}.rs-vibrant_cards .rs-comments{display:grid;grid-template-columns:1fr;gap:3mm}
+/* split: results directly under the band, then details | domains side by side, comments full width */
+.rs-split_header{grid-template-columns:1fr 1fr;grid-template-areas:"head head" "perf perf" "id dom" "att dom" "com com" "sig key" "foot foot"}
+.rs-split_header .rs-id{grid-template-columns:1fr 1fr}.rs-split_header .rs-domain-grid{grid-template-columns:1fr}
+.rs-sheet .rs-att,.rs-sheet .rs-sign,.rs-sheet .rs-key{min-width:0}
+@media print{.rs-sheet{break-inside:avoid}}
+
+/* keep a rating and its meaning on one line so the domain tables stay short */
+.rs-mini td:last-child{white-space:nowrap;font-size:.92em}.rs-mini td:last-child small{font-size:.9em}
+.rs-comments p{min-height:12mm}
+.rs-compact_academic .rs-mini td,.rs-executive_band .rs-mini td,.rs-vibrant_cards .rs-mini td,.rs-split_header .rs-mini td{padding:.7mm 1.2mm}
