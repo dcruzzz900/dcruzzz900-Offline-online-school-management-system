@@ -82,6 +82,7 @@ def register_v64(app, h):
         ft = list(form_teacher_class_ids(conn, uid) or [])
         today = core.school_today(conn, school_id)
 
+        # the dashboard already lists assigned classes and the results workspace, so Quick Actions only carry TASKS
         if assigned and not is_admin:
             pending = locked = 0
             first_pending = None
@@ -108,10 +109,7 @@ def register_v64(app, h):
             else:
                 add(act("enter_scores", "Enter Scores", "✎", url_for("score_entry", class_id=target["class_id"], subject_id=target["subject_id"]),
                         "Scores", "completed", "All scores entered"))
-            add(act("assigned_classes", "Assigned Classes", "▣", url_for("my_class"), "Scores", badge=f"{len(assigned)} assignment{'s' if len(assigned) != 1 else ''}"))
             add(act("view_scores", "View / Edit Scores", "▤", url_for("score_history_all"), "Scores"))
-            if not ft:
-                add(act("view_results", "View Results", "◧", url_for("classes_list"), "Results"))
 
         if ft:
             cid = ft[0]
@@ -119,20 +117,20 @@ def register_v64(app, h):
             add(act("take_attendance", "Take Class Attendance", "✔", url_for("roll_call", class_id=cid), "Class",
                     "completed" if taken else "pending", "Today — Taken" if taken else "Today — Not Taken"))
             add(act("class_register", "Class Register", "☰", url_for("class_register", class_id=cid), "Class"))
-            add(act("class_results", "Class Results", "◧", url_for("class_results_list", class_id=cid), "Results"))
-            add(act("class_broadsheet", "Class Broadsheet", "▦", url_for("broadsheet", class_id=cid), "Results"))
             add(act("domains", "Educational Domains", "★", url_for("class_results_list", class_id=cid), "Results", hint="Open a student's result to rate domains"))
             add(act("ct_comments", "Class Teacher Comments", "✍", url_for("class_results_list", class_id=cid), "Results", hint="Open a student's result to write the comment"))
             st = core.publication_status(conn, school_id, cid, term["id"]) if term else "draft"
             add(act("submit_results", "Submit Results for Review", "⇪", url_for("result_workflow"), "Results",
                     "available" if st in ("draft", "returned", "reopened") else ("completed" if st == "published" else "locked"), core.STATE_LABELS.get(st, st)))
 
-        if REGISTRAR_ROLE in roles or is_admin:
+        if REGISTRAR_ROLE in roles:
             add(act("register_student", "Register Student", "＋", url_for("registrar_dashboard"), "Admissions"))
             add(act("admission_number", "Admission Number", "#", url_for("registrar_dashboard"), "Admissions"))
             add(act("transfer_student", "Transfer Student", "⇄", url_for("registrar_dashboard"), "Admissions"))
             add(act("withdraw_student", "Withdraw Student", "⎋", url_for("registrar_dashboard"), "Admissions"))
             add(act("update_status", "Update Student Status", "◐", url_for("registrar_dashboard"), "Admissions"))
+        elif is_admin:
+            add(act("register_student", "Register Student", "＋", url_for("registrar_dashboard"), "Admissions"))
 
         if is_admin or conn.execute("SELECT 1 FROM result_workflow_permissions WHERE user_id=? AND granted=1 AND permission IN ('result.review','result.approve','result.publish','result.reopen') LIMIT 1", (uid,)).fetchone():
             n = conn.execute("SELECT COUNT(*) c FROM result_publication WHERE school_id=? AND term_id=? AND status IN ('submitted','under_review')",
@@ -141,13 +139,9 @@ def register_v64(app, h):
             add(act("review_results", "Results Awaiting Review", "✔", url_for("result_workflow"), "Results",
                     "attention" if n else ("pending" if ready else "available"), f"{n} Awaiting Review" if n else (f"{ready} Ready to Publish" if ready else None)))
 
-        if is_admin:
-            add(act("assign_subjects", "Assign Subjects", "◈", url_for("admin_class_subjects"), "Academics"))
-            add(act("staff_attendance", "Staff Attendance", "☑", url_for("staff_attendance"), "Staff"))
-            add(act("view_results", "View Results", "◧", url_for("classes_list"), "Results"))
-
-        add(act("timetable", "View Timetable", "▥", url_for("timetable_hub"), "Daily"))
-        add(act("materials", "Learning Materials", "▤", url_for("materials"), "Daily"))
+        if not is_admin:
+            add(act("timetable", "View Timetable", "▥", url_for("timetable_hub"), "Daily"))
+            add(act("materials", "Learning Materials", "▤", url_for("materials"), "Daily"))
         add(act("messages", "Messages", "✉", url_for("teacher_parent_messages"), "Daily"))
         add(act("notifications", "Notifications", "🔔", url_for("notifications_inbox"), "Daily"))
         add(act("my_profile", "My Profile", "☺", url_for("my_profile"), "Daily"))

@@ -2260,13 +2260,15 @@ def grading_problems(conn, school_id, ca1, ca2, ca3, exam):
 
 
 def recompute_attendance(conn, student_id, term_id):
-    """Derives Days Open / Present / Absent for a student's term from the daily register and stores them on the term info row.
-    Late counts as present; Absent and Excused count as absent, so Present + Absent always equals Days Open.
-    A result whose attendance was typed in manually (attendance_source='manual') is left untouched."""
+    """Derives Days Open / Present / Absent for a student's term from their
+    attendance_records and writes them into student_term_info, preserving
+    any comments/signed dates already stored there. Present + Absent can
+    never exceed Days Open here, since each date holds exactly one status."""
     row = conn.execute(
-        "SELECT COUNT(*) AS opened, "
-        "SUM(CASE WHEN status IN ('present','late') THEN 1 ELSE 0 END) AS present, "
-        "SUM(CASE WHEN status IN ('absent','excused') THEN 1 ELSE 0 END) AS absent "
+        "SELECT "
+        "COUNT(*) AS opened, "
+        "SUM(CASE WHEN status='present' THEN 1 ELSE 0 END) AS present, "
+        "SUM(CASE WHEN status='absent' THEN 1 ELSE 0 END) AS absent "
         "FROM attendance_records WHERE student_id=? AND term_id=?",
         (student_id, term_id),
     ).fetchone()
@@ -2274,12 +2276,11 @@ def recompute_attendance(conn, student_id, term_id):
     present = row["present"] or 0
     absent = row["absent"] or 0
     conn.execute(
-        "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, days_school_opened, attendance_source) "
-        "VALUES (?,?,?,?,?, 'auto') "
+        "INSERT INTO student_term_info (student_id, term_id, days_present, days_absent, days_school_opened) "
+        "VALUES (?,?,?,?,?) "
         "ON CONFLICT(student_id, term_id) DO UPDATE SET "
-        "days_present=CASE WHEN student_term_info.attendance_source='manual' THEN student_term_info.days_present ELSE excluded.days_present END, "
-        "days_absent=CASE WHEN student_term_info.attendance_source='manual' THEN student_term_info.days_absent ELSE excluded.days_absent END, "
-        "days_school_opened=CASE WHEN student_term_info.attendance_source='manual' THEN student_term_info.days_school_opened ELSE excluded.days_school_opened END",
+        "days_present=excluded.days_present, days_absent=excluded.days_absent, "
+        "days_school_opened=excluded.days_school_opened",
         (student_id, term_id, present, absent, opened),
     )
 
@@ -2298,8 +2299,9 @@ def attendance_percentage(present, opened):
 # by the school's own grade-scale "remark" (e.g. "Excellent", "Fail") so
 # they always match whatever grading system (Nigerian, British, or
 # custom) the school has configured — the same remark text that already
-# drives per-subject grades. The same short comment is used for both the
-# teacher's and principal's remark; there's no separate "formal" register.
+# drives per-subject grades. The class teacher's comment and the principal's
+# comment use SEPARATE banks (different voice and wording), so the two never
+# read as the same sentence on a result sheet. Schools can still edit either.
 _COMMENT_BANK = {
     "excellent": "Excellent performance. Keep it up.",
     "very good": "Very good performance. Keep it up.",
@@ -2329,52 +2331,30 @@ def _bank_comment(remark, average, subjects_written):
     return _COMMENT_BANK["fail"]
 
 
+def generate_teacher_comment(remark, average, subjects_written):
+    return _bank_comment(remark, average, subjects_written)
+
+
 _PRINCIPAL_BANK = {
-    "excellent": "An outstanding result. The school is proud of this achievement.",
-    "very good": "A commendable result. Sustain this standard.",
-    "good": "A good result. With more consistency, a higher standard is within reach.",
-    "fair": "A fair result. Greater commitment to study is expected next term.",
-    "pass": "A weak result. The pupil must work much harder and seek help early.",
-    "fail": "An unsatisfactory result. Parents and teachers should work together urgently on improvement.",
+    "excellent": "A commendable result that reflects the school's standards. The school expects this to be sustained.",
+    "very good": "A strong result. The school encourages continued focus and consistency.",
+    "good": "A fair result with clear potential. The school urges greater effort in the weaker subjects.",
+    "fair": "An average result. Closer attention to studies is needed to reach the expected standard.",
+    "pass": "The result is below expectation. Parents are advised to support more regular study at home.",
+    "fail": "The result is unsatisfactory. The school recommends close supervision and a plan for improvement.",
 }
 
 
-def _band(remark, average):
-    key = (remark or "").strip().lower()
-    if key in _COMMENT_BANK:
-        return key
-    if average >= 70: return "excellent"
-    if average >= 60: return "very good"
-    if average >= 50: return "good"
-    if average >= 45: return "fair"
-    if average >= 40: return "pass"
-    return "fail"
-
-
-def _letter_for(average, scale):
-    for g in scale or []:
-        if g["min_score"] <= average <= g["max_score"] + 0.999:
-            return g["grade"]
-    return None
-
-
-def _templated(kind_bank, templates, remark, average, subjects_written, grade, first_name):
+def generate_principal_comment(remark, average, subjects_written):
     if not subjects_written:
-        return "No scores recorded yet for this term."
-    tpl = (templates or {}).get(grade or "")
-    if tpl:
-        return tpl.replace("{name}", first_name or "the student")
-    return kind_bank[_band(remark, average)]
-
-
-def generate_teacher_comment(remark, average, subjects_written, templates=None, grade=None, first_name=None):
-    """Class/Form Teacher's suggested comment: its own wording and its own (school-configured) templates."""
-    return _templated(_COMMENT_BANK, templates, remark, average, subjects_written, grade, first_name)
-
-
-def generate_principal_comment(remark, average, subjects_written, templates=None, grade=None, first_name=None):
-    """Principal's suggested comment: different default wording and separately configured templates, never a copy of the teacher's."""
-    return _templated(_PRINCIPAL_BANK, templates, remark, average, subjects_written, grade, first_name)
+        return "No result is available for this term."
+    text = _PRINCIPAL_BANK.get((remark or "").strip().lower())
+    if text:
+        return text
+    for floor, key in ((70, "excellent"), (60, "very good"), (50, "good"), (45, "fair"), (40, "pass")):
+        if average >= floor:
+            return _PRINCIPAL_BANK[key]
+    return _PRINCIPAL_BANK["fail"]
 
 
 POSITION_LABELS = {
@@ -3491,9 +3471,6 @@ def ensure_school_v61_defaults(conn, school_id):
     for i, (key, label) in enumerate([("affective", "Affective Domain"), ("psychomotor", "Psychomotor Domain")], 1):
         conn.execute("INSERT OR IGNORE INTO educational_domains(school_id,tenant_id,domain_key,label,sort_order) VALUES(?,?,?,?,?)",
                      (school_id, tenant, key, label, i))
-    if table_exists(conn, "school_student_statuses"):
-        for i, (name, active) in enumerate(BUILTIN_STUDENT_STATUSES, 1):
-            conn.execute("INSERT OR IGNORE INTO school_student_statuses(school_id,tenant_id,name,counts_as_active,is_builtin,sort_order) VALUES(?,?,?,?,1,?)", (school_id, tenant, name, active, i))
     conn.commit()
 
 
@@ -3529,19 +3506,16 @@ RESULT_BOOL_SETTINGS = [
     ("show_result_date", "Show Result Date", 0),
     ("show_teacher_name", "Show Class Teacher's name under the signature", 1),
     ("show_principal_name", "Show Principal's name under the signature", 1),
-    ("show_contact", "Show School contact information", 1),
+    ("show_address", "Show School Address", 1),
+    ("show_email", "Show School Email", 1),
+    ("show_phone", "Show School Phone Number", 1),
+    ("show_motto", "Show School Motto", 1),
+    ("show_resumption_date", "Show Resumption Date", 0),
+    ("show_all_comments", "Show All Comments (master switch)", 1),
     ("show_grading_key", "Show Grading key", 1),
     ("show_promotion", "Show Promotion / Status", 1),
     ("show_domains", "Show Educational Domain ratings", 1),
     ("show_watermark", "Show Watermark", 0),
-    ("show_register_no", "Show Student Register No.", 0),
-    ("show_total", "Show Total Score", 1),
-    ("show_average", "Show Average", 1),
-    ("show_subject_comment", "Show Subject Teacher's Comment", 0),
-    ("show_custom_fields", "Show Custom Result Fields", 1),
-    ("show_motto", "Show School Motto", 1),
-    ("show_address", "Show School Address", 1),
-    ("show_domain_legend", "Show Educational Domain scale (1 = Poor ... 5 = Excellent)", 1),
 ]
 RESULT_TEMPLATES = [
     ("professional_classic", "Professional Classic", "Traditional bordered layout with a strong header rule."),
@@ -3549,6 +3523,11 @@ RESULT_TEMPLATES = [
     ("formal_school", "Formal School", "Serif typography and a double-ruled border for a formal certificate feel."),
     ("compact_academic", "Compact Academic", "Tight rows so long subject lists stay on one page."),
     ("detailed_report", "Detailed Report", "Adds the grading key and fuller remarks."),
+    ("executive_band", "Executive Band", "Full-width colour band header, left-aligned, ruled rows and accent-edged information cells."),
+    ("minimal_clean", "Minimal Clean", "Airy, borderless layout: hairline rules, a two-column information list and a plain table."),
+    ("ledger_classic", "Ledger Grid", "Accounting-ledger look: monospaced type, heavy full grid and a boxed information table on cream paper."),
+    ("vibrant_cards", "Vibrant Cards", "Rounded gradient header, tinted information cards and pill section headings."),
+    ("split_header", "Split Header", "Two-tone header with the school block on colour and the passport on a light panel."),
 ]
 _LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
 
@@ -3656,169 +3635,181 @@ STEPS.append(("result_display_settings_v62", migration_061_v62))
 
 
 # ---------------------------------------------------------------------------
-# V62.1: multiple roles, registrar/status history, strict attendance, result workflow, notifications
+# V63 — publication workflow, attendance audit, student status history,
+#       workflow permissions. Every table is tenant-stamped and the history
+#       tables are append-only (enforced by triggers, not by the UI).
 # ---------------------------------------------------------------------------
-RESULT_WORKFLOW_STATES = ["DRAFT", "SUBMITTED", "UNDER_REVIEW", "RETURNED", "APPROVED", "PUBLISHED", "REOPENED"]
-ATTENDANCE_STATUSES = ("present", "absent", "late", "excused")
-BUILTIN_STUDENT_STATUSES = [("Active", 1), ("Suspended", 0), ("Withdrawn", 0), ("Transferred", 0), ("Graduated", 0), ("Expelled", 0)]
+def _append_only(conn, table):
+    conn.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_update")
+    conn.execute(f"DROP TRIGGER IF EXISTS trg_{table}_no_delete")
+    conn.execute(f"CREATE TRIGGER trg_{table}_no_update BEFORE UPDATE ON {table} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
+    conn.execute(f"CREATE TRIGGER trg_{table}_no_delete BEFORE DELETE ON {table} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
 
 
-def _rebuild_attendance_records(conn):
-    sql = (conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='attendance_records'").fetchone() or [None])[0] or ""
-    if "'late'" in sql and "session_label" in sql:
-        return
-    conn.execute("ALTER TABLE attendance_records RENAME TO attendance_records_old")
-    for idx in [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='attendance_records_old' AND sql IS NOT NULL")]:
-        conn.execute(f"DROP INDEX IF EXISTS {idx}")
-    conn.execute("""
-        CREATE TABLE attendance_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id INTEGER NOT NULL,
-            class_id INTEGER NOT NULL,
-            term_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('present','absent','late','excused')),
-            recorded_by INTEGER,
-            recorded_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            school_id INTEGER, tenant_id TEXT,
-            session_label TEXT NOT NULL DEFAULT 'day',
-            recorder_name TEXT, recorder_role TEXT,
-            server_timestamp TEXT, school_timezone TEXT,
-            original_status TEXT, corrected_at TEXT, corrected_by INTEGER, corrected_by_name TEXT, correction_reason TEXT,
-            client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, source TEXT, synced_at TEXT,
-            FOREIGN KEY(student_id) REFERENCES students(id),
-            FOREIGN KEY(class_id) REFERENCES classes(id),
-            FOREIGN KEY(term_id) REFERENCES terms(id),
-            UNIQUE(student_id, date, session_label)
-        )""")
-    old_cols = [r[1] for r in conn.execute("PRAGMA table_info(attendance_records_old)")]
-    keep = [c for c in ("id", "student_id", "class_id", "term_id", "date", "status", "recorded_by", "recorded_at", "client_uuid", "updated_at", "is_deleted", "source", "synced_at") if c in old_cols]
-    conn.execute(f"INSERT OR IGNORE INTO attendance_records({','.join(keep)}) SELECT {','.join(keep)} FROM attendance_records_old")
-    conn.execute("UPDATE attendance_records SET school_id=(SELECT c.school_id FROM classes c WHERE c.id=attendance_records.class_id) WHERE school_id IS NULL")
-    conn.execute("UPDATE attendance_records SET tenant_id=(SELECT s.tenant_id FROM schools s WHERE s.id=attendance_records.school_id) WHERE tenant_id IS NULL")
-    conn.execute("UPDATE attendance_records SET server_timestamp=recorded_at WHERE server_timestamp IS NULL")
-    conn.execute("DROP TABLE attendance_records_old")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_attendance_class_date ON attendance_records(class_id, date)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_attendance_school_date ON attendance_records(school_id, date)")
-
-
-def migration_062_v62_integrated(conn):
-    # ---- school: timezone default, student login identifiers --------------------------------------------------
-    conn.execute("UPDATE schools SET timezone='Africa/Lagos' WHERE timezone IS NULL OR timezone=''")
-    for col in ("student_login_username", "student_login_admission", "student_login_register"):
-        ensure_column(conn, "schools", col, "INTEGER NOT NULL DEFAULT 1")
-
-    # ---- result display: header alignment, more toggles, comment templates, principal-date mode -------------------
-    for col, typ in [("logo_align", "TEXT NOT NULL DEFAULT 'left'"), ("text_align", "TEXT NOT NULL DEFAULT 'center'"),
-                     ("show_register_no", "INTEGER NOT NULL DEFAULT 0"), ("show_total", "INTEGER NOT NULL DEFAULT 1"), ("show_average", "INTEGER NOT NULL DEFAULT 1"),
-                     ("show_subject_comment", "INTEGER NOT NULL DEFAULT 0"), ("show_custom_fields", "INTEGER NOT NULL DEFAULT 1"),
-                     ("show_motto", "INTEGER NOT NULL DEFAULT 1"), ("show_address", "INTEGER NOT NULL DEFAULT 1"),
-                     ("show_domain_legend", "INTEGER NOT NULL DEFAULT 1"),
-                     ("teacher_templates", "TEXT"), ("principal_templates", "TEXT"),
-                     ("principal_date_mode", "TEXT NOT NULL DEFAULT 'manual'")]:
-        ensure_column(conn, "result_display_settings", col, typ)
-    conn.execute("UPDATE result_display_settings SET logo_align=CASE header_layout WHEN 'logo-right' THEN 'right' WHEN 'logo-center' THEN 'center' ELSE 'left' END WHERE logo_align='left' AND header_layout IN ('logo-right','logo-center')")
-    ensure_column(conn, "scores", "teacher_comment", "TEXT")
-    for col, typ in [("action", "TEXT"), ("arm", "TEXT"), ("server_timestamp", "TEXT"), ("school_timezone", "TEXT"), ("changed_by_roles", "TEXT")]:
+def migration_062_v63_spec(conn):
+    for col, typ in (("action", "TEXT"), ("class_arm", "TEXT"), ("roles_held", "TEXT"), ("server_timestamp", "TEXT")):
         ensure_column(conn, "score_audit", col, typ)
-    ensure_column(conn, "custom_fields", "show_on_result", "INTEGER NOT NULL DEFAULT 0")
-    ensure_column(conn, "custom_fields", "show_on_profile", "INTEGER NOT NULL DEFAULT 1")
+    # ---- result publication: one row per school + class + term -------------------------------------------------
+    conn.execute("""CREATE TABLE IF NOT EXISTS result_publication (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT,
+        class_id INTEGER NOT NULL, term_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','submitted','under_review','returned','approved','published','reopened')),
+        submitted_by INTEGER, submitted_at TEXT,
+        reviewed_by INTEGER, reviewed_at TEXT,
+        approved_by INTEGER, approved_at TEXT,
+        published_by INTEGER, published_at TEXT,
+        last_reason TEXT, updated_by INTEGER, updated_at TEXT,
+        UNIQUE(school_id, class_id, term_id)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS result_publication_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT,
+        publication_id INTEGER, class_id INTEGER NOT NULL, term_id INTEGER NOT NULL,
+        action TEXT NOT NULL, previous_status TEXT, new_status TEXT,
+        actor_id INTEGER, actor_name TEXT, actor_role TEXT, reason TEXT,
+        event_date TEXT, server_timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pub_audit_scope ON result_publication_audit(school_id, class_id, term_id, id)")
+    _append_only(conn, "result_publication_audit")
 
-    # ---- strict attendance ---------------------------------------------------------------------------------------------
-    _rebuild_attendance_records(conn)
-    for col, typ in [("session_label", "TEXT NOT NULL DEFAULT 'day'"), ("recorder_name", "TEXT"), ("recorder_role", "TEXT"), ("server_timestamp", "TEXT"), ("school_timezone", "TEXT"),
-                     ("original_status", "TEXT"), ("corrected_at", "TEXT"), ("corrected_by", "INTEGER"), ("corrected_by_name", "TEXT"), ("correction_reason", "TEXT"), ("tenant_id", "TEXT")]:
+    # ---- explicit workflow permissions (never implied by a role name) -----------------------------------------
+    conn.execute("""CREATE TABLE IF NOT EXISTS result_workflow_permissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT, user_id INTEGER NOT NULL,
+        permission TEXT NOT NULL, granted INTEGER NOT NULL DEFAULT 1,
+        changed_by INTEGER, changed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, permission)
+    )""")
+
+    # ---- attendance: refined status, immutable server timestamp, correction trail -----------------------------
+    for col, typ in (("detail_status", "TEXT"), ("server_recorded_at", "TEXT"), ("corrected_at", "TEXT"),
+                     ("corrected_by", "INTEGER"), ("correction_reason", "TEXT"), ("attendance_session", "TEXT DEFAULT 'daily'")):
+        ensure_column(conn, "attendance_records", col, typ)
+    for col, typ in (("server_recorded_at", "TEXT"), ("corrected_at", "TEXT"), ("corrected_by", "INTEGER"),
+                     ("correction_reason", "TEXT"), ("attendance_session", "TEXT DEFAULT 'daily'")):
         ensure_column(conn, "staff_attendance", col, typ)
-    conn.execute("UPDATE staff_attendance SET tenant_id=(SELECT tenant_id FROM schools WHERE schools.id=staff_attendance.school_id) WHERE tenant_id IS NULL")
-    conn.execute("UPDATE staff_attendance SET server_timestamp=recorded_at WHERE server_timestamp IS NULL")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS attendance_corrections (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            school_id INTEGER NOT NULL, tenant_id TEXT,
-            kind TEXT NOT NULL CHECK(kind IN ('student','staff')),
-            record_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, attendance_date TEXT NOT NULL,
-            old_status TEXT, new_status TEXT NOT NULL, reason TEXT NOT NULL,
-            corrected_by INTEGER, corrected_by_name TEXT, corrected_by_role TEXT,
-            corrected_at TEXT NOT NULL, school_timezone TEXT
-        )""")
+    conn.execute("UPDATE attendance_records SET server_recorded_at=COALESCE(recorded_at, CURRENT_TIMESTAMP) WHERE server_recorded_at IS NULL")
+    conn.execute("UPDATE attendance_records SET detail_status=status WHERE detail_status IS NULL")
+    conn.execute("UPDATE staff_attendance SET server_recorded_at=COALESCE(recorded_at, CURRENT_TIMESTAMP) WHERE server_recorded_at IS NULL")
     for t in ("attendance_records", "staff_attendance"):
-        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_immutable_origin")
-        conn.execute(f"""CREATE TRIGGER trg_{t}_immutable_origin BEFORE UPDATE OF date, recorded_at ON {t} FOR EACH ROW
-            WHEN NEW.date IS NOT OLD.date OR NEW.recorded_at IS NOT OLD.recorded_at
-            BEGIN SELECT RAISE(ABORT,'The original attendance date and timestamp cannot be changed'); END""")
-    conn.execute("DROP TRIGGER IF EXISTS trg_attendance_corrections_no_update")
-    conn.execute("DROP TRIGGER IF EXISTS trg_attendance_corrections_no_delete")
-    conn.execute("CREATE TRIGGER trg_attendance_corrections_no_update BEFORE UPDATE ON attendance_corrections BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
-    conn.execute("CREATE TRIGGER trg_attendance_corrections_no_delete BEFORE DELETE ON attendance_corrections BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
+        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_server_ts_immutable")
+        conn.execute(f"CREATE TRIGGER trg_{t}_server_ts_immutable BEFORE UPDATE OF server_recorded_at ON {t} "
+                     f"WHEN OLD.server_recorded_at IS NOT NULL AND NEW.server_recorded_at IS NOT OLD.server_recorded_at "
+                     f"BEGIN SELECT RAISE(ABORT,'The original attendance timestamp cannot be changed'); END")
+    conn.execute("""CREATE TABLE IF NOT EXISTS attendance_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT,
+        subject_type TEXT NOT NULL CHECK(subject_type IN ('student','staff')), subject_id INTEGER NOT NULL,
+        class_id INTEGER, class_arm TEXT, term_id INTEGER,
+        attendance_date TEXT NOT NULL, status TEXT, previous_status TEXT,
+        action TEXT NOT NULL CHECK(action IN ('record','correct','check_in','check_out')),
+        recorded_by INTEGER, recorder_name TEXT, recorder_role TEXT,
+        correction_reason TEXT, corrected_by INTEGER, corrected_at TEXT,
+        server_timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attendance_audit_scope ON attendance_audit(school_id, subject_type, attendance_date)")
+    _append_only(conn, "attendance_audit")
 
-    # ---- student status / admissions / transfers -------------------------------------------------------------------------------
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS school_student_statuses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT,
-            name TEXT NOT NULL, counts_as_active INTEGER NOT NULL DEFAULT 0, is_builtin INTEGER NOT NULL DEFAULT 0,
-            is_enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(school_id, name)
-        )""")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS student_status_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, student_id INTEGER NOT NULL,
-            previous_status TEXT, new_status TEXT NOT NULL, event TEXT NOT NULL,
-            effective_date TEXT, destination_school TEXT, previous_school TEXT, reason TEXT,
-            from_class_id INTEGER, to_class_id INTEGER,
-            changed_by INTEGER, changed_by_name TEXT, changed_by_role TEXT, changed_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )""")
+    # ---- student status history + school-defined statuses ------------------------------------------------------
+    conn.execute("""CREATE TABLE IF NOT EXISTS student_status_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT, student_id INTEGER NOT NULL,
+        previous_status TEXT, new_status TEXT NOT NULL,
+        effective_date TEXT, destination_school TEXT, previous_school TEXT, reason TEXT,
+        changed_by INTEGER, changed_by_name TEXT, changed_by_role TEXT,
+        server_timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_student_status_history ON student_status_history(school_id, student_id, id)")
-    conn.execute("DROP TRIGGER IF EXISTS trg_student_status_history_no_update")
-    conn.execute("DROP TRIGGER IF EXISTS trg_student_status_history_no_delete")
-    conn.execute("CREATE TRIGGER trg_student_status_history_no_update BEFORE UPDATE ON student_status_history BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
-    conn.execute("CREATE TRIGGER trg_student_status_history_no_delete BEFORE DELETE ON student_status_history BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
-    ensure_column(conn, "students", "previous_school", "TEXT")
-    ensure_column(conn, "students", "admission_notes", "TEXT")
-    ensure_column(conn, "students", "arm", "TEXT")
-    for sch in conn.execute("SELECT id, COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) t FROM schools").fetchall():
-        for i, (name, active) in enumerate(BUILTIN_STUDENT_STATUSES, 1):
-            conn.execute("INSERT OR IGNORE INTO school_student_statuses(school_id,tenant_id,name,counts_as_active,is_builtin,sort_order) VALUES(?,?,?,?,1,?)", (sch["id"], sch["t"], name, active, i))
+    _append_only(conn, "student_status_history")
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_student_statuses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT, name TEXT NOT NULL,
+        keeps_enrolled INTEGER NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(school_id, name)
+    )""")
+    ensure_column(conn, "students", "register_no", "TEXT")
+    ensure_column(conn, "students", "status_changed_at", "TEXT")
 
-    # ---- result approval / publication workflow -------------------------------------------------------------------------------------
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS result_batches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT NOT NULL,
-            class_id INTEGER NOT NULL, term_id INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','SUBMITTED','UNDER_REVIEW','RETURNED','APPROVED','PUBLISHED','REOPENED')),
-            submitted_by INTEGER, submitted_at TEXT, reviewed_by INTEGER, reviewed_at TEXT, approved_by INTEGER, approved_at TEXT,
-            published_by INTEGER, published_at TEXT, last_reason TEXT, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(class_id, term_id)
-        )""")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS result_publication_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT NOT NULL,
-            batch_id INTEGER NOT NULL, class_id INTEGER NOT NULL, term_id INTEGER NOT NULL,
-            action TEXT NOT NULL, previous_status TEXT, new_status TEXT NOT NULL, reason TEXT,
-            actor_id INTEGER, actor_name TEXT, actor_role TEXT, action_date TEXT, server_timestamp TEXT NOT NULL, school_timezone TEXT
-        )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_result_publication_log ON result_publication_log(school_id, class_id, term_id, id)")
-    for t in ("result_publication_log",):
-        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_update")
-        conn.execute(f"DROP TRIGGER IF EXISTS trg_{t}_no_delete")
-        conn.execute(f"CREATE TRIGGER trg_{t}_no_update BEFORE UPDATE ON {t} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
-        conn.execute(f"CREATE TRIGGER trg_{t}_no_delete BEFORE DELETE ON {t} BEGIN SELECT RAISE(ABORT,'History is append-only'); END")
-    # Terms published before this version keep their published state: their classes become PUBLISHED batches.
-    for t in conn.execute("SELECT t.id term_id, s.school_id, sc.tenant_id FROM terms t JOIN sessions s ON s.id=t.session_id JOIN schools sc ON sc.id=s.school_id WHERE t.is_published=1").fetchall():
-        for c in conn.execute("SELECT id FROM classes WHERE school_id=?", (t["school_id"],)).fetchall():
-            conn.execute("INSERT OR IGNORE INTO result_batches(school_id,tenant_id,class_id,term_id,status,published_at) VALUES(?,?,?,?, 'PUBLISHED', CURRENT_TIMESTAMP)",
-                         (t["school_id"], t["tenant_id"] or str(t["school_id"]), c["id"], t["term_id"]))
-
-    # ---- per-reader notification read state -------------------------------------------------------------------------------------------
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS notification_reads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, notification_id INTEGER NOT NULL,
-            reader_type TEXT NOT NULL CHECK(reader_type IN ('staff','student','parent')), reader_id INTEGER NOT NULL,
-            read_at TEXT DEFAULT CURRENT_TIMESTAMP, UNIQUE(notification_id, reader_type, reader_id)
-        )""")
-
-    # ---- result-sheet mirrors of School Profile information (single source: School Profile) -----------------------------------------------
-    ensure_column(conn, "schools", "school_motto", "TEXT")
-    conn.execute("UPDATE schools SET school_motto=school_tagline WHERE (school_motto IS NULL OR school_motto='') AND school_tagline IS NOT NULL") if "school_tagline" in [r[1] for r in conn.execute("PRAGMA table_info(schools)")] else None
+    # ---- already-published terms keep working: their classes start as PUBLISHED --------------------------------
+    conn.execute("""INSERT OR IGNORE INTO result_publication(school_id, tenant_id, class_id, term_id, status, published_at, last_reason, updated_at)
+        SELECT c.school_id, sc.tenant_id, c.id, t.id, 'published', CURRENT_TIMESTAMP, 'Published before the approval workflow existed', CURRENT_TIMESTAMP
+        FROM terms t JOIN sessions se ON se.id=t.session_id JOIN classes c ON c.school_id=se.school_id JOIN schools sc ON sc.id=c.school_id
+        WHERE t.is_published=1""")
+    # Admin accounts start with the workflow permissions as explicit, revocable grants (a role name alone never publishes).
+    for perm in ("result.submit", "result.review", "result.approve", "result.publish", "result.reopen"):
+        conn.execute("""INSERT OR IGNORE INTO result_workflow_permissions(school_id, tenant_id, user_id, permission, granted)
+            SELECT u.school_id, u.tenant_id, u.id, ?, 1 FROM users u WHERE u.role='admin' AND u.school_id IS NOT NULL""", (perm,))
 
 
-STEPS.append(("v62_integrated", migration_062_v62_integrated))
+STEPS.append(("spec_workflow_attendance_status_v63", migration_062_v63_spec))
+
+
+# ---------------------------------------------------------------------------
+# V64 — optional staff titles (Mr., Mrs., Dr. ... or school-defined)
+# ---------------------------------------------------------------------------
+def migration_063_v64_titles(conn):
+    ensure_column(conn, "users", "title", "TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_staff_titles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, name TEXT NOT NULL,
+        UNIQUE(school_id, name))""")
+
+
+STEPS.append(("staff_titles_v64", migration_063_v64_titles))
+
+
+# ---------------------------------------------------------------------------
+# V65 — AI consent: who consented, relationship, history (append-only)
+# ---------------------------------------------------------------------------
+def migration_064_v65_ai_consent(conn):
+    for col, typ in (("granted_by_name", "TEXT"), ("relationship", "TEXT"), ("recorded_by", "INTEGER"), ("recorded_at", "TEXT")):
+        ensure_column(conn, "student_ai_consent", col, typ)
+    conn.execute("""CREATE TABLE IF NOT EXISTS student_ai_consent_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, student_id INTEGER NOT NULL,
+        previous_status TEXT, new_status TEXT NOT NULL, consenting_name TEXT, relationship TEXT, policy_version TEXT, notes TEXT,
+        recorded_by_type TEXT, recorded_by_id INTEGER, recorded_by_name TEXT,
+        server_timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_consent_events ON student_ai_consent_events(school_id, student_id, id)")
+    _append_only(conn, "student_ai_consent_events")
+
+
+STEPS.append(("ai_consent_history_v65", migration_064_v65_ai_consent))
+
+
+# ---------------------------------------------------------------------------
+# V65 — Result Display Settings becomes the only home of result-sheet options
+# ---------------------------------------------------------------------------
+def migration_065_v65_result_settings(conn):
+    # new switches on the existing table (existing saved values are carried over, never reset)
+    for key, _label, default in RESULT_BOOL_SETTINGS:
+        ensure_column(conn, "result_display_settings", key, f"INTEGER NOT NULL DEFAULT {default}")
+    ensure_column(conn, "result_display_settings", "text_align", "TEXT NOT NULL DEFAULT 'auto'")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(result_display_settings)")}
+    if "show_contact" in cols:      # the single old contact switch seeds address / email / phone
+        conn.execute("UPDATE result_display_settings SET show_address=show_contact, show_email=show_contact, show_phone=show_contact")
+    # header text alignment used to live on the School Profile; keep any non-default choice
+    for sch in conn.execute("SELECT id, name_align FROM schools").fetchall():
+        if sch["name_align"] in ("left", "right"):
+            conn.execute("UPDATE result_display_settings SET text_align=? WHERE school_id=? AND text_align='auto'", (sch["name_align"], sch["id"]))
+    ensure_column(conn, "terms", "resumption_date", "TEXT")
+    # result-sheet options that used to be saved from Theme & Branding: copy into the authoritative table once, if they differ
+    # from the defaults (the old columns stay on `schools` as inert history; nothing reads them any more)
+    for sch in conn.execute("SELECT * FROM schools").fetchall():
+        k = sch.keys()
+        sets, vals = [], []
+        for src, dst in (("show_form_teacher_name", "show_teacher_name"), ("show_form_teacher_signature", "show_teacher_signature"),
+                         ("show_principal_name", "show_principal_name"), ("show_principal_signature", "show_principal_signature")):
+            if src in k and sch[src] is not None:
+                sets.append(f"{dst}=?"); vals.append(int(sch[src]))
+        if sets:
+            row = conn.execute("SELECT updated_by FROM result_display_settings WHERE school_id=?", (sch["id"],)).fetchone()
+            if row is not None and row["updated_by"] is None:     # never saved from the new page: Theme values were the live ones
+                conn.execute(f"UPDATE result_display_settings SET {', '.join(sets)} WHERE school_id=?", (*vals, sch["id"]))
+
+
+STEPS.append(("result_settings_single_home_v65", migration_065_v65_result_settings))
+
+
+# The five-point scale used everywhere educational-domain ratings appear (forms, sheets, keys, PDFs).
+DOMAIN_RATING_LABELS = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}

@@ -39,7 +39,7 @@ def engine_available():
     return _state["ok"]
 
 
-def render_documents(app, session_data, documents):
+def render_documents(app, session_data, documents, probe=None):
     """documents: list of full HTML strings. Returns a list of PDF bytes (one per document) or None if unavailable."""
     if not documents or not engine_available():
         return None
@@ -69,11 +69,16 @@ def render_documents(app, session_data, documents):
                 for html in documents:
                     current["html"] = html
                     page = ctx.new_page()
+                    page.set_viewport_size({"width": 794, "height": 1123})   # the real A4 print width, so the page is laid out as it will be printed
                     page.goto(DOC_URL, wait_until="load")
                     page.emulate_media(media="print")
-                    page.wait_for_timeout(120)      # let the one-page fit script run
+                    page.evaluate("window.dispatchEvent(new Event('beforeprint'))")   # re-run the one-page fit in the PRINT layout
+                    page.wait_for_timeout(150)
+                    if probe:
+                        out.append(page.evaluate(probe)); page.close(); continue
                     out.append(page.pdf(format="A4", print_background=True, prefer_css_page_size=True,
                                         margin={"top": "0", "right": "0", "bottom": "0", "left": "0"}))
+
                     page.close()
             finally:
                 browser.close()

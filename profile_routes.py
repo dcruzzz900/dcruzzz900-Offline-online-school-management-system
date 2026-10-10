@@ -374,10 +374,7 @@ def register_profile_routes(app, h):
             pblob, pext, e = pc.read_image_upload(files["photo"], pc.PASSPORT_MAX, "Passport photograph")
             if e:
                 errors["photo"] = e
-        if files.get("signature") and files["signature"].filename:
-            sblob, sext, e = pc.read_image_upload(files["signature"], pc.SIGNATURE_MAX, "Signature")
-            if e:
-                errors["signature"] = e
+        # Signature: managed ONLY from the Digital Signature card on the staff profile page (single authoritative field).
         fields = pc.load_fields(conn, school_id(), tenant_id(), "staff")
         existing = pc.load_values(conn, school_id(), "staff", uid)
         # Staff edit custom values only where the field is marked editable; School Admin may edit all.
@@ -494,7 +491,7 @@ def register_profile_routes(app, h):
                 ("Assigned Class / Form", ", ".join(r["name"] for r in form_classes) or "—"),
                 ("Subjects assigned by the school", ", ".join(r["name"] for r in subjects) or "—"),
             ],
-            states=pc.NIGERIAN_STATES, mode=mode, has_signature=True,
+            states=pc.NIGERIAN_STATES, mode=mode, has_signature=False, signature_managed_on=url_for("staff_profile", user_id=target["id"]) if target["id"] else None,
             entity_id=target["id"], today=pc._today().isoformat(),
         )
 

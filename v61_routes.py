@@ -744,9 +744,6 @@ def register_v61_routes(app, h):
             denied = h["require_class_result_access"](conn, cls)
             if denied:
                 return denied
-            blocked = h["require_published_output"](conn, cls, term["id"])
-            if blocked:
-                return blocked
             return render_print(conn, student_id, term, url_for("result_pdf", student_id=student_id, term_id=term["id"]),
                                 url_for("result", student_id=student_id, term_id=term["id"]))
         finally:
@@ -757,10 +754,8 @@ def register_v61_routes(app, h):
     def student_result_print(term_id):
         conn = get_db()
         try:
-            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?",
+            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=? AND t.is_published=1",
                                 (term_id, sid())).fetchone()
-            if term and not h["student_term_published"](conn, session["student_id"], term_id):
-                term = None
             enrolled = term and conn.execute("SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (session["student_id"], term["session_id"])).fetchone()
             if not term or not enrolled:
                 flash("That term's result isn't available.", "error")
@@ -775,10 +770,8 @@ def register_v61_routes(app, h):
         conn = get_db()
         try:
             child = h["parent_child"](conn, session["parent_id"], student_id)
-            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?",
+            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=? AND t.is_published=1",
                                 (term_id, sid())).fetchone()
-            if term and not h["student_term_published"](conn, student_id, term_id):
-                term = None
             if not child or not term:
                 flash("That published result is not available.", "error")
                 return redirect(url_for("parent_children_page"))
@@ -860,7 +853,7 @@ def register_v61_routes(app, h):
                 if term["id"] in idx and idx.index(term["id"]) > 0:
                     prev = avgs[idx[idx.index(term["id"]) - 1]]
                     delta = round((avgs[term["id"]] or 0) - prev, 1)
-            att = q("SELECT ar.date d, SUM(CASE WHEN ar.status IN ('present','late') THEN 1 ELSE 0 END) p, COUNT(*) n FROM attendance_records ar JOIN classes c ON c.id=ar.class_id "
+            att = q("SELECT ar.date d, SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) p, COUNT(*) n FROM attendance_records ar JOIN classes c ON c.id=ar.class_id "
                     "WHERE c.school_id=:sid AND ar.term_id=:tid" + cf + " GROUP BY ar.date ORDER BY ar.date DESC LIMIT 30")
             att = list(reversed(att))
             att_total = sum(r["n"] for r in att)
