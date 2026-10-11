@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}Result Display Settings{% endblock %}{% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/result-samples.css') }}">
 <style>.rds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px}.rds-grid label.sw{display:flex;gap:.5rem;align-items:center;font-weight:500;padding:.35rem 0}
 .rds-tpl{display:block;border:2px solid #ddd;border-radius:10px;padding:.6rem .8rem;margin:.4rem 0}.rds-tpl input:checked+span b{color:var(--accent,#1f6feb)}.rds-prev{overflow:auto;background:#e9ecef;padding:10px;border-radius:10px}.rds-prev .rs-sheet{transform-origin:top left;box-shadow:0 2px 10px rgba(0,0,0,.25)}
 .rds-err{color:#b3261e;font-weight:600}.rds-sticky{position:sticky;bottom:0;background:#fff;padding:.6rem;border-top:1px solid #ddd;z-index:5}</style>
