@@ -1,0 +1,82 @@
+/* Sample-inspired result sheets. Colours follow the school's accent (Result Display Settings); every show/hide switch is honoured. */
+.rs-sample,.rs-boxed_grey_card,.rs-assessment_dossier,.rs-peach_terminal_sheet,.rs-green_cumulative_report,.rs-progress_report_card,.rs-clean_midterm_report{font-family:Arial,Helvetica,sans-serif;font-size:9.2pt;line-height:1.28;padding:9mm}
+.rsx-logo,.rsx-dos-logo img,.rsx-peach-logo img,.rsx-grn-logo img,.rsx-prc-logo img,.rsx-cln-logo{max-width:26mm;max-height:26mm;width:auto;height:auto;object-fit:contain}
+table[class*="rsx-"]{border-collapse:collapse;width:100%}
+[class*="rsx-"] .l{text-align:left}
+.rsx-passport,.rsx-prc-photo,.rsx-cln-photo{width:24mm;height:30mm;overflow:hidden;display:flex;align-items:center;justify-content:center;flex:none}
+.rsx-passport img,.rsx-prc-photo img,.rsx-cln-photo img{width:100%;height:100%;object-fit:contain}
+.rsx-passport.rs-passport-empty,.rsx-prc-photo.rs-passport-empty,.rsx-cln-photo.rs-passport-empty{background:#e9edf4;align-items:flex-end}
+.rsx-passport.rs-passport-empty svg,.rsx-prc-photo.rs-passport-empty svg,.rsx-cln-photo.rs-passport-empty svg{width:78%;height:78%;fill:#aab3c5}
+.rsx-key-line{font-size:7.5pt;color:#555;margin:1mm 0 0}
+.rsx-sign{display:flex;justify-content:space-around;gap:10mm;margin-top:6mm;text-align:center}.rsx-sign>div{flex:1;display:flex;flex-direction:column;align-items:center;gap:1mm}.rsx-sign img{max-height:14mm;max-width:45mm}.rsx-sign .rs-line{display:block;width:100%;height:10mm}.rsx-sign small{font-size:8pt}
+.rsx-chip{display:inline-block;min-width:6mm;padding:.2mm 1.6mm;border-radius:1mm;background:var(--rs-accent);color:#fff;font-size:7.5pt;font-weight:700;text-align:center}
+
+/* 1 — Boxed grey card */
+.rsx-grey-head{display:grid;grid-template-columns:30mm 1fr 30mm;gap:3mm;align-items:center;margin-bottom:2mm}
+.rsx-grey-title{text-align:center}.rsx-grey-title h2{margin:0;font-size:22pt;letter-spacing:.03em;text-transform:uppercase;font-weight:800}.rsx-grey-title p{margin:.4mm 0;font-size:8.5pt}.rsx-grey-title h1{margin:1.5mm 0 0;font-size:10.5pt;letter-spacing:.04em}
+.rsx-grey-head.rs-text-left .rsx-grey-title{text-align:left}.rsx-grey-head.rs-text-right .rsx-grey-title{text-align:right}
+.rsx-grey-info td{border:1px solid #333;padding:.8mm 1.6mm;font-size:8.6pt;width:50%}
+.rsx-grey-table{margin-top:2mm}.rsx-grey-table th{background:#555;color:#fff;border:1px solid #333;padding:2mm 1mm;font-size:7.5pt;vertical-align:bottom}.rsx-grey-table th:not(.subj){writing-mode:vertical-rl;transform:rotate(180deg);height:21mm;font-weight:600;text-align:left;padding:1mm}
+.rsx-grey-table th.subj{font-size:11pt;width:38%}
+.rsx-grey-table td{border:1px solid #666;padding:.45mm 1.2mm;text-align:center;font-size:8.4pt}.rsx-grey-table tbody tr:nth-child(odd) td{background:#e4e4e4}.rsx-grey-table tbody tr:nth-child(even) td{background:#f6f6f6}.rsx-grey-table tr.tot td{background:#d0d0d0}
+.rsx-grey-lower{display:grid;grid-template-columns:1fr 1fr;gap:4mm;margin-top:3mm;align-items:start}
+.rsx-grey-mini th{background:#555;color:#fff;border:1px solid #333;padding:.8mm 1.5mm;font-size:7.5pt;text-align:left}.rsx-grey-mini td{border:1px solid #777;padding:.5mm 1.5mm;text-align:center;font-size:8pt}.rsx-grey-traits table{margin-bottom:2mm}
+.rsx-grey-reports{margin-top:3mm}.rsx-grey-reports th{background:#d8d8d8;border:1px solid #444;padding:2mm;text-align:left;width:32mm;font-size:9pt}.rsx-grey-reports td{border:1px solid #444;padding:2mm;min-height:12mm;height:13mm;vertical-align:top}
+
+/* 2 — Continuous assessment dossier */
+.rsx-dos-head{text-align:center;color:var(--rs-accent)}.rsx-dos-head h2{margin:0;font-size:19pt;letter-spacing:.07em;text-transform:uppercase}.rsx-dos-head p{margin:.4mm 0;color:#222;font-size:8.6pt}.rsx-dos-addr{font-weight:600}
+.rsx-dos-band{display:grid;grid-template-columns:1fr 30mm 1fr;align-items:center;gap:4mm;margin:3mm 0 2mm;text-align:left}.rsx-dos-t1 b{display:block;font-size:12pt;letter-spacing:.03em;font-weight:800;color:var(--rs-accent)}.rsx-dos-t1 span{font-size:8.6pt;color:#333}
+.rsx-dos-logo{text-align:center}.rsx-dos-t2{text-align:right}.rsx-dos-t2 b{font-size:9pt;letter-spacing:.06em;color:var(--rs-accent)}.rsx-dos-next{margin-top:1.5mm;border:1.5px solid var(--rs-accent);padding:1.4mm 2mm;font-size:8.4pt;text-align:left;color:#222}
+.rsx-dos-id{position:relative;margin:2mm 0 3mm;color:#234}.rsx-dos-line{display:flex;align-items:baseline;gap:2mm;margin:2mm 28mm 0 0;font-size:9pt}.rsx-dos-line span{color:var(--rs-accent);font-weight:600;white-space:nowrap}.rsx-dos-line u{flex:1;text-decoration:none;border-bottom:1px solid #666;padding:0 1mm;color:#111}
+.rsx-dos-photo{position:absolute;right:0;top:-1mm}
+.rsx-dos-table{border:1px solid #556}.rsx-dos-table th{border:1px solid #556;padding:1.2mm;text-align:center;font-size:8.6pt}.rsx-dos-table td{border:1px solid #889;padding:.9mm 1.4mm;text-align:center}.rsx-dos-table td.l{text-align:left}.rsx-dos-table .n{display:inline-block;width:6mm;font-weight:700}.rsx-dos-table tbody tr:nth-child(even) td{background:#f4f8fd}
+.rsx-dos-note{font-size:8pt;margin:2mm 0}.rsx-dos-skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(60mm,1fr));gap:3mm}
+.rsx-tick{margin-bottom:2mm}.rsx-tick th{background:#eef2f8;border:1px solid #556;font-size:7.4pt;padding:.6mm 1mm}.rsx-tick td{border:1px solid #889;text-align:center;padding:.35mm 1mm;font-size:8pt}.rsx-tick td.l,.rsx-tick th.l{text-align:left}.rsx-tick td:not(.l){width:7mm}
+.rsx-dos-remarks{margin-top:3mm}.rsx-dos-remarks div{display:flex;gap:2mm;align-items:flex-end;margin-bottom:2mm}.rsx-dos-remarks span{color:var(--rs-accent);font-weight:600;white-space:nowrap}.rsx-dos-remarks p{flex:1;margin:0;border-bottom:1px solid #666;min-height:6mm}
+
+/* 3 — Peach terminal sheet */
+.rsx-peach-head{display:grid;grid-template-columns:30mm 1fr 28mm;gap:3mm;align-items:center}.rsx-peach-text{text-align:center}.rsx-peach-text h2{margin:0;font-size:17pt;font-weight:900;color:var(--rs-accent);letter-spacing:-.01em}.rsx-peach-text p{margin:.3mm 0;font-size:8pt}.rsx-peach-text h1{margin:2mm 0 0;font-size:11pt;letter-spacing:.04em}.rsx-peach-sub{text-decoration:underline;font-size:8pt}
+.rsx-peach-text.rs-text-left{text-align:left}.rsx-peach-text.rs-text-right{text-align:right}
+.rsx-peach-id{margin:3mm 0;border:1.5px solid #222}.rsx-peach-id td{padding:1mm 2mm;font-size:8.6pt;border:0}
+.rsx-peach-main{display:grid;grid-template-columns:1fr 46mm;gap:3mm;align-items:start}
+.rsx-peach-table{border:1.5px solid #222}.rsx-peach-table th{background:#f3caa6;border:1px solid #444;padding:1.5mm;font-size:8.6pt}.rsx-peach-table th.v{writing-mode:vertical-rl;transform:rotate(180deg);height:22mm;font-size:7pt;text-align:left;padding:1mm}.rsx-peach-table td{border:1px solid #666;padding:.55mm 1.2mm;text-align:center;font-size:8pt}.rsx-peach-table td.l{text-align:left}
+.rsx-peach-box{margin-bottom:2.5mm;border:1.5px solid #222}.rsx-peach-box th{background:#f3caa6;border:1px solid #444;padding:1mm;font-size:8pt}.rsx-peach-box td{border:1px solid #777;padding:.5mm 1.2mm;text-align:center;font-size:7.8pt}.rsx-peach-box td.l{text-align:left}
+.rsx-peach-summary{width:62%;margin:3mm 0;border:1.5px solid #222}.rsx-peach-summary th{background:#f3caa6;padding:1mm;font-size:8.6pt}.rsx-peach-summary td{border-bottom:1px solid #aaa;padding:.7mm 2mm}.rsx-peach-summary td:last-child{text-align:right;font-weight:700}.rsx-peach-summary td.c{text-align:center;background:#f9e4d0}
+.rsx-peach-dom{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.rsx-peach-remarks{border:1.5px solid #222;margin-top:3mm}.rsx-peach-remarks th{width:26mm;text-align:left;font-size:8.4pt;padding:2mm;border:1px solid #444;background:#fbeee0}.rsx-peach-remarks td{border:1px solid #444;padding:2mm;height:12mm;vertical-align:top}.rsx-peach-remarks td.sg{width:48mm;text-align:center}.rsx-peach-remarks td.sg img{max-height:10mm}.rsx-peach-remarks small{display:block;font-size:7pt}
+.rsx-peach-next{margin:3mm 0 0;font-size:9pt}
+
+/* 4 — Green cumulative report */
+.rsx-grn-head{display:grid;grid-template-columns:28mm 1fr 28mm;gap:3mm;align-items:center;border:2px solid #4b2a8a;padding:2mm}.rsx-grn-band{background:#cfe3f4;padding:2mm 3mm;text-align:center}.rsx-grn-band h2{margin:0;font-size:17pt;color:#1b2a3a;letter-spacing:.02em;text-transform:uppercase}.rsx-grn-band p{margin:.4mm 0;font-size:8.4pt}.rsx-grn-band.rs-text-left{text-align:left}.rsx-grn-band.rs-text-right{text-align:right}
+.rsx-grn-title{margin:2mm 0;text-align:center;color:#c0262d;font-size:11pt;letter-spacing:.05em}
+.rsx-grn-id{border:1px solid #888}.rsx-grn-id td{border:1px solid #bbb;padding:1mm 2mm;font-size:8.2pt}
+.rsx-grn-bar{background:#3fae49;background:var(--rs-accent);color:#fff;text-align:center;font-weight:700;letter-spacing:.04em;padding:1mm;margin-top:2mm;font-size:8.6pt}
+.rsx-grn-table th{border:1px solid #999;background:#f1f1f1;padding:.8mm;font-size:7pt}.rsx-grn-table td{border:1px solid #bbb;padding:.35mm 1mm;text-align:center;font-size:7.4pt}.rsx-grn-table td.l{text-align:left;font-weight:600}
+.rsx-grn-lower{display:grid;grid-template-columns:1fr 62mm;gap:3mm;margin-top:1mm;align-items:start}
+.rsx-grn-remarks th{width:28mm;text-align:left;background:#f1f1f1;border:1px solid #bbb;padding:1.2mm 2mm;font-size:8pt;vertical-align:top}.rsx-grn-remarks td{border:1px solid #bbb;padding:1.2mm 2mm;font-size:8pt}
+.rsx-grn-dom .rsx-tick th{background:#fff;color:var(--rs-accent);border:1px solid #bbb;font-size:7pt}.rsx-grn-dom .rsx-tick td{border:1px solid #ddd}
+
+/* 5 — Progress report card */
+.rsx-prc-head{display:grid;grid-template-columns:20mm 1fr auto;gap:4mm;align-items:center;background:var(--rs-accent);color:#fff;border-radius:2mm;padding:4mm 5mm}.rsx-prc-logo{background:#fff;border-radius:1.5mm;padding:1.2mm;display:flex;align-items:center;justify-content:center;min-height:18mm}
+.rsx-prc-name h2{margin:0;font-size:16pt;letter-spacing:.02em;text-transform:uppercase}.rsx-prc-name p{margin:.4mm 0;font-size:7.6pt;color:#e9f1ee}.rsx-prc-name.rs-text-center{text-align:center}.rsx-prc-name.rs-text-right{text-align:right}
+.rsx-prc-chip{text-align:right}.rsx-prc-chip b{display:inline-block;background:rgba(255,255,255,.22);padding:1mm 3mm;border-radius:99px;font-size:7.4pt;letter-spacing:.05em}.rsx-prc-chip span{display:block;margin-top:1.5mm;font-size:8.4pt;font-weight:700}
+.rsx-prc-student{display:flex;gap:7mm;align-items:center;margin:3mm 0;padding-bottom:3mm;border-bottom:1.5px solid var(--rs-accent)}.rsx-prc-student div span{display:block;font-size:6.6pt;color:#667}.rsx-prc-student div b{font-size:9.6pt}
+.rsx-prc-table{border:1px solid #dde}.rsx-prc-table th{background:var(--rs-accent);color:#fff;border:1px solid rgba(255,255,255,.35);padding:1.1mm;font-size:7.2pt}.rsx-prc-table td{border:1px solid #dfe3ea;padding:1.1mm 1.4mm;text-align:center;font-size:8.6pt}.rsx-prc-table td.l{text-align:left}.rsx-prc-table tbody tr:nth-child(even) td{background:#f6f8fb}
+.rsx-prc-grid{display:grid;grid-template-columns:1fr 52mm;gap:4mm;margin-top:3mm;align-items:start}
+.rsx-prc-bar{background:var(--rs-accent);color:#fff;font-size:7.6pt;font-weight:700;letter-spacing:.04em;padding:1.1mm 2.2mm;margin-top:1.5mm}
+.rsx-prc-analysis{display:grid;grid-template-columns:1fr 1fr;gap:3mm;padding:2mm;font-size:8pt}.rsx-prc-analysis p{margin:1mm 0}
+.rsx-prc-lab{font-size:7.4pt;color:#556;margin:2mm 0 .8mm;font-weight:700}.rsx-prc-main blockquote{margin:0;border:1px solid #dde;border-radius:1.2mm;padding:2mm 3mm;font-style:italic;font-size:8.4pt;min-height:11mm}
+.rsx-prc-dom ul{list-style:none;margin:0;padding:1mm 2mm;border:1px solid #dde;font-size:8pt}.rsx-prc-dom li{display:flex;justify-content:space-between;gap:2mm;padding:.5mm 0}
+.rsx-prc-std{font-size:6.8pt;color:#444;margin:1.5mm 0}
+
+/* 6 — Clean mid-term report */
+.rsx-cln-head{text-align:center;border-bottom:2px solid var(--rs-accent);padding-bottom:3mm}.rsx-cln-logo{display:block;margin:0 auto 1.5mm}.rsx-cln-head h2{margin:0;font-size:15pt;color:var(--rs-accent)}.rsx-cln-head p{margin:.4mm 0;font-size:7.6pt;color:#444}.rsx-cln-head h1{margin:2.5mm 0 .5mm;font-size:13pt}.rsx-cln-term{font-weight:700;font-size:8pt}
+.rsx-cln-head.rs-text-left{text-align:left}.rsx-cln-head.rs-text-right{text-align:right}.rsx-cln-head.rs-text-left .rsx-cln-logo{margin-left:0}.rsx-cln-head.rs-text-right .rsx-cln-logo{margin-right:0;margin-left:auto}
+.rsx-cln-student{display:flex;justify-content:space-between;gap:6mm;margin:3mm 0}.rsx-cln-student dl{display:grid;grid-template-columns:32mm 1fr;gap:1.3mm 3mm;margin:0;font-size:8.6pt}.rsx-cln-student dt{font-weight:700}.rsx-cln-student dd{margin:0}
+.rsx-cln-h{margin:3mm 0 1.5mm;color:var(--rs-accent);font-size:9.4pt;border-bottom:1px solid #d6dbe3;padding-bottom:1mm}.rsx-cln-h small{font-weight:400;color:#556}
+.rsx-cln-table th{background:var(--rs-accent);color:#fff;padding:1.7mm;font-size:8pt;border:1px solid var(--rs-accent)}.rsx-cln-table td{border:1px solid #e1e5ec;padding:1.5mm;text-align:center;font-size:8.6pt}.rsx-cln-table td.l{text-align:left}.rsx-cln-table tbody tr:nth-child(even) td{background:#fafbfd}
+.rsx-cln-two{display:grid;grid-template-columns:1fr 1fr;gap:6mm}.rsx-cln-big{background:#eef2f7;text-align:center;padding:3mm;margin:1.5mm 0}.rsx-cln-big b{display:block;font-size:17pt;color:var(--rs-accent)}.rsx-cln-big span{font-size:7pt;color:#667}
+.rsx-cln-kv{display:flex;justify-content:space-between;margin:1.2mm 0;font-size:8.4pt}.rsx-cln-kv span{font-weight:700}
+.rsx-cln-dom{display:grid;grid-template-columns:1fr 1fr;gap:6mm;font-size:8.2pt}.rsx-cln-dom p{display:flex;justify-content:space-between;margin:.7mm 0}
+.rsx-cln-fb{border:1px solid #d6dbe3;border-radius:1.5mm;padding:2.5mm 3mm;margin-top:3mm;font-size:8.2pt}.rsx-cln-fb p{margin:1.2mm 0}.rsx-cln-note{margin-top:3mm;font-size:7pt;color:#667;text-align:center}
+@media print{.rsx-grey-table th,.rsx-prc-head,.rsx-prc-table th,.rsx-peach-table th,.rsx-grn-bar,.rsx-cln-table th,.rsx-chip{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
