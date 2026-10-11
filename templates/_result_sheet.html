@@ -2,6 +2,7 @@
 {% set t = rs.template %}
 <article class="rs-sheet rs-{{ t }}" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}" data-template="{{ t }}">
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
+{% if t in sample_sheets %}{% include 'sheets/' ~ t ~ '.html' %}{% else %}
 <header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
   <div class="rs-head-text"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
@@ -41,4 +42,5 @@
 </section>{% endif %}
 {% if (rs.show_grading_key or t == 'detailed_report') and rs.grading_scale %}<section class="rs-key"><b>Grading key:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</section>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
+{% endif %}
 </article>
