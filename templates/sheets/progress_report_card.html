@@ -1,0 +1,30 @@
+{% from "sheets/_parts.html" import logo, passport, term_line, signatures with context %}
+<header class="rsx-prc-head">{% if rs.logo and rs.header_layout != 'no-logo' %}<div class="rsx-prc-logo">{{ logo() }}</div>{% else %}<span></span>{% endif %}
+  <div class="rsx-prc-name{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag"><i>"{{ rs.tagline }}"</i></p>{% endif %}{% if rs.contact %}<p class="rsx-prc-addr">{{ rs.contact }}</p>{% endif %}</div>
+  <div class="rsx-prc-chip"><b>{{ rs.title }}</b><span>{{ term_line() }}</span></div></header>
+<section class="rsx-prc-student">{{ passport('rsx-prc-photo') }}
+  <div><span>Full Name</span><b>{{ student_full_name(student) }}</b></div>
+  {% if rs.show_admission_no %}<div><span>Reg. No.</span><b>{{ student.admission_no }}</b></div>{% endif %}
+  {% if rs.show_class %}<div><span>Class</span><b>{{ class_row.name }}</b></div>{% endif %}
+  <div><span>Gender{% if dob_text %} / D.O.B{% endif %}</span><b>{{ gender_text or '—' }}{% if dob_text %} / {{ dob_text }}{% endif %}</b></div>
+  {% if rs.show_attendance %}<div><span>Attendance</span><b>{{ info.days_present if info.days_present is not none else '—' }} / {{ info.days_school_opened if info.days_school_opened is not none else '—' }} Days</b></div>{% endif %}</section>
+<table class="rsx-prc-table"><thead><tr><th rowspan="2" class="l">SUBJECTS</th>{% if rs.show_score %}<th colspan="{{ 4 if show_ca3 else 3 }}">CONTINUOUS ASSESSMENT</th><th rowspan="2">TOTAL<br><small>({{ max_each }})</small></th>{% endif %}{% if rs.show_grade %}<th rowspan="2">GRADE</th>{% endif %}{% if rs.show_subject_position %}<th rowspan="2">POS.</th>{% endif %}<th rowspan="2">MAX</th><th rowspan="2">MIN</th><th rowspan="2">AVG</th>{% if rs.show_remarks %}<th rowspan="2">REMARKS</th>{% endif %}</tr>
+<tr>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exams</th>{% endif %}</tr></thead>
+<tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td><span class="rsx-chip">{{ s.grade }}</span></td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}<td>{{ s.highest if s.highest is not none else '-' }}</td><td>{{ s.lowest if s.lowest is not none else '-' }}</td><td>{{ s.class_avg if s.class_avg is not none else '-' }}</td>{% if rs.show_remarks %}<td><small>{{ s.remark|upper }}</small></td>{% endif %}</tr>{% endfor %}</tbody></table>
+<div class="rsx-prc-grid">
+  <div class="rsx-prc-main">
+    <div class="rsx-prc-bar">ACADEMIC ANALYSIS</div>
+    <div class="rsx-prc-analysis"><div><b>Grade Distribution</b><p>{% for g, n in grade_distribution %}<span class="rsx-chip">{{ g }}: {{ n }}</span> {% endfor %}</p></div>
+      {% if rs.show_score %}<div><b>Performance Summary</b><p>Overall: {{ total }} / {{ total_obtainable }}<br>Average: {{ average }}%{% if rs.show_overall_position %}<br>Position: {{ position_text }} of {{ class_size }}{% endif %}<br>Verdict: <b>{{ overall_remark|upper }}</b></p></div>{% endif %}</div>
+    {% if rs.show_teacher_comment or rs.show_principal_comment %}<div class="rsx-prc-bar">ACADEMIC FEEDBACKS</div>
+    {% if rs.show_teacher_comment %}<p class="rsx-prc-lab">FORM MASTER'S REMARKS:</p><blockquote>{{ info.teacher_comment or '' }}</blockquote>{% endif %}
+    {% if rs.show_principal_comment %}<p class="rsx-prc-lab">PRINCIPAL'S REMARKS:</p><blockquote>{{ info.principal_comment or '' }}</blockquote>{% endif %}{% endif %}
+  </div>
+  <aside class="rsx-prc-side">
+    {% if rs.show_domains and domain_groups %}<div class="rsx-prc-dom">{% for g in domain_groups %}<div><div class="rsx-prc-bar">{{ g.label|upper }}</div><ul>{% for name, rating in g['items'] %}<li><span>{{ name }}</span><b>{{ rating }}/5</b></li>{% endfor %}</ul></div>{% endfor %}</div>{% endif %}
+    {% if rs.show_grading_key and rs.grading_scale %}<div class="rsx-prc-bar">ACADEMIC STANDARD</div><p class="rsx-prc-std">{% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}-{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark|upper }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% if rs.resumption_date %}<p class="rsx-prc-std"><i>Next Term Begins: {{ rs.resumption_date }}</i></p>{% endif %}
+  </aside>
+</div>
+{{ signatures() }}
+{% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}

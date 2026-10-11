@@ -1,0 +1,29 @@
+{% from "sheets/_parts.html" import logo, passport, term_line, signatures with context %}
+<header class="rsx-grn-head"><div class="rsx-grn-logo">{{ logo() }}</div>
+  <div class="rsx-grn-band{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag"><i>{{ rs.tagline }}</i></p>{% endif %}{% if rs.contact %}<p class="rsx-grn-addr">{{ rs.contact }}</p>{% endif %}</div>
+  <div class="rsx-grn-photo">{{ passport() }}</div></header>
+<h1 class="rsx-grn-title">{{ rs.title }}</h1>
+<table class="rsx-grn-id"><tbody>
+<tr><td colspan="2"><b>NAME OF STUDENT:</b> {{ student_full_name(student) }}</td>{% if rs.show_admission_no %}<td><b>ADMISSION NO.:</b> {{ student.admission_no }}</td>{% endif %}{% if rs.show_class %}<td><b>CLASS:</b> {{ class_row.name }}</td>{% endif %}</tr>
+<tr><td><b>NUMBER IN CLASS:</b> {{ class_size }}</td><td><b>TERM:</b> {{ term.name }}{% if cumulative %}/CUMULATIVE{% endif %}</td><td><b>SESSION:</b> {{ term.session_name }}</td><td><b>STATUS:</b> {{ promotion_status or student_status or '—' }}</td></tr>
+{% if rs.show_score %}<tr><td><b>TOTAL MARKS OBTAINABLE:</b> {{ total_obtainable }}</td><td><b>TOTAL MARKS OBTAINED:</b> {{ total }}</td><td><b>AVERAGE:</b> {{ average }}</td>{% if rs.show_overall_position %}<td><b>POSITION:</b> {{ position_text }}</td>{% else %}<td></td>{% endif %}</tr>{% endif %}
+</tbody></table>
+<div class="rsx-grn-bar">COGNITIVE DOMAIN</div>
+<table class="rsx-grn-table"><thead>
+<tr><th rowspan="2" class="l">Subjects</th><th colspan="{{ 8 if show_ca3 else 7 }}">{{ term.name }} Result</th>{% if cumulative %}<th colspan="{{ cumulative.terms|length + 2 }}">Cumulative Result</th>{% endif %}</tr>
+<tr>{% if rs.show_score %}<th>1st CA</th><th>2nd CA</th>{% if show_ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}{% if rs.show_remarks %}<th>Remarks</th>{% endif %}{% if cumulative %}{% for tn in cumulative.terms %}<th>{{ tn }}</th>{% endfor %}<th>Average</th><th>Grade</th>{% endif %}</tr></thead>
+<tbody>{% for s in subjects %}{% set cm = cumulative.by_subject.get(s.name) if cumulative else none %}<tr><td class="l">{{ s.name|upper }}</td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td>{{ s.remark }}</td>{% endif %}{% if cumulative %}{% for v in (cm.term_values if cm else []) %}<td>{{ v if v is not none else '-' }}</td>{% endfor %}<td>{{ cm.average if cm else '-' }}</td><td>{{ cm.grade if cm else '-' }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
+<div class="rsx-grn-bar">REMARKS, AFFECTIVE AND PSYCHOMOTOR DOMAINS</div>
+<div class="rsx-grn-lower">
+  <table class="rsx-grn-remarks"><tbody>
+  {% if rs.show_teacher_comment %}<tr><th>Class Teacher Remarks:</th><td>{{ info.teacher_comment or '' }}</td></tr>{% endif %}
+  {% if rs.show_principal_comment %}<tr><th>Principal Remarks:</th><td>{{ info.principal_comment or '' }}</td></tr>{% endif %}
+  {% if rs.resumption_date %}<tr><th>Resumption Date:</th><td>{{ rs.resumption_date }}</td></tr>{% endif %}
+  {% if rs.show_attendance %}<tr><th>Attendance:</th><td>Opened {{ info.days_school_opened if info.days_school_opened is not none else '—' }} · Present {{ info.days_present if info.days_present is not none else '—' }} · Absent {{ info.days_absent if info.days_absent is not none else '—' }}</td></tr>{% endif %}
+  <tr><th>Result Analysis:</th><td>{{ subjects_written }} subject(s) offered · average {{ average }} · {{ overall_remark }}{% if promotion_status %} · {{ promotion_status }}{% endif %}</td></tr>
+  {% if rs.show_grading_key and rs.grading_scale %}<tr><th>Grading:</th><td>{% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark }}){% if not loop.last %} | {% endif %}{% endfor %}</td></tr>{% endif %}
+  </tbody></table>
+  {% if rs.show_domains and domain_groups %}<div class="rsx-grn-dom">{% from "sheets/_parts.html" import ticks with context %}{{ ticks([5,4,3,2,1], {5:'Excel.',4:'V.Good',3:'Good',2:'Fair',1:'Poor'}) }}<p class="rsx-key-line">{{ domain_key }}</p></div>{% endif %}
+</div>
+{{ signatures() }}
+{% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}

@@ -1,0 +1,22 @@
+{% from "sheets/_parts.html" import logo, passport, term_line, signatures, ticks with context %}
+<header class="rsx-dos-head{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
+  <h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rsx-dos-addr">{{ rs.contact }}</p>{% endif %}
+  <div class="rsx-dos-band"><div class="rsx-dos-t1"><b>{{ rs.title }}</b><span>{{ term_line() }}</span></div><div class="rsx-dos-logo">{{ logo() }}</div>
+    <div class="rsx-dos-t2"><b>CONTINUOUS ASSESSMENT DOSSIER</b>{% if rs.resumption_date %}<div class="rsx-dos-next">Next Term Begins: <u>{{ rs.resumption_date }}</u></div>{% endif %}</div></div>
+</header>
+<section class="rsx-dos-id">
+  <div class="rsx-dos-line"><span>Student's Name</span><u>{{ student_full_name(student) }}</u>{% if rs.show_class %}<span>Class</span><u>{{ class_row.name }}</u>{% endif %}{% if rs.show_session %}<span>Year</span><u>{{ term.session_name }}</u>{% endif %}</div>
+  <div class="rsx-dos-line">{% if rs.show_admission_no %}<span>Admission No.</span><u>{{ student.admission_no }}</u>{% endif %}{% if rs.show_score %}<span>Average Score</span><u>{{ average }}</u>{% endif %}{% if rs.show_overall_position %}<span>No. in Class</span><u>{{ position_text }} of {{ class_size }}</u>{% endif %}</div>
+  {% if rs.show_passport %}<div class="rsx-dos-photo">{{ passport() }}</div>{% endif %}
+</section>
+<table class="rsx-dos-table"><thead><tr><th rowspan="2" class="l">Subjects</th><th colspan="{{ 5 if show_ca3 else 4 }}">Test / Examination Score = {{ max_each }}%</th>{% if rs.show_grade %}<th rowspan="2">Grade</th>{% endif %}{% if rs.show_subject_position %}<th rowspan="2">Position</th>{% endif %}{% if rs.show_remarks %}<th rowspan="2">Remark</th>{% endif %}</tr>
+<tr><th>1st CA</th><th>2nd CA</th>{% if show_ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Sum</th></tr></thead>
+<tbody>{% for s in subjects %}<tr><td class="l"><span class="n">{{ loop.index }}.</span> {{ s.name }}</td><td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
+{% if rs.show_grading_key and rs.grading_scale %}<p class="rsx-dos-note"><b>Note:</b> {% for g in rs.grading_scale %}{{ '%g'|format(g.max_score) }} – {{ '%g'|format(g.min_score) }} {{ g.remark }}{% if not loop.last %} &nbsp;|&nbsp; {% endif %}{% endfor %}</p>{% endif %}
+{% if rs.show_domains and domain_groups %}<div class="rsx-dos-skills">{{ ticks([5,4,3,2,1], {5:'5',4:'4',3:'3',2:'2',1:'1'}) }}<p class="rsx-key-line">{{ domain_key }}</p></div>{% endif %}
+<section class="rsx-dos-remarks">
+  {% if rs.show_teacher_comment %}<div><span>Teacher's Remark</span><p>{{ info.teacher_comment or '' }}</p></div>{% endif %}
+  {% if rs.show_principal_comment %}<div><span>Principal's Remark</span><p>{{ info.principal_comment or '' }}</p></div>{% endif %}
+</section>
+{{ signatures() }}
+{% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
