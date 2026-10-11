@@ -289,7 +289,7 @@ check("CA3 disappears again when switched off", "3rd CA" not in html(ADMIN.get("
 # ---------------- ten genuinely different result styles
 import db as _db
 tpls = [x[0] for x in _db.RESULT_TEMPLATES]
-check("ten result styles are available", len(tpls) == 10, tpls)
+check("ten built-in styles plus the six sample-inspired layouts are available", len(tpls) == 16, tpls)
 check("the settings page lists them all", all(x in html(ADMIN.get("/admin/result-display-settings")) for x in tpls) if code(ADMIN.get("/admin/result-display-settings")) == 200 else True)
 pdfs, structure = {}, {}
 for tp in tpls:
