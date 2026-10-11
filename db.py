@@ -3528,6 +3528,12 @@ RESULT_TEMPLATES = [
     ("ledger_classic", "Ledger Grid", "Accounting-ledger look: monospaced type, heavy full grid and a boxed information table on cream paper."),
     ("vibrant_cards", "Vibrant Cards", "Rounded gradient header, tinted information cards and pill section headings."),
     ("split_header", "Split Header", "Two-tone header with the school block on colour and the passport on a light panel."),
+    ("boxed_grey_card", "Boxed Grey Card", "Sample layout: bold centred school name, ruled student-details box, dark-grey subject table with class average, highest and lowest, traits and score-range tables, report rows."),
+    ("assessment_dossier", "Continuous Assessment Dossier", "Sample layout: letter-spaced title band, fill-in style student lines, numbered subjects, 1st/2nd/Exam/Sum columns and 5-4-3-2-1 tick grids for skills."),
+    ("peach_terminal_sheet", "Peach Terminal Sheet", "Sample layout: peach table headers with rotated column titles, attendance, grade-analysis and grade-scale side panels, performance-summary box."),
+    ("green_cumulative_report", "Green Cumulative Report", "Sample layout: framed header with passport, green section bars, term and cumulative result columns, remarks beside tick-box affective and psychomotor domains."),
+    ("progress_report_card", "Progress Report Card", "Sample layout: colour header band, student card with passport, max/min/average columns with grade chips, academic analysis, feedback quotes and a ratings side panel."),
+    ("clean_midterm_report", "Clean Mid-Term Report", "Sample layout: centred minimal header, details list beside the passport, light table with class average and highest, summary and attendance panels, remarks box."),
 ]
 _LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
 

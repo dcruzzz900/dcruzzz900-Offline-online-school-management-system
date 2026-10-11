@@ -26,3 +26,23 @@ v65 146 checks · v64 104 · v63 107 · v62 248 · v61 292 · v60 213 · 45 cont
 * Without Chromium on the host (e.g. PythonAnywhere) PDFs fall back to the older layout.
 * Venues/rooms exist in the timetable data model; teacher and class clashes are checked on copy, room clashes too.
 * Cumulative / Annual calculations were not touched.
+
+## Update — six sample-inspired result templates
+Built from the seven sample report cards supplied (the green and blue "Demo International" samples are the same layout, so they are one template whose colour follows the Result Display accent). Names are descriptive, not school names; no school's branding, logo or wording is copied — each sheet shows the signed-in school's own data.
+
+| Template id | Layout it reproduces |
+|---|---|
+| `boxed_grey_card` | bold centred school name, ruled student-details box, dark-grey subject table with rotated headings plus class average / highest / lowest, traits and score-range tables, report rows |
+| `assessment_dossier` | letter-spaced title band, fill-in style student lines, numbered subjects (1st CA / 2nd CA / Exam / Sum), 5-4-3-2-1 tick grids, remark lines |
+| `peach_terminal_sheet` | peach headers with rotated column titles, attendance + grade-analysis + grade-scale side panels, performance-summary box, remark rows with signatures |
+| `green_cumulative_report` | framed header with passport, green section bars, term **and cumulative** columns (when Cumulative/Annual is ON), remarks beside tick-box domains |
+| `progress_report_card` | colour header band, student card with passport, max / min / average columns with grade chips, academic analysis, feedback quotes, ratings side panel |
+| `clean_midterm_report` | centred minimal header, details list beside the passport, light table, summary and attendance panels, remarks box |
+
+New real data computed for them (nothing invented): class average, highest and lowest per subject, grade distribution, overall grade, total obtainable, gender/date of birth, cumulative per-term values.
+Every sheet honours Result Display Settings (logo, passport, address/email/phone/motto, resumption date, All Comments, signatures, grading key, domains, subject position, CA3), prints/PDFs through the same Chromium path, and fits one A4 page.
+
+Not reproduced because the system has no such data/module: the NIN field, the "Financial outlook (next term)" fees box and the QR security-verification code on the Demo International samples, and "Vacation date". Tell me if you want those added as real features.
+Without Chromium on the host the PDF falls back to the older builder, which does not have these six layouts.
+
+Tests: v65 now 203 checks (adds: each sample renders in preview/print/PDF, one page, real data, tenant-safe, toggles, All Comments, cumulative columns on/off).

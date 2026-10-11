@@ -5336,6 +5336,7 @@ def _ca3_on():
 app.jinja_env.globals["ca3_on"] = _ca3_on
 from db import DOMAIN_RATING_LABELS
 app.jinja_env.globals["domain_labels"] = DOMAIN_RATING_LABELS
+app.jinja_env.globals["sample_sheets"] = ("boxed_grey_card", "assessment_dossier", "peach_terminal_sheet", "green_cumulative_report", "progress_report_card", "clean_midterm_report")
 app.jinja_env.globals["domain_key"] = " · ".join(f"{k} = {v}" for k, v in DOMAIN_RATING_LABELS.items())
 
 
@@ -5764,6 +5765,22 @@ def build_result_data(conn, student_id, term_id):
                 "total": "-", "grade": "-", "remark": "-", "position": None, "position_text": "-"
             })
 
+    # Class statistics per subject, computed from the same scores the broadsheet uses (nothing is invented):
+    for _sd, _subj in zip(subject_details, subjects):
+        _vals = [r["scores"][_subj["id"]]["total"] for r in rows if isinstance(r["scores"].get(_subj["id"], {}).get("total"), (int, float))]
+        _sd["highest"] = max(_vals) if _vals else None
+        _sd["lowest"] = min(_vals) if _vals else None
+        _sd["class_avg"] = round(sum(_vals) / len(_vals), 1) if _vals else None
+    _grade_counts = {}
+    for _sd in subject_details:
+        if _sd["grade"] not in (None, "-"):
+            _grade_counts[_sd["grade"]] = _grade_counts.get(_sd["grade"], 0) + 1
+    _gc = get_grading_config(conn)
+    try:
+        _max_each = sum((_gc[k] or 0) for k in ("ca1_max", "ca2_max", "ca3_max", "exam_max")) or 100
+    except (KeyError, IndexError, TypeError):
+        _max_each = 100
+
     info_row = conn.execute(
         "SELECT * FROM student_term_info WHERE student_id=? AND term_id=?", (student_id, term_id)
     ).fetchone()
@@ -5846,7 +5863,21 @@ def build_result_data(conn, student_id, term_id):
     # shown only when switched on AND the school has actually set a date for this term - never invented
     rs["resumption_date"] = format_dmy(term_default["resumption_date"]) if (rs.get("show_resumption_date") and term_default and term_default["resumption_date"]) else None
     result_date_iso = info.get("result_date") or (term_default["result_date"] if term_default else None)
+    _overall_grade, _overall_remark = grade_for(average, conn, school_id) if subjects_written else ("-", "-")
+    # Cumulative columns (only when the school has the Cumulative / Annual Result switched on): the same per-term values the cumulative sheet uses.
+    cumulative = None
+    if school and school["cumulative_enabled"]:
+        try:
+            _sess = conn.execute("SELECT session_id FROM terms WHERE id=?", (term_id,)).fetchone()["session_id"]
+            _cd = build_cumulative_result_data(conn, student_id, _sess)
+            cumulative = {"terms": [t["name"] for t in _cd["terms"]], "by_subject": {x["name"]: x for x in _cd["subjects"]}}
+        except Exception:
+            app.logger.exception("Cumulative columns unavailable for the result sheet")
+    _dob = student["date_of_birth"] if "date_of_birth" in student.keys() else None
     return {
+        "grade_distribution": sorted(_grade_counts.items()), "overall_grade": _overall_grade, "overall_remark": _overall_remark,
+        "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative,
+        "gender_text": {"M": "Male", "F": "Female"}.get(student["gender"] if "gender" in student.keys() else None, ""), "dob_text": format_dmy(_dob) if _dob else "",
         "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
         "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
         "student": student, "class_row": class_row, "subjects": subject_details,
