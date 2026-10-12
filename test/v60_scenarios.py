@@ -608,7 +608,7 @@ check("revoked registrar assignment loses access immediately (403)", reg_c.get(f
 for path in ["/app", "/offline", "/offline-app", "/csrf-token", "/api/offline/verify", "/api/sync/push", "/admin/sync-conflicts", "/api/offline/confirm_password"]:
     check(f"offline route gone: {path}", A.app.test_client().get(path).status_code in (404, 405, 302) and A.app.test_client().get(path).status_code != 200)
 sw = A.app.test_client().get("/service-worker.js")
-check("service worker is a self-destroying kill switch (no caching)", b"unregister" in sw.data and b"caches.delete" in sw.data and b"cache.put" not in sw.data and b"addAll" not in sw.data and b"fetch" not in sw.data.replace(b"c.navigate", b""))
+check("service worker is network-only: no cache is ever written or read, old caches are deleted", b"caches.delete" in sw.data and b"cache.put" not in sw.data and b"addAll" not in sw.data and b"caches.open" not in sw.data and b"caches.match" not in sw.data)
 static_js = os.listdir(os.path.join(ROOT, "static", "js"))
 check("offline JS files removed", not [f for f in static_js if re.search(r"offline|sync|connectivity", f)], static_js)
 bad_text = []
@@ -626,7 +626,7 @@ check("no offline helpers left in app.py", "offline_sync_" not in src and "is_of
 check("no offline queue markers in any served static asset", not [f for f in os.listdir(os.path.join(ROOT, "static")) if "offline" in f.lower()])
 check("connection-error script present and loaded", "online-only.js" in html(A.app.test_client().get("/login")) and "Cannot reach the server" in open(os.path.join(ROOT, "static/js/online-only.js")).read())
 mf = json.load(open(os.path.join(ROOT, "static/manifest.json")))
-check("manifest no longer starts an offline shell", mf.get("start_url") == "/dashboard")
+check("manifest no longer starts an offline shell (it opens the normal site root)", mf.get("start_url", "").split("?")[0] in ("/", "/dashboard"))
 check("device credentials purged by migration", db().execute("SELECT COUNT(*) FROM device_credentials").fetchone()[0] == 0)
 
 print(f"\n{PASS} checks passed, {len(FAIL)} failed")

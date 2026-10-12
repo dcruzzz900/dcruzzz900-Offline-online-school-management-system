@@ -448,6 +448,68 @@ check("copy-day respects the clash rules (no double-booking after copying)", one
 check("the edit page offers Copy day", "Copy one day" in html(ADMIN.get(f"/timetable/version/{vid}/edit")))
 A.app.config["PROPAGATE_EXCEPTIONS"] = False
 
+# ======================================================== 5b. ONE sign-in screen for admin, staff and parent
+from werkzeug.security import generate_password_hash as _gph
+anon = A.app.test_client()
+lg = html(anon.get("/login"))
+check("the sign-in screen is a single form (no role cards, no pop-up chooser)", lg.count("<form") <= 2 and "hub-role-card" not in lg and "hubLoginOverlay" not in lg and 'name="portal_role"' not in lg)
+check("it asks for username/email/phone and password, with the show/hide control", 'name="username"' in lg and 'type="password"' in lg and "password-toggle.js" in lg)
+check("it still links forgot-password, activation, signups and the separate student login", all(x in lg for x in ("/recover", "/activate", "/register", "/student/login")))
+for old in ("/admin/login", "/staff/login", "/parent/login"):
+    r = anon.get(old); check(f"{old} now leads to the same screen", code(r) == 302 and r.headers["Location"].endswith("/login"), r.headers.get("Location"))
+cols = {r_[1] for r_ in db().execute("PRAGMA table_info(parent_accounts)")}
+vals = {"name": "Mrs Parent", "username": "mrsparent", "email": "mrsparent@example.com", "phone": "08022223333", "password_hash": _gph("Parent#123"), "school_id": 1, "tenant_id": one("SELECT tenant_id FROM schools WHERE id=1"), "is_active": 1, "account_status": "active"}
+use = {k: v for k, v in vals.items() if k in cols}
+c_ = db(); c_.execute(f"INSERT INTO parent_accounts({','.join(use)}) VALUES({','.join('?' * len(use))})", tuple(use.values())); c_.commit(); c_.close()
+def sign_in(identifier, password):
+    cl = A.app.test_client(); tk_ = tok(cl, "/login")
+    return cl, cl.post("/login", data={"csrf_token": tk_, "username": identifier, "password": password})
+cl, r = sign_in("mrsparent", "Parent#123")
+check("a parent signs in on the same form and lands on the parent dashboard", code(r) == 302 and "/parent" in r.headers["Location"])
+cl, r = sign_in("mrsparent@example.com", "Parent#123"); check("...also by email", code(r) == 302 and "/parent" in r.headers["Location"])
+cl, r = sign_in("08022223333", "Parent#123"); check("...also by phone", code(r) == 302 and "/parent" in r.headers["Location"])
+cl, r = sign_in("admin", "definitely-wrong")
+check("a wrong password gets one clear message and no session", code(r) == 200 and "Invalid" in html(r))
+_staff_ok = staff("aokafor").get("/dashboard"); _adm_ok = ADMIN.get("/dashboard")
+check("staff and admin accounts (created through the same login) still reach their own dashboards", code(_staff_ok) == 200 and code(_adm_ok) == 200)
+r = anon.post("/login", data={"csrf_token": tok(anon, "/login"), "username": "mrsparent", "password": "Parent#123", "portal_role": "admin"})
+check("a parent cannot reach the staff dashboard by claiming the 'admin' portal", code(r) == 302 and "/parent" in r.headers["Location"] and code(anon.get("/admin/staff")) in (302, 403, 404))
+
+# ======================================================== 5c. installable app: icons with the name, manifest, service worker
+import json as _json
+mf = _json.loads(A.app.test_client().get("/manifest.json").data)
+check("the app is named My School Hub on phones", mf["name"] == "My School Hub" and mf["short_name"] == "My School Hub")
+check("it opens as a standalone app from the site root", mf["display"] == "standalone" and mf["scope"] == "/" and mf["start_url"].startswith("/"))
+ic = {(i["sizes"], i["purpose"]): i["src"] for i in mf["icons"]}
+check("manifest lists 192 and 512 icons for 'any' and for 'maskable'", set(ic) == {("192x192", "any"), ("512x512", "any"), ("192x192", "maskable"), ("512x512", "maskable")}, ic)
+cli = A.app.test_client()
+for (size, purpose), src in ic.items():
+    r = cli.get(src); im = Image.open(io.BytesIO(r.data)); n = int(size.split("x")[0])
+    check(f"{purpose} {size} icon is served and has the right size", code(r) == 200 and im.size == (n, n), im.size)
+    a_ = im.convert("RGBA")
+    if purpose == "maskable":
+        check(f"maskable {size} is fully opaque (the phone supplies the shape)", min(a_.getpixel((x, y))[3] for x, y in ((0, 0), (n - 1, 0), (0, n - 1), (n - 1, n - 1), (n // 2, 0))) == 255)
+    else:
+        check(f"'any' {size} has rounded transparent corners", a_.getpixel((0, 0))[3] == 0 and a_.getpixel((n // 2, n // 2))[3] == 255)
+# the name must sit inside the maskable safe zone (circle, radius 40% of the icon) and not be cut by a circular mask
+mk = Image.open(io.BytesIO(cli.get(ic[("512x512", "maskable")]).data)).convert("RGB")
+bg = mk.getpixel((8, 8)); import math as _m
+outside = [(x, y) for x in range(0, 512, 4) for y in range(0, 512, 4) if _m.hypot(x - 256, y - 256) > 0.43 * 512]
+check("nothing but background lies outside the maskable safe zone", all(sum(abs(a - b) for a, b in zip(mk.getpixel(p_), bg)) < 40 for p_ in outside))
+bright = [(x, y) for x in range(180, 340) for y in range(372, 420) if sum(mk.getpixel((x, y))) > 700]
+check("the white 'My School Hub' wording is present under the artwork", len(bright) > 150, len(bright))
+ap = cli.get("/static/icons/apple-touch-icon.png"); check("an iPhone home-screen icon (180x180, opaque) exists", code(ap) == 200 and Image.open(io.BytesIO(ap.data)).size == (180, 180) and Image.open(io.BytesIO(ap.data)).mode == "RGB")
+pg = html(cli.get("/login"))
+check("pages link the manifest, the favicon and the iPhone icon, and carry the app name", all(x in pg for x in ('rel="manifest"', 'rel="apple-touch-icon"', 'apple-mobile-web-app-title" content="My School Hub"', 'rel="icon"')))
+sw = cli.get("/service-worker.js")
+check("the service worker is served for the whole site", code(sw) == 200 and sw.headers.get("Service-Worker-Allowed") == "/" and "javascript" in sw.headers.get("Content-Type", ""))
+swt = sw.get_data(as_text=True)
+check("it has a fetch handler (installable) but caches nothing", "addEventListener('fetch'" in swt and "cache.put" not in swt and "addAll" not in swt and "caches.open" not in swt)
+check("it removes caches left by older offline builds", "caches.delete" in swt)
+oj = cli.get("/static/js/online-only.js").get_data(as_text=True)
+_l = ADMIN.get("/?source=pwa"); check("opening the installed app while signed in goes to the dashboard, not the login page", code(_l) == 302 and "login" not in _l.headers["Location"], _l.headers.get("Location"))
+check("the page script registers the worker (and no longer unregisters it)", 'register("/service-worker.js"' in oj)
+
 # ======================================================== 5. password show/hide
 for path in ("/login", "/student/login"):
     r = A.app.test_client().get(path)
