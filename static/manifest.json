@@ -1,32 +1,21 @@
 {
-  "name": "School Result System",
-  "short_name": "Results",
-  "description": "Online school results and management system.",
-  "start_url": "/dashboard",
-  "id": "/dashboard",
+  "name": "My School Hub",
+  "short_name": "My School Hub",
+  "description": "My School Hub — results, attendance, timetables and school management in one place.",
+  "id": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f5f7fa",
-  "theme_color": "#1f3a5f",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "background_color": "#00135b",
+  "theme_color": "#00135b",
   "icons": [
-    {
-      "src": "/static/icons/icon-192.png?v=2",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/static/icons/icon-512.png?v=2",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/static/icons/icon-maskable-512.png?v=2",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "/static/icons/icon-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-maskable-192.png?v=3", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/icons/icon-maskable-512.png?v=3", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
