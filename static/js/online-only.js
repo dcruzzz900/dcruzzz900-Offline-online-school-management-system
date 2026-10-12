@@ -8,7 +8,14 @@
   function purgeLegacy() {
     try {
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function (regs) { regs.forEach(function (r) { r.unregister(); }); });
+        // Keep ONLY the current network-only worker (it caches nothing and makes the app installable); remove any other.
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) {
+            var url = (r.active && r.active.scriptURL) || (r.waiting && r.waiting.scriptURL) || (r.installing && r.installing.scriptURL) || "";
+            if (!/\/service-worker\.js(\?|$)/.test(url)) { r.unregister(); }
+          });
+        });
+        navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(function () {});
       }
       if (window.caches && caches.keys) { caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }); }
       if (window.indexedDB && indexedDB.databases) {
