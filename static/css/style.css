@@ -480,3 +480,14 @@ html,body{max-width:100%;overflow-x:hidden}
 .pw-toggle{position:absolute;right:.25rem;top:50%;transform:translateY(-50%);width:2.5rem;height:2.5rem;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#5b6577;cursor:pointer;border-radius:8px;padding:0}
 .pw-toggle:hover{color:#1f3a5f}.pw-toggle:focus-visible{outline:2px solid #1f3a5f;outline-offset:1px}
 .pw-wrap>input+.pw-toggle{margin-top:0}
+
+/* one sign-in screen for administrators, staff and parents */
+.unified-login-form{width:min(440px,100%);margin:0 auto 22px;display:flex;flex-direction:column;gap:14px}
+.unified-login-form label{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:.9rem}
+.unified-login-form input{padding:13px 14px;font-size:1rem;border:1px solid #cbd5e1;border-radius:12px;width:100%}
+.unified-login-form .optional{font-weight:500;color:#64748b;font-size:.78rem;margin-left:.3rem}
+.unified-login-form .hub-primary-btn{width:100%;margin-top:4px;min-height:48px}
+.unified-links{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:.9rem}
+.unified-note{margin:.2rem 0 0;color:#64748b;font-size:.82rem;text-align:center}
+.unified-login .hub-welcome-copy h1{color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.25)}
+.unified-login-form label>span{display:block}
