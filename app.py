@@ -1056,9 +1056,9 @@ def require_cumulative_enabled(conn):
 
 @app.route("/service-worker.js")
 def service_worker():
-    """Online-only: this worker caches nothing. Devices that installed an older
-    offline-capable worker fetch this file on their next visit, and it removes
-    itself and every cache the old worker created."""
+    """Online-only but installable: this worker caches nothing and answers every page load from the network
+    (a plain "no connection" page if the server is unreachable). Devices that still hold an older offline-capable
+    worker pick this file up on their next visit, and it deletes every cache that worker created."""
     resp = send_from_directory("static", "service-worker.js", mimetype="application/javascript")
     resp.headers["Service-Worker-Allowed"] = "/"
     resp.headers["Cache-Control"] = "no-store"
@@ -1305,11 +1305,11 @@ def index():
 
 
 @app.route("/admin/login")
-def admin_login(): return render_template("login.html", selected_portal="admin")
+def admin_login(): return redirect(url_for("login"))
 @app.route("/staff/login")
-def staff_login(): return render_template("login.html", selected_portal="staff")
+def staff_login(): return redirect(url_for("login"))
 @app.route("/parent/login")
-def parent_login(): return render_template("login.html", selected_portal="parent")
+def parent_login(): return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)

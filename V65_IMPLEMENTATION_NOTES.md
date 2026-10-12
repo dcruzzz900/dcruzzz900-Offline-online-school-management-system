@@ -46,3 +46,14 @@ Not reproduced because the system has no such data/module: the NIN field, the "F
 Without Chromium on the host the PDF falls back to the older builder, which does not have these six layouts.
 
 Tests: v65 now 203 checks (adds: each sample renders in preview/print/PDF, one page, real data, tenant-safe, toggles, All Comments, cumulative columns on/off).
+
+## Update — one sign-in screen
+`/login` is now a single form for administrators, staff and parents (username / email / phone + password, optional School ID, show/hide password, forgot-password and activation links, signup links, and a pointer to the separate Student login). The role-card chooser and pop-up were removed. `/admin/login`, `/staff/login` and `/parent/login` redirect to it. The server already identified the account type itself (parent first, then staff/admin), so each user lands on their own dashboard; a "portal" choice can no longer matter. Platform (Super Admin) and Student sign-in remain separate by design. Tests: v65 has 215 checks (adds unified-screen, redirects, parent sign-in by username/email/phone, wrong-password message, no privilege escalation through a claimed portal).
+
+## Update — "My School Hub" icon and phone install
+* Icons regenerated with the app name under the artwork: `icon-192.png`, `icon-512.png` (rounded, transparent corners), `icon-maskable-192.png`, `icon-maskable-512.png` (full-bleed; artwork and wording kept inside the 80% safe zone so circular/squircle masks never cut them), and `apple-touch-icon.png` (180×180, for iPhone "Add to Home Screen").
+* `manifest.json`: name and short name "My School Hub", standalone display, start page from the site root, navy splash colour matching the icon, four icons (any + maskable at 192 and 512). Icon URLs carry `?v=3` so phones fetch the new artwork.
+* `service-worker.js` is now a **network-only** worker: it caches nothing, answers every page load from the server, and shows a plain "cannot reach the server" page if there is no connection (deleting caches left by older offline builds). It is registered by `online-only.js`. This keeps the online-only behaviour while letting phones install the site as an app.
+* iOS meta tags added (app title, standalone, status bar).
+* Verified with Chromium's own installability check against a local server: manifest parses with no errors, no installability errors, worker registers.
+* Phones need HTTPS (Railway provides it). Already-installed shortcuts keep the old icon until removed and re-added.
