@@ -508,7 +508,7 @@ check("school can add its own domain and a skill in it", tid_new is not None and
 r = post(a_c, "/admin/domains", {"action": "add_domain", "label": "Academic-related skills"}, "/admin/domains")
 check("duplicate domain name refused", db().execute("SELECT COUNT(*) FROM educational_domains WHERE school_id=1 AND domain_key='academic_related_skills'").fetchone()[0] == 1)
 ed = html(a_c.get(f"/result/1?term_id={term_id}"))
-check("rating inputs grouped by domain on the result editor", "Educational domain ratings" in ed and "Academic-related skills" in ed and f'name="trait_{tid_new[0]}"' in ed)
+check("rating inputs grouped by domain on the result editor", "Domain Ratings" in ed and "Academic-related skills" in ed and f'name="trait_{tid_new[0]}"' in ed)
 conn = db(); conn.execute("UPDATE result_publication SET status='reopened'"); conn.commit(); conn.close()   # comments/ratings are drafts: unlocked while saving
 post(a_c, "/result/1/extra", {"term_id": term_id, f"trait_{tid_new[0]}": "5", f"trait_{tr[0]}": "4", "days_school_opened": "60", "days_present": "55", "days_absent": "5", "teacher_comment": "Good", "principal_comment": "Well done", "promotion_status": "Promoted to JSS 2"}, f"/result/1?term_id={term_id}")
 conn = db(); conn.execute("UPDATE result_publication SET status='published'"); conn.commit(); conn.close()
