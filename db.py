@@ -2230,14 +2230,13 @@ def grade_band_problems(conn, school_id, grade, min_score, max_score, exclude_id
 
 
 def grading_problems(conn, school_id, ca1, ca2, ca3, exam):
-    """Reasons a proposed set of maximum marks must be refused (empty list = fine).
-    Shared by the online Grading Setup screen and offline devices' settings
-    edits, so both behave the same:
-      - no negative maximums;
-      - the maximums can't add up to more than 100 (a student could then score
-        above 100, which no grade band covers);
-      - a maximum can't be lowered below a mark already recorded in this school,
-        which would leave saved scores that break the new rules."""
+    """Reasons a proposed set of maximum marks must always be refused outright
+    (empty list = fine): no negative maximums, and the maximums can't add up
+    to more than 100 (a student could then score above 100, which no grade
+    band covers). This never looks at saved scores — a maximum that conflicts
+    with a score already on file is not an outright refusal, it's a case for
+    review (see `grading_affected_scores`), because silently refusing it is
+    exactly the "permanently locked" behaviour the school asked to remove."""
     problems = []
     vals = {"CA1": ca1, "CA2": ca2, "CA3": ca3, "Exam": exam}
     for label, v in vals.items():
@@ -2248,15 +2247,71 @@ def grading_problems(conn, school_id, ca1, ca2, ca3, exam):
     total = ca1 + ca2 + ca3 + exam
     if total > 100.0001:
         problems.append(f"The maximums add up to {total:g}; they can't exceed 100.")
-    cols = {"CA1": ("ca1", ca1), "CA2": ("ca2", ca2), "CA3": ("ca3", ca3), "Exam": ("exam", exam)}
-    for label, (col, new_max) in cols.items():
-        row = conn.execute(
-            f"SELECT MAX(x.{col}) AS hi FROM scores x JOIN students s ON s.id = x.student_id "
-            "JOIN classes c ON c.id = s.class_id WHERE c.school_id = ?", (school_id,)).fetchone()
-        hi = row["hi"] if row and row["hi"] is not None else 0
-        if hi > new_max:
-            problems.append(f"{label} maximum can't be lowered to {new_max:g}: a saved score is already {hi:g}.")
     return problems
+
+
+def grading_affected_scores(conn, school_id, ca1, ca2, ca3, exam, limit=50):
+    """Scores already on file that would exceed a proposed (lower) maximum.
+    Returns a dict: {"count": N, "by_component": {"CA1": N, ...}, "rows": [...]}
+    where each row names the student, class, subject, session/term and the
+    saved value, capped at `limit` rows (count/by_component are the true
+    totals even when rows is truncated). An empty result means the proposed
+    maximums can be applied with nothing left inconsistent.
+    This never changes a score — it only reports what a human should look at
+    before the new maximums take effect; existing scores are left exactly as
+    saved either way."""
+    cols = {"CA1": ("ca1", ca1), "CA2": ("ca2", ca2), "CA3": ("ca3", ca3), "Exam": ("exam", exam)}
+    by_component = {}
+    rows = []
+    total_count = 0
+    for label, (col, new_max) in cols.items():
+        found = conn.execute(
+            f"SELECT st.id AS student_id, st.first_name, st.last_name, st.other_names, st.admission_no, "
+            f"c.name AS class_name, sub.name AS subject_name, se.name AS session_name, t.name AS term_name, "
+            f"x.{col} AS value "
+            "FROM scores x "
+            "JOIN students st ON st.id = x.student_id "
+            "JOIN classes c ON c.id = st.class_id "
+            "JOIN subjects sub ON sub.id = x.subject_id "
+            "JOIN terms t ON t.id = x.term_id "
+            "JOIN sessions se ON se.id = t.session_id "
+            f"WHERE c.school_id = ? AND x.{col} > ? ORDER BY x.{col} DESC",
+            (school_id, new_max),
+        ).fetchall()
+        if not found:
+            continue
+        by_component[label] = len(found)
+        total_count += len(found)
+        for r in found:
+            if len(rows) >= limit:
+                continue
+            name = " ".join(x for x in (r["last_name"], r["first_name"], r["other_names"]) if x)
+            rows.append({
+                "component": label, "student_name": name, "admission_no": r["admission_no"],
+                "class_name": r["class_name"], "subject_name": r["subject_name"],
+                "session_name": r["session_name"], "term_name": r["term_name"],
+                "value": r["value"], "proposed_max": new_max,
+            })
+    return {"count": total_count, "by_component": by_component, "rows": rows, "truncated": total_count > len(rows)}
+
+
+def record_grading_config_change(conn, school_id, old_config, ca1, ca2, ca3, exam, affected, changed_by, changed_by_name):
+    """Writes the before/after maximums, who changed them, when, and how many
+    saved scores were left exceeding the new maximum (if any) into
+    grading_config_audit. Called in the same transaction as the UPDATE to
+    grading_config, after the review step (if any) has been confirmed."""
+    import json as _json
+    conn.execute(
+        "INSERT INTO grading_config_audit (school_id, old_ca1_max, old_ca2_max, old_ca3_max, old_exam_max, "
+        "new_ca1_max, new_ca2_max, new_ca3_max, new_exam_max, affected_count, affected_summary, changed_by, changed_by_name) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (school_id,
+         old_config["ca1_max"] if old_config else None, old_config["ca2_max"] if old_config else None,
+         old_config["ca3_max"] if old_config else None, old_config["exam_max"] if old_config else None,
+         ca1, ca2, ca3, exam, affected.get("count", 0) if affected else 0,
+         _json.dumps(affected.get("by_component", {})) if affected else None,
+         changed_by, changed_by_name),
+    )
 
 
 def recompute_attendance(conn, student_id, term_id):
@@ -3503,18 +3558,17 @@ RESULT_BOOL_SETTINGS = [
     ("show_class", "Show Class / Arm", 1),
     ("show_session", "Show Academic Session", 1),
     ("show_term", "Show Term", 1),
-    ("show_result_date", "Show Result Date", 0),
     ("show_teacher_name", "Show Class Teacher's name under the signature", 1),
     ("show_principal_name", "Show Principal's name under the signature", 1),
     ("show_address", "Show School Address", 1),
     ("show_email", "Show School Email", 1),
     ("show_phone", "Show School Phone Number", 1),
     ("show_motto", "Show School Motto", 1),
-    ("show_resumption_date", "Show Resumption Date", 0),
+    ("show_next_term_resumes", "Show Next Term Resumes", 0),
     ("show_all_comments", "Show All Comments (master switch)", 1),
     ("show_grading_key", "Show Grading key", 1),
     ("show_promotion", "Show Promotion / Status", 1),
-    ("show_domains", "Show Educational Domain ratings", 1),
+    ("show_domains", "Show Domain Ratings", 1),
     ("show_watermark", "Show Watermark", 0),
 ]
 RESULT_TEMPLATES = [
@@ -3815,6 +3869,111 @@ def migration_065_v65_result_settings(conn):
 
 
 STEPS.append(("result_settings_single_home_v65", migration_065_v65_result_settings))
+
+
+def migration_066_v66_grading_audit(conn):
+    """History of changes to CA1/CA2/CA3/Exam maximums, so a lowered maximum
+    that conflicts with saved scores can be reviewed and confirmed instead of
+    silently refused or silently applied. Nothing in `grading_config` or
+    `scores` is touched by this migration — it only adds a place to record
+    who changed the weighting, when, what it was before, and which saved
+    scores were left exceeding the new maximum at that moment."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS grading_config_audit ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "school_id INTEGER NOT NULL,"
+        "old_ca1_max REAL, old_ca2_max REAL, old_ca3_max REAL, old_exam_max REAL,"
+        "new_ca1_max REAL, new_ca2_max REAL, new_ca3_max REAL, new_exam_max REAL,"
+        "affected_count INTEGER NOT NULL DEFAULT 0,"
+        "affected_summary TEXT,"
+        "changed_by INTEGER, changed_by_name TEXT,"
+        "changed_at TEXT DEFAULT CURRENT_TIMESTAMP,"
+        "FOREIGN KEY(school_id) REFERENCES schools(id))"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_grading_config_audit_school ON grading_config_audit(school_id, changed_at)")
+
+
+STEPS.append(("grading_config_audit_v66", migration_066_v66_grading_audit))
+
+
+def migration_067_v67_next_term_resumes(conn):
+    """Consolidates three overlapping date fields into one authoritative model:
+    `terms.resumption_date` now always means "the date THIS term itself resumes"
+    (unchanged meaning, just now read correctly — see app.py), and a dedicated
+    `show_next_term_resumes` switch replaces the old `show_resumption_date` /
+    `show_result_date` toggles (both of which already lost their checkbox in
+    Result Display Settings). Nothing here deletes data:
+      - `show_next_term_resumes` seeds from the old `show_resumption_date` so a
+        school that had it on keeps seeing a date, now correctly placed.
+      - `terms.next_term_begins` (an older, separate "next term begins" field
+        entered on the term before) is folded into the next term's own
+        `resumption_date` wherever that next term exists and has no date of its
+        own yet — the two fields meant the same thing, entered in two places.
+      - `terms.result_date` / `student_term_info.result_date` are left exactly
+        as they are; the app simply stops displaying them (removed from Result
+        Display Settings and the result sheet per the "no duplicate date
+        fields" requirement), so no historical entry is lost.
+    """
+    ensure_column(conn, "result_display_settings", "show_next_term_resumes", "INTEGER NOT NULL DEFAULT 0")
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(result_display_settings)")}
+    if "show_resumption_date" in cols:
+        conn.execute("UPDATE result_display_settings SET show_next_term_resumes=show_resumption_date")
+    # Fold next_term_begins (entered on term T, meaning "the next term begins on this date")
+    # into the following term's own resumption_date, when that term exists and has none yet.
+    term_cols = {r[1] for r in conn.execute("PRAGMA table_info(terms)")}
+    if "next_term_begins" in term_cols:
+        for t in conn.execute("SELECT id, session_id, next_term_begins FROM terms WHERE next_term_begins IS NOT NULL AND next_term_begins<>''").fetchall():
+            nxt = conn.execute("SELECT id, resumption_date FROM terms WHERE session_id=? AND id>? ORDER BY id ASC LIMIT 1", (t["session_id"], t["id"])).fetchone()
+            if not nxt:
+                sess = conn.execute("SELECT school_id FROM sessions WHERE id=?", (t["session_id"],)).fetchone()
+                if sess:
+                    nxt_session = conn.execute("SELECT id FROM sessions WHERE school_id=? AND id>? ORDER BY id ASC LIMIT 1", (sess["school_id"], t["session_id"])).fetchone()
+                    if nxt_session:
+                        nxt = conn.execute("SELECT id, resumption_date FROM terms WHERE session_id=? ORDER BY id ASC LIMIT 1", (nxt_session["id"],)).fetchone()
+            if nxt and not nxt["resumption_date"]:
+                conn.execute("UPDATE terms SET resumption_date=? WHERE id=?", (t["next_term_begins"], nxt["id"]))
+
+
+STEPS.append(("next_term_resumes_v67", migration_067_v67_next_term_resumes))
+
+
+def term_sequence_next(conn, term):
+    """The term that immediately follows `term`: the next term in the same session
+    (by id, i.e. creation order — the same convention `_prev_term` in app.py relies
+    on), or the first term of the next session (by id) if `term` was the last one.
+    Returns None if there's nothing configured yet after it."""
+    nxt = conn.execute("SELECT * FROM terms WHERE session_id=? AND id>? ORDER BY id ASC LIMIT 1",
+                        (term["session_id"], term["id"])).fetchone()
+    if nxt:
+        return nxt
+    sess = conn.execute("SELECT school_id FROM sessions WHERE id=?", (term["session_id"],)).fetchone()
+    if not sess:
+        return None
+    nxt_session = conn.execute("SELECT id FROM sessions WHERE school_id=? AND id>? ORDER BY id ASC LIMIT 1",
+                                (sess["school_id"], term["session_id"])).fetchone()
+    if not nxt_session:
+        return None
+    return conn.execute("SELECT * FROM terms WHERE session_id=? ORDER BY id ASC LIMIT 1", (nxt_session["id"],)).fetchone()
+
+
+def next_term_resumes_info(conn, term):
+    """What to show for 'Next Term Resumes' when viewing `term`'s result: the
+    resumption date that belongs to the term that comes after it (First Term's
+    sheet shows Second Term's date, Second Term's shows Third Term's, Third
+    Term's shows the next session's first term's date) — never `term`'s own
+    date, and never guessed. Returns a dict with `date_iso` (or None if nothing
+    is configured yet) plus the next term/session names, so a caller can tell
+    an admin what's missing instead of just omitting it silently."""
+    nxt = term_sequence_next(conn, term)
+    if not nxt:
+        return {"date_iso": None, "next_term_name": None, "next_session_name": None, "configured": False}
+    nxt_session = conn.execute("SELECT name FROM sessions WHERE id=?", (nxt["session_id"],)).fetchone()
+    return {
+        "date_iso": nxt["resumption_date"] if "resumption_date" in nxt.keys() else None,
+        "next_term_name": nxt["name"],
+        "next_session_name": nxt_session["name"] if nxt_session else None,
+        "configured": bool(nxt["resumption_date"]) if "resumption_date" in nxt.keys() else False,
+    }
 
 
 # The five-point scale used everywhere educational-domain ratings appear (forms, sheets, keys, PDFs).

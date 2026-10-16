@@ -25,7 +25,8 @@ from db import (
     can_view_all_results, can_view_class_results, student_full_name,
     seed_school_defaults, upsert_enrollment, log_audit,
     get_visible_notifications, get_unread_notification_count,
-    recompute_attendance, attendance_percentage, grading_problems, grade_band_problems, parse_arms,
+    recompute_attendance, attendance_percentage, grading_problems, grading_affected_scores, record_grading_config_change, grade_band_problems, parse_arms,
+    term_sequence_next, next_term_resumes_info,
     generate_teacher_comment, generate_principal_comment,
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
@@ -875,6 +876,19 @@ def student_class_for_term(conn, student_id, term_id):
     return current["class_id"] if current else None
 
 
+def result_class_published(conn, school_id, class_id, term_id):
+    """Whether THIS SPECIFIC class's result has actually been published for this term —
+    never just whether some other class in the same term happens to be published.
+    terms.is_published is a legacy, term-wide "at least one class published" signal kept
+    only for old summary screens (see v63_core.sync_term_flag); every route that lets a
+    student/parent view, print, download or email an actual result must gate on this
+    per-class answer instead, or a result could leak the moment ANY class in the school
+    gets published, regardless of whether that student's own class has been approved yet."""
+    if not class_id:
+        return False
+    return v63_core.is_published(conn, school_id, class_id, term_id)
+
+
 def get_grading_config(conn):
     return conn.execute(
         "SELECT * FROM grading_config WHERE school_id=? LIMIT 1", (current_school_id(),)
@@ -933,8 +947,13 @@ def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_
     changed = (existing is None and any((ca1, ca2, ca3, exam))) or (
         existing is not None and (existing["ca1"] != ca1 or existing["ca2"] != ca2 or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam))
     reason = (reason or "").strip()[:300] or None
-    if changed and ctx["is_published"] and not reason:
-        raise ScoreChangeError("This term's results are published. Enter a reason for the score change.")
+    # "reopened" is the one state that means this class's result WAS published and has since been
+    # unlocked for correction — that's the case that needs a mandatory reason for the audit trail.
+    # (ctx["is_published"], the legacy term-wide flag, would be wrong here: it can still read True
+    # off some OTHER class in the same term, or already read False the moment this was the only
+    # published class and got reopened — either way it doesn't describe THIS class's own history.)
+    if changed and lock_state == "reopened" and not reason:
+        raise ScoreChangeError("This class's result was published and is now reopened. Enter a reason for the score change.")
     if changed:
         old_total = compute_total(old_vals[0], old_vals[1], old_vals[3], old_vals[2]) if existing else None
         new_total = compute_total(ca1, ca2, exam, ca3)
@@ -953,7 +972,11 @@ def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_
              ctx["class_id"], ctx["class_name"], ctx["session_id"], ctx["session_name"], term_id, ctx["term_name"],
              old_vals[0], old_vals[1], old_vals[2], old_vals[3], old_total, ca1, ca2, ca3, exam, new_total,
              round(new_total - (old_total or 0), 2), user_id, session.get("name"), _actor_role_label(),
-             "Published" if ctx["is_published"] else "Draft", reason, source,
+             # This class's own workflow state at the moment of the change (Draft/Submitted/Under Review/
+             # Returned/Approved/Published/Reopened) — not the term-wide "some class is published" flag,
+             # which could otherwise mislabel a change to a still-unpublished class as "Published" just
+             # because a different class in the same term had already gone through approval.
+             v63_core.STATE_LABELS[lock_state], reason, source,
              ("entered" if existing is None else ("cleared" if all(v is None for v in (ca1, ca2, ca3, exam)) else
               ("changed_after_return" if v63_core.publication_status(conn, ctx["school_id"], ctx["class_id"], term_id) in ("returned", "reopened") else "edited"))),
              (conn.execute("SELECT arm FROM classes WHERE id=?", (ctx["class_id"],)).fetchone() or {"arm": None})["arm"] if "arm" in [r[1] for r in conn.execute("PRAGMA table_info(classes)")] else None,
@@ -3090,8 +3113,9 @@ def parent_child_detail(student_id):
 @parent_login_required
 def parent_result(student_id,term_id):
     conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
-    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
-    if not child or not term:
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,current_school_id())).fetchone()
+    cls_for_term = student_class_for_term(conn, student_id, term_id) if child and term else None
+    if not child or not term or not result_class_published(conn, current_school_id(), cls_for_term, term_id):
         conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
     data=build_result_data(conn,student_id,term_id); conn.close()
     return render_template("parent_result.html",child=child,term=term,student_full_name=student_full_name,**data)
@@ -3100,8 +3124,9 @@ def parent_result(student_id,term_id):
 @parent_login_required
 def parent_result_pdf(student_id,term_id):
     conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
-    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
-    if not child or not term:
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,current_school_id())).fetchone()
+    cls_for_term = student_class_for_term(conn, student_id, term_id) if child and term else None
+    if not child or not term or not result_class_published(conn, current_school_id(), cls_for_term, term_id):
         conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
     data=build_result_data(conn,student_id,term_id); school=get_school(conn,current_school_id()); logo_path=None
     if school and school["logo_filename"]:
@@ -3793,6 +3818,8 @@ def reset_subadmin_password(user_id):
 def admin_grading():
     conn = get_db()
     school_id = current_school_id()
+    review = None
+    proposed = None
     if request.method == "POST":
         ca1 = float(request.form["ca1_max"])
         ca2 = float(request.form["ca2_max"])
@@ -3802,17 +3829,35 @@ def admin_grading():
         if problems:
             flash(" ".join(problems), "error")
         else:
-            conn.execute("UPDATE grading_config SET ca1_max=?, ca2_max=?, ca3_max=?, exam_max=? WHERE school_id=?",
-                         (ca1, ca2, ca3, exam, school_id))
-            conn.commit()
-            if abs(ca1 + ca2 + ca3 + exam - 100) > 0.001:
-                flash(f"Grading weights updated — note the maximums add up to {ca1 + ca2 + ca3 + exam:g}, not 100.", "success")
+            affected = grading_affected_scores(conn, school_id, ca1, ca2, ca3, exam)
+            confirmed = request.form.get("confirm_override") == "1"
+            if affected["count"] and not confirmed:
+                # Don't save yet — show what would be left exceeding the new
+                # maximums and ask an authorized user to explicitly confirm.
+                # Nothing is deleted, capped, or overwritten by looking at this.
+                review = affected
+                proposed = {"ca1_max": ca1, "ca2_max": ca2, "ca3_max": ca3, "exam_max": exam}
             else:
-                flash("Grading weights updated.", "success")
+                old_config = get_grading_config(conn)
+                conn.execute("UPDATE grading_config SET ca1_max=?, ca2_max=?, ca3_max=?, exam_max=? WHERE school_id=?",
+                             (ca1, ca2, ca3, exam, school_id))
+                record_grading_config_change(conn, school_id, old_config, ca1, ca2, ca3, exam, affected,
+                                              session.get("user_id"), session.get("name"))
+                conn.commit()
+                msg = "Grading weights updated."
+                if abs(ca1 + ca2 + ca3 + exam - 100) > 0.001:
+                    msg += f" Note: the maximums add up to {ca1 + ca2 + ca3 + exam:g}, not 100."
+                if affected["count"]:
+                    msg += (f" {affected['count']} saved score(s) now exceed one of the new maximums — they were "
+                            "kept exactly as entered and will need review/correction; they were not changed.")
+                flash(msg, "success")
     config = get_grading_config(conn)
     scale = conn.execute("SELECT * FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
+    history = conn.execute(
+        "SELECT * FROM grading_config_audit WHERE school_id=? ORDER BY changed_at DESC, id DESC LIMIT 10",
+        (school_id,)).fetchall()
     conn.close()
-    return render_template("admin_grading.html", config=config, scale=scale)
+    return render_template("admin_grading.html", config=config, scale=scale, review=review, proposed=proposed, history=history)
 
 
 @app.route("/admin/grading/scale/add", methods=["POST"])
@@ -5340,6 +5385,24 @@ app.jinja_env.globals["sample_sheets"] = ("boxed_grey_card", "assessment_dossier
 app.jinja_env.globals["domain_key"] = " · ".join(f"{k} = {v}" for k, v in DOMAIN_RATING_LABELS.items())
 
 
+def rank_with_ties(rows, key):
+    """Assigns 'position' using standard competition ranking (1,2,2,4): students tied on `key`
+    share the same position, and the position after a tie skips ahead to the student's actual
+    rank rather than just counting ties as one place. This is the same convention
+    `compute_subject_positions` already uses for subject-level positions, so a class's "Overall
+    Position" on the broadsheet and on each student's result sheet never disagrees with a tie
+    that's visibly identical in the subject columns."""
+    rows = sorted(rows, key=lambda r: -key(r))
+    prev, rank = None, 0
+    for i, r in enumerate(rows, 1):
+        v = key(r)
+        if v != prev:
+            rank = i
+            prev = v
+        r["position"] = rank
+    return rows
+
+
 def build_broadsheet_data(conn, class_id, term_id):
     school_id = current_school_id()
     subjects = conn.execute(
@@ -5381,9 +5444,7 @@ def build_broadsheet_data(conn, class_id, term_id):
             "student": st, "scores": subj_scores, "total": total, "average": average
         })
 
-    rows.sort(key=lambda r: r["total"], reverse=True)
-    for i, r in enumerate(rows, start=1):
-        r["position"] = i
+    rows = rank_with_ties(rows, lambda r: r["total"])
 
     return subjects, rows
 
@@ -5437,9 +5498,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id):
         overall_average = round(overall_total / overall_count, 2) if overall_count else 0
         rows.append({"student": st, "subjects": subj_cumulative, "average": overall_average})
 
-    rows.sort(key=lambda r: r["average"], reverse=True)
-    for i, r in enumerate(rows, start=1):
-        r["position"] = i
+    rows = rank_with_ties(rows, lambda r: r["average"])
 
     return subjects, terms, rows
 
@@ -5565,11 +5624,11 @@ def email_class_results(class_id):
         conn.close()
         flash("No active term set.", "error")
         return redirect(url_for("dashboard"))
-    if not term["is_published"]:
+    if not result_class_published(conn, current_school_id(), class_id, term["id"]):
         conn.close()
         flash(
-            "This term's results haven't been published yet. Ask your admin/principal to "
-            "publish the term (Setup → Terms) before emailing results to parents.",
+            "This class's results haven't been published yet. Ask your admin/principal to "
+            "approve and publish this class (Results → Workflow) before emailing results to parents.",
             "error",
         )
         return redirect(url_for("broadsheet", class_id=class_id))
@@ -5859,10 +5918,12 @@ def build_result_data(conn, student_id, term_id):
     rs["principal_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"])) if principal_signature_user else None
     rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
     promotion = info.get("promotion_status")
-    term_default = conn.execute("SELECT result_date, resumption_date FROM terms WHERE id=?", (term_id,)).fetchone()
-    # shown only when switched on AND the school has actually set a date for this term - never invented
-    rs["resumption_date"] = format_dmy(term_default["resumption_date"]) if (rs.get("show_resumption_date") and term_default and term_default["resumption_date"]) else None
-    result_date_iso = info.get("result_date") or (term_default["result_date"] if term_default else None)
+    term_row_for_dates = conn.execute("SELECT * FROM terms WHERE id=?", (term_id,)).fetchone()
+    # "Next Term Resumes" is never this term's own date — it's whatever comes after it
+    # (First Term shows Second Term's date, etc.), and it's left blank rather than guessed
+    # when that hasn't been configured yet.
+    _ntr = next_term_resumes_info(conn, term_row_for_dates) if term_row_for_dates else {"date_iso": None}
+    rs["next_term_resumes"] = format_dmy(_ntr["date_iso"]) if (rs.get("show_next_term_resumes") and _ntr.get("date_iso")) else None
     _overall_grade, _overall_remark = grade_for(average, conn, school_id) if subjects_written else ("-", "-")
     # Cumulative columns (only when the school has the Cumulative / Annual Result switched on): the same per-term values the cumulative sheet uses.
     cumulative = None
@@ -5888,7 +5949,6 @@ def build_result_data(conn, student_id, term_id):
         "subjects_written": subjects_written,
         "show_ca3": ca3_enabled(conn.execute(
             "SELECT ca3_max FROM grading_config WHERE school_id=? LIMIT 1", (school_id,)).fetchone()),
-        "result_date": (format_dmy(result_date_iso) if (rs["show_result_date"] and result_date_iso) else None),
         "teacher_signature_user": teacher_signature_user,
         "principal_signature_user": principal_signature_user,
         "teacher_signature_path": os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"]) if teacher_signature_user else None,
@@ -6086,11 +6146,12 @@ def email_result(student_id):
         conn.close()
         flash("No active term set.", "error")
         return redirect(url_for("dashboard"))
-    if not term["is_published"]:
+    cls_for_term = student_class_for_term(conn, student_id, term["id"])
+    if not result_class_published(conn, current_school_id(), cls_for_term, term["id"]):
         conn.close()
         flash(
-            "This term's results haven't been published yet. Ask your admin/principal to "
-            "publish the term (Setup → Terms) before emailing results to parents.",
+            "This student's class result hasn't been published yet. Ask your admin/principal to "
+            "approve and publish the class (Results → Workflow) before emailing results to parents.",
             "error",
         )
         return redirect(url_for("result", student_id=student_id))
@@ -7261,7 +7322,7 @@ def student_result(term_id):
         "SELECT terms.*, sessions.name as session_name FROM terms "
         "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
     ).fetchone()
-    if not term or not term["is_published"]:
+    if not term:
         conn.close()
         flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
@@ -7271,6 +7332,11 @@ def student_result(term_id):
     if not enrolled:
         conn.close()
         flash("You weren't enrolled in that term.", "error")
+        return redirect(url_for("student_dashboard"))
+    cls_for_term = student_class_for_term(conn, student_id, term_id)
+    if not result_class_published(conn, session["school_id"], cls_for_term, term_id):
+        conn.close()
+        flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
     data = build_result_data(conn, student_id, term_id)
     all_traits = conn.execute(
@@ -7291,7 +7357,7 @@ def student_result_pdf(term_id):
         "SELECT terms.*, sessions.name as session_name FROM terms "
         "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
     ).fetchone()
-    if not term or not term["is_published"]:
+    if not term:
         conn.close()
         flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
@@ -7301,6 +7367,11 @@ def student_result_pdf(term_id):
     if not enrolled:
         conn.close()
         flash("You weren't enrolled in that term.", "error")
+        return redirect(url_for("student_dashboard"))
+    cls_for_term = student_class_for_term(conn, student_id, term_id)
+    if not result_class_published(conn, session["school_id"], cls_for_term, term_id):
+        conn.close()
+        flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
     data = build_result_data(conn, student_id, term_id)
     school = get_school(conn, session["school_id"])
@@ -9218,11 +9289,71 @@ def record_ai_consent(conn, school_id, student_id, status, consenting_name, rela
     return previous
 
 
+def _ai_consent_bulk(conn, sid):
+    """Admin-wide consent management: apply one status to many students at once (e.g. a batch
+    of paper consent forms collected at the start of term, or a school-wide policy change),
+    instead of clicking Save once per student. Every student touched still gets their own
+    row in `record_ai_consent`'s history — this is a convenience for applying the SAME change
+    to many students in one submit, not a separate/weaker code path."""
+    student_ids = [i for i in request.form.getlist("student_ids", type=int) if i]
+    status = (request.form.get("bulk_status") or "").strip()
+    name = re.sub(r"\s+", " ", (request.form.get("bulk_consenting_name") or "").strip())[:120]
+    relationship = (request.form.get("bulk_relationship") or "").strip()
+    notes = (request.form.get("bulk_notes") or "").strip()[:300]
+    if not student_ids:
+        conn.close(); flash("Select at least one student first.", "error")
+        return redirect(url_for("ai_consent"))
+    if status not in ("pending", "granted", "withdrawn"):
+        conn.close(); flash("Choose a valid consent status.", "error")
+        return redirect(url_for("ai_consent"))
+    if status == "granted" and (not name or relationship not in CONSENT_RELATIONSHIPS):
+        conn.close()
+        flash("To record consent in bulk, enter who gave it and their relationship "
+              "(use 'School representative' for paper forms already collected and being logged together).", "error")
+        return redirect(url_for("ai_consent"))
+    # Tenant isolation: only student ids that genuinely belong to this school are touched,
+    # whatever ids were posted.
+    ph = ",".join("?" * len(student_ids))
+    valid_ids = [r["id"] for r in conn.execute(
+        f"SELECT st.id FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.id IN ({ph})",
+        (sid, *student_ids)).fetchall()]
+    changed = 0
+    try:
+        for student_id in valid_ids:
+            current = conn.execute("SELECT status FROM student_ai_consent WHERE student_id=? AND school_id=?", (student_id, sid)).fetchone()
+            if (current["status"] if current else "pending") == status:
+                continue  # already that status — not touched, not counted, not re-logged
+            record_ai_consent(conn, sid, student_id, status, name if status == "granted" else None,
+                               relationship if status == "granted" else None, notes,
+                               "school_admin", session["user_id"], session.get("name"))
+            changed += 1
+        if changed:
+            log_audit(conn, session.get("role"), session.get("name"), "ai_consent_bulk_changed",
+                       f"{changed} student(s) -> {status}" + (f" ({len(valid_ids) - changed} already '{status}')" if len(valid_ids) > changed else ""),
+                       school_id=sid)
+            conn.commit()
+        else:
+            conn.rollback()
+    except Exception:
+        conn.rollback(); conn.close(); app.logger.exception("Bulk AI consent could not be saved")
+        flash("The bulk update could not be saved. Nothing was changed - please try again or contact support.", "error")
+        return redirect(url_for("ai_consent"))
+    conn.close()
+    skipped = len(student_ids) - len(valid_ids)
+    msg = f"Consent set to '{status}' for {changed} student(s)." if changed else "No changes were needed — the selected students already had that status."
+    if skipped:
+        msg += f" ({skipped} selected id(s) were not in your school and were ignored.)"
+    flash(msg, "success" if changed else "info")
+    return redirect(url_for("ai_consent"))
+
+
 @app.route("/ai/consent", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def ai_consent():
     conn = get_db(); sid = current_school_id()
     if request.method == "POST":
+        if request.form.get("bulk") == "1":
+            return _ai_consent_bulk(conn, sid)
         student_id = request.form.get("student_id", type=int)
         status = (request.form.get("status") or "").strip()
         name = re.sub(r"\s+", " ", (request.form.get("consenting_name") or "").strip())[:120]
@@ -9261,8 +9392,9 @@ def ai_consent():
         "WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name", (sid, sid)).fetchall()
     history = conn.execute("SELECT e.*, s.first_name, s.last_name FROM student_ai_consent_events e JOIN students s ON s.id=e.student_id "
                            "WHERE e.school_id=? ORDER BY e.id DESC LIMIT 25", (sid,)).fetchall()
+    class_names = [r["name"] for r in conn.execute("SELECT DISTINCT name FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()]
     conn.close()
-    return render_template("ai_consent.html", students=students, history=history, relationships=CONSENT_RELATIONSHIPS)
+    return render_template("ai_consent.html", students=students, history=history, relationships=CONSENT_RELATIONSHIPS, class_names=class_names)
 
 
 @app.route("/ai/result-analysis")
@@ -9499,6 +9631,7 @@ _v61_helpers = dict(
     build_result_data=build_result_data, student_in_school=student_in_school, resolve_term=resolve_term,
     student_class_for_term=student_class_for_term, require_class_result_access=require_class_result_access,
     parent_child=parent_child, parent_login_required=parent_login_required, current_term=current_term,
+    result_class_published=result_class_published,
 )
 register_v61_routes(app, _v61_helpers)
 _AUTO_ADVANCE_IMPL = _v61_helpers["auto_advance_after_publish"]

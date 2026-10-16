@@ -342,7 +342,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     # ---- educational domains ------------------------------------------------------------------------------------------------
     groups = data.get("domain_groups") if rs.get("show_domains", True) else None
     if groups:
-        elements.append(Paragraph("Educational Domains (1 = Poor · 2 = Fair · 3 = Good · 4 = Very Good · 5 = Excellent)", h3))
+        elements.append(Paragraph("Domain Ratings (1 = Poor · 2 = Fair · 3 = Good · 4 = Very Good · 5 = Excellent)", h3))
         tables = []
         for g in groups:
             _L = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}
