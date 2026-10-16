@@ -24,5 +24,5 @@
 {% if rs.show_teacher_comment %}<tr><th>Class Teacher's Remark</th><td>{{ info.teacher_comment or '' }}</td><td class="sg">{% if rs.show_teacher_signature %}{% if rs.teacher_sig %}<img src="{{ rs.teacher_sig }}" alt="Class teacher signature">{% endif %}{% if teacher_name %}<small>{{ teacher_name|upper }}</small>{% endif %}{% endif %}</td></tr>{% endif %}
 {% if rs.show_principal_comment %}<tr><th>Principal's Remark</th><td>{{ info.principal_comment or '' }}</td><td class="sg">{% if rs.show_principal_signature %}{% if rs.principal_sig %}<img src="{{ rs.principal_sig }}" alt="Principal signature">{% endif %}{% if principal_name %}<small>{{ principal_name|upper }}</small>{% endif %}{% endif %}{% if rs.show_principal_sign_date and info.principal_signed_date %}<small>Date: {{ info.principal_signed_date|dmy }}</small>{% endif %}</td></tr>{% endif %}
 </tbody></table>{% endif %}
-{% if rs.resumption_date %}<p class="rsx-peach-next">Next School Begins: <u>{{ rs.resumption_date }}</u></p>{% endif %}
+{% if rs.next_term_resumes %}<p class="rsx-peach-next">Next Term Resumes: <u>{{ rs.next_term_resumes }}</u></p>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
