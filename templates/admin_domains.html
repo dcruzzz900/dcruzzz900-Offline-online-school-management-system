@@ -1,5 +1,5 @@
-{% extends "base.html" %}{% block title %}Educational Domains{% endblock %}{% block content %}
-<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1>Educational Domains</h1><p>Configure the behavioural, skills and other domains rated on each result sheet (scale 1–5).</p></div></div>
+{% extends "base.html" %}{% block title %}Domain Ratings{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1>Domain Ratings</h1><p>Configure the behavioural, skills and other domains rated on each result sheet (scale 1–5).</p></div></div>
 <form method="POST" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_domain"><h3>Add a domain</h3><label>Domain name<input name="label" maxlength="60" placeholder="e.g. Academic-related skills" required></label><button class="btn">Add domain</button></form>
 {% for d in domains %}<div class="card" style="margin-top:12px;{{ 'opacity:.6' if not d.is_active }}"><h3>{{ d.label }} {% if not d.is_active %}<small class="muted">(hidden from result sheets)</small>{% endif %}</h3>
 <form method="POST" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="rename_domain"><input type="hidden" name="domain_id" value="{{ d.id }}"><input name="label" value="{{ d.label }}" maxlength="60" style="width:14rem"><button class="btn btn-small">Rename</button></form>

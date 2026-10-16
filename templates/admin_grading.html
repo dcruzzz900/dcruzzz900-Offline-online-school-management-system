@@ -3,6 +3,51 @@
 {% block content %}
 <h1>Grading Setup</h1>
 
+{% if review %}
+<div class="card" style="border:2px solid #b3261e;">
+    <h3>Review before applying — {{ review.count }} saved score(s) would exceed a new maximum</h3>
+    <p style="font-size:0.88rem; color:#444;">
+        Nothing has been saved yet. These scores were entered under the current maximums and are higher than the
+        proposed one below. They will <strong>not</strong> be deleted, capped, or changed — applying the new
+        weighting just means they'll show as exceeding it until a teacher corrects them (or you keep the higher maximum).
+    </p>
+    <ul style="font-size:0.88rem;">
+        {% for label, n in review.by_component.items() %}
+        <li><strong>{{ label }}</strong>: {{ n }} score(s) above the proposed maximum ({{ proposed[label|lower ~ '_max'] }})</li>
+        {% endfor %}
+    </ul>
+    <div style="max-height:260px; overflow:auto; border:1px solid #ddd; border-radius:6px;">
+        <table class="table" style="font-size:0.82rem;">
+            <thead><tr><th>Component</th><th>Student</th><th>Admission No</th><th>Class</th><th>Subject</th><th>Session / Term</th><th>Saved value</th></tr></thead>
+            <tbody>
+            {% for r in review.rows %}
+                <tr>
+                    <td>{{ r.component }}</td><td>{{ r.student_name }}</td><td>{{ r.admission_no }}</td>
+                    <td>{{ r.class_name }}</td><td>{{ r.subject_name }}</td>
+                    <td>{{ r.session_name }} · {{ r.term_name }}</td><td>{{ r.value|round(2) }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if review.truncated %}<p style="font-size:0.8rem; color:#666;">Showing the first {{ review.rows|length }} of {{ review.count }} affected scores.</p>{% endif %}
+    <form method="POST" style="margin-top:0.75rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="ca1_max" value="{{ proposed.ca1_max }}">
+    <input type="hidden" name="ca2_max" value="{{ proposed.ca2_max }}">
+    <input type="hidden" name="ca3_max" value="{{ proposed.ca3_max }}">
+    <input type="hidden" name="exam_max" value="{{ proposed.exam_max }}">
+    <input type="hidden" name="confirm_override" value="1">
+        <label style="font-weight:normal; display:flex; gap:0.4rem; align-items:flex-start;">
+            <input type="checkbox" required style="margin-top:0.25rem;">
+            I've reviewed the affected scores above and want to apply this weighting anyway. Existing scores will be left exactly as entered.
+        </label>
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Apply anyway</button>
+        <a class="btn btn-small" href="{{ url_for('admin_grading') }}" style="background:#666;">Cancel</a>
+    </form>
+</div>
+{% endif %}
+
 <div class="card">
     <h3>Score Weighting</h3>
     <form method="POST">
@@ -21,16 +66,39 @@
             <div>
                 <label>CA3 Max <span style="font-weight:normal; color:#666;">(optional)</span></label>
                 <input type="number" step="0.01" min="0" name="ca3_max" value="{{ config.ca3_max or 0 }}">
-                <p style="font-size:0.8rem; color:#666; margin:0.2rem 0 0;">Leave at 0 if your school only uses CA1 and CA2. Any value above 0 adds a CA3 column everywhere.</p>
+                <p style="font-size:0.8rem; color:#666; margin:0.2rem 0 0;">Leave at 0 if your school only uses CA1 and CA2. Any value above 0 adds a CA3 column everywhere; setting it back to 0 switches it off again without deleting any CA3 scores already saved.</p>
             </div>
             <div>
                 <label>Exam Max</label>
                 <input type="number" step="0.01" name="exam_max" value="{{ config.exam_max }}" required>
             </div>
         </div>
+        <p style="font-size:0.8rem; color:#666;">The four maximums are usually set to add up to 100 (e.g. CA1 10 + CA2 10 + CA3 10 + Exam 70), but you can use any combination that fits your school's grading rules.</p>
         <button class="btn" type="submit">Save Weighting</button>
     </form>
 </div>
+
+{% if history %}
+<div class="card">
+    <h3>Recent weighting changes</h3>
+    <table class="table" style="font-size:0.82rem;">
+        <thead><tr><th>When</th><th>By</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Scores affected</th></tr></thead>
+        <tbody>
+        {% for h in history %}
+            <tr>
+                <td>{{ h.changed_at }}</td>
+                <td>{{ h.changed_by_name or '—' }}</td>
+                <td>{{ h.old_ca1_max|round(1) if h.old_ca1_max is not none else '—' }} → {{ h.new_ca1_max|round(1) }}</td>
+                <td>{{ h.old_ca2_max|round(1) if h.old_ca2_max is not none else '—' }} → {{ h.new_ca2_max|round(1) }}</td>
+                <td>{{ h.old_ca3_max|round(1) if h.old_ca3_max is not none else '—' }} → {{ h.new_ca3_max|round(1) }}</td>
+                <td>{{ h.old_exam_max|round(1) if h.old_exam_max is not none else '—' }} → {{ h.new_exam_max|round(1) }}</td>
+                <td>{{ h.affected_count }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 
 <div class="card">
     <h3>Grade Scale</h3>

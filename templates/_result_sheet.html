@@ -18,15 +18,13 @@
   {% if rs.show_score %}<div><span>Total Score</span><b>{{ total }}</b></div><div><span>Average</span><b>{{ average }}</b></div>{% endif %}
   <div><span>Subjects</span><b>{{ subjects_written }} of {{ subjects|length }}</b></div>
   {% if rs.show_overall_position %}<div class="rs-pos"><span>Overall Position</span><b>{{ position_text }}{% if class_size %} <small>of {{ class_size }}</small>{% endif %}</b></div>{% endif %}
-  {% if result_date %}<div><span>Result Date</span><b>{{ result_date }}</b></div>{% endif %}
-  {% if rs.resumption_date %}<div><span>Resumption Date</span><b>{{ rs.resumption_date }}</b></div>{% endif %}
 </section>
 <section class="rs-perf">
   <h3 class="rs-h">Academic Performance</h3>
   <table class="rs-table"><thead><tr><th class="l">Subject</th>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}{% if rs.show_remarks %}<th class="l">Remark</th>{% endif %}</tr></thead>
   <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
 </section>
-{% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Educational Domains <small>({{ domain_key }})</small></h3>
+{% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}{% if domain_labels.get(rating|int) %} <small>– {{ domain_labels[rating|int] }}</small>{% endif %}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
 {% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or (rs.show_promotion and promotion_status)) %}<section class="rs-att">
   {% if rs.show_days_opened %}<div><span>Days School Opened</span><b>{{ info.days_school_opened if info.days_school_opened is not none else '—' }}</b></div>{% endif %}
@@ -40,7 +38,13 @@
   {% if rs.show_teacher_signature or rs.show_teacher_sign_date %}<div>{% if rs.show_teacher_signature %}{% if rs.teacher_sig %}<img src="{{ rs.teacher_sig }}" alt="Class teacher signature">{% else %}<i class="rs-line"></i>{% endif %}<span>Class Teacher{% if teacher_name %}: {{ teacher_name }}{% endif %}</span>{% endif %}{% if rs.show_teacher_sign_date %}<small>Date: {{ info.teacher_signed_date|dmy if info.teacher_signed_date else '' }}</small>{% endif %}</div>{% endif %}
   {% if rs.show_principal_signature or rs.show_principal_sign_date %}<div>{% if rs.show_principal_signature %}{% if rs.principal_sig %}<img src="{{ rs.principal_sig }}" alt="Principal signature">{% else %}<i class="rs-line"></i>{% endif %}<span>Principal{% if principal_name %}: {{ principal_name }}{% endif %}</span>{% endif %}{% if rs.show_principal_sign_date %}<small>Date: {{ info.principal_signed_date|dmy if info.principal_signed_date else '' }}</small>{% endif %}</div>{% endif %}
 </section>{% endif %}
-{% if (rs.show_grading_key or t == 'detailed_report') and rs.grading_scale %}<section class="rs-key"><b>Grading key:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</section>{% endif %}
+{% if rs.next_term_resumes %}<section class="rs-ntr"><div><span>Next Term Resumes</span><b>{{ rs.next_term_resumes }}</b></div></section>{% endif %}
+{% set show_grading_key = (rs.show_grading_key or t == 'detailed_report') and rs.grading_scale %}
+{% set show_domain_key = rs.show_domains and domain_groups %}
+{% if show_grading_key or show_domain_key %}<section class="rs-key">
+  {% if show_grading_key %}<div class="rs-key-row"><b>Grades:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</div>{% endif %}
+  {% if show_domain_key %}<div class="rs-key-row"><b>Domain ratings:</b> {{ domain_key }}</div>{% endif %}
+</section>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
 {% endif %}
 </article>
