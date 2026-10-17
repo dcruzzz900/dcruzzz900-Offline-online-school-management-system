@@ -19,5 +19,10 @@ table{width:100%;border-collapse:collapse;font-size:8.5pt}th{background:{{ rs.ac
 <tbody>{% for r in rows %}<tr><td>{{ r.position }}</td><td class="l">{{ student_full_name(r.student) }}</td><td>{{ r.student.admission_no }}</td>{% for s in subjects %}{% set c = r.scores[s.id] %}<td>{{ c.ca1 }}</td><td>{{ c.ca2 }}</td>{% if _ca3 %}<td>{{ c.ca3 }}</td>{% endif %}<td>{{ c.exam }}</td><td><b>{{ c.total }}</b>{% if c.grade != '-' %} ({{ c.grade }}){% endif %}</td>{% endfor %}<td><b>{{ r.total }}</b></td><td>{{ r.average }}</td></tr>{% else %}<tr><td colspan="{{ 5 + subjects|length * (5 if _ca3 else 4) }}">No results yet.</td></tr>{% endfor %}</tbody></table>
 </div>
 {% if autoprint %}<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},350);});</script>{% endif %}
-<script>(function(){function fit(){var box=document.querySelector('.bs-page'),t=box&&box.querySelector('table');if(!t)return;t.style.zoom=1;var avail=box.clientWidth,w=t.scrollWidth;if(w>avail+1){t.style.zoom=Math.max(.38,avail/w)}}
+<script>
+/* Same font_scale preference as the individual result sheet (Page & Print settings), composed with the
+   broadsheet's own width-based auto-shrink: scale to the preferred size first, then shrink further only if that's
+   still wider than the page. Broadsheets stay landscape regardless of the per-sheet orientation setting. */
+var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
+(function(){function fit(){var box=document.querySelector('.bs-page'),t=box&&box.querySelector('table');if(!t)return;var base=RS_FONT_SCALE||1;t.style.zoom=base;var avail=box.clientWidth,w=t.scrollWidth;if(w>avail+1){t.style.zoom=Math.max(.38,base*avail/w)}}
 window.addEventListener('load',fit);window.addEventListener('resize',fit);window.addEventListener('beforeprint',fit);if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fit)}})();</script></body></html>
