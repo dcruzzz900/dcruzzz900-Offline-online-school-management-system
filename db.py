@@ -3570,7 +3570,11 @@ RESULT_BOOL_SETTINGS = [
     ("show_promotion", "Show Promotion / Status", 1),
     ("show_domains", "Show Domain Ratings", 1),
     ("show_watermark", "Show Watermark", 0),
+    ("fit_to_page", "Automatically Shrink to Fit One Page", 1),
 ]
+FONT_SCALE_FACTORS = {"small": 0.9, "normal": 1.0, "large": 1.12}
+PAGE_ORIENTATIONS = [("portrait", "Portrait"), ("landscape", "Landscape")]
+FONT_SCALE_CHOICES = [("small", "Small"), ("normal", "Normal"), ("large", "Large")]
 RESULT_TEMPLATES = [
     ("professional_classic", "Professional Classic", "Traditional bordered layout with a strong header rule."),
     ("modern_academic", "Modern Academic", "Coloured header band, soft cards and clean tables."),
@@ -3935,6 +3939,27 @@ def migration_067_v67_next_term_resumes(conn):
 
 
 STEPS.append(("next_term_resumes_v67", migration_067_v67_next_term_resumes))
+
+
+def migration_068_v73_print_scaling(conn):
+    """Three new, independent result-sheet print controls, each additive and defaulted to
+    today's existing behaviour so nothing changes for a school that never opens the new
+    settings:
+      - page_orientation ('portrait'|'landscape'): the printed/PDF page size for an
+        individual result sheet. Was hardcoded portrait everywhere; defaults to 'portrait'.
+      - fit_to_page (bool): whether an overflowing sheet is automatically shrunk to stay on
+        one page (today's only behaviour) or left to flow across more than one page.
+        Defaults to 1 (today's behaviour, unchanged).
+      - font_scale ('small'|'normal'|'large'): a school-wide print size preference,
+        independent of which of the 13 templates is chosen. Defaults to 'normal' (today's
+        fixed per-template sizes, unchanged).
+    """
+    ensure_column(conn, "result_display_settings", "page_orientation", "TEXT NOT NULL DEFAULT 'portrait'")
+    ensure_column(conn, "result_display_settings", "fit_to_page", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(conn, "result_display_settings", "font_scale", "TEXT NOT NULL DEFAULT 'normal'")
+
+
+STEPS.append(("print_orientation_fit_font_scale_v73", migration_068_v73_print_scaling))
 
 
 def term_sequence_next(conn, term):

@@ -23,6 +23,7 @@ SECTIONS = [
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
                                "show_teacher_name", "show_principal_signature", "show_principal_sign_date", "show_principal_name"]),
+    ("Page & print", ["fit_to_page"]),
 ]
 
 
@@ -38,6 +39,8 @@ def register_v62_routes(app, h):
     actor_role_label = h["_actor_role_label"]
     PDF_FONT_CHOICES = h["PDF_FONT_CHOICES"]
     PARENT_PHOTOS_DIR = h["PARENT_PHOTOS_DIR"]
+    PAGE_ORIENTATIONS = h["PAGE_ORIENTATIONS"]
+    FONT_SCALE_CHOICES = h["FONT_SCALE_CHOICES"]
     labels = {k: l for k, l, _d in RESULT_BOOL_SETTINGS}
 
     def sid():
@@ -118,10 +121,17 @@ def register_v62_routes(app, h):
                 pdf_font = f.get("pdf_font", school["pdf_font"] or "Helvetica")
                 if pdf_font not in PDF_FONT_CHOICES:
                     errors["pdf_font"] = "Choose one of the listed fonts."
+                page_orientation = f.get("page_orientation", "portrait")
+                if page_orientation not in {x[0] for x in PAGE_ORIENTATIONS}:
+                    errors["page_orientation"] = "Choose a page orientation."
+                font_scale = f.get("font_scale", "normal")
+                if font_scale not in {x[0] for x in FONT_SCALE_CHOICES}:
+                    errors["font_scale"] = "Choose a font size."
                 if not errors:
                     vals = {k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}
                     vals.update(template=tmpl, title=title or None, footer_text=footer or None, watermark_text=wm or None,
-                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig, text_align=text_align)
+                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig, text_align=text_align,
+                                page_orientation=page_orientation, font_scale=font_scale)
                     before = dict(cfg)
                     before["cumulative_enabled"] = school["cumulative_enabled"]
                     try:
@@ -144,7 +154,8 @@ def register_v62_routes(app, h):
                         app.logger.exception("Result display settings save failed")
                         errors["_form"] = "The settings could not be saved. Please try again."
                 cfg = {**cfg, **{k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}, "template": tmpl, "title": title, "footer_text": footer,
-                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig, "text_align": text_align}
+                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig, "text_align": text_align,
+                       "page_orientation": page_orientation, "font_scale": font_scale}
                 school = {**dict(school), "pdf_font": pdf_font, "auto_teacher_comment": 1 if f.get("auto_teacher_comment") else 0,
                           "auto_principal_comment": 1 if f.get("auto_principal_comment") else 0, "cumulative_enabled": 1 if f.get("cumulative_enabled") else 0}
             # live sample through the real sheet component
@@ -155,6 +166,7 @@ def register_v62_routes(app, h):
                 preview = sample_result(conn, preview_rs)
             return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
                                    header_layouts=HEADER_LAYOUTS, text_aligns=TEXT_ALIGNS, signature_layouts=SIGNATURE_LAYOUTS, pdf_fonts=PDF_FONT_CHOICES, errors=errors,
+                                   page_orientations=PAGE_ORIENTATIONS, font_scales=FONT_SCALE_CHOICES,
                                    preview=preview, terms=terms,
                                    resumption_dates={t["id"]: conn.execute("SELECT resumption_date FROM terms WHERE id=?", (t["id"],)).fetchone()[0] for t in terms}), (422 if errors else 200)
         finally:

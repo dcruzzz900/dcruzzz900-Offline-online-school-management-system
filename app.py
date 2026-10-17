@@ -21,6 +21,7 @@ from collections import defaultdict, deque
 import v63_core
 from db import (
     get_db, init_db, grade_for, get_school, INSTANCE_DIR, table_exists, ensure_school_v61_defaults, generate_school_id, get_result_display, RESULT_BOOL_SETTINGS, RESULT_TEMPLATES,
+    FONT_SCALE_FACTORS, PAGE_ORIENTATIONS, FONT_SCALE_CHOICES,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
     seed_school_defaults, upsert_enrollment, log_audit,
@@ -5745,7 +5746,10 @@ def result_sheet_settings(conn, school_id):
         "text_align": cfg["text_align"] if cfg["text_align"] in ("left", "center", "right") else "",
         "secondary": cfg["secondary_color"] or "#c9a227", "header_layout": cfg["header_layout"], "signature_layout": cfg["signature_layout"],
         "pdf_font": g("pdf_font", "Helvetica"),
+        "page_orientation": cfg["page_orientation"] if cfg["page_orientation"] in ("portrait", "landscape") else "portrait",
+        "font_scale": cfg["font_scale"] if cfg["font_scale"] in FONT_SCALE_FACTORS else "normal",
     })
+    rs["font_scale_factor"] = FONT_SCALE_FACTORS.get(rs["font_scale"], 1.0)
     # one master switch: when "All comments" is OFF neither comment is shown, whatever the individual switches say
     if not cfg["show_all_comments"]:
         rs["show_teacher_comment"] = rs["show_principal_comment"] = False
@@ -9642,6 +9646,7 @@ register_v62_routes(app, dict(
     get_db=get_db, login_required=login_required, log_audit=log_audit, RESULT_BOOL_SETTINGS=RESULT_BOOL_SETTINGS, RESULT_TEMPLATES=RESULT_TEMPLATES,
     get_result_display=get_result_display, result_sheet_settings=result_sheet_settings, student_full_name=student_full_name,
     _actor_role_label=_actor_role_label, PDF_FONT_CHOICES=PDF_FONT_CHOICES, PARENT_PHOTOS_DIR=PARENT_PHOTOS_DIR, grade_for=grade_for,
+    PAGE_ORIENTATIONS=PAGE_ORIENTATIONS, FONT_SCALE_CHOICES=FONT_SCALE_CHOICES,
     ordinal_text=ordinal_text, all_terms_for_school=all_terms_for_school, require_class_result_access=require_class_result_access,
     resolve_term=resolve_term, build_broadsheet_data=build_broadsheet_data, parent_login_required=parent_login_required,
 ))
