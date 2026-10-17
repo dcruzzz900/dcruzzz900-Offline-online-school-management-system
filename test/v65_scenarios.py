@@ -121,7 +121,9 @@ def png(color=(20, 100, 200)):
 RES_ON = ["show_passport", "show_logo", "show_overall_position", "show_attendance", "show_days_opened", "show_days_present", "show_days_absent",
           "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date", "show_principal_signature", "show_principal_sign_date",
           "show_score", "show_grade", "show_remarks", "show_admission_no", "show_class", "show_session", "show_term", "show_teacher_name", "show_principal_name",
-          "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_grading_key", "show_promotion", "show_domains"]
+          "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_grading_key", "show_promotion", "show_domains",
+          # fit_to_page (V73): keep the one-page auto-shrink ON, same as its own default.
+          "fit_to_page"]
 
 
 def rds(client, on=None, **kw):
@@ -254,6 +256,10 @@ def settings(**kw):
     cur = {r_[0]: r_[1] for r_ in db().execute("SELECT 'x','x'")}
     row = db().execute("SELECT * FROM result_display_settings WHERE school_id=1").fetchone()
     form = {k: ("1" if row[k] else "") for k in row.keys() if k.startswith("show_")}
+    # fit_to_page (V73) isn't a "show_*" toggle but is still a RESULT_BOOL_SETTINGS checkbox, so it would
+    # otherwise be silently unchecked (and turned OFF) by every settings() call below — carry its current value
+    # over just like the show_* ones.
+    form["fit_to_page"] = "1" if row["fit_to_page"] else ""
     for k, v in kw.items(): form[k] = v
     form = {k: v for k, v in form.items() if v != ""}
     form.update({"title": row["title"] or "TERMINAL REPORT SHEET", "accent_color": row["accent_color"] or "#1f3a5f", "secondary_color": row["secondary_color"] or "#c9a227",
