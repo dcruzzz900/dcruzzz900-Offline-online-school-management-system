@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}{{ p.name }}{% endblock %}{% block content %}
+<h1>{{ p.name }}</h1><div class="card" style="display:flex;gap:1.2rem;flex-wrap:wrap"><div>{% if p.photo_filename %}<img src="{{ url_for('admin_parent_photo', parent_id=p.id) }}" alt="Parent passport" style="width:130px;height:160px;object-fit:cover;border:1px solid #ccc;border-radius:6px">{% else %}<div style="width:130px;height:160px;border:1px dashed #bbb;border-radius:6px"></div>{% endif %}</div>
+<div><p><b>Username:</b> {{ p.username }}</p><p><b>Phone:</b> {{ p.phone or '—' }}</p><p><b>Email:</b> {{ p.email or '—' }}</p><p><b>Status:</b> {{ p.account_status or 'active' }}</p></div></div>
+<div class="card"><h3>Linked children</h3>{% for k in kids %}<p><a href="{{ url_for('student_profile', student_id=k.id) }}">{{ student_full_name(k) }}</a> · {{ k.admission_no }} · {{ k.class_name }}</p>{% else %}<p class="muted">No verified children linked.</p>{% endfor %}</div>
+<a class="btn btn-secondary" href="{{ url_for('admin_parents') }}">Back</a>{% endblock %}
