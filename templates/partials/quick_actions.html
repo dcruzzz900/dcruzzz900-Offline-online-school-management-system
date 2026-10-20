@@ -1,0 +1,32 @@
+{% set qa = quick_actions() %}
+{% if qa.actions %}
+<style>
+.qa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.7rem;margin-top:.8rem}
+.qa-tile{display:flex;flex-direction:column;gap:.25rem;padding:.8rem;border:1px solid var(--border,#d9dde3);border-radius:12px;text-decoration:none;color:inherit;background:var(--card,#fff);min-height:92px}
+.qa-tile:hover,.qa-tile:focus-visible{border-color:#1f3a5f;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.qa-icon{font-size:1.25rem}.qa-label{font-weight:600}
+.qa-badge{font-size:.78rem;color:#444}
+.qa-state{display:inline-block;font-size:.7rem;font-weight:700;border-radius:999px;padding:.05rem .5rem;width:fit-content}
+.qa-state.available{background:#e3f2fd;color:#0d47a1}.qa-state.pending{background:#fff3e0;color:#8a4b00}.qa-state.completed{background:#e8f5e9;color:#1b5e20}
+.qa-state.attention{background:#fdecea;color:#8e1b1b}.qa-state.locked{background:#eceff1;color:#37474f}.qa-state.unpublished{background:#f3e5f5;color:#4a148c}
+.qa-unread{background:#d32f2f;color:#fff;border-radius:999px;padding:0 .5rem;font-size:.75rem;width:fit-content}
+.qa-kids{display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0}
+.qa-kids a{padding:.25rem .7rem;border:1px solid #1f3a5f;border-radius:999px;text-decoration:none;font-size:.85rem}
+.qa-kids a.on{background:#1f3a5f;color:#fff}
+</style>
+<section class="card quick-actions" aria-label="Quick Actions" id="quick-actions">
+  <div class="section-title"><div><h3 style="margin:0">Quick Actions</h3>
+    <p class="muted" style="margin:.2rem 0 0">Shortcuts only — every page still checks your permissions.{% if qa.roles %} Combined from your roles: {{ qa.roles|join(', ') }}.{% endif %}</p></div></div>
+  {% if qa.audience == 'parent' and qa.children|length > 1 %}
+  <div class="qa-kids" role="group" aria-label="Select child">{% for k in qa.children %}<a href="?child={{ k.id }}" class="{{ 'on' if k.id == qa.selected else '' }}" aria-current="{{ 'true' if k.id == qa.selected else 'false' }}">{{ k.name }}</a>{% endfor %}</div>
+  {% elif qa.audience == 'parent' and qa.children %}<p class="muted">Showing actions for {{ qa.children[0].name }}.</p>{% endif %}
+  {% macro tile(a) %}
+  <a class="qa-tile" href="{{ a.url }}" title="{{ a.hint or a.label }}"><span class="qa-icon" aria-hidden="true">{{ a.icon }}</span><span class="qa-label">{{ a.label }}</span>
+    {% if a.key == 'notifications' and unread_notifications %}<span class="qa-unread">{{ unread_notifications }} Unread</span>{% elif a.badge %}<span class="qa-badge">{{ a.badge }}</span>{% endif %}
+    <span class="qa-state {{ a.state }}">{{ a.state_label }}</span></a>
+  {% endmacro %}
+  <div class="qa-grid">{% for a in qa.actions[:8] %}{{ tile(a) }}{% endfor %}</div>
+  {% if qa.actions|length > 8 %}<details style="margin-top:.7rem"><summary class="btn btn-small btn-secondary" style="display:inline-block;cursor:pointer">View All Actions ({{ qa.actions|length }})</summary>
+    <div class="qa-grid">{% for a in qa.actions[8:] %}{{ tile(a) }}{% endfor %}</div></details>{% endif %}
+</section>
+{% endif %}
