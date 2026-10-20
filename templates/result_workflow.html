@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Result approval workflow{% endblock %}
+{% block content %}
+<h1>Result approval &amp; publication</h1>
+<p class="muted">Draft &rarr; Submitted &rarr; Under review &rarr; Approved &rarr; Published. Unpublished results can be viewed or previewed by authorised staff only; printing, download and PDF are blocked until a result is published.</p>
+<form method="GET" style="margin-bottom:1rem">
+  <label style="display:inline">Term:</label>
+  <select name="term_id" onchange="this.form.submit()" style="width:auto;display:inline-block">
+    {% for t in terms %}<option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}
+  </select>
+</form>
+<div class="card" style="overflow-x:auto">
+<table>
+  <tr><th>Class</th><th>Students</th><th>Status</th><th>Actions</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.cls.name }}</td>
+    <td>{{ r.students }}</td>
+    <td><strong>{{ r.label }}</strong>{% if r.pub and r.pub.last_reason %}<br><small class="muted">{{ r.pub.last_reason }}</small>{% endif %}
+      {% if r.summary %}<br><small class="muted">Review: {{ r.summary.with_attendance }}/{{ r.summary.students }} attendance · {{ r.summary.with_teacher_comment }} teacher comments · {{ r.summary.with_principal_comment }} principal comments · {{ r.summary.with_domains }} domain ratings</small>{% endif %}</td>
+    <td>
+      {% for a in r.actions %}
+      <form method="POST" action="{{ url_for('result_workflow_action', class_id=r.cls.id, term_id=term.id, action=a) }}" style="display:inline-flex;gap:.3rem;margin:.15rem 0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if need_reason[a] %}<input type="text" name="reason" placeholder="Reason (required)" required style="width:11rem">{% endif %}
+        <button class="btn btn-small" type="submit">{{ action_labels[a] }}</button>
+      </form>
+      {% endfor %}
+      {% if not r.actions %}<span class="muted">—</span>{% endif %}
+    </td>
+    <td><a class="btn btn-small btn-secondary" href="{{ url_for('result_workflow_history', class_id=r.cls.id, term_id=term.id) }}">History</a>
+        <a class="btn btn-small btn-secondary" href="{{ url_for('class_results_list', class_id=r.cls.id, term_id=term.id) }}">Preview</a></td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">No classes available to you.</td></tr>{% endfor %}
+</table>
+</div>
+{% endblock %}

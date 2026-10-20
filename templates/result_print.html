@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ student_full_name(student) }} — {{ term.name }} Result</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/result-samples.css') }}">
+<style>body{margin:0;background:#e9ecef}.rs-toolbar{position:sticky;top:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;padding:8px;background:#222}.rs-toolbar button,.rs-toolbar a{padding:8px 16px;border-radius:6px;border:0;background:#fff;color:#111;font:600 14px Arial;text-decoration:none;cursor:pointer}.rs-font-ctl{display:flex;align-items:center;gap:0;background:#fff;border-radius:6px;overflow:hidden}.rs-font-ctl button{padding:8px 14px;border-radius:0}.rs-font-ctl button:disabled{opacity:.4;cursor:default}.rs-font-ctl span{padding:0 10px;font:600 13px Arial;color:#444;min-width:38px;text-align:center}.rs-font-ctl .rs-font-reset{font-size:12px;padding:8px 10px;border-left:1px solid #ddd}.rs-wrap{padding:12px 0}.rs-wrap .rs-sheet{box-shadow:0 2px 10px rgba(0,0,0,.25)}@media print{body{background:#fff}.rs-toolbar{display:none}.rs-wrap{padding:0}.rs-overflow-warning{display:none!important}}
+.rs-overflow-warning{display:none;sticky:0;background:#fff3cd;color:#664d03;border-bottom:1px solid #ffe69c;padding:10px 16px;font:600 13px/1.4 Arial;text-align:center}.rs-overflow-warning.is-shown{display:block}
+/* Page orientation: overrides result-sheet.css's portrait default when the school chose landscape. Declared last so it wins. */
+@page{size:A4{{ ' landscape' if rs.page_orientation == 'landscape' else '' }};margin:0}
+</style></head>
+<body class="rs-print-page">
+<div class="rs-overflow-warning no-print" id="rsOverflowWarning">This result doesn't fit legibly on one page at the school's chosen font size, so it will print onto a second page instead of being shrunk further. To get it back onto one page: shorten a comment, turn off an optional section in Result Display Settings, or reduce the font size below.</div>
+<div class="rs-toolbar no-print">
+<span class="rs-font-ctl" role="group" aria-label="Font size">
+  <button type="button" id="rsFontMinus" aria-label="Decrease font size">&minus;</button>
+  <span id="rsFontLevel">100%</span>
+  <button type="button" id="rsFontPlus" aria-label="Increase font size">+</button>
+  <button type="button" id="rsFontReset" class="rs-font-reset">Reset</button>
+</span>
+<button type="button" id="rsPrint">Print</button><a href="{{ pdf_url }}" id="rsDownload">Download PDF</a><a href="{{ back_url }}">Close</a></div>
+<div class="rs-wrap">{% include "_result_sheet.html" %}</div>
+<script>
+/* Page & print settings, from the school's Result Display Settings:
+   - RS_LANDSCAPE: the chosen page orientation for this sheet.
+   - RS_FONT_SCALE: a flat zoom factor for the school's preferred print size (small/normal/large).
+   - RS_FIT_TO_PAGE: whether an overflowing sheet is auto-shrunk onto one page, or left to flow onto more than one.
+   One page (when Fit to Page is on): if the sheet is taller than the page, scale it down so nothing is cut off or
+   pushed to a second page; otherwise (or when Fit to Page is off and it already fits) pad it to fill the page. */
+var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape')|tojson }};
+var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
+var RS_FIT_TO_PAGE = {{ (rs.fit_to_page if rs.fit_to_page is defined else true)|tojson }};
+(function(){
+// On-screen Decrease(-)/Increase(+)/Reset font control: a reading convenience for whoever is
+// viewing/printing THIS sheet right now, on top of the school's saved print-size preference
+// (RS_FONT_SCALE) rather than replacing it. Resets to 100% (i.e. the school's own setting) on
+// every page load -- it's a per-view adjustment, not something that overrides the saved
+// setting for anyone else. The chosen level is carried onto the Download PDF link so a PDF
+// started from here matches what's on screen, not a silent revert to the default.
+var STEPS=[0.8,0.88,0.94,1,1.06,1.12,1.2,1.3,1.4], live=1;
+// FIT_FLOOR: the smallest this page will ever shrink a result to. Below this, printed text on A4
+// stops being comfortably readable (this is about a 7.5pt effective size off this sheet's 10.5pt
+// base) -- so Fit to Page never shrinks past it. If the result is STILL taller than one page even
+// at this floor, we stop trying to force it onto one page at all: it's left at the floor size and
+// allowed to flow naturally onto a second page (never clipped, nothing hidden), and a warning is
+// shown here so whoever is preparing the result sees it and can shorten/adjust it before publishing.
+var FIT_FLOOR=0.72;
+function fit(){var s=document.querySelector('.rs-sheet');if(!s)return;
+var pageWmm=RS_LANDSCAPE?297:210,pageHmm=RS_LANDSCAPE?210:297;
+s.style.zoom='';s.style.height='';s.style.minHeight='';var ow=s.style.width,ob=s.style.boxSizing;s.style.boxSizing='border-box';s.style.width=pageWmm+'mm';
+var max=pageHmm*96/25.4-8;var h=s.scrollHeight;s.style.width=ow;s.style.boxSizing=ob;
+var base=(RS_FONT_SCALE||1)*live,fitOn=RS_FIT_TO_PAGE!==false,overflow=(h*base)>max;
+var warn=document.getElementById('rsOverflowWarning'),stillOverflows=false;
+if(fitOn&&overflow){
+  var z=Math.max(FIT_FLOOR,(max/h)*0.965);
+  stillOverflows=(h*z)>max+1;  // even at the legibility floor, it's still taller than one page
+  s.style.zoom=z;
+  if(!stillOverflows){s.style.minHeight=(max/z-1)+'px';}  // fits: pad to exactly one page
+  // else: leave it at the floor size and let it grow past one page naturally -- never shrink further.
+}else{s.style.zoom=base;if(!overflow||fitOn){s.style.minHeight=(max/base-1)+'px';}}
+if(warn)warn.classList.toggle('is-shown',stillOverflows);
+s.style.height='';}
+function updateControls(){
+  var lvl=document.getElementById('rsFontLevel');if(lvl)lvl.textContent=Math.round(live*100)+'%';
+  var minus=document.getElementById('rsFontMinus'),plus=document.getElementById('rsFontPlus');
+  if(minus)minus.disabled=live<=STEPS[0];
+  if(plus)plus.disabled=live>=STEPS[STEPS.length-1];
+  var dl=document.getElementById('rsDownload');
+  if(dl&&dl.getAttribute('href')){
+    var href=dl.getAttribute('href').split('&scale=')[0].split('?scale=')[0];
+    dl.setAttribute('href',href+(href.indexOf('?')===-1?'?':'&')+'scale='+live.toFixed(2));
+  }
+}
+function step(dir){var i=STEPS.indexOf(live);if(i===-1){i=STEPS.indexOf(1);}
+  i=Math.max(0,Math.min(STEPS.length-1,i+dir));live=STEPS[i];fit();updateControls();}
+// Print = Download: a phone's own print pipeline doesn't reliably reproduce this page's colors or
+// the one-page auto-shrink above (it's the live HTML, printed by whatever engine the phone/browser
+// happens to use, not the one that builds Download PDF) -- so "Print" opens that same, already-
+// correct PDF (with ?inline=1, so the browser shows it to view/print from instead of saving it to
+// Downloads the way the plain Download PDF link still does), rather than calling window.print() on
+// this page and hoping the result matches.
+function printPdf(){
+  var dl=document.getElementById('rsDownload'),href=dl&&dl.getAttribute('href');
+  if(!href)return;
+  window.location.href=href+(href.indexOf('?')===-1?'?':'&')+'inline=1';
+}
+var mEl=document.getElementById('rsFontMinus'),pEl=document.getElementById('rsFontPlus'),rEl=document.getElementById('rsFontReset'),prEl=document.getElementById('rsPrint');
+if(mEl)mEl.addEventListener('click',function(){step(-1);});
+if(pEl)pEl.addEventListener('click',function(){step(1);});
+if(rEl)rEl.addEventListener('click',function(){live=1;fit();updateControls();});
+if(prEl)prEl.addEventListener('click',printPdf);
+window.addEventListener('load',function(){fit();updateControls();});
+window.addEventListener('beforeprint',fit);window.addEventListener('resize',fit);
+{% if autoprint %}window.addEventListener('load',function(){setTimeout(printPdf,350);});{% endif %}
+})();
+</script>
+</body></html>

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Contact School{% endblock %}
+{% block content %}<h1>Contact School</h1>
+<div class="card"><h3>{{ school.name if school else '' }}</h3>
+{% if school and school.address %}<p><b>Address:</b> {{ school.address }}</p>{% endif %}
+{% if school and school.phone %}<p><b>Phone:</b> <a href="tel:{{ school.phone }}">{{ school.phone }}</a></p>{% endif %}
+{% if school and school.email %}<p><b>Email:</b> <a href="mailto:{{ school.email }}">{{ school.email }}</a></p>{% endif %}
+{% if not school or not (school.address or school.phone or school.email) %}<p class="muted">The school has not added contact details yet.</p>{% endif %}</div>
+<p><a class="btn btn-secondary" href="{{ url_for('parent_dashboard') }}">Back</a></p>{% endblock %}

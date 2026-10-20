@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Publication history{% endblock %}
+{% block content %}
+<h1>Publication history — {{ cls.name }}</h1>
+<div class="card" style="overflow-x:auto"><table>
+<tr><th>Server time (UTC)</th><th>Action</th><th>From</th><th>To</th><th>By</th><th>Role</th><th>Reason</th></tr>
+{% for r in rows %}<tr><td>{{ r.server_timestamp }}</td><td>{{ r.action|replace('_',' ') }}</td><td>{{ labels.get(r.previous_status, r.previous_status) }}</td><td>{{ labels.get(r.new_status, r.new_status) }}</td><td>{{ r.actor_name }}</td><td>{{ r.actor_role }}</td><td>{{ r.reason or '' }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">No activity yet.</td></tr>{% endfor %}
+</table></div>
+<p><a class="btn btn-secondary" href="{{ url_for('result_workflow', term_id=term_id) }}">Back</a></p>
+{% endblock %}

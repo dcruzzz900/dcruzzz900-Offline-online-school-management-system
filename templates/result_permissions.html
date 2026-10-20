@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Result workflow permissions{% endblock %}
+{% block content %}
+<h1>Result workflow permissions</h1>
+<p class="muted">Publication is never granted by a job title. Tick exactly who may submit, review, approve, publish and reopen results. Changes apply immediately and are audited.</p>
+<form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="card" style="overflow-x:auto"><table>
+<tr><th>Staff</th>{% for key, label in perms.items() %}<th>{{ label }}</th>{% endfor %}</tr>
+{% for u in staff %}<tr><td><strong>{{ u.name }}</strong><br><small>{{ u.rbac_role or u.role }}</small></td>
+{% for key in perms %}<td style="text-align:center"><input type="checkbox" name="p_{{ u.id }}_{{ key }}" {% if grants.get((u.id, key)) %}checked{% endif %}></td>{% endfor %}</tr>{% endfor %}
+</table></div>
+<button class="btn" type="submit">Save permissions</button></form>
+{% endblock %}
