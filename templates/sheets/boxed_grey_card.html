@@ -1,0 +1,34 @@
+{% from "sheets/_parts.html" import logo, passport, term_line, signatures with context %}
+<header class="rsx-grey-head{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
+  <div class="rsx-grey-logo">{{ logo() }}</div>
+  <div class="rsx-grey-title"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p>{{ rs.contact }}</p>{% endif %}<h1>{{ rs.title }}</h1></div>
+  <div class="rsx-grey-photo">{{ passport() }}</div>
+</header>
+<table class="rsx-grey-info"><tbody>
+<tr><td><b>Session:</b> {{ term.session_name }}</td><td><b>Term:</b> {{ term.name }}</td></tr>
+<tr><td><b>Name of Student:</b> {{ student_full_name(student) }}</td>{% if rs.show_admission_no %}<td><b>Admission number:</b> {{ student.admission_no }}</td>{% else %}<td></td>{% endif %}</tr>
+<tr><td><b>Class:</b> {{ class_row.name }}</td><td><b>No. of students in class:</b> {{ class_size }}</td></tr>
+{% if rs.show_overall_position %}<tr><td><b>Position in class:</b> {{ position_text }}</td><td><b>No. of days school opened:</b> {{ info.days_school_opened if info.days_school_opened is not none else '—' }}</td></tr>{% endif %}
+<tr>{% if rs.show_score %}<td><b>Overall total score:</b> {{ total }}</td>{% else %}<td></td>{% endif %}<td><b>No. of days present:</b> {{ info.days_present if info.days_present is not none else '—' }}</td></tr>
+<tr>{% if rs.show_score %}<td><b>Student's average score:</b> {{ average }}</td>{% else %}<td></td>{% endif %}<td><b>No. of days absent:</b> {{ info.days_absent if info.days_absent is not none else '—' }}</td></tr>
+<tr><td colspan="2"><b>Overall performance:</b> {{ overall_remark }}</td></tr>
+</tbody></table>
+<table class="rsx-grey-table"><thead><tr><th class="l subj">SUBJECT</th>{% if rs.show_score %}<th><i>{{ 'Test 1' if not show_ca3 else 'CA 1' }}</i></th><th><i>{{ 'Test 2' if not show_ca3 else 'CA 2' }}</i></th>{% if show_ca3 %}<th><i>CA 3</i></th>{% endif %}<th><i>Exam</i></th><th><i>Total</i></th>{% endif %}{% if rs.show_grade %}<th><i>Grade</i></th>{% endif %}{% if rs.show_subject_position %}<th><i>Subject position</i></th>{% endif %}<th><i>Class average</i></th><th><i>Highest in subject</i></th><th><i>Lowest in subject</i></th>{% if rs.show_remarks %}<th><i>Remark</i></th>{% endif %}</tr></thead>
+<tbody>{% for s in subjects %}<tr><td class="l">{{ s.name|upper }}</td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}<td>{{ s.class_avg if s.class_avg is not none else '-' }}</td><td>{{ s.highest if s.highest is not none else '-' }}</td><td>{{ s.lowest if s.lowest is not none else '-' }}</td>{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}
+<tr class="tot"><td class="l">TOTAL</td>{% if rs.show_score %}<td colspan="{{ 4 if show_ca3 else 3 }}"></td><td><b>{{ total }}</b></td>{% endif %}<td colspan="20"></td></tr></tbody></table>
+<div class="rsx-grey-lower">
+  {% if rs.show_domains and domain_groups %}<div class="rsx-grey-traits">{% for g in domain_groups %}<table class="rsx-grey-mini"><thead><tr><th class="l">{{ g.label|upper }}</th><th>RATING</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div>{% endif %}
+  {% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
+  {% set show_domain_key = rs.show_domains and domain_groups %}
+  {% if show_grading_key or show_domain_key %}<div class="rsx-grey-key">
+    {% if show_grading_key %}<table class="rsx-grey-mini rsx-grey-scale"><thead><tr><th>SCORE RANGE</th><th>GRADE</th><th>MEANING</th></tr></thead><tbody>{% for g in rs.grading_scale %}<tr><td>{{ '%g'|format(g.min_score) }} – {{ '%g'|format(g.max_score) }}</td><td>{{ g.grade }}</td><td class="l">{{ g.remark }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+    {% if show_domain_key %}<p class="rsx-key-line"><b>Domain ratings:</b> {{ domain_key }}</p>{% endif %}
+  </div>{% endif %}
+</div>
+{% if rs.show_teacher_comment or rs.show_principal_comment %}<table class="rsx-grey-reports"><tbody>
+  {% if rs.show_teacher_comment %}<tr><th>Class Teacher's Report</th><td>{{ info.teacher_comment or '' }}</td></tr>{% endif %}
+  {% if rs.show_principal_comment %}<tr><th>Principal's Report</th><td>{{ info.principal_comment or '' }}</td></tr>{% endif %}
+</tbody></table>{% endif %}
+{{ signatures() }}
+{% if rs.next_term_resumes %}<p class="rsx-grey-next"><b>Next Term Resumes:</b> {{ rs.next_term_resumes }}</p>{% endif %}
+{% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
