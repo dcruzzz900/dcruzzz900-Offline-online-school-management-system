@@ -463,7 +463,14 @@ anon = A.app.test_client()
 lg = html(anon.get("/login"))
 check("the sign-in screen is a single form (no role cards, no pop-up chooser)", lg.count("<form") <= 2 and "hub-role-card" not in lg and "hubLoginOverlay" not in lg and 'name="portal_role"' not in lg)
 check("it asks for username/email/phone and password, with the show/hide control", 'name="username"' in lg and 'type="password"' in lg and "password-toggle.js" in lg)
-check("it still links forgot-password, activation, signups and the separate student login", all(x in lg for x in ("/recover", "/activate", "/register", "/student/login")))
+# V81 folded student sign-in into this SAME unified form (no more separate /student/login page
+# to link to) -- so this now checks for forgot-password/activation/signup links only, plus the
+# new in-form "Student logging in for the first time?" section (the class-code field) instead
+# of a link elsewhere. V82 replaced the forgot-password link's target with the new email-based
+# /account-recovery flow (the old /recover username+security-question flow still exists and still
+# works, just isn't the one linked from the main sign-in screen any more).
+check("it still links forgot-password, activation and signups, and now has a student class-code section instead of a separate student login link",
+      all(x in lg for x in ("/account-recovery", "/activate", "/register", 'name="class_code"')))
 for old in ("/admin/login", "/staff/login", "/parent/login"):
     r = anon.get(old); check(f"{old} now leads to the same screen", code(r) == 302 and r.headers["Location"].endswith("/login"), r.headers.get("Location"))
 cols = {r_[1] for r_ in db().execute("PRAGMA table_info(parent_accounts)")}
