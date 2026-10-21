@@ -3962,6 +3962,29 @@ def migration_068_v73_print_scaling(conn):
 STEPS.append(("print_orientation_fit_font_scale_v73", migration_068_v73_print_scaling))
 
 
+def migration_069_v82_password_reset_tokens(conn):
+    """Email-based 'Forgot username/password' recovery (9th requirements document, Phase 5),
+    covering both staff (users) and parent accounts -- the old security-question flow only ever
+    covered staff. A reset token is single-use, short-lived, and stores only a hash of itself (never
+    the raw token), the same pattern class_login_codes/signup_codes already use for other one-time
+    codes in this app."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_type TEXT NOT NULL CHECK(account_type IN ('staff','parent')),
+            account_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            used_at TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_account ON password_reset_tokens(account_type, account_id)")
+
+
+STEPS.append(("password_reset_tokens_v82", migration_069_v82_password_reset_tokens))
+
+
 def term_sequence_next(conn, term):
     """The term that immediately follows `term`: the next term in the same session
     (by id, i.e. creation order — the same convention `_prev_term` in app.py relies

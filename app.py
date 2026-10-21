@@ -624,6 +624,24 @@ def _public_auth_school(conn=None):
             row = conn.execute("SELECT school_id FROM users WHERE username=? LIMIT 1", (username,)).fetchone()
             if row:
                 return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
+        # The unified /login form (V81) also accepts a student's username/admission/register no,
+        # or a parent's username, in this same "username" field -- so a failed sign-in attempt by
+        # a student or parent (re-rendering this same page) needs the branding lookup to recognize
+        # those identifiers too, not just staff usernames, or the page would silently revert to the
+        # generic unbranded look on a retry.
+        if username and _table_exists_safe(conn, "students"):
+            row = conn.execute(
+                "SELECT c.school_id FROM students st JOIN classes c ON c.id=st.class_id "
+                "WHERE LOWER(st.username)=LOWER(?) OR LOWER(TRIM(st.admission_no))=LOWER(?) "
+                "OR LOWER(TRIM(COALESCE(st.register_no,'')))=LOWER(?) LIMIT 1",
+                (username, username, username),
+            ).fetchone()
+            if row:
+                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
+        if username and _table_exists_safe(conn, "parent_accounts"):
+            row = conn.execute("SELECT school_id FROM parent_accounts WHERE LOWER(username)=LOWER(?) LIMIT 1", (username,)).fetchone()
+            if row:
+                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
         return None
     finally:
         if own_conn:
@@ -1376,11 +1394,19 @@ def login():
         identifier = request.form["username"].strip()
         password = request.form["password"]
         requested_school_code = request.form.get("school_code", "").strip()
+        class_code_raw = request.form.get("class_code", "")  # V81: first-time student login only
         conn = get_db()
         parent = conn.execute(
             "SELECT * FROM parent_accounts WHERE (username=? OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))",
             (identifier, identifier, identifier),
         ).fetchone() if _table_exists_safe(conn, "parent_accounts") else None
+        if not parent:
+            # V84: an unmatched identifier used to skip straight to the next lookup with no hash
+            # computed at all, while a matched-but-wrong-password identifier always computes one --
+            # a timing side-channel an attacker could use to enumerate valid logins. Student login
+            # already defends against this with the same dummy-hash trick (see _DUMMY_PASSWORD_HASH
+            # below); this brings the staff/parent branch up to the same standard.
+            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")
         if parent and check_password_hash(parent["password_hash"], password):
             school = get_school(conn, parent["school_id"])
             if not parent["is_active"] or ("account_status" in parent.keys() and parent["account_status"] != "active"):
@@ -1417,6 +1443,8 @@ def login():
             "OR (phone IS NOT NULL AND phone=?)",
             (identifier, identifier, identifier),
         ).fetchall()
+        if not cands:
+            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")  # V84: same timing fix as above
         # An exact-case username match wins; otherwise the first candidate whose password verifies.
         cands = sorted(cands, key=lambda u: 0 if u["username"] == identifier else 1)
         user = next((u for u in cands if u["password_hash"] and check_password_hash(u["password_hash"], password)), cands[0] if cands else None)
@@ -1461,6 +1489,18 @@ def login():
             if user["role"] == "teacher" and "first_login_required" in user.keys() and user["first_login_required"]:
                 return redirect(url_for("staff_onboarding"))
             return redirect(url_for("dashboard"))
+        # V81: not a parent or staff account match -- try a student account, then a platform
+        # admin account, on this SAME connection, before giving the same generic failure. One
+        # unified form for every role (the ninth spec's Phase 4), instead of the separate
+        # /student/login and /platform/login pages this project used to have.
+        outcome = _try_student_login(conn, identifier, password, class_code_raw, requested_school_code)
+        if outcome is not None:
+            conn.close()
+            return outcome
+        outcome = _try_platform_login(conn, identifier, password)
+        if outcome is not None:
+            conn.close()
+            return outcome
         conn.close()
         flash("Invalid username/email/phone or password.", "error")
     return render_template("login.html")
@@ -1706,6 +1746,167 @@ def recover_reset():
             flash("Password reset. You can now log in with your new password.", "success")
             return redirect(url_for("login"))
     return render_template("recover_reset.html")
+
+
+# ---------- email-based account recovery (9th requirements document, Phase 5) ----------
+# Covers both staff (users) and parent accounts via a single, email-address-driven flow -- the
+# older /recover flow above only ever covered staff (it needs a username plus a security question
+# that only staff accounts have), and is left in place unchanged as a fallback for a staff member
+# who has no email on file. A reset link is single-use and expires in PASSWORD_RESET_TOKEN_MINUTES.
+# The same generic confirmation is shown whether or not the email matched anything, so this can't be
+# used to probe which email addresses have accounts (the same anti-enumeration principle the student
+# login already follows with its constant-time dummy password check).
+
+PASSWORD_RESET_TOKEN_MINUTES = 30
+ACCOUNT_RECOVERY_GENERIC_MESSAGE = (
+    "If an account is associated with that email address, we've sent instructions to it. "
+    "The link will work for the next 30 minutes."
+)
+
+
+def _hash_reset_token(raw_token):
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _issue_reset_token(conn, account_type, account_id):
+    """Creates a new single-use reset token for the given account, invalidating any earlier
+    unused tokens for that same account first (so only the most recently requested link works).
+    Returns the raw token -- only its hash is ever stored."""
+    now = datetime.datetime.utcnow()
+    conn.execute(
+        "UPDATE password_reset_tokens SET used_at=? WHERE account_type=? AND account_id=? AND used_at IS NULL",
+        (now.isoformat(timespec="seconds"), account_type, account_id),
+    )
+    raw_token = secrets.token_urlsafe(32)
+    expires_at = (now + datetime.timedelta(minutes=PASSWORD_RESET_TOKEN_MINUTES)).isoformat(timespec="seconds")
+    conn.execute(
+        "INSERT INTO password_reset_tokens (account_type, account_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+        (account_type, account_id, _hash_reset_token(raw_token), expires_at),
+    )
+    return raw_token
+
+
+def _lookup_reset_token(conn, raw_token):
+    """Returns the matching, still-valid (unused, unexpired) token row, or None."""
+    if not raw_token:
+        return None
+    now_iso = datetime.datetime.utcnow().isoformat(timespec="seconds")
+    return conn.execute(
+        "SELECT * FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?",
+        (_hash_reset_token(raw_token), now_iso),
+    ).fetchone()
+
+
+@app.route("/account-recovery", methods=["GET", "POST"])
+@rate_limit(max_attempts=5, window_seconds=600)
+def account_recovery():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        if not email:
+            flash("Please enter your email address.", "error")
+            return redirect(url_for("account_recovery"))
+
+        conn = get_db()
+        staff_matches = conn.execute(
+            "SELECT * FROM users WHERE email IS NOT NULL AND email<>'' AND LOWER(email)=?", (email,)
+        ).fetchall()
+        parent_matches = (
+            conn.execute(
+                "SELECT * FROM parent_accounts WHERE email IS NOT NULL AND email<>'' AND LOWER(email)=? AND is_active=1",
+                (email,),
+            ).fetchall()
+            if _table_exists_safe(conn, "parent_accounts")
+            else []
+        )
+
+        sent_any = False
+        for row in staff_matches:
+            school = get_school(conn, row["school_id"])
+            if not school:
+                continue
+            raw_token = _issue_reset_token(conn, "staff", row["id"])
+            conn.commit()
+            reset_url = url_for("account_recovery_reset", token=raw_token, _external=True)
+            ok, _msg = send_email(
+                school, row["email"],
+                f"Reset your {school['name'] or 'My School Hub'} login",
+                f"Hello {row['name']},\n\n"
+                f"Your username is: {row['username']}\n\n"
+                f"To set a new password, open this link within {PASSWORD_RESET_TOKEN_MINUTES} minutes "
+                f"(it can only be used once):\n{reset_url}\n\n"
+                "If you didn't request this, you can safely ignore this email -- your password will "
+                "not change unless you open the link above and choose a new one.",
+            )
+            sent_any = sent_any or ok
+        for row in parent_matches:
+            school = get_school(conn, row["school_id"])
+            if not school:
+                continue
+            raw_token = _issue_reset_token(conn, "parent", row["id"])
+            conn.commit()
+            reset_url = url_for("account_recovery_reset", token=raw_token, _external=True)
+            ok, _msg = send_email(
+                school, row["email"],
+                f"Reset your {school['name'] or 'My School Hub'} parent login",
+                f"Hello {row['name']},\n\n"
+                f"Your username for your {school['name'] or 'school'} parent account is: {row['username']}\n\n"
+                f"To set a new password, open this link within {PASSWORD_RESET_TOKEN_MINUTES} minutes "
+                f"(it can only be used once):\n{reset_url}\n\n"
+                "If you didn't request this, you can safely ignore this email -- your password will "
+                "not change unless you open the link above and choose a new one.\n\n"
+                "(If you have parent accounts at more than one school using this same email address, "
+                "you'll receive a separate message like this one for each school.)",
+            )
+            sent_any = sent_any or ok
+        if (staff_matches or parent_matches) and not sent_any:
+            # Matched an account, but every match's school has no email sending set up yet.
+            # Still show the generic message to the visitor (never reveal which emails match),
+            # but leave a trail an admin can find.
+            try:
+                security_event(conn, "ACCOUNT_RECOVERY_EMAIL_UNDELIVERABLE", "blocked",
+                                f"matched_accounts={len(staff_matches) + len(parent_matches)} but no school had email sending configured")
+                conn.commit()
+            except Exception:
+                pass
+        conn.close()
+        flash(ACCOUNT_RECOVERY_GENERIC_MESSAGE, "success")
+        return redirect(url_for("login"))
+    return render_template("account_recovery.html")
+
+
+@app.route("/account-recovery/reset/<token>", methods=["GET", "POST"])
+@rate_limit(max_attempts=5, window_seconds=600)
+def account_recovery_reset(token):
+    conn = get_db()
+    token_row = _lookup_reset_token(conn, token)
+    if not token_row:
+        conn.close()
+        flash("This recovery link is invalid or has expired. Please request a new one.", "error")
+        return redirect(url_for("account_recovery"))
+
+    if request.method == "POST":
+        new = request.form.get("new_password", "")
+        confirm = request.form.get("confirm_password", "")
+        if len(new) < 6:
+            conn.close()
+            flash("New password must be at least 6 characters.", "error")
+            return render_template("account_recovery_reset.html", token=token)
+        if new != confirm:
+            conn.close()
+            flash("New password and confirmation don't match.", "error")
+            return render_template("account_recovery_reset.html", token=token)
+
+        table = "users" if token_row["account_type"] == "staff" else "parent_accounts"
+        conn.execute(f"UPDATE {table} SET password_hash=? WHERE id=?", (generate_password_hash(new), token_row["account_id"]))
+        conn.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?",
+                     (datetime.datetime.utcnow().isoformat(timespec="seconds"), token_row["id"]))
+        conn.commit()
+        conn.close()
+        flash("Password reset. You can now log in with your new password.", "success")
+        return redirect(url_for("login"))
+
+    conn.close()
+    return render_template("account_recovery_reset.html", token=token)
 
 
 # ---------- dashboard ----------
@@ -7162,15 +7363,37 @@ def student_login_required(f):
 @app.route("/student/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def student_login():
+    """V81: there is no longer a separate student sign-in PAGE -- GET here goes straight to
+    the one unified /login form, which has its own "Student logging in for the first time?"
+    section for the class code (the ninth spec's Phase 4: "one unified login form for all
+    user roles", no separate page per role). POST still works exactly as before (for any
+    old bookmark, saved shortcut, or cached page still pointing here with the original
+    identifier/class_code field names), by calling the very same _try_student_login the
+    unified form itself now uses -- it's the same account check either way, just one fewer
+    page for a person to land on by mistake. GET renders the exact same unified template
+    (not a redirect), so a CSRF token is present here too, for the same reason: there's
+    genuinely only one login page's worth of HTML in the whole app now."""
+    if request.method == "GET":
+        return render_template("login.html")
     if request.method == "POST":
+        conn = get_db()
         try:
-            return _student_login_post()
+            identifier = (request.form.get("identifier") or request.form.get("username") or "").strip()
+            password = request.form.get("password", "")
+            class_code_raw = request.form.get("class_code", "")
+            hint = request.form.get("school_code", "")
+            outcome = _try_student_login(conn, identifier, password, class_code_raw, hint)
         except Exception:
             # Full technical detail goes to the server log; the student sees a clear, safe message.
             app.logger.exception("Student login failed unexpectedly")
             flash("We could not complete your sign-in right now. Please try again shortly or contact your school.", "error")
-            return render_template("student_login.html"), 500
-    return render_template("student_login.html")
+            return redirect(url_for("login"))
+        finally:
+            conn.close()
+        if outcome is not None:
+            return outcome
+        flash(GENERIC_STUDENT_LOGIN_ERROR, "error")
+        return render_template("login.html")
 
 
 STUDENT_MAX_FAILS = 8
@@ -7198,113 +7421,144 @@ def find_active_class_code(conn, raw_code):
     return row
 
 
-def _student_login_post():
-    identifier = (request.form.get("identifier") or request.form.get("username") or "").strip()[:60]
-    password = request.form.get("password", "")
-    class_code_raw = request.form.get("class_code", "")
-    hint = request.form.get("school_code", "").strip().lower()
+def _try_student_login(conn, identifier, password, class_code_raw, hint):
+    """V81: the student half of the unified /login form (previously its own dedicated page,
+    /student/login) -- returns a Flask response (and completes the session login) when this
+    identifier+password match exactly one student account, or None to let the caller try
+    other account types, since a wrong password here doesn't necessarily mean this wasn't a
+    staff/parent/platform-admin login attempt. Preserves every security property the old
+    dedicated page had, unchanged: constant-time handling for an identifier that matches no
+    student at all, per-student lockout after repeated failures, the "multiple schools share
+    this number" disambiguation, and the class-login-code requirement on a student's very
+    first login. conn is the SAME connection login() already opened for the parent/staff
+    checks -- this function reads/writes it but never closes it; the caller does."""
+    identifier = (identifier or "").strip()[:60]
+    hint = (hint or "").strip().lower()
+    if not identifier or not password:
+        return None
     now = datetime.datetime.utcnow()
     now_iso = now.isoformat(timespec="seconds")
 
-    def fail(msg=GENERIC_STUDENT_LOGIN_ERROR):
+    def blocked(msg=GENERIC_STUDENT_LOGIN_ERROR):
         flash(msg, "error")
-        return render_template("student_login.html")
+        return render_template("login.html")
 
-    conn = get_db()
-    try:
+    ident = identifier.lower()
+    candidates = conn.execute(
+        "SELECT st.*, c.school_id AS cls_school, c.id AS cls_id FROM students st JOIN classes c ON c.id=st.class_id "
+        "WHERE st.is_active=1 AND (LOWER(st.username)=? OR LOWER(TRIM(st.admission_no))=? "
+        "OR LOWER(TRIM(COALESCE(st.register_no,'')))=?)", (ident, ident, ident)).fetchall()
+    if not candidates:
+        # Not a student account at all -- let the caller try other account types. A dummy-hash
+        # check keeps this branch's timing close to a real check, same as the old page did for
+        # an unknown identifier, so a login attempt can't be timed to learn whether a given
+        # number belongs to a student.
+        check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")
+        return None
+    code_row = find_active_class_code(conn, class_code_raw) if normalize_class_code(class_code_raw) else None
+    if normalize_class_code(class_code_raw) and not code_row:
+        # A wrong/expired/revoked code must not leak whether the student exists: same generic answer.
         candidates = []
-        if identifier and password:
-            ident = identifier.lower()
-            candidates = conn.execute(
-                "SELECT st.*, c.school_id AS cls_school, c.id AS cls_id FROM students st JOIN classes c ON c.id=st.class_id "
-                "WHERE st.is_active=1 AND (LOWER(st.username)=? OR LOWER(TRIM(st.admission_no))=? "
-                "OR LOWER(TRIM(COALESCE(st.register_no,'')))=?)", (ident, ident, ident)).fetchall()
-        code_row = find_active_class_code(conn, class_code_raw) if normalize_class_code(class_code_raw) else None
-        if normalize_class_code(class_code_raw) and not code_row:
-            # A wrong/expired/revoked code must not leak whether the student exists: same generic answer.
-            candidates = []
-        # The tenant always comes from the matched student's own class/school, never from the browser.
-        # A school hint or a class code can only NARROW the candidates; it never grants access.
-        schools = {}
-        scoped = []
-        for st in candidates:
-            sc = schools.get(st["cls_school"]) or get_school(conn, st["cls_school"])
-            schools[st["cls_school"]] = sc
-            if not sc:
-                continue
-            if hint and hint not in {str(sc["school_code"] or "").lower(), str(sc["tenant_id"] or "").lower(),
-                                     str(sc["school_id_public"] or "").lower(), str(sc["id"])}:
-                continue
-            if code_row and (code_row["class_id"] != st["cls_id"] or code_row["school_id"] != sc["id"]):
-                continue
-            scoped.append(st)
-        matches = []
-        locked_seen = False
+    # The tenant always comes from the matched student's own class/school, never from the browser.
+    # A school hint or a class code can only NARROW the candidates; it never grants access.
+    schools = {}
+    scoped = []
+    for st in candidates:
+        sc = schools.get(st["cls_school"]) or get_school(conn, st["cls_school"])
+        schools[st["cls_school"]] = sc
+        if not sc:
+            continue
+        if hint and hint not in {str(sc["school_code"] or "").lower(), str(sc["tenant_id"] or "").lower(),
+                                 str(sc["school_id_public"] or "").lower(), str(sc["id"])}:
+            continue
+        if code_row and (code_row["class_id"] != st["cls_id"] or code_row["school_id"] != sc["id"]):
+            continue
+        scoped.append(st)
+    matches = []
+    locked_seen = False
+    for st in scoped:
+        locked = bool(st["locked_until"] and st["locked_until"] > now_iso)
+        locked_seen = locked_seen or locked
+        has_pw = bool(st["password_hash"])
+        ok = check_password_hash(st["password_hash"] if has_pw else _DUMMY_PASSWORD_HASH, password)
+        if ok and has_pw and not locked:
+            matches.append(st)
+    if not scoped:
+        check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")   # constant-ish timing for unknown identifiers
+    if len(matches) > 1:
+        # Several schools have a student with this number AND this exact password. Only reachable with a correct
+        # password, so it leaks nothing; we refuse rather than guess whose account to open.
+        return blocked("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
+    # Count failures against the accounts this identifier points to (only when the password was wrong),
+    # then let the caller try other account types rather than assuming this login attempt was
+    # necessarily a student's -- a real student number exists, but it might still be a coincidental
+    # match while the person is actually signing in as staff/parent/platform-admin.
+    if len(matches) != 1:
         for st in scoped:
-            locked = bool(st["locked_until"] and st["locked_until"] > now_iso)
-            locked_seen = locked_seen or locked
-            has_pw = bool(st["password_hash"])
-            ok = check_password_hash(st["password_hash"] if has_pw else _DUMMY_PASSWORD_HASH, password)
-            if ok and has_pw and not locked:
-                matches.append(st)
-        if not scoped:
-            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")   # constant-ish timing for unknown identifiers
-        if len(matches) > 1:
-            # Several schools have a student with this number AND this exact password. Only reachable with a correct
-            # password, so it leaks nothing; we refuse rather than guess whose account to open.
-            return fail("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
-        # Count failures against the accounts this identifier points to (only when the password was wrong).
-        if len(matches) != 1:
-            for st in scoped:
-                if st in matches:
-                    continue
-                fails = (st["failed_logins"] or 0) + 1
-                lock = (now + datetime.timedelta(minutes=STUDENT_LOCK_MINUTES)).isoformat(timespec="seconds") if fails >= STUDENT_MAX_FAILS else st["locked_until"]
-                conn.execute("UPDATE students SET failed_logins=?, locked_until=? WHERE id=?", (0 if fails >= STUDENT_MAX_FAILS else fails, lock, st["id"]))
-            if scoped:
-                conn.commit()
-            try:
-                security_event(conn, "STUDENT_LOGIN_FAILED", "failed", f"identifier_len={len(identifier)} candidates={len(scoped)} locked={locked_seen}", "student")
-                conn.commit()
-            except Exception:
-                pass
-            return fail()
-        student = matches[0]
-        school = schools[student["cls_school"]]
-        # ---- first login needs the class code of the student's OWN class ----
-        first_time = not student["first_login_completed_at"]
-        # The class code only links/enrols a student who has no password yet; a student with valid credentials signs in without it.
-        if first_time and code_row and code_row["class_id"] != student["cls_id"]:
-            return fail()
-        # ---- school state (only reported after the credentials proved who this is) ----
-        if school["activation_status"] != "active":
-            return fail("This school hasn't been activated yet.")
-        if school["is_archived"]:
-            return fail("This school's account has been archived. Contact the platform administrator.")
-        if school["is_suspended"]:
-            return fail("This school's account has been suspended. Contact the platform administrator.")
-        if not subscription_login_allowed(school):
-            return fail("This school's subscription or trial has expired. Contact the platform administrator.")
-        if g.portal_school and school["id"] != g.portal_school["id"]:
-            return fail(GENERIC_STUDENT_LOGIN_ERROR)
-        if not school["tenant_id"]:
-            app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
-            return fail("This school's account setup is incomplete. Please contact the platform administrator.")
-        conn.execute("UPDATE students SET failed_logins=0, locked_until=NULL, last_login_at=?, "
-                     "first_login_completed_at=COALESCE(first_login_completed_at, ?) WHERE id=?", (now_iso, now_iso, student["id"]))
-        if first_time and code_row and code_row["class_id"] == student["cls_id"]:
-            conn.execute("UPDATE class_login_codes SET use_count=use_count+1 WHERE id=?", (code_row["id"],))
-        conn.commit()
-        session.clear()
-        session["student_id"] = student["id"]
-        session["role"] = "student"
-        session["school_id"] = school["id"]
-        session["tenant_id"] = school["tenant_id"]
-        session["school_code"] = school["school_code"]
-        session["login_time"] = now_iso
-        return redirect(url_for("student_dashboard"))
-    finally:
-        conn.close()
+            if st in matches:
+                continue
+            fails = (st["failed_logins"] or 0) + 1
+            lock = (now + datetime.timedelta(minutes=STUDENT_LOCK_MINUTES)).isoformat(timespec="seconds") if fails >= STUDENT_MAX_FAILS else st["locked_until"]
+            conn.execute("UPDATE students SET failed_logins=?, locked_until=? WHERE id=?", (0 if fails >= STUDENT_MAX_FAILS else fails, lock, st["id"]))
+        if scoped:
+            conn.commit()
+        try:
+            security_event(conn, "STUDENT_LOGIN_FAILED", "failed", f"identifier_len={len(identifier)} candidates={len(scoped)} locked={locked_seen}", "student")
+            conn.commit()
+        except Exception:
+            pass
+        return None
+    student = matches[0]
+    school = schools[student["cls_school"]]
+    # ---- first login needs the class code of the student's OWN class ----
+    first_time = not student["first_login_completed_at"]
+    # The class code only links/enrols a student who has no password yet; a student with valid credentials signs in without it.
+    if first_time and code_row and code_row["class_id"] != student["cls_id"]:
+        return blocked()
+    # ---- school state (only reported after the credentials proved who this is) ----
+    if school["activation_status"] != "active":
+        return blocked("This school hasn't been activated yet.")
+    if school["is_archived"]:
+        return blocked("This school's account has been archived. Contact the platform administrator.")
+    if school["is_suspended"]:
+        return blocked("This school's account has been suspended. Contact the platform administrator.")
+    if not subscription_login_allowed(school):
+        return blocked("This school's subscription or trial has expired. Contact the platform administrator.")
+    if g.portal_school and school["id"] != g.portal_school["id"]:
+        return blocked(GENERIC_STUDENT_LOGIN_ERROR)
+    if not school["tenant_id"]:
+        app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
+        return blocked("This school's account setup is incomplete. Please contact the platform administrator.")
+    conn.execute("UPDATE students SET failed_logins=0, locked_until=NULL, last_login_at=?, "
+                 "first_login_completed_at=COALESCE(first_login_completed_at, ?) WHERE id=?", (now_iso, now_iso, student["id"]))
+    if first_time and code_row and code_row["class_id"] == student["cls_id"]:
+        conn.execute("UPDATE class_login_codes SET use_count=use_count+1 WHERE id=?", (code_row["id"],))
+    conn.commit()
+    session.clear()
+    session["student_id"] = student["id"]
+    session["role"] = "student"
+    session["school_id"] = school["id"]
+    session["tenant_id"] = school["tenant_id"]
+    session["school_code"] = school["school_code"]
+    session["login_time"] = now_iso
+    return redirect(url_for("student_dashboard"))
+
+
+def _try_platform_login(conn, identifier, password):
+    """V81: the Platform/Super Admin half of the unified /login form (previously its own
+    page, /platform/login). Platform admins have no school/tenant context at all -- none of
+    the school-state checks the other account types go through apply here. This portal was
+    deliberately never linked from the public login screen, and stays that way: this check
+    just runs silently against whatever was typed, with no visible UI difference."""
+    admin = conn.execute("SELECT * FROM platform_admins WHERE username=?", (identifier,)).fetchone()
+    if not admin or not admin["password_hash"] or not check_password_hash(admin["password_hash"], password):
+        return None
+    session.clear()
+    session["platform_admin_id"] = admin["id"]
+    session["platform_admin_name"] = admin["name"]
+    log_audit(conn, "platform_admin", admin["name"], "login")
+    conn.commit()
+    return redirect(url_for("platform_dashboard"))
 
 
 @app.route("/student/logout")
@@ -7538,21 +7792,27 @@ def platform_admin_required(f):
 @app.route("/platform/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def platform_login():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
-        conn = get_db()
-        admin = conn.execute("SELECT * FROM platform_admins WHERE username=?", (username,)).fetchone()
-        if admin and check_password_hash(admin["password_hash"], password):
-            session.clear()
-            session["platform_admin_id"] = admin["id"]
-            session["platform_admin_name"] = admin["name"]
-            log_audit(conn, "platform_admin", admin["name"], "login")
-            conn.close()
-            return redirect(url_for("platform_dashboard"))
+    """V81: there is no longer a separate platform-admin sign-in PAGE -- GET here goes to the
+    one unified /login form (see student_login()'s docstring for the same reasoning), which
+    quietly accepts a platform admin's username/password too. Deliberately still not linked
+    from anywhere public -- the old platform_login.html page itself said "This portal is not
+    listed on the public school login screen," and that stays true. POST still works exactly
+    as before, for any old bookmark, by calling the very same _try_platform_login the unified
+    form itself now uses. GET renders the same unified template directly (not a redirect), so
+    a CSRF token is present here too."""
+    if request.method == "GET":
+        return render_template("login.html")
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    conn = get_db()
+    try:
+        outcome = _try_platform_login(conn, username, password)
+    finally:
         conn.close()
-        flash("Invalid username or password.", "error")
-    return render_template("platform_login.html")
+    if outcome is not None:
+        return outcome
+    flash("Invalid username or password.", "error")
+    return render_template("login.html")
 
 
 @app.route("/platform/logout")
