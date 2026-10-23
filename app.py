@@ -54,6 +54,37 @@ def _html_sheets(data_list, term):
     return docs
 
 
+def _cumulative_html_sheet(data, academic_session, selected_term, rs):
+    """V85: the exact HTML the cumulative print view renders -- same template, same CSS, same
+    Fit-to-Page/orientation JS as the regular result's print view, so Preview = Print = PDF holds
+    for cumulative results too."""
+    return render_template(
+        "cumulative_result_print.html", academic_session=academic_session, selected_term=selected_term,
+        student_full_name=student_full_name, rs=rs, pdf_url="", back_url="", autoprint=False, **data
+    )
+
+
+def build_cumulative_result_pdf_html(data, academic_session, selected_term, rs):
+    """Preview = Print = PDF for the cumulative result (V85): the PDF is the cumulative print page,
+    printed by Chromium -- same mechanism as build_result_pdf for the regular result. Falls back to
+    the older reportlab-style builder (imported as build_cumulative_result_pdf from pdf_utils) only
+    if no Chromium is installed on the host."""
+    _live_scale_override({"rs": rs})
+    pdfs = html_pdf.render_documents(app, _session_for_pdf(), [_cumulative_html_sheet(data, academic_session, selected_term, rs)])
+    if pdfs:
+        return io.BytesIO(pdfs[0])
+    _c = get_db()
+    try:
+        school = get_school(_c, current_school_id())
+    finally:
+        _c.close()
+    return build_cumulative_result_pdf(
+        data, academic_session, school_name=school["name"] if school else None,
+        student_full_name=student_full_name, font_choice=school["pdf_font"] if school else "Helvetica",
+        accent_color=rs.get("accent") or "#1f3a5f",
+    )
+
+
 def _session_for_pdf():
     return {k: v for k, v in session.items() if not str(k).startswith("_")}
 
@@ -5875,11 +5906,16 @@ def cumulative_broadsheet(class_id):
     all_sessions = conn.execute(
         "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (current_school_id(),)
     ).fetchall()
+    # V85: at least the school's colors/logo now theme the cumulative broadsheet too. Its PDF stays
+    # on the existing, simpler builder for now (already correctly landscape-fixed and width-based,
+    # unlike the single-student sheet's FIT_FLOOR/orientation mechanism) -- a deliberate, smaller
+    # scope than the single-student cumulative result got.
+    rs = result_sheet_settings(conn, current_school_id())
     conn.close()
     return render_template(
         "cumulative_broadsheet.html", class_row=class_row, academic_session=session_row, subjects=subjects,
         terms=terms, rows=rows, all_sessions=all_sessions, student_full_name=student_full_name,
-        selected_term=selected_term, session_terms=session_terms,
+        selected_term=selected_term, session_terms=session_terms, rs=rs,
     )
 
 
@@ -6017,7 +6053,7 @@ def result_sheet_settings(conn, school_id):
         "text_align": cfg["text_align"] if cfg["text_align"] in ("left", "center", "right") else "",
         "secondary": cfg["secondary_color"] or "#c9a227", "header_layout": cfg["header_layout"], "signature_layout": cfg["signature_layout"],
         "pdf_font": g("pdf_font", "Helvetica"),
-        "page_orientation": cfg["page_orientation"] if cfg["page_orientation"] in ("portrait", "landscape") else "portrait",
+        "page_orientation": cfg["page_orientation"] if cfg["page_orientation"] in ("portrait", "landscape", "auto") else "portrait",
         "font_scale": cfg["font_scale"] if cfg["font_scale"] in FONT_SCALE_FACTORS else "normal",
     })
     rs["font_scale_factor"] = FONT_SCALE_FACTORS.get(rs["font_scale"], 1.0)
@@ -6349,14 +6385,56 @@ def cumulative_result(student_id):
     selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
     session_terms = terms_for_session(conn, session_row["id"])
     data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
+    # V85: full Result Display Settings (colors, logo, watermark, footer) now apply to the
+    # cumulative page too, the same way they already did for the regular (per-term) result.
+    rs = result_sheet_settings(conn, current_school_id())
     all_sessions = conn.execute(
         "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (current_school_id(),)
     ).fetchall()
     conn.close()
     return render_template(
         "cumulative_result.html", academic_session=session_row, all_sessions=all_sessions,
-        student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, **data
+        student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
+        print_url=url_for("cumulative_result_print", student_id=student_id, session_id=session_row["id"],
+                          term_id=selected_term["id"] if selected_term else None),
+        **data
     )
+
+
+@app.route("/cumulative/student/<int:student_id>/print")
+@login_required()
+def cumulative_result_print(student_id):
+    conn = get_db()
+    try:
+        student_row = student_in_school(conn, student_id)
+        if not student_row:
+            flash("Student not found.", "error")
+            return redirect(url_for("dashboard"))
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("dashboard"))
+        historical_class_id = student_class_for_session(conn, student_id, session_row["id"])
+        denied = require_class_result_access(conn, historical_class_id)
+        if denied:
+            return denied
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
+        rs = result_sheet_settings(conn, current_school_id())
+        return render_template(
+            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
+            student_full_name=student_full_name,
+            pdf_url=url_for("cumulative_result_pdf", student_id=student_id, session_id=session_row["id"],
+                            term_id=selected_term["id"] if selected_term else None),
+            back_url=url_for("cumulative_result", student_id=student_id, session_id=session_row["id"],
+                             term_id=selected_term["id"] if selected_term else None),
+            autoprint=request.args.get("auto") == "1", **data
+        )
+    finally:
+        conn.close()
 
 
 @app.route("/cumulative/student/<int:student_id>/pdf")
@@ -6384,22 +6462,121 @@ def cumulative_result_pdf(student_id):
         return denied
     selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
     data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
-    school = get_school(conn, current_school_id())
-    logo_path = None
-    if school and school["logo_filename"]:
-        p = os.path.join(INSTANCE_DIR, school["logo_filename"])
-        if os.path.exists(p):
-            logo_path = p
+    rs = result_sheet_settings(conn, current_school_id())
     conn.close()
-    buf = build_cumulative_result_pdf(
-        data, session_row, school_name=school["name"] if school else None,
-        logo_path=logo_path, student_full_name=student_full_name,
-        font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
-        name_align=school["name_align"] if school else None,
-    )
+    buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
     fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
-    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
+    return pdf_response(buf, fname)
+
+
+# ------------------------------------------------------------------ V85: parent/student-facing cumulative results
+def _cumulative_term_gate(conn, student_id, session_row, selected_term):
+    """V85: the publication check the staff cumulative route deliberately does NOT have (staff may
+    look at unpublished data internally) but a self-service student/parent view MUST have, scoped to
+    the specific cutoff term being viewed -- mirrors the same gate student_result()/parent_result()
+    already use for the regular (per-term) result, so an unpublished cumulative figure can never leak
+    to a student or parent just because an earlier term in the same session was published."""
+    if not selected_term:
+        return False
+    cls_for_term = student_class_for_term(conn, student_id, selected_term["id"])
+    return bool(result_class_published(conn, current_school_id(), cls_for_term, selected_term["id"]))
+
+
+@app.route("/parent/children/<int:student_id>/cumulative")
+@parent_login_required
+def parent_cumulative_result(student_id):
+    conn = get_db()
+    try:
+        child = parent_child(conn, session["parent_id"], student_id)
+        if not child:
+            flash("That child isn't linked to your account.", "error")
+            return redirect(url_for("parent_children_page"))
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        session_terms = terms_for_session(conn, session_row["id"])
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        all_sessions = conn.execute(
+            "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (session["school_id"],)
+        ).fetchall()
+        return render_template(
+            "parent_cumulative_result.html", academic_session=session_row, all_sessions=all_sessions, child=child,
+            student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
+            **data
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/parent/children/<int:student_id>/cumulative/print")
+@parent_login_required
+def parent_cumulative_result_print(student_id):
+    conn = get_db()
+    try:
+        child = parent_child(conn, session["parent_id"], student_id)
+        if not child:
+            flash("That child isn't linked to your account.", "error")
+            return redirect(url_for("parent_children_page"))
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        return render_template(
+            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
+            student_full_name=student_full_name,
+            pdf_url=url_for("parent_cumulative_result_pdf", student_id=student_id, session_id=session_row["id"], term_id=selected_term["id"]),
+            back_url=url_for("parent_cumulative_result", student_id=student_id, session_id=session_row["id"], term_id=selected_term["id"]),
+            autoprint=request.args.get("auto") == "1", **data
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/parent/children/<int:student_id>/cumulative/pdf")
+@parent_login_required
+def parent_cumulative_result_pdf(student_id):
+    conn = get_db()
+    try:
+        child = parent_child(conn, session["parent_id"], student_id)
+        if not child:
+            flash("That child isn't linked to your account.", "error")
+            return redirect(url_for("parent_children_page"))
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("parent_children_page"))
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
+        fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
+        return pdf_response(buf, fname)
+    finally:
+        conn.close()
 
 
 @app.route("/result/<int:student_id>/email", methods=["POST"])
@@ -7769,6 +7946,95 @@ def student_result_pdf(term_id):
                             font_choice=school["pdf_font"] if school else "Helvetica")
     fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
     return pdf_response(buf, fname)
+
+
+# ------------------------------------------------------------------ V85: student-facing cumulative results
+@app.route("/student/cumulative")
+@student_login_required
+def student_cumulative_result():
+    conn = get_db()
+    try:
+        student_id = session["student_id"]
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        session_terms = terms_for_session(conn, session_row["id"])
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        all_sessions = conn.execute(
+            "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (session["school_id"],)
+        ).fetchall()
+        return render_template(
+            "student_cumulative_result.html", academic_session=session_row, all_sessions=all_sessions,
+            student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
+            **data
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/student/cumulative/print")
+@student_login_required
+def student_cumulative_result_print():
+    conn = get_db()
+    try:
+        student_id = session["student_id"]
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        return render_template(
+            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
+            student_full_name=student_full_name,
+            pdf_url=url_for("student_cumulative_result_pdf", session_id=session_row["id"], term_id=selected_term["id"]),
+            back_url=url_for("student_cumulative_result", session_id=session_row["id"], term_id=selected_term["id"]),
+            autoprint=request.args.get("auto") == "1", **data
+        )
+    finally:
+        conn.close()
+
+
+@app.route("/student/cumulative/pdf")
+@student_login_required
+def student_cumulative_result_pdf():
+    conn = get_db()
+    try:
+        student_id = session["student_id"]
+        denied = require_cumulative_enabled(conn)
+        if denied:
+            return denied
+        session_row = resolve_session(conn, request.args.get("session_id", type=int))
+        if not session_row:
+            flash("No academic session set up yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
+        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
+            flash("That cumulative result isn't published yet.", "error")
+            return redirect(url_for("student_dashboard"))
+        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
+        rs = result_sheet_settings(conn, current_school_id())
+        buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
+        fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
+        return pdf_response(buf, fname)
+    finally:
+        conn.close()
 
 
 # ---------- platform (super admin) tier ----------

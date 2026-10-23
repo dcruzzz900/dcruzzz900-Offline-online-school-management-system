@@ -3573,7 +3573,7 @@ RESULT_BOOL_SETTINGS = [
     ("fit_to_page", "Automatically Shrink to Fit One Page", 1),
 ]
 FONT_SCALE_FACTORS = {"small": 0.9, "normal": 1.0, "large": 1.12}
-PAGE_ORIENTATIONS = [("portrait", "Portrait"), ("landscape", "Landscape")]
+PAGE_ORIENTATIONS = [("portrait", "Portrait"), ("landscape", "Landscape"), ("auto", "Automatic (picks whichever fits best, per result)")]
 FONT_SCALE_CHOICES = [("small", "Small"), ("normal", "Normal"), ("large", "Large")]
 RESULT_TEMPLATES = [
     ("professional_classic", "Professional Classic", "Traditional bordered layout with a strong header rule."),
