@@ -88,7 +88,7 @@ def result_table(h):
     page's own "Through term:" <select>, which (by design) always lists every term in the session as
     an option regardless of the chosen cutoff, so checking the whole page for a term name would be
     testing the selector, not the consolidated data."""
-    m = re.search(r"Academic Performance.*?<table>(.*?)</table>", h, re.S)
+    m = re.search(r"Academic Performance.*?<table[^>]*>(.*?)</table>", h, re.S)
     return m.group(1) if m else ""
 
 
@@ -160,7 +160,7 @@ check("with Third Term selected, all three terms' columns appear in the table",
 # student's own consolidated sheet (which lists one row per subject, one column per included term),
 # through Second Term its cumulative average must be exactly its (only) term1 total, 100, not
 # (100+0)/2=50 -- h2 is the Second-Term-cutoff page fetched in check 2) above.
-row = re.search(r"<td>English Language</td>.*?</tr>", h2, re.S)
+row = re.search(r"<td[^>]*>\s*(?:<b>)?English Language(?:</b>)?\s*</td>.*?</tr>", h2, re.S)
 check("English Language's row is present on the Second-Term cutoff result sheet", row is not None, h2[:1500])
 if row:
     check("...and its missing term2 score is shown as '-', not a zero", ">-<" in row.group(0), row.group(0))

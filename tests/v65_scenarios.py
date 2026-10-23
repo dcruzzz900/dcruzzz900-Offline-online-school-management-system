@@ -396,6 +396,7 @@ for tp, marker in SAMPLES.items():
     run("UPDATE result_display_settings SET show_address=1, show_next_term_resumes=1, show_teacher_comment=1, show_all_comments=1 WHERE school_id=1")
     layouts.add(re.sub(r"\s+", " ", re.sub(r">[^<]+<", "><", pr))[:1200])
 check("the six sample layouts have six different structures", len(layouts) == 6)
+
 run("UPDATE result_display_settings SET template='green_cumulative_report' WHERE school_id=1")
 gc = html(ADMIN.get("/result/1/print?term_id=1"))
 check("the cumulative columns appear on the green layout when Cumulative / Annual is ON", "Cumulative Result" in gc)
