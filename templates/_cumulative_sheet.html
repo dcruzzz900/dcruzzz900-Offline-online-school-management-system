@@ -1,0 +1,31 @@
+{# V85: dedicated printable cumulative/annual result component -- the cumulative counterpart to
+   _result_sheet.html. Result Display Settings (rs) now theme this sheet the same way they already
+   theme the regular per-term result: accent/secondary colors, logo, school name/tagline/contact,
+   watermark and footer. Deliberately simpler than the regular sheet's "template" gallery (no
+   sample_sheets variants, no attendance/comments/signature sections) -- a cumulative/annual summary
+   doesn't carry per-term attendance, comments or signatures, so there is nothing there to theme. #}
+<article class="rs-sheet" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}">
+{% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
+<header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
+  {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
+  <div class="rs-head-text"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
+    <h1>Annual / Cumulative Result</h1>
+    <p class="rs-term">{{ academic_session.name }}{% if selected_term %} &mdash; through {{ selected_term.name }}{% endif %}</p>
+  </div>
+</header>
+<section class="rs-id">
+  <div><span>Name</span><b>{{ student_full_name(student) }}</b></div>
+  <div><span>Admission / Register No.</span><b>{{ student.admission_no }}</b></div>
+  <div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>
+  {% if class_row.category %}<div><span>Category</span><b>{{ class_row.category }}</b></div>{% endif %}
+  <div><span>Cumulative Average</span><b>{{ average }}</b></div>
+  <div><span>Grade</span><b>{{ grade }} ({{ remark }})</b></div>
+  <div class="rs-pos"><span>Overall Position</span><b>{{ position }}{% if class_size %} <small>of {{ class_size }}</small>{% endif %}</b></div>
+</section>
+<section class="rs-perf">
+  <h3 class="rs-h">Academic Performance Through {{ selected_term.name if selected_term else 'the Selected Term' }}</h3>
+  <table class="rs-table"><thead><tr><th class="l">Subject</th>{% for t in terms %}<th>{{ t.name }}</th>{% endfor %}<th>Cumulative Avg</th><th>Grade</th></tr></thead>
+  <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% for v in s.term_values %}<td>{{ v if v is not none else '-' }}</td>{% endfor %}<td><b>{{ s.average }}</b></td><td>{{ s.grade }}</td></tr>{% endfor %}</tbody></table>
+</section>
+{% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
+</article>

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Cumulative Broadsheet{% endblock %}
 {% block content %}
-<div class="report-header">
-    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
+<div class="report-header" style="border-bottom:3px solid {{ rs.accent if rs else '#1f3a5f' }};">
+    {% if rs and rs.logo %}<img src="{{ rs.logo }}" alt="{{ rs.school_name }}" class="report-logo"><br>
+    {% elif school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0; color:{{ rs.accent if rs else '#1f3a5f' }};">{{ (rs.school_name if rs else none) or school_name }}</h2>
+    {% if rs and rs.tagline %}<p style="margin:0 0 0.3rem; color:#666;">{{ rs.tagline }}</p>{% endif %}
     <h1>Annual / Cumulative Broadsheet</h1>
     <p>{{ class_row.name }}{% if class_row.category %} ({{ class_row.category }}){% endif %} &mdash; {{ academic_session.name }}{% if selected_term %} &mdash; through {{ selected_term.name }}{% endif %}</p>
 </div>
@@ -55,4 +57,5 @@
     {% endfor %}
 </table>
 </div>
+{% if rs and rs.footer %}<p style="margin-top:1rem; color:#555; font-size:0.8rem; border-top:1px solid #aaa; padding-top:0.4rem;">{{ rs.footer }}</p>{% endif %}
 {% endblock %}
