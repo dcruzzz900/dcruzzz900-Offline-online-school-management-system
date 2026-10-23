@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}{{ child.first_name }} {{ child.last_name }} — Cumulative Result{% endblock %}{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}">
+<div class="page-head no-print"><div><span class="eyebrow">Cumulative Result</span><h1>{{ child.first_name }} {{ child.last_name }}</h1><p>{{ academic_session.name }}{% if selected_term %} &mdash; through {{ selected_term.name }}{% endif %}</p></div>
+<div>
+    <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
+        <label style="display:inline; font-weight:normal;">Session:</label>
+        <select name="session_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+            {% for s in all_sessions %}
+            <option value="{{ s.id }}" {% if s.id == academic_session.id %}selected{% endif %}>{{ s.name }}{% if s.is_active %} (active){% endif %}</option>
+            {% endfor %}
+        </select>
+        <label style="display:inline; font-weight:normal; margin-left:0.75rem;">Through term:</label>
+        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+            {% for t in session_terms %}
+            <option value="{{ t.id }}" {% if selected_term and t.id == selected_term.id %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+        </select>
+    </form>
+    <a class="btn" href="{{ url_for('parent_cumulative_result_pdf', student_id=child.id, session_id=academic_session.id, term_id=selected_term.id) }}">Download PDF</a>
+    <a class="btn btn-gold" href="{{ url_for('parent_cumulative_result_print', student_id=child.id, session_id=academic_session.id, term_id=selected_term.id, auto=1) }}" target="_blank" rel="noopener">Print</a>
+</div></div>
+<p class="no-print" style="color:#666; font-size:0.85rem; max-width:48rem;">
+    Cumulative Average is the mean of the totals from every term below that has a score
+    recorded for that subject &mdash; a later term's scores are never included here.
+</p>
+<div class="rs-screen-wrap">{% include "_cumulative_sheet.html" %}</div>
+{% endblock %}
