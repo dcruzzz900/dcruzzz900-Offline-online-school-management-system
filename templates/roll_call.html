@@ -3,9 +3,13 @@
 {% block content %}
 <h1>Roll Call — {{ class_row.name }}</h1>
 <p style="color:#666; font-size:0.9rem;">
-    Attendance is recorded for <strong>today only</strong> ({{ now_label }}, school time). The date and time come from the school server — the
-    device clock and any date you type are ignored. Everyone defaults to Present; switch the students who are absent, late or excused, then save.
+    Attendance is recorded for <strong>today only</strong> ({{ now_label }}, school time).
 </p>
+<details class="hlp"><summary class="hlp-t">How this works</summary>
+<p class="muted hlp-b" style="font-size:0.9rem;">
+    The date and time come from the school server — the
+    device clock and any date you type are ignored. Everyone defaults to Present; switch the students who are absent, late or excused, then save.
+</p></details>
 
 <div class="card">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">

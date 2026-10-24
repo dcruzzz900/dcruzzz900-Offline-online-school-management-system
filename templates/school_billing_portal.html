@@ -64,7 +64,7 @@
 
 <div class="card">
   <h2>Email billing notifications</h2>
-  <p>Billing reminders are sent only to the school's registered administrator email when platform email delivery is enabled.</p>
+  <details class="hlp"><summary class="hlp-t">How this works</summary><p class="muted hlp-b">Billing reminders are sent only to the school's registered administrator email when platform email delivery is enabled.</p></details>
   <form method="post" action="{{ url_for('billing_email_preferences') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label><input type="checkbox" name="billing_email_notifications" value="1" {% if school.billing_email_notifications|default(1) %}checked{% endif %}> Send billing reminders by email</label>
@@ -86,14 +86,15 @@
 {% endif %}
 
 <div class="card">
-  <h2>Renewal instructions</h2>
-  <ol>
+  <details class="hlp"><summary class="hlp-t">Renewal instructions</summary>
+  <ol class="hlp-b">
     <li>Ask the platform administrator to issue a renewal invoice for your school.</li>
     <li>Pay using the payment method supplied by the platform administrator.</li>
     <li>Keep the payment reference/transaction ID.</li>
     <li>The platform administrator or verified payment gateway confirms the payment.</li>
     <li>After confirmation, your subscription dates and plan status are updated automatically.</li>
   </ol>
+  </details>
   <p><strong>Security:</strong> Never send your school password, platform credentials, Paystack secret key or Flutterwave secret hash as proof of payment.</p>
 </div>
 {% endblock %}
