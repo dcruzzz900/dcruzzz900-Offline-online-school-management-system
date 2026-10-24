@@ -10,8 +10,8 @@
     <div class="card"><strong>Account</strong><br>{{ user.username }}</div>
   </div>
   <div class="card">
-    <h2>What happens next?</h2>
-    <ol>
+    <details class="hlp"><summary class="hlp-t">What happens next?</summary>
+    <ol class="hlp-b">
       <li>Confirm your school profile and branding.</li>
       <li>Configure Nursery, Primary and/or Secondary levels.</li>
       <li>Create academic sessions, terms, classes and arms.</li>
@@ -19,6 +19,7 @@
       <li>Review roles, scopes, grading and result settings.</li>
       <li>Complete the setup verification before entering live records.</li>
     </ol>
+    </details>
   </div>
   <form method="post" style="margin-top:1rem;"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-primary">Continue to School Setup</button>

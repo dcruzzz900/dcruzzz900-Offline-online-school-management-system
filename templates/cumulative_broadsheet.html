@@ -29,11 +29,12 @@
     <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
 </div>
 
-<p style="color:#666; font-size:0.85rem;">
+<details class="hlp"><summary class="hlp-t">How this is calculated</summary>
+<p class="muted hlp-b" style="font-size:0.85rem;">
     This consolidates every term through <b>{{ selected_term.name if selected_term else 'the selected term' }}</b>
     &mdash; a later term's scores are never included, and a term with no score yet for a subject isn't
     counted as zero, rather than dragging the average down.
-</p>
+</p></details>
 
 <div style="overflow-x:auto;">
 <table>

@@ -22,10 +22,11 @@
     <a class="btn" href="{{ url_for('result', student_id=student.id) }}">&larr; Back to Term Result</a>
 </div>
 
-<p class="no-print" style="color:#666; font-size:0.85rem; max-width:48rem;">
+<details class="hlp no-print"><summary class="hlp-t">How Cumulative Average is calculated</summary>
+<p class="muted hlp-b" style="font-size:0.85rem; max-width:48rem;">
     Cumulative Average is the mean of the totals from every term below that has a score
     recorded for that subject &mdash; a later term's scores are never included here.
-</p>
+</p></details>
 
 <div class="rs-screen-wrap">{% include "_cumulative_sheet.html" %}</div>
 {% endblock %}

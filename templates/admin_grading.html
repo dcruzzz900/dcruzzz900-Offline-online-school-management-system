@@ -66,14 +66,16 @@
             <div>
                 <label>CA3 Max <span style="font-weight:normal; color:#666;">(optional)</span></label>
                 <input type="number" step="0.01" min="0" name="ca3_max" value="{{ config.ca3_max or 0 }}">
-                <p style="font-size:0.8rem; color:#666; margin:0.2rem 0 0;">Leave at 0 if your school only uses CA1 and CA2. Any value above 0 adds a CA3 column everywhere; setting it back to 0 switches it off again without deleting any CA3 scores already saved.</p>
+                <details class="hlp"><summary class="hlp-t">How CA3 works</summary>
+                <p class="muted hlp-b" style="font-size:0.8rem; margin:0.2rem 0 0;">Leave at 0 if your school only uses CA1 and CA2. Any value above 0 adds a CA3 column everywhere; setting it back to 0 switches it off again without deleting any CA3 scores already saved.</p></details>
             </div>
             <div>
                 <label>Exam Max</label>
                 <input type="number" step="0.01" name="exam_max" value="{{ config.exam_max }}" required>
             </div>
         </div>
-        <p style="font-size:0.8rem; color:#666;">The four maximums are usually set to add up to 100 (e.g. CA1 10 + CA2 10 + CA3 10 + Exam 70), but you can use any combination that fits your school's grading rules.</p>
+        <details class="hlp"><summary class="hlp-t">Tip</summary>
+        <p class="muted hlp-b" style="font-size:0.8rem;">The four maximums are usually set to add up to 100 (e.g. CA1 10 + CA2 10 + CA3 10 + Exam 70), but you can use any combination that fits your school's grading rules.</p></details>
         <button class="btn" type="submit">Save Weighting</button>
     </form>
 </div>
@@ -142,8 +144,9 @@
         </div>
         <button class="btn" type="submit">Add Grade Band</button>
     </form>
-    <p style="font-size:0.85rem; color:#666; margin-top:0.75rem;">
+    <details class="hlp"><summary class="hlp-t">Tip</summary>
+    <p class="muted hlp-b" style="font-size:0.85rem; margin-top:0.75rem;">
         Grade bands should not overlap — each total score (0-100) should fall inside exactly one band.
-    </p>
+    </p></details>
 </div>
 {% endblock %}

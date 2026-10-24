@@ -4,7 +4,7 @@
 <p>AI features only process a student's identifiable data while consent is <b>Granted</b>. Record who gave the consent; every change is kept in the history below.</p></div></div>
 <div class="card">
 <h3>Bulk consent update</h3>
-<p class="muted">Apply one status to many students at once — e.g. a batch of paper consent forms collected at the start of term, or a school-wide policy change. Each student is still recorded individually in the history below; nothing here is a separate or weaker record than changing one student at a time.</p>
+<details class="hlp"><summary class="hlp-t">How bulk updates work</summary><p class="muted hlp-b">Apply one status to many students at once — e.g. a batch of paper consent forms collected at the start of term, or a school-wide policy change. Each student is still recorded individually in the history below; nothing here is a separate or weaker record than changing one student at a time.</p></details>
 <form method="POST" style="display:grid;gap:.6rem;max-width:34rem">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="bulk" value="1">
 <label>Class<select id="bulkClassFilter"><option value="">All classes</option>{% for cn in class_names %}<option value="{{ cn }}">{{ cn }}</option>{% endfor %}</select></label>

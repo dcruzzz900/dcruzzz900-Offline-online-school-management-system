@@ -5,7 +5,8 @@
 
 <div class="card">
     <h3>Bulk Upload Students (CSV)</h3>
-    <p style="font-size:0.9rem; color:#666;">
+    <details class="hlp"><summary class="hlp-t">CSV format</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
         Upload a CSV with columns: <code>admission_no, first_name, last_name,
         other_names, gender, class_name, date_of_birth, religion, parent_name,
         parent_address, parent_email, parent_phone, parent_relationship</code>.
@@ -15,7 +16,7 @@
         <b>Admission No. / Register No.</b> only needs to be unique within the same class
         (arm), so different arms of the same class (e.g. SS1 Science 1 and SS1 Science 2)
         can reuse the same numbers for different students.
-    </p>
+    </p></details>
     <a class="btn btn-small" href="{{ url_for('students_csv_template') }}">Download CSV Template</a>
     <form method="POST" action="{{ url_for('students_bulk_upload') }}" enctype="multipart/form-data" style="margin-top:1rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
