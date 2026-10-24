@@ -510,3 +510,13 @@ details.hlp summary.hlp-t::-webkit-details-marker{display:none}
 details.hlp summary.hlp-t::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:1.05rem;height:1.05rem;border-radius:50%;background:#eef2f7;color:#334155;font-size:.72rem}
 details.hlp[open] summary.hlp-t::before{background:var(--theme-primary,#1f3a5f);color:#fff}
 details.hlp .hlp-b{margin:.35rem 0 0}
+details.hlp summary.hlp-t:focus-visible{outline:2px solid var(--theme-primary,#1f3a5f);outline-offset:2px;border-radius:4px}
+/* V86: the same component, generalized sitewide ("Collapsible Highlights and Instructions") --
+   every genuine instructional/tip/notice block across the app is now wrapped the same way, closed
+   by default, reopened with one click/tap; <summary> is natively keyboard-focusable (Tab, then
+   Enter/Space toggles it) and screen readers announce its expanded/collapsed state from the
+   element's own `open` attribute, which is why this doesn't add separate aria-expanded/aria-controls
+   attributes by hand -- that would be redundant with (and could conflict with) the semantics the
+   browser already derives from <details>/<summary> itself. Status/empty-state messages, required-field
+   labels, validation errors, security/consent warnings and short signposts are deliberately NOT
+   wrapped -- see V74's and V86's implementation notes for the full reasoning. */
