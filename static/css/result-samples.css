@@ -27,13 +27,8 @@ table[class*="rsx-"]{border-collapse:collapse;width:100%}
 .rsx-dos-head{text-align:center;color:var(--rs-accent)}.rsx-dos-head h2{margin:0;font-size:19pt;letter-spacing:.07em;text-transform:uppercase}.rsx-dos-head p{margin:.4mm 0;color:#222;font-size:8.6pt}.rsx-dos-addr{font-weight:600}
 .rsx-dos-band{display:grid;grid-template-columns:1fr 30mm 1fr;align-items:center;gap:4mm;margin:3mm 0 2mm;text-align:left}.rsx-dos-t1 b{display:block;font-size:12pt;letter-spacing:.03em;font-weight:800;color:var(--rs-accent)}.rsx-dos-t1 span{font-size:8.6pt;color:#333}
 .rsx-dos-logo{text-align:center}.rsx-dos-t2{text-align:right}.rsx-dos-t2 b{font-size:9pt;letter-spacing:.06em;color:var(--rs-accent)}.rsx-dos-next{margin-top:1.5mm;border:1.5px solid var(--rs-accent);padding:1.4mm 2mm;font-size:8.4pt;text-align:left;color:#222}
-.rsx-dos-id{position:relative;margin:2mm 0 3mm;color:#234;min-height:30mm}.rsx-dos-line{display:flex;align-items:baseline;gap:2mm;margin:2mm 28mm 0 0;font-size:9pt}.rsx-dos-line span{color:var(--rs-accent);font-weight:600;white-space:nowrap}.rsx-dos-line u{flex:1;text-decoration:none;border-bottom:1px solid #666;padding:0 1mm;color:#111}
-/* The photo is absolutely positioned (so the two text lines can wrap beside it), which means it
-   never contributes to .rsx-dos-id's own height. Without the min-height above and with the old
-   top:-1mm offset, a tall passport (30mm) could overhang well past the short two-line identity
-   block (~12mm) and collide with the assessment table directly below it. Keeping the photo flush
-   with the top of its container (top:0) and reserving its full height on the parent fixes that. */
-.rsx-dos-photo{position:absolute;right:0;top:0}
+.rsx-dos-id{position:relative;margin:2mm 0 3mm;color:#234}.rsx-dos-line{display:flex;align-items:baseline;gap:2mm;margin:2mm 28mm 0 0;font-size:9pt}.rsx-dos-line span{color:var(--rs-accent);font-weight:600;white-space:nowrap}.rsx-dos-line u{flex:1;text-decoration:none;border-bottom:1px solid #666;padding:0 1mm;color:#111}
+.rsx-dos-photo{position:absolute;right:0;top:-1mm}
 .rsx-dos-table{border:1px solid #556}.rsx-dos-table th{border:1px solid #556;padding:1.2mm;text-align:center;font-size:8.6pt}.rsx-dos-table td{border:1px solid #889;padding:.9mm 1.4mm;text-align:center}.rsx-dos-table td.l{text-align:left}.rsx-dos-table .n{display:inline-block;width:6mm;font-weight:700}.rsx-dos-table tbody tr:nth-child(even) td{background:#f4f8fd}
 .rsx-dos-note{font-size:8pt;margin:2mm 0}.rsx-dos-skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(60mm,1fr));gap:3mm}
 .rsx-tick{margin-bottom:2mm}.rsx-tick th{background:#eef2f8;border:1px solid #556;font-size:7.4pt;padding:.6mm 1mm}.rsx-tick td{border:1px solid #889;text-align:center;padding:.35mm 1mm;font-size:8pt}.rsx-tick td.l,.rsx-tick th.l{text-align:left}.rsx-tick td:not(.l){width:7mm}
