@@ -2,11 +2,10 @@
 {% block title %}School Profile{% endblock %}
 {% block content %}
 <h1>School Profile</h1>
-<details class="hlp"><summary class="hlp-t">Where this is used</summary>
-<p class="muted hlp-b" style="font-size:0.9rem;">
+<p style="color:#666; font-size:0.9rem;">
     This name and logo appear on the dashboard, broadsheet, and terminal
     results (on screen and in the downloaded PDFs). Update it anytime.
-</p></details>
+</p>
 
 <div class="card" style="max-width:520px;">
     <h3>Current Logo</h3>
@@ -60,12 +59,11 @@
         </select>
 
         
-        <details class="hlp"><summary class="hlp-t">How auto-comment works</summary>
-        <p class="muted hlp-b" style="font-size:0.85rem; margin-top:0.3rem;">
+        <p style="font-size:0.85rem; color:#999; margin-top:0.3rem;">
             When on, this term's comment is generated from the student's grade/average instead of
             what's typed on the result — handy when scores come in by CSV upload and no one
             types a comment by hand.
-        </p></details>
+        </p>
 
         <label style="margin-top:1rem;">Fonts</label>
         <label>App Display Font</label>
@@ -106,12 +104,11 @@
 <div class="card" style="max-width:520px;">
     <h3>Custom Subdomain</h3>
     {% if base_domain %}
-    <details class="hlp"><summary class="hlp-t">How this works</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem;">
+    <p style="font-size:0.9rem; color:#666;">
         Claim a subdomain and staff/students can sign in at
         <code>https://&lt;your-subdomain&gt;.{{ base_domain }}</code> with this school's own branding
         shown on the login page.
-    </p></details>
+    </p>
     {% else %}
     <p style="font-size:0.85rem; color:#b3261e;">
         This deployment hasn't been configured with a base domain yet, so a claimed subdomain won't

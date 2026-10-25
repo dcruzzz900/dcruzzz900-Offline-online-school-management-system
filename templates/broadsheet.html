@@ -20,7 +20,7 @@
     {% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
     <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only</span>{% endif %}
     {% if cumulative_enabled %}
-    <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id, session_id=term.session_id, term_id=term.id) }}">📊 Annual / Cumulative Broadsheet</a>
+    <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id) }}">📊 Annual / Cumulative Broadsheet</a>
     {% endif %}
     {% if term.is_active %}
     <form method="POST" action="{{ url_for('email_class_results', class_id=class_row.id) }}" class="inline"
@@ -34,12 +34,9 @@
 </div>
 
 <div style="overflow-x:auto;">
-<table class="bs-table">
-    <thead>
-    <tr><th rowspan="2">S/N</th><th rowspan="2">Student</th>{% set _ca3 = ca3_on() %}{% for subj in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ subj.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Position</th></tr>
+<table>
+    <tr><th rowspan="2">S/N</th><th rowspan="2">Student</th>{% set _ca3 = ca3_on(term.id) %}{% for subj in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ subj.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Position</th></tr>
     <tr>{% for subj in subjects %}<th>1st CA</th><th>2nd CA</th>{% if _ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}</tr>
-    </thead>
-    <tbody>
     {% for r in rows %}
     <tr>
         <td>{{ loop.index }}</td>
@@ -52,7 +49,6 @@
         <td>{{ r.position }}</td>
     </tr>
     {% endfor %}
-    </tbody>
 </table>
 </div>
 {% endblock %}

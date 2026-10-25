@@ -2,24 +2,14 @@
 {% block content %}
 <div class="page-heading"><div><div class="eyebrow">AI PRIVACY</div><h1>Student AI Consent</h1>
 <p>AI features only process a student's identifiable data while consent is <b>Granted</b>. Record who gave the consent; every change is kept in the history below.</p></div></div>
-<div class="card">
-<h3>Bulk consent update</h3>
-<details class="hlp"><summary class="hlp-t">How bulk updates work</summary><p class="muted hlp-b">Apply one status to many students at once — e.g. a batch of paper consent forms collected at the start of term, or a school-wide policy change. Each student is still recorded individually in the history below; nothing here is a separate or weaker record than changing one student at a time.</p></details>
-<form method="POST" style="display:grid;gap:.6rem;max-width:34rem">
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="bulk" value="1">
-<label>Class<select id="bulkClassFilter"><option value="">All classes</option>{% for cn in class_names %}<option value="{{ cn }}">{{ cn }}</option>{% endfor %}</select></label>
-<label>Students (ctrl/cmd-click, or shift-click, to select more than one)
-<select name="student_ids" id="bulkStudentSelect" multiple size="8" style="width:100%">
-{% for s in students %}<option value="{{ s.id }}" data-class="{{ s.class_name }}">{{ s.last_name }} {{ s.first_name }} — {{ s.class_name }} ({{ s.consent_status|title }})</option>{% endfor %}
-</select></label>
-<div style="display:flex;gap:.5rem"><button type="button" class="btn btn-small btn-secondary" id="bulkSelectAll">Select all shown</button><button type="button" class="btn btn-small btn-secondary" id="bulkClearSel">Clear selection</button></div>
-<label>New status<select name="bulk_status" aria-label="Bulk consent status"><option value="pending">Pending</option><option value="granted">Granted</option><option value="withdrawn">Withdrawn</option></select></label>
-<label>Consent given by <small class="muted">(required only when setting "Granted")</small><input name="bulk_consenting_name" maxlength="120" placeholder="Name of whoever gave consent"></label>
-<label>Relationship <small class="muted">(required only when setting "Granted")</small><select name="bulk_relationship" aria-label="Bulk relationship"><option value="">—</option>{% for r in relationships %}<option>{{ r }}</option>{% endfor %}</select></label>
-<label>Notes<input name="bulk_notes" maxlength="300" placeholder="e.g. Paper consent forms collected at term start"></label>
-<button class="btn" type="submit" id="bulkSubmit">Apply to selected students</button>
-</form>
-</div>
+<div class="card" id="bulk-consent"><h3>School-wide consent <button type="button" class="help-btn" data-help="help-bulk">?</button></h3>
+<div class="help-text" id="help-bulk" hidden>Use this when the school holds consent for all (or a whole class of) students, for example in a signed enrolment agreement. It only records consent for students who have <b>not already decided</b>: a student whose consent was withdrawn stays withdrawn, and a parent can still withdraw at any time. Withdrawing is immediate and stops AI use for the selected students. Every student gets a history entry and the whole action is audited.</div>
+<form method="POST" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="bulk">
+<label>Applies to<select name="scope"><option value="school">The whole school</option>{% for c in classes %}<option value="class:{{ c.id }}">Class: {{ c.name }}</option>{% endfor %}</select></label>
+<label>Decision<select name="status"><option value="granted">Record school-wide consent</option><option value="withdrawn">Withdraw consent</option></select></label>
+<label>Basis (required for consent)<input name="basis" maxlength="300" placeholder="e.g. Signed enrolment agreement, Sept 2026"></label>
+<label>Type GRANT CONSENT or WITHDRAW CONSENT<input name="confirm_text" autocomplete="off"></label>
+<button class="btn" type="submit">Apply</button></form></div>
 <div class="card" style="overflow-x:auto"><table>
 <tr><th>Student</th><th>Class</th><th>Status</th><th>Consent given by</th><th>Change</th></tr>
 {% for s in students %}
@@ -35,33 +25,5 @@
 {% else %}<tr><td colspan="5" class="muted">No active students.</td></tr>{% endfor %}</table></div>
 <div class="card" style="overflow-x:auto"><h3>Recent consent history</h3><table><tr><th>Server time (UTC)</th><th>Student</th><th>From → To</th><th>Consent from</th><th>Recorded by</th></tr>
 {% for e in history %}<tr><td>{{ e.server_timestamp }}</td><td>{{ e.last_name }} {{ e.first_name }}</td><td>{{ e.previous_status|title }} → {{ e.new_status|title }}</td><td>{{ e.consenting_name or '—' }}{% if e.relationship %} ({{ e.relationship }}){% endif %}</td><td>{{ e.recorded_by_name or e.recorded_by_type }}</td></tr>{% else %}<tr><td colspan="5" class="muted">No changes recorded yet.</td></tr>{% endfor %}</table></div>
-<script>document.querySelectorAll('.consent-form').forEach(function(f){f.addEventListener('submit',function(){var b=f.querySelector('button[type=submit]');if(f.dataset.sent){return false}f.dataset.sent='1';b.disabled=true;b.textContent='Saving…'})})
-(function(){
-  var filt=document.getElementById('bulkClassFilter'), sel=document.getElementById('bulkStudentSelect');
-  if(!filt||!sel) return;
-  function applyFilter(){
-    var v=filt.value;
-    Array.prototype.forEach.call(sel.options,function(o){
-      var show=!v||o.dataset.class===v;
-      o.style.display=show?'':'none';
-      if(!show) o.selected=false;
-    });
-  }
-  filt.addEventListener('change',applyFilter);
-  document.getElementById('bulkSelectAll').addEventListener('click',function(){
-    Array.prototype.forEach.call(sel.options,function(o){ if(o.style.display!=='none') o.selected=true; });
-  });
-  document.getElementById('bulkClearSel').addEventListener('click',function(){
-    Array.prototype.forEach.call(sel.options,function(o){ o.selected=false; });
-  });
-  var bform=sel.closest('form');
-  bform.addEventListener('submit',function(e){
-    var any=Array.prototype.some.call(sel.options,function(o){return o.selected;});
-    if(!any){ e.preventDefault(); alert('Select at least one student first.'); return false; }
-    var btn=document.getElementById('bulkSubmit');
-    if(bform.dataset.sent) return false;
-    bform.dataset.sent='1'; btn.disabled=true; btn.textContent='Applying…';
-  });
-})();
-</script>
+<script>document.querySelectorAll('.consent-form').forEach(function(f){f.addEventListener('submit',function(){var b=f.querySelector('button[type=submit]');if(f.dataset.sent){return false}f.dataset.sent='1';b.disabled=true;b.textContent='Saving…'})})</script>
 {% endblock %}

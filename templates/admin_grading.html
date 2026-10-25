@@ -3,104 +3,69 @@
 {% block content %}
 <h1>Grading Setup</h1>
 
-{% if review %}
-<div class="card" style="border:2px solid #b3261e;">
-    <h3>Review before applying — {{ review.count }} saved score(s) would exceed a new maximum</h3>
-    <p style="font-size:0.88rem; color:#444;">
-        Nothing has been saved yet. These scores were entered under the current maximums and are higher than the
-        proposed one below. They will <strong>not</strong> be deleted, capped, or changed — applying the new
-        weighting just means they'll show as exceeding it until a teacher corrects them (or you keep the higher maximum).
-    </p>
-    <ul style="font-size:0.88rem;">
-        {% for label, n in review.by_component.items() %}
-        <li><strong>{{ label }}</strong>: {{ n }} score(s) above the proposed maximum ({{ proposed[label|lower ~ '_max'] }})</li>
-        {% endfor %}
-    </ul>
-    <div style="max-height:260px; overflow:auto; border:1px solid #ddd; border-radius:6px;">
-        <table class="table" style="font-size:0.82rem;">
-            <thead><tr><th>Component</th><th>Student</th><th>Admission No</th><th>Class</th><th>Subject</th><th>Session / Term</th><th>Saved value</th></tr></thead>
-            <tbody>
-            {% for r in review.rows %}
-                <tr>
-                    <td>{{ r.component }}</td><td>{{ r.student_name }}</td><td>{{ r.admission_no }}</td>
-                    <td>{{ r.class_name }}</td><td>{{ r.subject_name }}</td>
-                    <td>{{ r.session_name }} · {{ r.term_name }}</td><td>{{ r.value|round(2) }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
+{% set fv = form_vals or {} %}
+<div class="card" id="weighting">
+  <h3>Score Weighting <button type="button" class="help-btn" data-help="help-weighting">?</button></h3>
+  <div class="help-text" id="help-weighting" hidden>Set the maximum marks for each assessment. They must add up to {{ '%g'|format(need) }}. CA3 is optional: turn it off and it disappears from entry forms, totals and sheets, while any CA3 marks already saved are kept untouched. Changing a maximum never deletes, caps or overwrites a saved score: if a saved score is higher than the new maximum you will see exactly which ones and choose a safe way forward.</div>
+  <p class="muted" style="margin:.2rem 0 .8rem">Active weighting{% if active %} for <b>{{ active.session_name }} — {{ active.name }}</b>{% endif %}: CA1 {{ '%g'|format(config.ca1_max) }} · CA2 {{ '%g'|format(config.ca2_max) }} · {% if config.ca3_max %}CA3 {{ '%g'|format(config.ca3_max) }}{% else %}CA3 off{% endif %} · Exam {{ '%g'|format(config.exam_max) }}</p>
+  <form method="POST" id="weightingForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <label>CA1 maximum<input type="number" step="0.01" min="0" name="ca1_max" id="w_ca1" value="{{ fv.ca1 if fv else config.ca1_max }}" required></label>
+      <label>CA2 maximum<input type="number" step="0.01" min="0" name="ca2_max" id="w_ca2" value="{{ fv.ca2 if fv else config.ca2_max }}" required></label>
+      <label>CA3 maximum <label class="sw" style="display:inline-flex;gap:.35rem;align-items:center;font-weight:500"><input type="checkbox" name="use_ca3" value="1" id="w_use3" {{ 'checked' if (fv.use_ca3 if fv else config.ca3_max) }}> use CA3</label>
+        <input type="number" step="0.01" min="0" name="ca3_max" id="w_ca3" value="{{ fv.ca3 if fv else (config.ca3_max or 0) }}"></label>
+      <label>Examination maximum<input type="number" step="0.01" min="0" name="exam_max" id="w_exam" value="{{ fv.exam if fv else config.exam_max }}" required></label>
     </div>
-    {% if review.truncated %}<p style="font-size:0.8rem; color:#666;">Showing the first {{ review.rows|length }} of {{ review.count }} affected scores.</p>{% endif %}
-    <form method="POST" style="margin-top:0.75rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="ca1_max" value="{{ proposed.ca1_max }}">
-    <input type="hidden" name="ca2_max" value="{{ proposed.ca2_max }}">
-    <input type="hidden" name="ca3_max" value="{{ proposed.ca3_max }}">
-    <input type="hidden" name="exam_max" value="{{ proposed.exam_max }}">
-    <input type="hidden" name="confirm_override" value="1">
-        <label style="font-weight:normal; display:flex; gap:0.4rem; align-items:flex-start;">
-            <input type="checkbox" required style="margin-top:0.25rem;">
-            I've reviewed the affected scores above and want to apply this weighting anyway. Existing scores will be left exactly as entered.
-        </label>
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Apply anyway</button>
-        <a class="btn btn-small" href="{{ url_for('admin_grading') }}" style="background:#666;">Cancel</a>
-    </form>
+    <p id="w_total" class="weighting-total" aria-live="polite" style="font-weight:700;margin:.6rem 0"></p>
+    <fieldset style="border:0;padding:0;margin:.4rem 0 .8rem"><legend><b>Apply this weighting</b> <button type="button" class="help-btn" data-help="help-scope">?</button></legend>
+      <div class="help-text" id="help-scope" hidden>Earlier terms keep the weighting they were scored with, so published and past results never change. “Future terms only” leaves every existing term exactly as it is.</div>
+      <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="scope" value="current" {{ 'checked' if (not review or review.scope == 'current') and (not form_vals or request.form.get('scope','current') == 'current') }}> from {% if active %}the current term ({{ active.name }}){% else %}the current term{% endif %} onward</label>
+      <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="scope" value="future" {{ 'checked' if request.form.get('scope') == 'future' }}> future terms only (every existing term keeps its weighting)</label>
+      <label style="display:flex;gap:.4rem;align-items:center"><input type="radio" name="scope" value="term" id="scopeTermRadio" {{ 'checked' if (request.form.get('scope','')[:5] == 'term:') }}> from this term onward
+        <select id="scopeTermSel" onchange="document.getElementById('scopeTermRadio').value='term:'+this.value;document.getElementById('scopeTermRadio').checked=true" style="width:auto">{% for t in terms %}<option value="{{ t.id }}">{{ t.session_name }} — {{ t.name }}</option>{% endfor %}</select></label>
+    </fieldset>
+    <button class="btn" type="submit">Review &amp; save weighting</button>
+  </form>
+</div>
+
+{% if review %}
+<div class="card" id="review" style="border:2px solid #b45309">
+  <h3>⚠ Review needed — {{ review.conflicts|length }} saved score{{ 's' if review.conflicts|length != 1 }} exceed the new maximum{{ 's' if review.conflicts|length != 1 }}</h3>
+  <p>Nothing has been changed. The weighting was <b>not</b> saved because these existing scores would be above the new maximum. Choose one of the safe options below.</p>
+  <div style="overflow-x:auto;max-height:340px;overflow-y:auto"><table>
+    <tr><th>Student</th><th>Class</th><th>Subject</th><th>Term</th><th>Component</th><th>Saved score</th><th>New maximum</th><th>State</th></tr>
+    {% for c in review.conflicts[:200] %}<tr><td>{{ c.student }}</td><td>{{ c.class_name }}</td><td>{{ c.subject }}</td><td>{{ c.term }}</td><td>{{ c.component }}</td><td><b>{{ '%g'|format(c.value) }}</b></td><td>{{ '%g'|format(c.new_max) }}</td><td>{{ 'Locked (' ~ c.status ~ ')' if c.locked else 'Editable' }}</td></tr>{% endfor %}
+  </table></div>
+  {% if review.conflicts|length > 200 %}<p class="muted">Showing the first 200 of {{ review.conflicts|length }}.</p>{% endif %}
+  <h4 style="margin-top:1rem">Safe options</h4>
+  <div class="form-grid" style="align-items:start">
+    <div class="card" style="margin:0"><b>1. Keep existing terms as they are</b><p class="muted">Apply the new weighting to future terms only. No saved score is touched.</p>
+      <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ca1_max" value="{{ review.new.ca1 }}"><input type="hidden" name="ca2_max" value="{{ review.new.ca2 }}"><input type="hidden" name="ca3_max" value="{{ review.new.ca3 }}"><input type="hidden" name="exam_max" value="{{ review.new.exam }}">{% if review.new.use_ca3 %}<input type="hidden" name="use_ca3" value="1">{% endif %}<input type="hidden" name="scope" value="future"><button class="btn" type="submit">Apply to future terms only</button></form></div>
+    <div class="card" style="margin:0"><b>2. Correct the scores yourself</b><p class="muted">Open each class and subject, correct the listed scores (each change is audited), then save the weighting again.</p>
+      {% set seen = [] %}{% for c in review.conflicts if not c.locked %}{% set key = c.class_id ~ '/' ~ c.subject_id %}{% if key not in seen %}{% set _ = seen.append(key) %}<a class="btn btn-small btn-secondary" style="margin:.15rem" href="{{ url_for('score_entry', class_id=c.class_id, subject_id=c.subject_id) }}">{{ c.class_name }} · {{ c.subject }}</a>{% endif %}{% endfor %}
+      {% if review.locked %}<p class="muted">Some scores are in submitted, approved or published results. Return or reopen those results first.</p>{% endif %}</div>
+    <div class="card" style="margin:0"><b>3. Approved migration</b> <small class="muted">(School Admin only)</small><p class="muted">Changes the listed scores to fit. Every original value is kept in the migration log and nothing is lost.</p>
+      {% if is_school_admin and not review.locked %}
+      <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ca1_max" value="{{ review.new.ca1 }}"><input type="hidden" name="ca2_max" value="{{ review.new.ca2 }}"><input type="hidden" name="ca3_max" value="{{ review.new.ca3 }}"><input type="hidden" name="exam_max" value="{{ review.new.exam }}">{% if review.new.use_ca3 %}<input type="hidden" name="use_ca3" value="1">{% endif %}<input type="hidden" name="scope" value="{{ review.scope if review.scope in ('current','future') else ('term:' ~ review.eff_term) }}">
+        <label style="display:flex;gap:.4rem"><input type="radio" name="migrate" value="scale" required> scale proportionally (old maximum → new maximum)</label>
+        <label style="display:flex;gap:.4rem"><input type="radio" name="migrate" value="cap" required> cap at the new maximum</label>
+        <label>Type MIGRATE SCORES to confirm<input name="confirm_text" autocomplete="off" required></label>
+        <button class="btn" type="submit">Migrate {{ review.conflicts|length }} score(s) and save</button></form>
+      {% else %}<p class="muted">{{ 'Locked results must be returned or reopened first.' if review.locked else 'Only a School Admin can approve a migration.' }}</p>{% endif %}</div>
+  </div>
 </div>
 {% endif %}
 
-<div class="card">
-    <h3>Score Weighting</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="grid-2">
-            <div>
-                <label>CA1 Max</label>
-                <input type="number" step="0.01" name="ca1_max" value="{{ config.ca1_max }}" required>
-            </div>
-            <div>
-                <label>CA2 Max</label>
-                <input type="number" step="0.01" name="ca2_max" value="{{ config.ca2_max }}" required>
-            </div>
-        </div>
-        <div class="grid-2">
-            <div>
-                <label>CA3 Max <span style="font-weight:normal; color:#666;">(optional)</span></label>
-                <input type="number" step="0.01" min="0" name="ca3_max" value="{{ config.ca3_max or 0 }}">
-                <details class="hlp"><summary class="hlp-t">How CA3 works</summary>
-                <p class="muted hlp-b" style="font-size:0.8rem; margin:0.2rem 0 0;">Leave at 0 if your school only uses CA1 and CA2. Any value above 0 adds a CA3 column everywhere; setting it back to 0 switches it off again without deleting any CA3 scores already saved.</p></details>
-            </div>
-            <div>
-                <label>Exam Max</label>
-                <input type="number" step="0.01" name="exam_max" value="{{ config.exam_max }}" required>
-            </div>
-        </div>
-        <details class="hlp"><summary class="hlp-t">Tip</summary>
-        <p class="muted hlp-b" style="font-size:0.8rem;">The four maximums are usually set to add up to 100 (e.g. CA1 10 + CA2 10 + CA3 10 + Exam 70), but you can use any combination that fits your school's grading rules.</p></details>
-        <button class="btn" type="submit">Save Weighting</button>
-    </form>
-</div>
-
-{% if history %}
-<div class="card">
-    <h3>Recent weighting changes</h3>
-    <table class="table" style="font-size:0.82rem;">
-        <thead><tr><th>When</th><th>By</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Scores affected</th></tr></thead>
-        <tbody>
-        {% for h in history %}
-            <tr>
-                <td>{{ h.changed_at }}</td>
-                <td>{{ h.changed_by_name or '—' }}</td>
-                <td>{{ h.old_ca1_max|round(1) if h.old_ca1_max is not none else '—' }} → {{ h.new_ca1_max|round(1) }}</td>
-                <td>{{ h.old_ca2_max|round(1) if h.old_ca2_max is not none else '—' }} → {{ h.new_ca2_max|round(1) }}</td>
-                <td>{{ h.old_ca3_max|round(1) if h.old_ca3_max is not none else '—' }} → {{ h.new_ca3_max|round(1) }}</td>
-                <td>{{ h.old_exam_max|round(1) if h.old_exam_max is not none else '—' }} → {{ h.new_exam_max|round(1) }}</td>
-                <td>{{ h.affected_count }}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
+<div class="card"><h3>Weighting history <button type="button" class="help-btn" data-help="help-history">?</button></h3>
+  <div class="help-text" id="help-history" hidden>Every change is recorded with the old and new maximums, who made it, when, and how many saved scores it affected. Terms listed under “Terms with their own weighting” keep the weighting they were scored with.</div>
+  <div style="overflow-x:auto"><table><tr><th>Server time (UTC)</th><th>By</th><th>Old (CA1/CA2/CA3/Exam)</th><th>New</th><th>Applies</th><th>Scores affected</th></tr>
+  {% for h in history %}<tr><td>{{ h.server_timestamp }}</td><td>{{ h.changed_by_name }}</td><td>{{ '%g'|format(h.old_ca1) }}/{{ '%g'|format(h.old_ca2) }}/{{ '%g'|format(h.old_ca3 or 0) }}/{{ '%g'|format(h.old_exam) }}</td><td>{{ '%g'|format(h.new_ca1) }}/{{ '%g'|format(h.new_ca2) }}/{{ '%g'|format(h.new_ca3 or 0) }}/{{ '%g'|format(h.new_exam) }}</td><td>{{ 'future terms' if h.scope == 'future' else 'from term onward' }}</td><td>{{ h.affected_scores }}</td></tr>{% else %}<tr><td colspan="6" class="muted">No changes yet.</td></tr>{% endfor %}</table></div>
+  {% if snaps %}<h4>Terms with their own weighting</h4><ul>{% for s in snaps %}<li>{{ s.session_name }} — {{ s.term_name }}: CA1 {{ '%g'|format(s.ca1_max) }} · CA2 {{ '%g'|format(s.ca2_max) }} · CA3 {{ '%g'|format(s.ca3_max) if s.ca3_max else 'off' }} · Exam {{ '%g'|format(s.exam_max) }}</li>{% endfor %}</ul>{% endif %}</div>
+<script>(function(){var f=document.getElementById('weightingForm');if(!f)return;var need={{ need }};function v(i){return parseFloat(document.getElementById(i).value)||0}
+function calc(){var u=document.getElementById('w_use3').checked,c3=document.getElementById('w_ca3');c3.disabled=!u;var t=v('w_ca1')+v('w_ca2')+(u?v('w_ca3'):0)+v('w_exam'),el=document.getElementById('w_total'),ok=Math.abs(t-need)<0.001;
+el.textContent='Total: '+(Math.round(t*100)/100)+' / '+need+(ok?'  ✓ valid':'  ✗ must add up to '+need);el.style.color=ok?'#166534':'#b91c1c'}
+f.addEventListener('input',calc);calc();var r=document.getElementById('scopeTermRadio'),sl=document.getElementById('scopeTermSel');if(r&&sl)r.value='term:'+sl.value;})();</script>
 
 <div class="card">
     <h3>Grade Scale</h3>
@@ -144,9 +109,8 @@
         </div>
         <button class="btn" type="submit">Add Grade Band</button>
     </form>
-    <details class="hlp"><summary class="hlp-t">Tip</summary>
-    <p class="muted hlp-b" style="font-size:0.85rem; margin-top:0.75rem;">
+    <p style="font-size:0.85rem; color:#666; margin-top:0.75rem;">
         Grade bands should not overlap — each total score (0-100) should fall inside exactly one band.
-    </p></details>
+    </p>
 </div>
 {% endblock %}
