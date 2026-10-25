@@ -266,9 +266,8 @@ check("reopened with a reason", one("SELECT status FROM result_publication WHERE
 check("reopen audited with previous and new status", one("SELECT COUNT(*) FROM result_publication_audit WHERE action='reopen' AND previous_status='published' AND new_status='reopened' AND reason IS NOT NULL") == 1)
 check("reopened result is no longer printable or downloadable", code(ADMIN.get(f"/result/1/pdf?term_id={TERM}")) == 403 and code(ADMIN.get(f"/result/1/print?term_id={TERM}")) == 403)
 check("student loses access after reopening", code(student_client("chinedu").get(f"/student/result/{TERM}")) in (302, 403))
-r = FT.post("/scores/1/1", data=[("csrf_token", tok(FT, "/scores/1/1")), ("student_id", "1"), ("ca1_1", "18"), ("ca2_1", "12"), ("exam_1", "45"), ("change_reason", "Correction after reopening")])
-check("correction is possible after reopening (with a reason — now required for a reopened, previously-published class, same as any other locked-state edit)",
-      one("SELECT ca1 FROM scores WHERE student_id=1 AND subject_id=1") == 18)
+r = FT.post("/scores/1/1", data=[("csrf_token", tok(FT, "/scores/1/1")), ("student_id", "1"), ("ca1_1", "18"), ("ca2_1", "12"), ("exam_1", "45")])
+check("correction is possible after reopening", one("SELECT ca1 FROM scores WHERE student_id=1 AND subject_id=1") == 18)
 post(FT, f"{WF}/1/{TERM}/submit", {}, f"{WF}?term_id={TERM}")
 check("reopened result must go through the workflow again", one("SELECT status FROM result_publication WHERE class_id=1") == "submitted")
 check("history page shows the trail", "Wrong exam score" in html(ADMIN.get(f"{WF}/1/{TERM}/history")))

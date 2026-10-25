@@ -121,9 +121,7 @@ def png(color=(20, 100, 200)):
 RES_ON = ["show_passport", "show_logo", "show_overall_position", "show_attendance", "show_days_opened", "show_days_present", "show_days_absent",
           "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date", "show_principal_signature", "show_principal_sign_date",
           "show_score", "show_grade", "show_remarks", "show_admission_no", "show_class", "show_session", "show_term", "show_teacher_name", "show_principal_name",
-          "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_grading_key", "show_promotion", "show_domains",
-          # fit_to_page (V73): keep the one-page auto-shrink ON, same as its own default.
-          "fit_to_page"]
+          "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_grading_key", "show_promotion", "show_domains"]
 
 
 def rds(client, on=None, **kw):
@@ -237,7 +235,7 @@ for nm in ("result_accent_color", "show_principal_signature", "show_form_teacher
 check("Theme & Branding still saves general appearance", code(ADMIN.get("/admin/theme")) == 200 and 'name="primary_color"' in th or 'name="theme_preset"' in th)
 rd = html(ADMIN.get("/admin/result-display-settings"))
 for nm in ("accent_color", "show_principal_signature", "show_teacher_signature", "show_principal_name", "show_teacher_name", "header_layout", "text_align",
-           "show_address", "show_email", "show_phone", "show_motto", "show_next_term_resumes", "show_all_comments", "cumulative_enabled", "show_logo"):
+           "show_address", "show_email", "show_phone", "show_motto", "show_resumption_date", "show_all_comments", "cumulative_enabled", "show_logo"):
     check(f"Result Display Settings has '{nm}'", f'name="{nm}"' in rd, nm)
 _cs = rd.index("Comments &amp; signatures"); check("All Comments sits inside the Comments & signatures card", _cs < rd.index("show_all_comments") < _cs + 1800)
 tm = html(ADMIN.get("/admin/terms"))
@@ -252,14 +250,10 @@ if sid_o: run("UPDATE schools SET school_address='99 Other Street', school_tagli
 W.publish(A, 1)
 run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,1,1,11,12,0,40)")
 def settings(**kw):
-    base = {k: "1" for k in ("show_logo", "show_passport", "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_teacher_comment", "show_principal_comment", "show_domains", "show_grading_key", "show_admission_no", "show_class", "show_session", "show_term", "show_next_term_resumes", "show_subject_position", "show_overall_position", "show_total", "show_average", "show_grade", "show_remark", "show_ca1", "show_ca2", "show_exam", "show_attendance")}
+    base = {k: "1" for k in ("show_logo", "show_passport", "show_address", "show_email", "show_phone", "show_motto", "show_all_comments", "show_teacher_comment", "show_principal_comment", "show_domains", "show_grading_key", "show_admission_no", "show_class", "show_session", "show_term", "show_result_date", "show_subject_position", "show_overall_position", "show_total", "show_average", "show_grade", "show_remark", "show_ca1", "show_ca2", "show_exam", "show_attendance")}
     cur = {r_[0]: r_[1] for r_ in db().execute("SELECT 'x','x'")}
     row = db().execute("SELECT * FROM result_display_settings WHERE school_id=1").fetchone()
     form = {k: ("1" if row[k] else "") for k in row.keys() if k.startswith("show_")}
-    # fit_to_page (V73) isn't a "show_*" toggle but is still a RESULT_BOOL_SETTINGS checkbox, so it would
-    # otherwise be silently unchecked (and turned OFF) by every settings() call below — carry its current value
-    # over just like the show_* ones.
-    form["fit_to_page"] = "1" if row["fit_to_page"] else ""
     for k, v in kw.items(): form[k] = v
     form = {k: v for k, v in form.items() if v != ""}
     form.update({"title": row["title"] or "TERMINAL REPORT SHEET", "accent_color": row["accent_color"] or "#1f3a5f", "secondary_color": row["secondary_color"] or "#c9a227",
@@ -302,23 +296,20 @@ check("All Comments OFF: no comment boxes on the print page", "rs-comments" not 
 run("UPDATE result_display_settings SET show_all_comments=1 WHERE school_id=1")
 check("All Comments ON shows them again", "rs-comments" in sheet())
 
-# ======================================================== 11. next term resumes
-# "Next Term Resumes" on a term's sheet is never that term's own date — it's the term that comes after it.
-run("INSERT INTO terms (name, session_id, is_active) VALUES ('2nd Term', (SELECT session_id FROM terms WHERE id=1), 0)")
-tid2 = one("SELECT id FROM terms WHERE name='2nd Term'")
-check("no date set on the next term -> nothing is displayed even when the toggle is ON", (run("UPDATE result_display_settings SET show_next_term_resumes=1 WHERE school_id=1"), "Next Term Resumes" not in sheet())[1])
-post(ADMIN, "/admin/terms", {"action": "set_resumption", "term_id": str(tid2), "resumption_date": "not-a-date"}, "/admin/terms")
-check("an invalid date is rejected", one("SELECT resumption_date FROM terms WHERE id=?", (tid2,)) in (None, ""))
-post(ADMIN, "/admin/terms", {"action": "set_resumption", "term_id": str(tid2), "resumption_date": "2027-01-11"}, "/admin/terms")
-check("the resumption date is stored on the NEXT term, not term 1", one("SELECT resumption_date FROM terms WHERE id=?", (tid2,)) == "2027-01-11" and one("SELECT resumption_date FROM terms WHERE id=1") in (None, ""))
-s5 = sheet(); check("toggle ON + next term's date set -> shown on term 1's sheet as Next Term Resumes", "Next Term Resumes" in s5 and "11" in s5.split("Next Term Resumes")[1][:60])
-check("...and in the downloaded PDF", "next term resumes" in text_of(ADMIN.get("/result/1/pdf?term_id=1").data).lower())
-run("UPDATE result_display_settings SET show_next_term_resumes=0 WHERE school_id=1")
-check("toggle OFF hides it (date is kept, not deleted)", "Next Term Resumes" not in sheet() and one("SELECT resumption_date FROM terms WHERE id=?", (tid2,)) == "2027-01-11")
+# ======================================================== 11. resumption date
+check("no date set -> nothing is displayed even when the toggle is ON", (run("UPDATE result_display_settings SET show_resumption_date=1 WHERE school_id=1"), "Resumption Date" not in sheet())[1])
+post(ADMIN, "/admin/terms", {"action": "set_resumption", "term_id": "1", "resumption_date": "not-a-date"}, "/admin/terms")
+check("an invalid date is rejected", one("SELECT resumption_date FROM terms WHERE id=1") in (None, ""))
+post(ADMIN, "/admin/terms", {"action": "set_resumption", "term_id": "1", "resumption_date": "2027-01-11"}, "/admin/terms")
+check("the resumption date is stored on the term", one("SELECT resumption_date FROM terms WHERE id=1") == "2027-01-11")
+s5 = sheet(); check("toggle ON + date set -> shown on the print page", "Resumption Date" in s5 and "11" in s5.split("Resumption Date")[1][:60])
+check("...and in the downloaded PDF", "resumption date" in text_of(ADMIN.get("/result/1/pdf?term_id=1").data).lower())
+run("UPDATE result_display_settings SET show_resumption_date=0 WHERE school_id=1")
+check("toggle OFF hides it", "Resumption Date" not in sheet())
 check("the date change is audited", one("SELECT COUNT(*) FROM audit_log WHERE action='resumption_date_changed'") >= 1)
-post(OADM, "/admin/terms", {"action": "set_resumption", "term_id": str(tid2), "resumption_date": "2030-01-01"}, "/admin/terms")
-check("another school cannot change our term's date", one("SELECT resumption_date FROM terms WHERE id=?", (tid2,)) == "2027-01-11")
-run("UPDATE result_display_settings SET show_next_term_resumes=1 WHERE school_id=1")
+post(OADM, "/admin/terms", {"action": "set_resumption", "term_id": "1", "resumption_date": "2030-01-01"}, "/admin/terms")
+check("another school cannot change our term's date", one("SELECT resumption_date FROM terms WHERE id=1") == "2027-01-11")
+run("UPDATE result_display_settings SET show_resumption_date=1 WHERE school_id=1")
 
 # ======================================================== 14. domain ratings 1..5 with labels
 tid_ = one("SELECT id FROM skill_traits WHERE school_id=1 AND COALESCE(is_active,1)=1 ORDER BY id LIMIT 1")
@@ -361,7 +352,7 @@ for tp in [x[0] for x in __import__("db").RESULT_TEMPLATES]:
     run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
     rp = ADMIN.get("/result/1/pdf?term_id=1"); pg = PdfReader(io.BytesIO(rp.data)).pages
     txt = re.sub(r"\s+", " ", text_of(rp.data).lower())
-    check(f"[{tp}] every style fits ONE page with signatures and grading key still present", len(pg) == 1 and any(k in txt for k in ("grading key", "grading:", "grade scale", "score range", "academic standard", "note:", "grading", "grades:", "domain ratings:", "key:")) and "class teacher" in txt, (len(pg), txt[-120:]))
+    check(f"[{tp}] every style fits ONE page with signatures and grading key still present", len(pg) == 1 and any(k in txt for k in ("grading key", "grading:", "grade scale", "score range", "academic standard", "note:", "grading")) and "class teacher" in txt, (len(pg), txt[-120:]))
     check(f"[{tp}] preview and print use the same style class", f"rs-{tp}" in html(ADMIN.get("/result/1?term_id=1")) and f"rs-{tp}" in html(ADMIN.get("/result/1/print?term_id=1")))
 run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
 run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
@@ -374,8 +365,8 @@ for sid_ in (1, 2, 3):
     for sub, (a_, b_, e_) in zip((1, 2, 3, 4), ((11, 12, 40), (8, 9, 31), (14, 12, 50), (10, 10, 35))):
         run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(?,?,1,?,?,0,?)", (sid_, sub, a_ + sid_, b_, e_ - sid_))
 run("UPDATE schools SET school_address='12 Unity Road, Abuja', registered_phone='08011112222', registered_email='office@myschool.ng', school_tagline='Knowledge and Integrity', cumulative_enabled=1 WHERE id=1")
-run("UPDATE result_display_settings SET show_next_term_resumes=1, show_address=1, show_phone=1, show_email=1, show_motto=1, show_all_comments=1, show_teacher_comment=1, show_principal_comment=1 WHERE school_id=1")
-run("UPDATE terms SET resumption_date='2027-01-11' WHERE id=?", (tid2,))
+run("UPDATE result_display_settings SET show_resumption_date=1, show_address=1, show_phone=1, show_email=1, show_motto=1, show_all_comments=1, show_teacher_comment=1, show_principal_comment=1 WHERE school_id=1")
+run("UPDATE terms SET resumption_date='2027-01-11' WHERE id=1")
 run("INSERT OR REPLACE INTO student_term_info(student_id,term_id,teacher_comment,principal_comment,days_school_opened,days_present,days_absent) VALUES(1,1,'Shows excellent ability to set goals.','A bright performance.',60,55,5)")
 ADMIN.get("/admin/result-display-settings")
 layouts = set()
@@ -387,16 +378,15 @@ for tp, marker in SAMPLES.items():
     check(f"[{tp}] PDF is one page and carries the real data", len(pdf_.pages) == 1 and "Obi" in ptxt and "Mathematics" in ptxt.title() or "MATHEMATICS" in ptxt, (len(pdf_.pages), ptxt[:120]))
     check(f"[{tp}] school details come from this school's profile", "12 Unity Road" in pr and "99 Other Street" not in pr)
     check(f"[{tp}] class statistics are real numbers from the broadsheet", True if tp in ("assessment_dossier", "green_cumulative_report") else any(k in pr for k in ("Class average", "Class avg", "Highest", "AVG", "Average", "Class avg")))
-    check(f"[{tp}] next term resumes shown when ON and the following term's date is set", "11" in pr and ("11/01/2027" in pr or "2027" in pr))
-    run("UPDATE result_display_settings SET show_address=0, show_next_term_resumes=0, show_teacher_comment=0 WHERE school_id=1")
+    check(f"[{tp}] resumption date shown when ON and set", "11" in pr and ("11/01/2027" in pr or "2027" in pr))
+    run("UPDATE result_display_settings SET show_address=0, show_resumption_date=0, show_teacher_comment=0 WHERE school_id=1")
     pr2 = html(ADMIN.get("/result/1/print?term_id=1"))
-    check(f"[{tp}] toggles hide address, next term resumes and the teacher comment", "12 Unity Road" not in pr2 and "2027" not in pr2 and "Shows excellent ability" not in pr2 and "A bright performance." in pr2)
+    check(f"[{tp}] toggles hide address, resumption date and the teacher comment", "12 Unity Road" not in pr2 and "2027" not in pr2 and "Shows excellent ability" not in pr2 and "A bright performance." in pr2)
     run("UPDATE result_display_settings SET show_all_comments=0 WHERE school_id=1")
     check(f"[{tp}] the All Comments master switch hides both comments", "A bright performance." not in html(ADMIN.get("/result/1/print?term_id=1")))
-    run("UPDATE result_display_settings SET show_address=1, show_next_term_resumes=1, show_teacher_comment=1, show_all_comments=1 WHERE school_id=1")
+    run("UPDATE result_display_settings SET show_address=1, show_resumption_date=1, show_teacher_comment=1, show_all_comments=1 WHERE school_id=1")
     layouts.add(re.sub(r"\s+", " ", re.sub(r">[^<]+<", "><", pr))[:1200])
 check("the six sample layouts have six different structures", len(layouts) == 6)
-
 run("UPDATE result_display_settings SET template='green_cumulative_report' WHERE school_id=1")
 gc = html(ADMIN.get("/result/1/print?term_id=1"))
 check("the cumulative columns appear on the green layout when Cumulative / Annual is ON", "Cumulative Result" in gc)
@@ -464,14 +454,7 @@ anon = A.app.test_client()
 lg = html(anon.get("/login"))
 check("the sign-in screen is a single form (no role cards, no pop-up chooser)", lg.count("<form") <= 2 and "hub-role-card" not in lg and "hubLoginOverlay" not in lg and 'name="portal_role"' not in lg)
 check("it asks for username/email/phone and password, with the show/hide control", 'name="username"' in lg and 'type="password"' in lg and "password-toggle.js" in lg)
-# V81 folded student sign-in into this SAME unified form (no more separate /student/login page
-# to link to) -- so this now checks for forgot-password/activation/signup links only, plus the
-# new in-form "Student logging in for the first time?" section (the class-code field) instead
-# of a link elsewhere. V82 replaced the forgot-password link's target with the new email-based
-# /account-recovery flow (the old /recover username+security-question flow still exists and still
-# works, just isn't the one linked from the main sign-in screen any more).
-check("it still links forgot-password, activation and signups, and now has a student class-code section instead of a separate student login link",
-      all(x in lg for x in ("/account-recovery", "/activate", "/register", 'name="class_code"')))
+check("it still links forgot-password, activation, signups and the separate student login", all(x in lg for x in ("/recover", "/activate", "/register", "/student/login")))
 for old in ("/admin/login", "/staff/login", "/parent/login"):
     r = anon.get(old); check(f"{old} now leads to the same screen", code(r) == 302 and r.headers["Location"].endswith("/login"), r.headers.get("Location"))
 cols = {r_[1] for r_ in db().execute("PRAGMA table_info(parent_accounts)")}
