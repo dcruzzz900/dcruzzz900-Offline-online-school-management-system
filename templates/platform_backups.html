@@ -11,5 +11,5 @@
 {% if backups %}<div style="overflow-x:auto"><table><tr><th>Backup</th><th>Size</th><th>Schools</th><th>Integrity</th><th>Action</th></tr>
 {% for b in backups %}<tr><td>{{ b.name }}</td><td>{{ (b.size / 1024)|round(0) }} KB</td><td>{{ b.schools }}</td><td>{{ b.status }}</td><td>{% if b.status == 'OK' %}<a class="btn" href="{{ url_for('platform_backup_download', name=b.name) }}">Download</a>{% endif %}</td></tr>{% endfor %}
 </table></div>{% else %}<p>No manual backups have been created yet.</p>{% endif %}</div>
-<div class="card"><h3>Restore Safety</h3><details class="hlp"><summary class="hlp-t">How to restore</summary><p class="muted hlp-b">Restoring a production database is intentionally not a one-click browser operation. Stop the Railway service, preserve the current database as a rollback copy, replace the database from a verified backup, then restart and run the migration checks.</p></details></div>
+<div class="card"><h3>Restore Safety</h3><p>Restoring a production database is intentionally not a one-click browser operation. Stop the Railway service, preserve the current database as a rollback copy, replace the database from a verified backup, then restart and run the migration checks.</p></div>
 {% endblock %}

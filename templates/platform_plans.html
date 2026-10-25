@@ -2,7 +2,7 @@
 {% block title %}Subscription Plans{% endblock %}
 {% block content %}
 <div class="dashboard-header"><div><h1>Subscription Plans</h1><p class="badge">Configure school plans in Nigerian Naira · payment gateway not connected</p></div></div>
-<div class="card"><details class="hlp"><summary class="hlp-t">What changing a plan affects</summary><p class="muted hlp-b">Changing a plan changes its configuration for future assignments and for schools currently using that plan. Existing legacy schools remain legacy.</p></details></div>
+<div class="card"><p>Changing a plan changes its configuration for future assignments and for schools currently using that plan. Existing legacy schools remain legacy.</p></div>
 {% for p in plans %}
 <div class="card">
 <form method="post" style="display:grid;gap:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

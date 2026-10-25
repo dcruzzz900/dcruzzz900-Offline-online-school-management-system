@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block title %}My Account{% endblock %}{% block content %}
 <h1>My Account</h1>
-<div class="card" style="max-width:560px"><h3>Official details</h3><details class="hlp"><summary class="hlp-t">Why can't I change these?</summary><p class="muted hlp-b">Your name, class, admission/register number and date of birth are set by the school and cannot be changed here. Ask your Form Teacher if something is wrong.</p></details>
+<div class="card" style="max-width:560px"><h3>Official details</h3><p class="muted">Your name, class, admission/register number and date of birth are set by the school and cannot be changed here. Ask your Form Teacher if something is wrong.</p>
 <p><b>Name:</b> {{ st.last_name }} {{ st.first_name }} {{ st.other_names or '' }}</p><p><b>Admission No.:</b> {{ st.admission_no }}</p></div>
 <form method="POST" class="card" style="max-width:560px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="username"><h3>Change username</h3>
 <label>Username<input type="text" name="username" value="{{ form.get('username', st.username or '') }}" maxlength="40" required></label>{% if errors.username %}<div class="pf-err" style="color:#b3261e;font-weight:600">{{ errors.username }}</div>{% endif %}

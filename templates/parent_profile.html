@@ -11,11 +11,10 @@
     <p><b>Phone:</b> {{ student.parent_phone or '—' }}</p>
     <p><b>Email:</b> {{ student.parent_email or '—' }}</p>
     <p><b>Address:</b> {{ student.parent_address or '—' }}</p>
-    <details class="hlp"><summary class="hlp-t">How this works</summary>
-    <p class="muted hlp-b" style="font-size:0.8rem; margin-top:0.75rem;">
+    <p style="font-size:0.8rem; color:#999; margin-top:0.75rem;">
         This profile is assembled from the parent/guardian contact fields on each student's record —
         there isn't a separate parent login yet. To update this information, edit any of the children below.
-    </p></details>
+    </p>
 </div>
 
 <div class="card" style="max-width:640px;">

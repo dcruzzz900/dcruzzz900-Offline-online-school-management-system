@@ -2,13 +2,12 @@
 {% block title %}Onboard a School{% endblock %}
 {% block content %}
 <h1>Onboard a New School</h1>
-<details class="hlp"><summary class="hlp-t">What happens when you onboard a school</summary>
-<p class="muted hlp-b" style="font-size:0.9rem;">
+<p style="color:#666; font-size:0.9rem;">
     This creates the school and its admin account in "pending" status, and issues a one-time
     6-digit activation code. The code is emailed to the school's registered address and shown
     to you here in case email isn't set up yet — the School Admin enters it on the
     <a href="{{ url_for('activate_school') }}">Activate School</a> page to finish setup.
-</p></details>
+</p>
 
 <div class="card" style="max-width:520px;">
     <form method="POST">
