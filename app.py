@@ -19,15 +19,14 @@ import hashlib
 from collections import defaultdict, deque
 
 import v63_core
+from db import effective_grading_config, weighting_problems, score_conflicts, required_total
 from db import (
     get_db, init_db, grade_for, get_school, INSTANCE_DIR, table_exists, ensure_school_v61_defaults, generate_school_id, get_result_display, RESULT_BOOL_SETTINGS, RESULT_TEMPLATES,
-    FONT_SCALE_FACTORS, PAGE_ORIENTATIONS, FONT_SCALE_CHOICES,
     POSITION_LABELS, FULL_ACCESS_POSITIONS, form_teacher_class_ids,
     can_view_all_results, can_view_class_results, student_full_name,
     seed_school_defaults, upsert_enrollment, log_audit,
     get_visible_notifications, get_unread_notification_count,
-    recompute_attendance, attendance_percentage, grading_problems, grading_affected_scores, record_grading_config_change, grade_band_problems, parse_arms,
-    term_sequence_next, next_term_resumes_info,
+    recompute_attendance, attendance_percentage, grading_problems, grade_band_problems, parse_arms,
     generate_teacher_comment, generate_principal_comment,
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
@@ -54,65 +53,13 @@ def _html_sheets(data_list, term):
     return docs
 
 
-def _cumulative_html_sheet(data, academic_session, selected_term, rs):
-    """V85: the exact HTML the cumulative print view renders -- same template, same CSS, same
-    Fit-to-Page/orientation JS as the regular result's print view, so Preview = Print = PDF holds
-    for cumulative results too."""
-    return render_template(
-        "cumulative_result_print.html", academic_session=academic_session, selected_term=selected_term,
-        student_full_name=student_full_name, rs=rs, pdf_url="", back_url="", autoprint=False, **data
-    )
-
-
-def build_cumulative_result_pdf_html(data, academic_session, selected_term, rs):
-    """Preview = Print = PDF for the cumulative result (V85): the PDF is the cumulative print page,
-    printed by Chromium -- same mechanism as build_result_pdf for the regular result. Falls back to
-    the older reportlab-style builder (imported as build_cumulative_result_pdf from pdf_utils) only
-    if no Chromium is installed on the host."""
-    _live_scale_override({"rs": rs})
-    pdfs = html_pdf.render_documents(app, _session_for_pdf(), [_cumulative_html_sheet(data, academic_session, selected_term, rs)])
-    if pdfs:
-        return io.BytesIO(pdfs[0])
-    _c = get_db()
-    try:
-        school = get_school(_c, current_school_id())
-    finally:
-        _c.close()
-    return build_cumulative_result_pdf(
-        data, academic_session, school_name=school["name"] if school else None,
-        student_full_name=student_full_name, font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=rs.get("accent") or "#1f3a5f",
-    )
-
-
 def _session_for_pdf():
     return {k: v for k, v in session.items() if not str(k).startswith("_")}
-
-
-def _live_scale_override(data):
-    """The print page's on-screen Decrease(-)/Increase(+)/Reset font control (V77) is a
-    per-viewer, client-side zoom — it doesn't touch the saved Result Display Settings. A
-    download started from that page carries the chosen level as ?scale=, so the PDF (built by
-    printing this same HTML) matches what was on screen instead of silently reverting to the
-    school's saved default. Ignored outside a request (e.g. a bulk/background PDF build) or
-    when the value is missing/invalid; clamped to the same 0.8-1.4 range the on-screen control
-    itself enforces, so a hand-edited URL can't shrink text unreadably or blow past the page."""
-    try:
-        scale = request.args.get("scale", type=float)
-    except RuntimeError:
-        scale = None  # no active request context (e.g. a scheduled/background PDF build)
-    if not scale:
-        return
-    scale = max(0.8, min(1.4, scale))
-    rs = data.get("rs")
-    if rs is not None:
-        rs["font_scale_factor"] = (rs.get("font_scale_factor") or 1.0) * scale
 
 
 def build_result_pdf(data, term, **kw):
     """Preview = Print = PDF: the PDF is the print page, printed by Chromium. Falls back to the old builder only if
     no Chromium is installed on the host."""
-    _live_scale_override(data)
     pdfs = html_pdf.render_documents(app, _session_for_pdf(), _html_sheets([data], term))
     if pdfs:
         return io.BytesIO(pdfs[0])
@@ -145,19 +92,6 @@ def build_class_results_pdf(data_list, term, **kw):
     if pdfs:
         return html_pdf.merge(pdfs)
     return _reportlab_class_pdf(data_list, term, **kw)
-
-
-def pdf_response(buf, download_name):
-    """V78: 'Print' (on a result/broadsheet print page) now opens this same PDF instead of asking the
-    PHONE's own browser to print the live HTML -- a phone's native print pipeline doesn't reliably
-    apply this app's colors/backgrounds or the one-page auto-shrink, so what printed could look
-    nothing like the Download PDF (plain borders, no colors, spilling onto a second page), even
-    though the HTML and CSS were identical in both cases; printing the PDF itself (already rendered
-    once, by Chromium, with colors forced on) can't drift from Download, because it IS Download.
-    That request carries ?inline=1 so the browser opens the PDF to view/print from, rather than
-    saving it to Downloads the way a normal "Download PDF" click still does."""
-    inline = request.args.get("inline") == "1"
-    return send_file(buf, mimetype="application/pdf", as_attachment=not inline, download_name=download_name)
 
 from email_utils import send_email, send_platform_email
 from reports import build_csv, build_xlsx
@@ -655,24 +589,6 @@ def _public_auth_school(conn=None):
             row = conn.execute("SELECT school_id FROM users WHERE username=? LIMIT 1", (username,)).fetchone()
             if row:
                 return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
-        # The unified /login form (V81) also accepts a student's username/admission/register no,
-        # or a parent's username, in this same "username" field -- so a failed sign-in attempt by
-        # a student or parent (re-rendering this same page) needs the branding lookup to recognize
-        # those identifiers too, not just staff usernames, or the page would silently revert to the
-        # generic unbranded look on a retry.
-        if username and _table_exists_safe(conn, "students"):
-            row = conn.execute(
-                "SELECT c.school_id FROM students st JOIN classes c ON c.id=st.class_id "
-                "WHERE LOWER(st.username)=LOWER(?) OR LOWER(TRIM(st.admission_no))=LOWER(?) "
-                "OR LOWER(TRIM(COALESCE(st.register_no,'')))=LOWER(?) LIMIT 1",
-                (username, username, username),
-            ).fetchone()
-            if row:
-                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
-        if username and _table_exists_safe(conn, "parent_accounts"):
-            row = conn.execute("SELECT school_id FROM parent_accounts WHERE LOWER(username)=LOWER(?) LIMIT 1", (username,)).fetchone()
-            if row:
-                return conn.execute("SELECT * FROM schools WHERE id=?", (row["school_id"],)).fetchone()
         return None
     finally:
         if own_conn:
@@ -960,23 +876,30 @@ def student_class_for_term(conn, student_id, term_id):
     return current["class_id"] if current else None
 
 
-def result_class_published(conn, school_id, class_id, term_id):
-    """Whether THIS SPECIFIC class's result has actually been published for this term —
-    never just whether some other class in the same term happens to be published.
-    terms.is_published is a legacy, term-wide "at least one class published" signal kept
-    only for old summary screens (see v63_core.sync_term_flag); every route that lets a
-    student/parent view, print, download or email an actual result must gate on this
-    per-class answer instead, or a result could leak the moment ANY class in the school
-    gets published, regardless of whether that student's own class has been approved yet."""
-    if not class_id:
-        return False
-    return v63_core.is_published(conn, school_id, class_id, term_id)
+def get_grading_config(conn, term_id=None):
+    """The grading configuration that applies to a TERM (None = the active term). A term that was frozen with an earlier
+    weighting (published history, or a change that did not apply to it) keeps that weighting."""
+    school_id = None
+    if term_id is not None:        # a term knows its own school: works outside a request too (background jobs, tests)
+        row = conn.execute("SELECT se.school_id FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=?", (term_id,)).fetchone()
+        school_id = row["school_id"] if row else None
+    if school_id is None:
+        school_id = current_school_id()
+    try:
+        cache = g.__dict__.setdefault("_grading_cfg", {})
+    except RuntimeError:
+        return effective_grading_config(conn, school_id, term_id)
+    key = (school_id, term_id)
+    if key not in cache:
+        cache[key] = effective_grading_config(conn, school_id, term_id)
+    return cache[key]
 
 
-def get_grading_config(conn):
-    return conn.execute(
-        "SELECT * FROM grading_config WHERE school_id=? LIMIT 1", (current_school_id(),)
-    ).fetchone()
+def term_total(conn, term_id, score):
+    """A student's subject total for one term, under that term's weighting. CA3 only counts while CA3 is switched on, so
+    switching it off never leaves a hidden value inside a total (the stored CA3 mark itself is kept)."""
+    cfg = get_grading_config(conn, term_id)
+    return compute_total(score["ca1"], score["ca2"], score["exam"], (score["ca3"] or 0) if ca3_enabled(cfg) else 0)
 
 
 def compute_total(ca1, ca2, exam, ca3=0):
@@ -1031,16 +954,12 @@ def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_
     changed = (existing is None and any((ca1, ca2, ca3, exam))) or (
         existing is not None and (existing["ca1"] != ca1 or existing["ca2"] != ca2 or (existing["ca3"] or 0) != ca3 or existing["exam"] != exam))
     reason = (reason or "").strip()[:300] or None
-    # "reopened" is the one state that means this class's result WAS published and has since been
-    # unlocked for correction — that's the case that needs a mandatory reason for the audit trail.
-    # (ctx["is_published"], the legacy term-wide flag, would be wrong here: it can still read True
-    # off some OTHER class in the same term, or already read False the moment this was the only
-    # published class and got reopened — either way it doesn't describe THIS class's own history.)
-    if changed and lock_state == "reopened" and not reason:
-        raise ScoreChangeError("This class's result was published and is now reopened. Enter a reason for the score change.")
+    if changed and ctx["is_published"] and not reason:
+        raise ScoreChangeError("This term's results are published. Enter a reason for the score change.")
     if changed:
-        old_total = compute_total(old_vals[0], old_vals[1], old_vals[3], old_vals[2]) if existing else None
-        new_total = compute_total(ca1, ca2, exam, ca3)
+        _c3on = ca3_enabled(get_grading_config(conn, term_id))
+        old_total = compute_total(old_vals[0], old_vals[1], old_vals[3], old_vals[2] if _c3on else 0) if existing else None
+        new_total = compute_total(ca1, ca2, exam, ca3 if _c3on else 0)
         conn.execute(
             "INSERT INTO score_history (student_id, subject_id, term_id, old_ca1, old_ca2, old_ca3, old_exam, "
             "new_ca1, new_ca2, new_ca3, new_exam, changed_by, tenant_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -1056,11 +975,7 @@ def save_score(conn, student_id, subject_id, term_id, ca1, ca2, ca3, exam, user_
              ctx["class_id"], ctx["class_name"], ctx["session_id"], ctx["session_name"], term_id, ctx["term_name"],
              old_vals[0], old_vals[1], old_vals[2], old_vals[3], old_total, ca1, ca2, ca3, exam, new_total,
              round(new_total - (old_total or 0), 2), user_id, session.get("name"), _actor_role_label(),
-             # This class's own workflow state at the moment of the change (Draft/Submitted/Under Review/
-             # Returned/Approved/Published/Reopened) — not the term-wide "some class is published" flag,
-             # which could otherwise mislabel a change to a still-unpublished class as "Published" just
-             # because a different class in the same term had already gone through approval.
-             v63_core.STATE_LABELS[lock_state], reason, source,
+             "Published" if ctx["is_published"] else "Draft", reason, source,
              ("entered" if existing is None else ("cleared" if all(v is None for v in (ca1, ca2, ca3, exam)) else
               ("changed_after_return" if v63_core.publication_status(conn, ctx["school_id"], ctx["class_id"], term_id) in ("returned", "reopened") else "edited"))),
              (conn.execute("SELECT arm FROM classes WHERE id=?", (ctx["class_id"],)).fetchone() or {"arm": None})["arm"] if "arm" in [r[1] for r in conn.execute("PRAGMA table_info(classes)")] else None,
@@ -1154,7 +1069,7 @@ def require_cumulative_enabled(conn):
     redirect response otherwise."""
     school = get_school(conn, current_school_id())
     if not school or not school["cumulative_enabled"]:
-        flash("Cumulative/Annual results are turned off for this school. Enable it under Result Display Settings.", "error")
+        flash("Cumulative/Annual results are turned off for this school. Enable it under Setup → Terms.", "error")
         return redirect(url_for("dashboard"))
     return None
 
@@ -1425,19 +1340,11 @@ def login():
         identifier = request.form["username"].strip()
         password = request.form["password"]
         requested_school_code = request.form.get("school_code", "").strip()
-        class_code_raw = request.form.get("class_code", "")  # V81: first-time student login only
         conn = get_db()
         parent = conn.execute(
             "SELECT * FROM parent_accounts WHERE (username=? OR (email IS NOT NULL AND LOWER(email)=LOWER(?)) OR (phone IS NOT NULL AND phone=?))",
             (identifier, identifier, identifier),
         ).fetchone() if _table_exists_safe(conn, "parent_accounts") else None
-        if not parent:
-            # V84: an unmatched identifier used to skip straight to the next lookup with no hash
-            # computed at all, while a matched-but-wrong-password identifier always computes one --
-            # a timing side-channel an attacker could use to enumerate valid logins. Student login
-            # already defends against this with the same dummy-hash trick (see _DUMMY_PASSWORD_HASH
-            # below); this brings the staff/parent branch up to the same standard.
-            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")
         if parent and check_password_hash(parent["password_hash"], password):
             school = get_school(conn, parent["school_id"])
             if not parent["is_active"] or ("account_status" in parent.keys() and parent["account_status"] != "active"):
@@ -1474,8 +1381,6 @@ def login():
             "OR (phone IS NOT NULL AND phone=?)",
             (identifier, identifier, identifier),
         ).fetchall()
-        if not cands:
-            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")  # V84: same timing fix as above
         # An exact-case username match wins; otherwise the first candidate whose password verifies.
         cands = sorted(cands, key=lambda u: 0 if u["username"] == identifier else 1)
         user = next((u for u in cands if u["password_hash"] and check_password_hash(u["password_hash"], password)), cands[0] if cands else None)
@@ -1520,18 +1425,6 @@ def login():
             if user["role"] == "teacher" and "first_login_required" in user.keys() and user["first_login_required"]:
                 return redirect(url_for("staff_onboarding"))
             return redirect(url_for("dashboard"))
-        # V81: not a parent or staff account match -- try a student account, then a platform
-        # admin account, on this SAME connection, before giving the same generic failure. One
-        # unified form for every role (the ninth spec's Phase 4), instead of the separate
-        # /student/login and /platform/login pages this project used to have.
-        outcome = _try_student_login(conn, identifier, password, class_code_raw, requested_school_code)
-        if outcome is not None:
-            conn.close()
-            return outcome
-        outcome = _try_platform_login(conn, identifier, password)
-        if outcome is not None:
-            conn.close()
-            return outcome
         conn.close()
         flash("Invalid username/email/phone or password.", "error")
     return render_template("login.html")
@@ -1777,167 +1670,6 @@ def recover_reset():
             flash("Password reset. You can now log in with your new password.", "success")
             return redirect(url_for("login"))
     return render_template("recover_reset.html")
-
-
-# ---------- email-based account recovery (9th requirements document, Phase 5) ----------
-# Covers both staff (users) and parent accounts via a single, email-address-driven flow -- the
-# older /recover flow above only ever covered staff (it needs a username plus a security question
-# that only staff accounts have), and is left in place unchanged as a fallback for a staff member
-# who has no email on file. A reset link is single-use and expires in PASSWORD_RESET_TOKEN_MINUTES.
-# The same generic confirmation is shown whether or not the email matched anything, so this can't be
-# used to probe which email addresses have accounts (the same anti-enumeration principle the student
-# login already follows with its constant-time dummy password check).
-
-PASSWORD_RESET_TOKEN_MINUTES = 30
-ACCOUNT_RECOVERY_GENERIC_MESSAGE = (
-    "If an account is associated with that email address, we've sent instructions to it. "
-    "The link will work for the next 30 minutes."
-)
-
-
-def _hash_reset_token(raw_token):
-    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-
-
-def _issue_reset_token(conn, account_type, account_id):
-    """Creates a new single-use reset token for the given account, invalidating any earlier
-    unused tokens for that same account first (so only the most recently requested link works).
-    Returns the raw token -- only its hash is ever stored."""
-    now = datetime.datetime.utcnow()
-    conn.execute(
-        "UPDATE password_reset_tokens SET used_at=? WHERE account_type=? AND account_id=? AND used_at IS NULL",
-        (now.isoformat(timespec="seconds"), account_type, account_id),
-    )
-    raw_token = secrets.token_urlsafe(32)
-    expires_at = (now + datetime.timedelta(minutes=PASSWORD_RESET_TOKEN_MINUTES)).isoformat(timespec="seconds")
-    conn.execute(
-        "INSERT INTO password_reset_tokens (account_type, account_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
-        (account_type, account_id, _hash_reset_token(raw_token), expires_at),
-    )
-    return raw_token
-
-
-def _lookup_reset_token(conn, raw_token):
-    """Returns the matching, still-valid (unused, unexpired) token row, or None."""
-    if not raw_token:
-        return None
-    now_iso = datetime.datetime.utcnow().isoformat(timespec="seconds")
-    return conn.execute(
-        "SELECT * FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?",
-        (_hash_reset_token(raw_token), now_iso),
-    ).fetchone()
-
-
-@app.route("/account-recovery", methods=["GET", "POST"])
-@rate_limit(max_attempts=5, window_seconds=600)
-def account_recovery():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        if not email:
-            flash("Please enter your email address.", "error")
-            return redirect(url_for("account_recovery"))
-
-        conn = get_db()
-        staff_matches = conn.execute(
-            "SELECT * FROM users WHERE email IS NOT NULL AND email<>'' AND LOWER(email)=?", (email,)
-        ).fetchall()
-        parent_matches = (
-            conn.execute(
-                "SELECT * FROM parent_accounts WHERE email IS NOT NULL AND email<>'' AND LOWER(email)=? AND is_active=1",
-                (email,),
-            ).fetchall()
-            if _table_exists_safe(conn, "parent_accounts")
-            else []
-        )
-
-        sent_any = False
-        for row in staff_matches:
-            school = get_school(conn, row["school_id"])
-            if not school:
-                continue
-            raw_token = _issue_reset_token(conn, "staff", row["id"])
-            conn.commit()
-            reset_url = url_for("account_recovery_reset", token=raw_token, _external=True)
-            ok, _msg = send_email(
-                school, row["email"],
-                f"Reset your {school['name'] or 'My School Hub'} login",
-                f"Hello {row['name']},\n\n"
-                f"Your username is: {row['username']}\n\n"
-                f"To set a new password, open this link within {PASSWORD_RESET_TOKEN_MINUTES} minutes "
-                f"(it can only be used once):\n{reset_url}\n\n"
-                "If you didn't request this, you can safely ignore this email -- your password will "
-                "not change unless you open the link above and choose a new one.",
-            )
-            sent_any = sent_any or ok
-        for row in parent_matches:
-            school = get_school(conn, row["school_id"])
-            if not school:
-                continue
-            raw_token = _issue_reset_token(conn, "parent", row["id"])
-            conn.commit()
-            reset_url = url_for("account_recovery_reset", token=raw_token, _external=True)
-            ok, _msg = send_email(
-                school, row["email"],
-                f"Reset your {school['name'] or 'My School Hub'} parent login",
-                f"Hello {row['name']},\n\n"
-                f"Your username for your {school['name'] or 'school'} parent account is: {row['username']}\n\n"
-                f"To set a new password, open this link within {PASSWORD_RESET_TOKEN_MINUTES} minutes "
-                f"(it can only be used once):\n{reset_url}\n\n"
-                "If you didn't request this, you can safely ignore this email -- your password will "
-                "not change unless you open the link above and choose a new one.\n\n"
-                "(If you have parent accounts at more than one school using this same email address, "
-                "you'll receive a separate message like this one for each school.)",
-            )
-            sent_any = sent_any or ok
-        if (staff_matches or parent_matches) and not sent_any:
-            # Matched an account, but every match's school has no email sending set up yet.
-            # Still show the generic message to the visitor (never reveal which emails match),
-            # but leave a trail an admin can find.
-            try:
-                security_event(conn, "ACCOUNT_RECOVERY_EMAIL_UNDELIVERABLE", "blocked",
-                                f"matched_accounts={len(staff_matches) + len(parent_matches)} but no school had email sending configured")
-                conn.commit()
-            except Exception:
-                pass
-        conn.close()
-        flash(ACCOUNT_RECOVERY_GENERIC_MESSAGE, "success")
-        return redirect(url_for("login"))
-    return render_template("account_recovery.html")
-
-
-@app.route("/account-recovery/reset/<token>", methods=["GET", "POST"])
-@rate_limit(max_attempts=5, window_seconds=600)
-def account_recovery_reset(token):
-    conn = get_db()
-    token_row = _lookup_reset_token(conn, token)
-    if not token_row:
-        conn.close()
-        flash("This recovery link is invalid or has expired. Please request a new one.", "error")
-        return redirect(url_for("account_recovery"))
-
-    if request.method == "POST":
-        new = request.form.get("new_password", "")
-        confirm = request.form.get("confirm_password", "")
-        if len(new) < 6:
-            conn.close()
-            flash("New password must be at least 6 characters.", "error")
-            return render_template("account_recovery_reset.html", token=token)
-        if new != confirm:
-            conn.close()
-            flash("New password and confirmation don't match.", "error")
-            return render_template("account_recovery_reset.html", token=token)
-
-        table = "users" if token_row["account_type"] == "staff" else "parent_accounts"
-        conn.execute(f"UPDATE {table} SET password_hash=? WHERE id=?", (generate_password_hash(new), token_row["account_id"]))
-        conn.execute("UPDATE password_reset_tokens SET used_at=? WHERE id=?",
-                     (datetime.datetime.utcnow().isoformat(timespec="seconds"), token_row["id"]))
-        conn.commit()
-        conn.close()
-        flash("Password reset. You can now log in with your new password.", "success")
-        return redirect(url_for("login"))
-
-    conn.close()
-    return render_template("account_recovery_reset.html", token=token)
 
 
 # ---------- dashboard ----------
@@ -3380,9 +3112,8 @@ def parent_child_detail(student_id):
 @parent_login_required
 def parent_result(student_id,term_id):
     conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
-    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,current_school_id())).fetchone()
-    cls_for_term = student_class_for_term(conn, student_id, term_id) if child and term else None
-    if not child or not term or not result_class_published(conn, current_school_id(), cls_for_term, term_id):
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
+    if not child or not term:
         conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
     data=build_result_data(conn,student_id,term_id); conn.close()
     return render_template("parent_result.html",child=child,term=term,student_full_name=student_full_name,**data)
@@ -3391,16 +3122,15 @@ def parent_result(student_id,term_id):
 @parent_login_required
 def parent_result_pdf(student_id,term_id):
     conn=get_db(); child=parent_child(conn,session["parent_id"],student_id)
-    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=?",(term_id,current_school_id())).fetchone()
-    cls_for_term = student_class_for_term(conn, student_id, term_id) if child and term else None
-    if not child or not term or not result_class_published(conn, current_school_id(), cls_for_term, term_id):
+    term=conn.execute("SELECT t.*,s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=? AND s.school_id=? AND t.is_published=1",(term_id,current_school_id())).fetchone()
+    if not child or not term:
         conn.close(); flash("That published result is not available.","error"); return redirect(url_for("parent_children_page"))
     data=build_result_data(conn,student_id,term_id); school=get_school(conn,current_school_id()); logo_path=None
     if school and school["logo_filename"]:
         candidate=os.path.join(INSTANCE_DIR,school["logo_filename"])
         if os.path.exists(candidate): logo_path=candidate
     conn.close(); buf=build_result_pdf(data,term,school_name=school["name"],logo_path=logo_path,student_full_name=student_full_name,font_choice=school["pdf_font"],accent_color=school["result_accent_color"] or "#1f3a5f",name_align=school["name_align"])
-    return pdf_response(buf,f"result_{child['admission_no']}_{term['name']}.pdf".replace(" ","_").replace("/","-"))
+    return send_file(buf,mimetype="application/pdf",as_attachment=True,download_name=f"result_{child['admission_no']}_{term['name']}.pdf".replace(" ","_").replace("/","-"))
 
 @app.route("/parent/children/<int:student_id>/attendance")
 @parent_login_required
@@ -4080,51 +3810,115 @@ def reset_subadmin_password(user_id):
     return redirect(url_for("admin_subadmins"))
 
 
+def _school_terms(conn, school_id):
+    return conn.execute("SELECT t.id, t.name, t.is_active, se.name session_name FROM terms t JOIN sessions se ON se.id=t.session_id "
+                        "WHERE se.school_id=? ORDER BY t.id", (school_id,)).fetchall()
+
+
+def _read_weighting_form():
+    def num(name, default=0.0):
+        raw = (request.form.get(name) or "").strip()
+        if raw == "":
+            return default
+        return float(raw)
+    use_ca3 = request.form.get("use_ca3") == "1"
+    return {"ca1": num("ca1_max"), "ca2": num("ca2_max"), "ca3": (num("ca3_max") if use_ca3 else 0.0), "exam": num("exam_max"), "use_ca3": use_ca3}
+
+
 @app.route("/admin/grading", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_grading():
     conn = get_db()
     school_id = current_school_id()
+    terms = _school_terms(conn, school_id)
+    active = next((t for t in terms if t["is_active"]), None)
+    base = conn.execute("SELECT * FROM grading_config WHERE school_id=? LIMIT 1", (school_id,)).fetchone()
     review = None
-    proposed = None
+    form_vals = None
     if request.method == "POST":
-        ca1 = float(request.form["ca1_max"])
-        ca2 = float(request.form["ca2_max"])
-        ca3 = float(request.form.get("ca3_max") or 0)   # 0 = CA3 not used
-        exam = float(request.form["exam_max"])
-        problems = grading_problems(conn, school_id, ca1, ca2, ca3, exam)
-        if problems:
-            flash(" ".join(problems), "error")
+        try:
+            new = _read_weighting_form()
+        except ValueError:
+            conn.close(); flash("Enter every maximum as a number.", "error"); return redirect(url_for("admin_grading"))
+        form_vals = new
+        scope = request.form.get("scope", "current")
+        eff_term = None
+        if scope == "current":
+            eff_term = active["id"] if active else None
+        elif scope.startswith("term:") and scope[5:].isdigit():
+            eff_term = int(scope[5:])
+            if eff_term not in {t["id"] for t in terms}:
+                eff_term = None; scope = "future"
         else:
-            affected = grading_affected_scores(conn, school_id, ca1, ca2, ca3, exam)
-            confirmed = request.form.get("confirm_override") == "1"
-            if affected["count"] and not confirmed:
-                # Don't save yet — show what would be left exceeding the new
-                # maximums and ask an authorized user to explicitly confirm.
-                # Nothing is deleted, capped, or overwritten by looking at this.
-                review = affected
-                proposed = {"ca1_max": ca1, "ca2_max": ca2, "ca3_max": ca3, "exam_max": exam}
-            else:
-                old_config = get_grading_config(conn)
-                conn.execute("UPDATE grading_config SET ca1_max=?, ca2_max=?, ca3_max=?, exam_max=? WHERE school_id=?",
-                             (ca1, ca2, ca3, exam, school_id))
-                record_grading_config_change(conn, school_id, old_config, ca1, ca2, ca3, exam, affected,
-                                              session.get("user_id"), session.get("name"))
+            scope = "future"
+        errors = weighting_problems(conn, school_id, new["ca1"], new["ca2"], new["ca3"], new["exam"])     # 1) the CONFIGURATION itself
+        affected_terms = [t["id"] for t in terms if eff_term is not None and t["id"] >= eff_term]
+        conflicts, locked_terms = [], []
+        if not errors:
+            conflicts = score_conflicts(conn, school_id, new, affected_terms)                              # 2) EXISTING SCORES, separately
+            locked_terms = sorted({c["term"] for c in conflicts if c["locked"]})
+            for tid in affected_terms:                                                                    # published/submitted history is never re-weighted
+                if conn.execute("SELECT 1 FROM result_publication WHERE school_id=? AND term_id=? AND status IN ('submitted','under_review','approved','published') LIMIT 1", (school_id, tid)).fetchone():
+                    tn = next(t for t in terms if t["id"] == tid)
+                    errors.append(f"{tn['session_name']} — {tn['name']} already has submitted, approved or published results, so the new weighting cannot start from it. Choose a later starting term or 'Future terms only'.")
+        migrate = request.form.get("migrate") in ("cap", "scale")
+        if errors:
+            flash(" ".join(errors), "error")
+        elif conflicts and not migrate:
+            review = {"conflicts": conflicts, "scope": scope, "new": new, "eff_term": eff_term, "locked": bool(locked_terms)}
+        elif conflicts and migrate and (session.get("role") != "admin" or (request.form.get("confirm_text") or "").strip().upper() != "MIGRATE SCORES"):
+            review = {"conflicts": conflicts, "scope": scope, "new": new, "eff_term": eff_term, "locked": False}
+            flash("To migrate scores, a School Admin must type MIGRATE SCORES to confirm.", "error")
+        else:
+            old = dict(base)
+            migrated = 0
+            try:
+                tenant = conn.execute("SELECT tenant_id FROM schools WHERE id=?", (school_id,)).fetchone()["tenant_id"]
+                # freeze every term the new weighting does NOT apply to, with the weighting it has been scored with so far
+                for t in terms:
+                    if eff_term is not None and t["id"] >= eff_term:
+                        conn.execute("DELETE FROM term_grading_snapshots WHERE school_id=? AND term_id=?", (school_id, t["id"]))
+                    else:
+                        conn.execute("INSERT OR IGNORE INTO term_grading_snapshots(school_id,tenant_id,term_id,ca1_max,ca2_max,ca3_max,exam_max,reason,created_by) VALUES (?,?,?,?,?,?,?,?,?)",
+                                     (school_id, tenant, t["id"], old["ca1_max"], old["ca2_max"], old["ca3_max"] or 0, old["exam_max"], "Frozen before a weighting change", session.get("user_id")))
+                hid = conn.execute(
+                    "INSERT INTO grading_config_history(school_id,tenant_id,action,scope,effective_term_id,old_ca1,old_ca2,old_ca3,old_exam,new_ca1,new_ca2,new_ca3,new_exam,affected_scores,details,changed_by,changed_by_name,changed_by_role) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (school_id, tenant, "config_changed", scope, eff_term, old["ca1_max"], old["ca2_max"], old["ca3_max"] or 0, old["exam_max"], new["ca1"], new["ca2"], new["ca3"], new["exam"],
+                     len(conflicts), ("Approved score migration (" + request.form.get("migrate") + ")") if conflicts else "No existing score exceeded the new maximums",
+                     session.get("user_id"), session.get("name"), _actor_role_label())).lastrowid
+                if conflicts:
+                    old_max = {"CA1": old["ca1_max"], "CA2": old["ca2_max"], "CA3": old["ca3_max"] or 0, "Examination": old["exam_max"]}
+                    for c in conflicts:
+                        method = request.form.get("migrate")
+                        newv = c["new_max"] if method == "cap" else round(min(c["new_max"], c["value"] * c["new_max"] / (old_max[c["component"]] or c["new_max"])), 2)
+                        conn.execute(f"UPDATE scores SET {c['col']}=? WHERE student_id=? AND subject_id=? AND term_id=?", (newv, c["student_id"], c["subject_id"], c["term_id"]))
+                        conn.execute("INSERT INTO score_migration_log(history_id,school_id,tenant_id,student_id,subject_id,term_id,component,old_value,new_value,method,migrated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                     (hid, school_id, tenant, c["student_id"], c["subject_id"], c["term_id"], c["component"], c["value"], newv, method, session.get("user_id")))
+                        migrated += 1
+                conn.execute("UPDATE grading_config SET ca1_max=?, ca2_max=?, ca3_max=?, exam_max=? WHERE school_id=?", (new["ca1"], new["ca2"], new["ca3"], new["exam"], school_id))
+                log_audit(conn, session.get("role"), session.get("name"), "grading_weighting_changed",
+                          f"CA1 {old['ca1_max']:g}->{new['ca1']:g}, CA2 {old['ca2_max']:g}->{new['ca2']:g}, CA3 {(old['ca3_max'] or 0):g}->{new['ca3']:g}, Exam {old['exam_max']:g}->{new['exam']:g}; scope={scope}; scores migrated={migrated}",
+                          school_id=school_id)
                 conn.commit()
-                msg = "Grading weights updated."
-                if abs(ca1 + ca2 + ca3 + exam - 100) > 0.001:
-                    msg += f" Note: the maximums add up to {ca1 + ca2 + ca3 + exam:g}, not 100."
-                if affected["count"]:
-                    msg += (f" {affected['count']} saved score(s) now exceed one of the new maximums — they were "
-                            "kept exactly as entered and will need review/correction; they were not changed.")
-                flash(msg, "success")
+                g.__dict__.pop("_grading_cfg", None)
+                where = ("future terms only" if eff_term is None else
+                         "from " + next(f"{t['session_name']} — {t['name']}" for t in terms if t["id"] == eff_term) + " onward")
+                flash(f"Weighting saved: CA1 {new['ca1']:g} + CA2 {new['ca2']:g}" + (f" + CA3 {new['ca3']:g}" if new["use_ca3"] else " (CA3 off)") + f" + Exam {new['exam']:g} = {new['ca1'] + new['ca2'] + new['ca3'] + new['exam']:g}. Applies {where}; earlier terms keep the weighting they were scored with."
+                      + (f" {migrated} score(s) were migrated and every original value is kept in the migration log." if migrated else ""), "success")
+                conn.close()
+                return redirect(url_for("admin_grading"))
+            except Exception:
+                conn.rollback(); app.logger.exception("Weighting change failed")
+                flash("The weighting could not be saved and nothing was changed. Please try again.", "error")
     config = get_grading_config(conn)
     scale = conn.execute("SELECT * FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
-    history = conn.execute(
-        "SELECT * FROM grading_config_audit WHERE school_id=? ORDER BY changed_at DESC, id DESC LIMIT 10",
-        (school_id,)).fetchall()
+    history = conn.execute("SELECT * FROM grading_config_history WHERE school_id=? ORDER BY id DESC LIMIT 8", (school_id,)).fetchall()
+    snaps = conn.execute("SELECT s.*, t.name term_name, se.name session_name FROM term_grading_snapshots s JOIN terms t ON t.id=s.term_id JOIN sessions se ON se.id=t.session_id WHERE s.school_id=? ORDER BY s.term_id", (school_id,)).fetchall()
+    need = required_total(conn, school_id)
     conn.close()
-    return render_template("admin_grading.html", config=config, scale=scale, review=review, proposed=proposed, history=history)
+    return render_template("admin_grading.html", config=base if base is not None else config, scale=scale, history=history, snaps=snaps, terms=terms, active=active,
+                           need=need, review=review, form_vals=form_vals, is_school_admin=(session.get("role") == "admin"))
 
 
 @app.route("/admin/grading/scale/add", methods=["POST"])
@@ -5501,7 +5295,7 @@ def score_csv_template(class_id, subject_id):
         ca2 = sc["ca2"] if sc else ""
         ca3 = (sc["ca3"] or 0) if sc else ""
         exam = sc["exam"] if sc else ""
-        total = compute_total(ca1, ca2, exam, ca3 or 0) if sc else ""
+        total = compute_total(ca1, ca2, exam, (ca3 or 0) if use_ca3 else 0) if sc else ""
         writer.writerow([s["admission_no"], student_full_name(s), ca1, ca2] + ([ca3] if use_ca3 else []) + [exam, total])
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     fname = f"scores_{class_row['name']}_{subject_row['name']}.csv".replace(" ", "_")
@@ -5633,12 +5427,12 @@ def score_history_view(class_id, subject_id):
 
 # ---------- broadsheet ----------
 
-def _ca3_on():
-    """True only while the school's assessment configuration has CA3 activated (drives every broadsheet view)."""
+def _ca3_on(term_id=None):
+    """True only while CA3 is activated in the weighting that applies to the TERM shown (None = active term)."""
     try:
         c = get_db()
         try:
-            return bool(ca3_enabled(get_grading_config(c)))
+            return bool(ca3_enabled(get_grading_config(c, term_id)))
         finally:
             c.close()
     except Exception:
@@ -5650,24 +5444,6 @@ from db import DOMAIN_RATING_LABELS
 app.jinja_env.globals["domain_labels"] = DOMAIN_RATING_LABELS
 app.jinja_env.globals["sample_sheets"] = ("boxed_grey_card", "assessment_dossier", "peach_terminal_sheet", "green_cumulative_report", "progress_report_card", "clean_midterm_report")
 app.jinja_env.globals["domain_key"] = " · ".join(f"{k} = {v}" for k, v in DOMAIN_RATING_LABELS.items())
-
-
-def rank_with_ties(rows, key):
-    """Assigns 'position' using standard competition ranking (1,2,2,4): students tied on `key`
-    share the same position, and the position after a tie skips ahead to the student's actual
-    rank rather than just counting ties as one place. This is the same convention
-    `compute_subject_positions` already uses for subject-level positions, so a class's "Overall
-    Position" on the broadsheet and on each student's result sheet never disagrees with a tie
-    that's visibly identical in the subject columns."""
-    rows = sorted(rows, key=lambda r: -key(r))
-    prev, rank = None, 0
-    for i, r in enumerate(rows, 1):
-        v = key(r)
-        if v != prev:
-            rank = i
-            prev = v
-        r["position"] = rank
-    return rows
 
 
 def build_broadsheet_data(conn, class_id, term_id):
@@ -5699,7 +5475,7 @@ def build_broadsheet_data(conn, class_id, term_id):
                 (st["id"], subj["id"], term_id),
             ).fetchone()
             if score:
-                t = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
+                t = term_total(conn, term_id, score)
                 grade, remark = grade_for(t, conn, school_id)
                 subj_scores[subj["id"]] = {"total": t, "grade": grade, "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"], "exam": score["exam"]}
                 total += t
@@ -5711,54 +5487,25 @@ def build_broadsheet_data(conn, class_id, term_id):
             "student": st, "scores": subj_scores, "total": total, "average": average
         })
 
-    rows = rank_with_ties(rows, lambda r: r["total"])
+    rows.sort(key=lambda r: r["total"], reverse=True)
+    for i, r in enumerate(rows, start=1):
+        r["position"] = i
 
     return subjects, rows
 
 
-def resolve_term_in_session(conn, session_id, requested_term_id=None):
-    """V80: picks which term's Cumulative/Annual Result to show, scoped to a single
-    academic session (which may not be the currently active one). This is what pins
-    down "based on the selected term" for the Cumulative/Annual Result feature: First
-    Term selected consolidates only First Term, Second Term consolidates First+Second,
-    Third Term consolidates all three (build_cumulative_broadsheet_data below does the
-    actual cutoff once this term is known). Falls back to the session's own active
-    term, or its chronologically latest term if none in this session is active, when
-    no specific term was requested — so a bare link into this page still resolves to
-    a sensible, well-defined term rather than silently meaning "every term that
-    happens to have data yet", which was the old, spec-violating default."""
-    terms = terms_for_session(conn, session_id)
-    if not terms:
-        return None
-    if requested_term_id:
-        match = next((t for t in terms if t["id"] == requested_term_id), None)
-        if match:
-            return match
-    active = next((t for t in terms if t["is_active"]), None)
-    return active or terms[-1]
-
-
-def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=None):
+def build_cumulative_broadsheet_data(conn, class_id, session_id):
     """Annual/Cumulative broadsheet: for each subject, averages the totals
-    from every term UP TO AND INCLUDING upto_term_id (chronologically -- 1st/2nd/3rd
-    Term order, via term_sort_key) that has a score recorded (a term with no score for
-    that subject simply isn't counted — it doesn't drag the average down to 0, and a
-    term AFTER upto_term_id is excluded entirely rather than shown as a blank/zero
-    column, so a Second Term cumulative never leaks a preview of Third Term work),
-    then ranks students by their overall cumulative average. upto_term_id=None keeps
-    the old "every term in the session" behaviour, for callers that haven't resolved
-    a specific term (e.g. resolve_term_in_session found none)."""
+    from every term in the session that has a score recorded (a term with
+    no score for that subject simply isn't counted — it doesn't drag the
+    average down to 0), then ranks students by their overall cumulative
+    average."""
     school_id = current_school_id()
     subjects = conn.execute(
         "SELECT s.* FROM subjects s JOIN class_subjects cs ON cs.subject_id=s.id "
         "WHERE cs.class_id=? ORDER BY s.name", (class_id,)
     ).fetchall()
     terms = terms_for_session(conn, session_id)
-    if upto_term_id:
-        upto_term = next((t for t in terms if t["id"] == upto_term_id), None)
-        if upto_term:
-            cutoff = term_sort_key(upto_term)
-            terms = [t for t in terms if term_sort_key(t) <= cutoff]
     students = conn.execute(
         "SELECT s.* FROM students s "
         "LEFT JOIN enrollments e ON e.student_id = s.id AND e.session_id = ? "
@@ -5780,7 +5527,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
                     (st["id"], subj["id"], term["id"]),
                 ).fetchone()
                 if score:
-                    t = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
+                    t = term_total(conn, term["id"], score)
                     term_values.append(t)
                     present_totals.append(t)
                 else:
@@ -5796,16 +5543,18 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
         overall_average = round(overall_total / overall_count, 2) if overall_count else 0
         rows.append({"student": st, "subjects": subj_cumulative, "average": overall_average})
 
-    rows = rank_with_ties(rows, lambda r: r["average"])
+    rows.sort(key=lambda r: r["average"], reverse=True)
+    for i, r in enumerate(rows, start=1):
+        r["position"] = i
 
     return subjects, terms, rows
 
 
-def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None):
+def build_cumulative_result_data(conn, student_id, session_id):
     student = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     class_id = student_class_for_session(conn, student_id, session_id)
     class_row = conn.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
-    subjects, terms, rows = build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id)
+    subjects, terms, rows = build_cumulative_broadsheet_data(conn, class_id, session_id)
 
     my_row = next((r for r in rows if r["student"]["id"] == student_id), None)
     school_id = current_school_id()
@@ -5874,9 +5623,10 @@ def broadsheet_pdf(class_id):
         school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
-        use_ca3=_ca3_on(),
+        use_ca3=_ca3_on(term["id"]),
     )
-    return pdf_response(buf, f"broadsheet_{class_row['name']}_{term['name']}.pdf".replace(" ", "_"))
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                      download_name=f"broadsheet_{class_row['name']}_{term['name']}.pdf".replace(" ", "_"))
 
 
 @app.route("/cumulative/<int:class_id>")
@@ -5896,26 +5646,15 @@ def cumulative_broadsheet(class_id):
         conn.close()
         flash("No academic session set up yet.", "error")
         return redirect(url_for("dashboard"))
-    # V80: "based on the selected term" -- First Term consolidates only First Term, Second
-    # consolidates First+Second, Third consolidates all three (see build_cumulative_broadsheet_data).
-    selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-    session_terms = terms_for_session(conn, session_row["id"])
-    subjects, terms, rows = build_cumulative_broadsheet_data(
-        conn, class_id, session_row["id"], selected_term["id"] if selected_term else None)
+    subjects, terms, rows = build_cumulative_broadsheet_data(conn, class_id, session_row["id"])
     class_row = conn.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
     all_sessions = conn.execute(
         "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (current_school_id(),)
     ).fetchall()
-    # V85: at least the school's colors/logo now theme the cumulative broadsheet too. Its PDF stays
-    # on the existing, simpler builder for now (already correctly landscape-fixed and width-based,
-    # unlike the single-student sheet's FIT_FLOOR/orientation mechanism) -- a deliberate, smaller
-    # scope than the single-student cumulative result got.
-    rs = result_sheet_settings(conn, current_school_id())
     conn.close()
     return render_template(
         "cumulative_broadsheet.html", class_row=class_row, academic_session=session_row, subjects=subjects,
         terms=terms, rows=rows, all_sessions=all_sessions, student_full_name=student_full_name,
-        selected_term=selected_term, session_terms=session_terms, rs=rs,
     )
 
 
@@ -5932,11 +5671,11 @@ def email_class_results(class_id):
         conn.close()
         flash("No active term set.", "error")
         return redirect(url_for("dashboard"))
-    if not result_class_published(conn, current_school_id(), class_id, term["id"]):
+    if not term["is_published"]:
         conn.close()
         flash(
-            "This class's results haven't been published yet. Ask your admin/principal to "
-            "approve and publish this class (Results → Workflow) before emailing results to parents.",
+            "This term's results haven't been published yet. Ask your admin/principal to "
+            "publish the term (Setup → Terms) before emailing results to parents.",
             "error",
         )
         return redirect(url_for("broadsheet", class_id=class_id))
@@ -5992,7 +5731,7 @@ def compute_subject_positions(conn, student_ids, subject_ids, term_id):
         (term_id, *student_ids, *subject_ids)).fetchall()
     per = {}
     for r in rows:
-        per.setdefault(r["subject_id"], []).append((r["student_id"], compute_total(r["ca1"], r["ca2"], r["exam"], r["ca3"])))
+        per.setdefault(r["subject_id"], []).append((r["student_id"], term_total(conn, term_id, r)))
     for sj, lst in per.items():
         lst.sort(key=lambda x: -x[1])
         pos, prev, rank = 0, None, 0
@@ -6053,10 +5792,7 @@ def result_sheet_settings(conn, school_id):
         "text_align": cfg["text_align"] if cfg["text_align"] in ("left", "center", "right") else "",
         "secondary": cfg["secondary_color"] or "#c9a227", "header_layout": cfg["header_layout"], "signature_layout": cfg["signature_layout"],
         "pdf_font": g("pdf_font", "Helvetica"),
-        "page_orientation": cfg["page_orientation"] if cfg["page_orientation"] in ("portrait", "landscape", "auto") else "portrait",
-        "font_scale": cfg["font_scale"] if cfg["font_scale"] in FONT_SCALE_FACTORS else "normal",
     })
-    rs["font_scale_factor"] = FONT_SCALE_FACTORS.get(rs["font_scale"], 1.0)
     # one master switch: when "All comments" is OFF neither comment is shown, whatever the individual switches say
     if not cfg["show_all_comments"]:
         rs["show_teacher_comment"] = rs["show_principal_comment"] = False
@@ -6122,7 +5858,7 @@ def build_result_data(conn, student_id, term_id):
         ).fetchone()
         if score:
             subjects_written += 1
-            total = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
+            total = term_total(conn, term_id, score)
             grade, remark = grade_for(total, conn, school_id)
             subject_details.append({
                 "name": subj["name"], "ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"] or 0,
@@ -6145,7 +5881,7 @@ def build_result_data(conn, student_id, term_id):
     for _sd in subject_details:
         if _sd["grade"] not in (None, "-"):
             _grade_counts[_sd["grade"]] = _grade_counts.get(_sd["grade"], 0) + 1
-    _gc = get_grading_config(conn)
+    _gc = get_grading_config(conn, term_id)
     try:
         _max_each = sum((_gc[k] or 0) for k in ("ca1_max", "ca2_max", "ca3_max", "exam_max")) or 100
     except (KeyError, IndexError, TypeError):
@@ -6229,12 +5965,10 @@ def build_result_data(conn, student_id, term_id):
     rs["principal_sig"] = _file_data_uri(os.path.join(SIGNATURES_DIR, principal_signature_user["signature_filename"])) if principal_signature_user else None
     rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()
     promotion = info.get("promotion_status")
-    term_row_for_dates = conn.execute("SELECT * FROM terms WHERE id=?", (term_id,)).fetchone()
-    # "Next Term Resumes" is never this term's own date — it's whatever comes after it
-    # (First Term shows Second Term's date, etc.), and it's left blank rather than guessed
-    # when that hasn't been configured yet.
-    _ntr = next_term_resumes_info(conn, term_row_for_dates) if term_row_for_dates else {"date_iso": None}
-    rs["next_term_resumes"] = format_dmy(_ntr["date_iso"]) if (rs.get("show_next_term_resumes") and _ntr.get("date_iso")) else None
+    term_default = conn.execute("SELECT result_date, resumption_date FROM terms WHERE id=?", (term_id,)).fetchone()
+    # shown only when switched on AND the school has actually set a date for this term - never invented
+    rs["resumption_date"] = format_dmy(term_default["resumption_date"]) if (rs.get("show_resumption_date") and term_default and term_default["resumption_date"]) else None
+    result_date_iso = info.get("result_date") or (term_default["result_date"] if term_default else None)
     _overall_grade, _overall_remark = grade_for(average, conn, school_id) if subjects_written else ("-", "-")
     # Cumulative columns (only when the school has the Cumulative / Annual Result switched on): the same per-term values the cumulative sheet uses.
     cumulative = None
@@ -6258,8 +5992,8 @@ def build_result_data(conn, student_id, term_id):
         "position": my_row["position"] if my_row else "-",
         "class_size": class_size, "info": info, "ratings": ratings,
         "subjects_written": subjects_written,
-        "show_ca3": ca3_enabled(conn.execute(
-            "SELECT ca3_max FROM grading_config WHERE school_id=? LIMIT 1", (school_id,)).fetchone()),
+        "show_ca3": ca3_enabled(get_grading_config(conn, term_id)),
+        "result_date": (format_dmy(result_date_iso) if (rs["show_result_date"] and result_date_iso) else None),
         "teacher_signature_user": teacher_signature_user,
         "principal_signature_user": principal_signature_user,
         "teacher_signature_path": os.path.join(SIGNATURES_DIR, teacher_signature_user["signature_filename"]) if teacher_signature_user else None,
@@ -6355,7 +6089,7 @@ def result_pdf(student_id):
         teacher_signature=teacher_signature, principal_signature=principal_signature,
     )
     fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
-    return pdf_response(buf, fname)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
 
 @app.route("/cumulative/student/<int:student_id>")
@@ -6381,60 +6115,15 @@ def cumulative_result(student_id):
     if denied:
         conn.close()
         return denied
-    # V80: "based on the selected term" -- see resolve_term_in_session / build_cumulative_broadsheet_data.
-    selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-    session_terms = terms_for_session(conn, session_row["id"])
-    data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
-    # V85: full Result Display Settings (colors, logo, watermark, footer) now apply to the
-    # cumulative page too, the same way they already did for the regular (per-term) result.
-    rs = result_sheet_settings(conn, current_school_id())
+    data = build_cumulative_result_data(conn, student_id, session_row["id"])
     all_sessions = conn.execute(
         "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (current_school_id(),)
     ).fetchall()
     conn.close()
     return render_template(
         "cumulative_result.html", academic_session=session_row, all_sessions=all_sessions,
-        student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
-        print_url=url_for("cumulative_result_print", student_id=student_id, session_id=session_row["id"],
-                          term_id=selected_term["id"] if selected_term else None),
-        **data
+        student_full_name=student_full_name, **data
     )
-
-
-@app.route("/cumulative/student/<int:student_id>/print")
-@login_required()
-def cumulative_result_print(student_id):
-    conn = get_db()
-    try:
-        student_row = student_in_school(conn, student_id)
-        if not student_row:
-            flash("Student not found.", "error")
-            return redirect(url_for("dashboard"))
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("dashboard"))
-        historical_class_id = student_class_for_session(conn, student_id, session_row["id"])
-        denied = require_class_result_access(conn, historical_class_id)
-        if denied:
-            return denied
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
-        rs = result_sheet_settings(conn, current_school_id())
-        return render_template(
-            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
-            student_full_name=student_full_name,
-            pdf_url=url_for("cumulative_result_pdf", student_id=student_id, session_id=session_row["id"],
-                            term_id=selected_term["id"] if selected_term else None),
-            back_url=url_for("cumulative_result", student_id=student_id, session_id=session_row["id"],
-                             term_id=selected_term["id"] if selected_term else None),
-            autoprint=request.args.get("auto") == "1", **data
-        )
-    finally:
-        conn.close()
 
 
 @app.route("/cumulative/student/<int:student_id>/pdf")
@@ -6460,123 +6149,23 @@ def cumulative_result_pdf(student_id):
     if denied:
         conn.close()
         return denied
-    selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-    data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"] if selected_term else None)
-    rs = result_sheet_settings(conn, current_school_id())
+    data = build_cumulative_result_data(conn, student_id, session_row["id"])
+    school = get_school(conn, current_school_id())
+    logo_path = None
+    if school and school["logo_filename"]:
+        p = os.path.join(INSTANCE_DIR, school["logo_filename"])
+        if os.path.exists(p):
+            logo_path = p
     conn.close()
-    buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
+    buf = build_cumulative_result_pdf(
+        data, session_row, school_name=school["name"] if school else None,
+        logo_path=logo_path, student_full_name=student_full_name,
+        font_choice=school["pdf_font"] if school else "Helvetica",
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        name_align=school["name_align"] if school else None,
+    )
     fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
-    return pdf_response(buf, fname)
-
-
-# ------------------------------------------------------------------ V85: parent/student-facing cumulative results
-def _cumulative_term_gate(conn, student_id, session_row, selected_term):
-    """V85: the publication check the staff cumulative route deliberately does NOT have (staff may
-    look at unpublished data internally) but a self-service student/parent view MUST have, scoped to
-    the specific cutoff term being viewed -- mirrors the same gate student_result()/parent_result()
-    already use for the regular (per-term) result, so an unpublished cumulative figure can never leak
-    to a student or parent just because an earlier term in the same session was published."""
-    if not selected_term:
-        return False
-    cls_for_term = student_class_for_term(conn, student_id, selected_term["id"])
-    return bool(result_class_published(conn, current_school_id(), cls_for_term, selected_term["id"]))
-
-
-@app.route("/parent/children/<int:student_id>/cumulative")
-@parent_login_required
-def parent_cumulative_result(student_id):
-    conn = get_db()
-    try:
-        child = parent_child(conn, session["parent_id"], student_id)
-        if not child:
-            flash("That child isn't linked to your account.", "error")
-            return redirect(url_for("parent_children_page"))
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        session_terms = terms_for_session(conn, session_row["id"])
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        all_sessions = conn.execute(
-            "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (session["school_id"],)
-        ).fetchall()
-        return render_template(
-            "parent_cumulative_result.html", academic_session=session_row, all_sessions=all_sessions, child=child,
-            student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
-            **data
-        )
-    finally:
-        conn.close()
-
-
-@app.route("/parent/children/<int:student_id>/cumulative/print")
-@parent_login_required
-def parent_cumulative_result_print(student_id):
-    conn = get_db()
-    try:
-        child = parent_child(conn, session["parent_id"], student_id)
-        if not child:
-            flash("That child isn't linked to your account.", "error")
-            return redirect(url_for("parent_children_page"))
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        return render_template(
-            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
-            student_full_name=student_full_name,
-            pdf_url=url_for("parent_cumulative_result_pdf", student_id=student_id, session_id=session_row["id"], term_id=selected_term["id"]),
-            back_url=url_for("parent_cumulative_result", student_id=student_id, session_id=session_row["id"], term_id=selected_term["id"]),
-            autoprint=request.args.get("auto") == "1", **data
-        )
-    finally:
-        conn.close()
-
-
-@app.route("/parent/children/<int:student_id>/cumulative/pdf")
-@parent_login_required
-def parent_cumulative_result_pdf(student_id):
-    conn = get_db()
-    try:
-        child = parent_child(conn, session["parent_id"], student_id)
-        if not child:
-            flash("That child isn't linked to your account.", "error")
-            return redirect(url_for("parent_children_page"))
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("parent_children_page"))
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
-        fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
-        return pdf_response(buf, fname)
-    finally:
-        conn.close()
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
 
 @app.route("/result/<int:student_id>/email", methods=["POST"])
@@ -6602,12 +6191,11 @@ def email_result(student_id):
         conn.close()
         flash("No active term set.", "error")
         return redirect(url_for("dashboard"))
-    cls_for_term = student_class_for_term(conn, student_id, term["id"])
-    if not result_class_published(conn, current_school_id(), cls_for_term, term["id"]):
+    if not term["is_published"]:
         conn.close()
         flash(
-            "This student's class result hasn't been published yet. Ask your admin/principal to "
-            "approve and publish the class (Results → Workflow) before emailing results to parents.",
+            "This term's results haven't been published yet. Ask your admin/principal to "
+            "publish the term (Setup → Terms) before emailing results to parents.",
             "error",
         )
         return redirect(url_for("result", student_id=student_id))
@@ -6717,8 +6305,8 @@ def result_extra(student_id):
     if "principal_comment" in request.form:
         if can_edit_principal_comment():
             principal_comment = request.form.get("principal_comment", "").strip()[:1000]
-        elif (request.form.get("principal_comment", "").strip()[:1000]) != (principal_comment or ""):
-            conn.close(); flash("Only the Principal (or the school administration) can change the Principal's comment.", "error"); return redirect(back)
+        # Anyone else (e.g. the Class/Form Teacher) simply keeps the stored Principal comment: a draft must never be refused
+        # because the Principal's box was pre-filled, empty or different. The Principal's comment is never required to save a draft.
     # sign dates follow the same ownership as the comments they belong to
     if not can_edit_teacher_comment(conn, student_row["class_id"]):
         teacher_signed_date = ex.get("teacher_signed_date")
@@ -6762,57 +6350,6 @@ def result_extra(student_id):
                 "DO UPDATE SET rating=excluded.rating",
                 (student_id, term_id, trait["id"], int(val)),
             )
-    # A sign date is a one-time, whole-cohort event (the teacher/principal signs on one day, not a
-    # separate day per student), so changing it here also applies it to every OTHER student it covers
-    # for this term: the Class/Form Teacher's date to the rest of their own class, the Principal's date
-    # to the rest of the school. Only the date and who-signed-it are touched on those other students —
-    # every other field of their own student_term_info row (comments, attendance, etc.) is untouched.
-    # A class whose result is locked (submitted/approved/published) is skipped, same as the single-
-    # student save above would refuse to touch it.
-    session_row = conn.execute("SELECT session_id FROM terms WHERE id=?", (term_id,)).fetchone()
-    session_id = session_row["session_id"] if session_row else None
-    if session_id and teacher_signed_date and teacher_signed_date != ex.get("teacher_signed_date"):
-        classmates = conn.execute(
-            "SELECT s.id FROM students s LEFT JOIN enrollments e ON e.student_id=s.id AND e.session_id=? "
-            "WHERE COALESCE(e.class_id, s.class_id)=? AND s.is_active=1 AND s.id!=?",
-            (session_id, student_row["class_id"], student_id),
-        ).fetchall()
-        for mate in classmates:
-            conn.execute(
-                "INSERT INTO student_term_info (student_id, term_id, teacher_signed_date, teacher_signed_by) VALUES (?,?,?,?) "
-                "ON CONFLICT(student_id, term_id) DO UPDATE SET teacher_signed_date=excluded.teacher_signed_date, teacher_signed_by=excluded.teacher_signed_by",
-                (mate["id"], term_id, teacher_signed_date, teacher_signed_by),
-            )
-        if classmates:
-            _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(),
-                             "school_id": current_school_id(), "tenant_id": session.get("tenant_id")}, "teacher_sign_date_applied_to_class",
-                      "class", student_row["class_id"], {"term_id": term_id, "date": teacher_signed_date, "students_affected": len(classmates)}, ip=request.remote_addr)
-    if session_id and principal_signed_date and principal_signed_date != ex.get("principal_signed_date"):
-        schoolmates = conn.execute(
-            "SELECT s.id student_id, COALESCE(e.class_id, s.class_id) class_id FROM students s "
-            "LEFT JOIN enrollments e ON e.student_id=s.id AND e.session_id=? "
-            "JOIN classes c ON c.id=COALESCE(e.class_id, s.class_id) "
-            "WHERE c.school_id=? AND s.is_active=1 AND s.id!=?",
-            (session_id, current_school_id(), student_id),
-        ).fetchall()
-        by_class = {}
-        for row in schoolmates:
-            by_class.setdefault(row["class_id"], []).append(row["student_id"])
-        affected = 0
-        for cls_id, ids in by_class.items():
-            if v63_core.publication_status(conn, current_school_id(), cls_id, term_id) in v63_core.LOCKED_STATES:
-                continue
-            for sid_ in ids:
-                conn.execute(
-                    "INSERT INTO student_term_info (student_id, term_id, principal_signed_date, principal_signed_by) VALUES (?,?,?,?) "
-                    "ON CONFLICT(student_id, term_id) DO UPDATE SET principal_signed_date=excluded.principal_signed_date, principal_signed_by=excluded.principal_signed_by",
-                    (sid_, term_id, principal_signed_date, principal_signed_by),
-                )
-                affected += 1
-        if affected:
-            _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(),
-                             "school_id": current_school_id(), "tenant_id": session.get("tenant_id")}, "principal_sign_date_applied_to_school",
-                      "school", current_school_id(), {"term_id": term_id, "date": principal_signed_date, "students_affected": affected}, ip=request.remote_addr)
     conn.commit()
     conn.close()
     flash("Report card details updated.", "success")
@@ -7498,7 +7035,7 @@ def report_student_history(fmt=None):
                 (student_id, subj["id"], term["id"]),
             ).fetchone()
             if score:
-                total = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
+                total = term_total(conn, term["id"], score)
                 grade, _ = grade_for(total, conn, school_id)
                 rows.append([term["session_name"], term["name"], class_row["name"], subj["name"],
                              score["ca1"], score["ca2"], score["exam"], total, grade])
@@ -7540,37 +7077,15 @@ def student_login_required(f):
 @app.route("/student/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def student_login():
-    """V81: there is no longer a separate student sign-in PAGE -- GET here goes straight to
-    the one unified /login form, which has its own "Student logging in for the first time?"
-    section for the class code (the ninth spec's Phase 4: "one unified login form for all
-    user roles", no separate page per role). POST still works exactly as before (for any
-    old bookmark, saved shortcut, or cached page still pointing here with the original
-    identifier/class_code field names), by calling the very same _try_student_login the
-    unified form itself now uses -- it's the same account check either way, just one fewer
-    page for a person to land on by mistake. GET renders the exact same unified template
-    (not a redirect), so a CSRF token is present here too, for the same reason: there's
-    genuinely only one login page's worth of HTML in the whole app now."""
-    if request.method == "GET":
-        return render_template("login.html")
     if request.method == "POST":
-        conn = get_db()
         try:
-            identifier = (request.form.get("identifier") or request.form.get("username") or "").strip()
-            password = request.form.get("password", "")
-            class_code_raw = request.form.get("class_code", "")
-            hint = request.form.get("school_code", "")
-            outcome = _try_student_login(conn, identifier, password, class_code_raw, hint)
+            return _student_login_post()
         except Exception:
             # Full technical detail goes to the server log; the student sees a clear, safe message.
             app.logger.exception("Student login failed unexpectedly")
             flash("We could not complete your sign-in right now. Please try again shortly or contact your school.", "error")
-            return redirect(url_for("login"))
-        finally:
-            conn.close()
-        if outcome is not None:
-            return outcome
-        flash(GENERIC_STUDENT_LOGIN_ERROR, "error")
-        return render_template("login.html")
+            return render_template("student_login.html"), 500
+    return render_template("student_login.html")
 
 
 STUDENT_MAX_FAILS = 8
@@ -7598,144 +7113,113 @@ def find_active_class_code(conn, raw_code):
     return row
 
 
-def _try_student_login(conn, identifier, password, class_code_raw, hint):
-    """V81: the student half of the unified /login form (previously its own dedicated page,
-    /student/login) -- returns a Flask response (and completes the session login) when this
-    identifier+password match exactly one student account, or None to let the caller try
-    other account types, since a wrong password here doesn't necessarily mean this wasn't a
-    staff/parent/platform-admin login attempt. Preserves every security property the old
-    dedicated page had, unchanged: constant-time handling for an identifier that matches no
-    student at all, per-student lockout after repeated failures, the "multiple schools share
-    this number" disambiguation, and the class-login-code requirement on a student's very
-    first login. conn is the SAME connection login() already opened for the parent/staff
-    checks -- this function reads/writes it but never closes it; the caller does."""
-    identifier = (identifier or "").strip()[:60]
-    hint = (hint or "").strip().lower()
-    if not identifier or not password:
-        return None
+def _student_login_post():
+    identifier = (request.form.get("identifier") or request.form.get("username") or "").strip()[:60]
+    password = request.form.get("password", "")
+    class_code_raw = request.form.get("class_code", "")
+    hint = request.form.get("school_code", "").strip().lower()
     now = datetime.datetime.utcnow()
     now_iso = now.isoformat(timespec="seconds")
 
-    def blocked(msg=GENERIC_STUDENT_LOGIN_ERROR):
+    def fail(msg=GENERIC_STUDENT_LOGIN_ERROR):
         flash(msg, "error")
-        return render_template("login.html")
+        return render_template("student_login.html")
 
-    ident = identifier.lower()
-    candidates = conn.execute(
-        "SELECT st.*, c.school_id AS cls_school, c.id AS cls_id FROM students st JOIN classes c ON c.id=st.class_id "
-        "WHERE st.is_active=1 AND (LOWER(st.username)=? OR LOWER(TRIM(st.admission_no))=? "
-        "OR LOWER(TRIM(COALESCE(st.register_no,'')))=?)", (ident, ident, ident)).fetchall()
-    if not candidates:
-        # Not a student account at all -- let the caller try other account types. A dummy-hash
-        # check keeps this branch's timing close to a real check, same as the old page did for
-        # an unknown identifier, so a login attempt can't be timed to learn whether a given
-        # number belongs to a student.
-        check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")
-        return None
-    code_row = find_active_class_code(conn, class_code_raw) if normalize_class_code(class_code_raw) else None
-    if normalize_class_code(class_code_raw) and not code_row:
-        # A wrong/expired/revoked code must not leak whether the student exists: same generic answer.
+    conn = get_db()
+    try:
         candidates = []
-    # The tenant always comes from the matched student's own class/school, never from the browser.
-    # A school hint or a class code can only NARROW the candidates; it never grants access.
-    schools = {}
-    scoped = []
-    for st in candidates:
-        sc = schools.get(st["cls_school"]) or get_school(conn, st["cls_school"])
-        schools[st["cls_school"]] = sc
-        if not sc:
-            continue
-        if hint and hint not in {str(sc["school_code"] or "").lower(), str(sc["tenant_id"] or "").lower(),
-                                 str(sc["school_id_public"] or "").lower(), str(sc["id"])}:
-            continue
-        if code_row and (code_row["class_id"] != st["cls_id"] or code_row["school_id"] != sc["id"]):
-            continue
-        scoped.append(st)
-    matches = []
-    locked_seen = False
-    for st in scoped:
-        locked = bool(st["locked_until"] and st["locked_until"] > now_iso)
-        locked_seen = locked_seen or locked
-        has_pw = bool(st["password_hash"])
-        ok = check_password_hash(st["password_hash"] if has_pw else _DUMMY_PASSWORD_HASH, password)
-        if ok and has_pw and not locked:
-            matches.append(st)
-    if not scoped:
-        check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")   # constant-ish timing for unknown identifiers
-    if len(matches) > 1:
-        # Several schools have a student with this number AND this exact password. Only reachable with a correct
-        # password, so it leaks nothing; we refuse rather than guess whose account to open.
-        return blocked("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
-    # Count failures against the accounts this identifier points to (only when the password was wrong),
-    # then let the caller try other account types rather than assuming this login attempt was
-    # necessarily a student's -- a real student number exists, but it might still be a coincidental
-    # match while the person is actually signing in as staff/parent/platform-admin.
-    if len(matches) != 1:
-        for st in scoped:
-            if st in matches:
+        if identifier and password:
+            ident = identifier.lower()
+            candidates = conn.execute(
+                "SELECT st.*, c.school_id AS cls_school, c.id AS cls_id FROM students st JOIN classes c ON c.id=st.class_id "
+                "WHERE st.is_active=1 AND (LOWER(st.username)=? OR LOWER(TRIM(st.admission_no))=? "
+                "OR LOWER(TRIM(COALESCE(st.register_no,'')))=?)", (ident, ident, ident)).fetchall()
+        code_row = find_active_class_code(conn, class_code_raw) if normalize_class_code(class_code_raw) else None
+        if normalize_class_code(class_code_raw) and not code_row:
+            # A wrong/expired/revoked code must not leak whether the student exists: same generic answer.
+            candidates = []
+        # The tenant always comes from the matched student's own class/school, never from the browser.
+        # A school hint or a class code can only NARROW the candidates; it never grants access.
+        schools = {}
+        scoped = []
+        for st in candidates:
+            sc = schools.get(st["cls_school"]) or get_school(conn, st["cls_school"])
+            schools[st["cls_school"]] = sc
+            if not sc:
                 continue
-            fails = (st["failed_logins"] or 0) + 1
-            lock = (now + datetime.timedelta(minutes=STUDENT_LOCK_MINUTES)).isoformat(timespec="seconds") if fails >= STUDENT_MAX_FAILS else st["locked_until"]
-            conn.execute("UPDATE students SET failed_logins=?, locked_until=? WHERE id=?", (0 if fails >= STUDENT_MAX_FAILS else fails, lock, st["id"]))
-        if scoped:
-            conn.commit()
-        try:
-            security_event(conn, "STUDENT_LOGIN_FAILED", "failed", f"identifier_len={len(identifier)} candidates={len(scoped)} locked={locked_seen}", "student")
-            conn.commit()
-        except Exception:
-            pass
-        return None
-    student = matches[0]
-    school = schools[student["cls_school"]]
-    # ---- first login needs the class code of the student's OWN class ----
-    first_time = not student["first_login_completed_at"]
-    # The class code only links/enrols a student who has no password yet; a student with valid credentials signs in without it.
-    if first_time and code_row and code_row["class_id"] != student["cls_id"]:
-        return blocked()
-    # ---- school state (only reported after the credentials proved who this is) ----
-    if school["activation_status"] != "active":
-        return blocked("This school hasn't been activated yet.")
-    if school["is_archived"]:
-        return blocked("This school's account has been archived. Contact the platform administrator.")
-    if school["is_suspended"]:
-        return blocked("This school's account has been suspended. Contact the platform administrator.")
-    if not subscription_login_allowed(school):
-        return blocked("This school's subscription or trial has expired. Contact the platform administrator.")
-    if g.portal_school and school["id"] != g.portal_school["id"]:
-        return blocked(GENERIC_STUDENT_LOGIN_ERROR)
-    if not school["tenant_id"]:
-        app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
-        return blocked("This school's account setup is incomplete. Please contact the platform administrator.")
-    conn.execute("UPDATE students SET failed_logins=0, locked_until=NULL, last_login_at=?, "
-                 "first_login_completed_at=COALESCE(first_login_completed_at, ?) WHERE id=?", (now_iso, now_iso, student["id"]))
-    if first_time and code_row and code_row["class_id"] == student["cls_id"]:
-        conn.execute("UPDATE class_login_codes SET use_count=use_count+1 WHERE id=?", (code_row["id"],))
-    conn.commit()
-    session.clear()
-    session["student_id"] = student["id"]
-    session["role"] = "student"
-    session["school_id"] = school["id"]
-    session["tenant_id"] = school["tenant_id"]
-    session["school_code"] = school["school_code"]
-    session["login_time"] = now_iso
-    return redirect(url_for("student_dashboard"))
-
-
-def _try_platform_login(conn, identifier, password):
-    """V81: the Platform/Super Admin half of the unified /login form (previously its own
-    page, /platform/login). Platform admins have no school/tenant context at all -- none of
-    the school-state checks the other account types go through apply here. This portal was
-    deliberately never linked from the public login screen, and stays that way: this check
-    just runs silently against whatever was typed, with no visible UI difference."""
-    admin = conn.execute("SELECT * FROM platform_admins WHERE username=?", (identifier,)).fetchone()
-    if not admin or not admin["password_hash"] or not check_password_hash(admin["password_hash"], password):
-        return None
-    session.clear()
-    session["platform_admin_id"] = admin["id"]
-    session["platform_admin_name"] = admin["name"]
-    log_audit(conn, "platform_admin", admin["name"], "login")
-    conn.commit()
-    return redirect(url_for("platform_dashboard"))
+            if hint and hint not in {str(sc["school_code"] or "").lower(), str(sc["tenant_id"] or "").lower(),
+                                     str(sc["school_id_public"] or "").lower(), str(sc["id"])}:
+                continue
+            if code_row and (code_row["class_id"] != st["cls_id"] or code_row["school_id"] != sc["id"]):
+                continue
+            scoped.append(st)
+        matches = []
+        locked_seen = False
+        for st in scoped:
+            locked = bool(st["locked_until"] and st["locked_until"] > now_iso)
+            locked_seen = locked_seen or locked
+            has_pw = bool(st["password_hash"])
+            ok = check_password_hash(st["password_hash"] if has_pw else _DUMMY_PASSWORD_HASH, password)
+            if ok and has_pw and not locked:
+                matches.append(st)
+        if not scoped:
+            check_password_hash(_DUMMY_PASSWORD_HASH, password or "x")   # constant-ish timing for unknown identifiers
+        if len(matches) > 1:
+            # Several schools have a student with this number AND this exact password. Only reachable with a correct
+            # password, so it leaks nothing; we refuse rather than guess whose account to open.
+            return fail("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
+        # Count failures against the accounts this identifier points to (only when the password was wrong).
+        if len(matches) != 1:
+            for st in scoped:
+                if st in matches:
+                    continue
+                fails = (st["failed_logins"] or 0) + 1
+                lock = (now + datetime.timedelta(minutes=STUDENT_LOCK_MINUTES)).isoformat(timespec="seconds") if fails >= STUDENT_MAX_FAILS else st["locked_until"]
+                conn.execute("UPDATE students SET failed_logins=?, locked_until=? WHERE id=?", (0 if fails >= STUDENT_MAX_FAILS else fails, lock, st["id"]))
+            if scoped:
+                conn.commit()
+            try:
+                security_event(conn, "STUDENT_LOGIN_FAILED", "failed", f"identifier_len={len(identifier)} candidates={len(scoped)} locked={locked_seen}", "student")
+                conn.commit()
+            except Exception:
+                pass
+            return fail()
+        student = matches[0]
+        school = schools[student["cls_school"]]
+        # ---- first login needs the class code of the student's OWN class ----
+        first_time = not student["first_login_completed_at"]
+        # The class code only links/enrols a student who has no password yet; a student with valid credentials signs in without it.
+        if first_time and code_row and code_row["class_id"] != student["cls_id"]:
+            return fail()
+        # ---- school state (only reported after the credentials proved who this is) ----
+        if school["activation_status"] != "active":
+            return fail("This school hasn't been activated yet.")
+        if school["is_archived"]:
+            return fail("This school's account has been archived. Contact the platform administrator.")
+        if school["is_suspended"]:
+            return fail("This school's account has been suspended. Contact the platform administrator.")
+        if not subscription_login_allowed(school):
+            return fail("This school's subscription or trial has expired. Contact the platform administrator.")
+        if g.portal_school and school["id"] != g.portal_school["id"]:
+            return fail(GENERIC_STUDENT_LOGIN_ERROR)
+        if not school["tenant_id"]:
+            app.logger.error("School %s has no tenant_id; student login blocked", school["id"])
+            return fail("This school's account setup is incomplete. Please contact the platform administrator.")
+        conn.execute("UPDATE students SET failed_logins=0, locked_until=NULL, last_login_at=?, "
+                     "first_login_completed_at=COALESCE(first_login_completed_at, ?) WHERE id=?", (now_iso, now_iso, student["id"]))
+        if first_time and code_row and code_row["class_id"] == student["cls_id"]:
+            conn.execute("UPDATE class_login_codes SET use_count=use_count+1 WHERE id=?", (code_row["id"],))
+        conn.commit()
+        session.clear()
+        session["student_id"] = student["id"]
+        session["role"] = "student"
+        session["school_id"] = school["id"]
+        session["tenant_id"] = school["tenant_id"]
+        session["school_code"] = school["school_code"]
+        session["login_time"] = now_iso
+        return redirect(url_for("student_dashboard"))
+    finally:
+        conn.close()
 
 
 @app.route("/student/logout")
@@ -7882,7 +7366,7 @@ def student_result(term_id):
         "SELECT terms.*, sessions.name as session_name FROM terms "
         "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
     ).fetchone()
-    if not term:
+    if not term or not term["is_published"]:
         conn.close()
         flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
@@ -7892,11 +7376,6 @@ def student_result(term_id):
     if not enrolled:
         conn.close()
         flash("You weren't enrolled in that term.", "error")
-        return redirect(url_for("student_dashboard"))
-    cls_for_term = student_class_for_term(conn, student_id, term_id)
-    if not result_class_published(conn, session["school_id"], cls_for_term, term_id):
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
     data = build_result_data(conn, student_id, term_id)
     all_traits = conn.execute(
@@ -7917,7 +7396,7 @@ def student_result_pdf(term_id):
         "SELECT terms.*, sessions.name as session_name FROM terms "
         "JOIN sessions ON sessions.id=terms.session_id WHERE terms.id=?", (term_id,)
     ).fetchone()
-    if not term:
+    if not term or not term["is_published"]:
         conn.close()
         flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
@@ -7927,11 +7406,6 @@ def student_result_pdf(term_id):
     if not enrolled:
         conn.close()
         flash("You weren't enrolled in that term.", "error")
-        return redirect(url_for("student_dashboard"))
-    cls_for_term = student_class_for_term(conn, student_id, term_id)
-    if not result_class_published(conn, session["school_id"], cls_for_term, term_id):
-        conn.close()
-        flash("That term's result isn't published yet.", "error")
         return redirect(url_for("student_dashboard"))
     data = build_result_data(conn, student_id, term_id)
     school = get_school(conn, session["school_id"])
@@ -7945,96 +7419,7 @@ def student_result_pdf(term_id):
                             logo_path=logo_path, student_full_name=student_full_name,
                             font_choice=school["pdf_font"] if school else "Helvetica")
     fname = f"result_{data['student']['admission_no']}_{term['name']}.pdf".replace(" ", "_").replace("/", "-")
-    return pdf_response(buf, fname)
-
-
-# ------------------------------------------------------------------ V85: student-facing cumulative results
-@app.route("/student/cumulative")
-@student_login_required
-def student_cumulative_result():
-    conn = get_db()
-    try:
-        student_id = session["student_id"]
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        session_terms = terms_for_session(conn, session_row["id"])
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        all_sessions = conn.execute(
-            "SELECT * FROM sessions WHERE school_id=? ORDER BY id DESC", (session["school_id"],)
-        ).fetchall()
-        return render_template(
-            "student_cumulative_result.html", academic_session=session_row, all_sessions=all_sessions,
-            student_full_name=student_full_name, selected_term=selected_term, session_terms=session_terms, rs=rs,
-            **data
-        )
-    finally:
-        conn.close()
-
-
-@app.route("/student/cumulative/print")
-@student_login_required
-def student_cumulative_result_print():
-    conn = get_db()
-    try:
-        student_id = session["student_id"]
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        return render_template(
-            "cumulative_result_print.html", academic_session=session_row, selected_term=selected_term, rs=rs,
-            student_full_name=student_full_name,
-            pdf_url=url_for("student_cumulative_result_pdf", session_id=session_row["id"], term_id=selected_term["id"]),
-            back_url=url_for("student_cumulative_result", session_id=session_row["id"], term_id=selected_term["id"]),
-            autoprint=request.args.get("auto") == "1", **data
-        )
-    finally:
-        conn.close()
-
-
-@app.route("/student/cumulative/pdf")
-@student_login_required
-def student_cumulative_result_pdf():
-    conn = get_db()
-    try:
-        student_id = session["student_id"]
-        denied = require_cumulative_enabled(conn)
-        if denied:
-            return denied
-        session_row = resolve_session(conn, request.args.get("session_id", type=int))
-        if not session_row:
-            flash("No academic session set up yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        selected_term = resolve_term_in_session(conn, session_row["id"], request.args.get("term_id", type=int))
-        if not _cumulative_term_gate(conn, student_id, session_row, selected_term):
-            flash("That cumulative result isn't published yet.", "error")
-            return redirect(url_for("student_dashboard"))
-        data = build_cumulative_result_data(conn, student_id, session_row["id"], selected_term["id"])
-        rs = result_sheet_settings(conn, current_school_id())
-        buf = build_cumulative_result_pdf_html(data, session_row, selected_term, rs)
-        fname = f"annual_result_{data['student']['admission_no']}_{session_row['name']}.pdf".replace(" ", "_").replace("/", "-")
-        return pdf_response(buf, fname)
-    finally:
-        conn.close()
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
 
 # ---------- platform (super admin) tier ----------
@@ -8058,27 +7443,21 @@ def platform_admin_required(f):
 @app.route("/platform/login", methods=["GET", "POST"])
 @rate_limit(max_attempts=10, window_seconds=300)
 def platform_login():
-    """V81: there is no longer a separate platform-admin sign-in PAGE -- GET here goes to the
-    one unified /login form (see student_login()'s docstring for the same reasoning), which
-    quietly accepts a platform admin's username/password too. Deliberately still not linked
-    from anywhere public -- the old platform_login.html page itself said "This portal is not
-    listed on the public school login screen," and that stays true. POST still works exactly
-    as before, for any old bookmark, by calling the very same _try_platform_login the unified
-    form itself now uses. GET renders the same unified template directly (not a redirect), so
-    a CSRF token is present here too."""
-    if request.method == "GET":
-        return render_template("login.html")
-    username = request.form.get("username", "").strip()
-    password = request.form.get("password", "")
-    conn = get_db()
-    try:
-        outcome = _try_platform_login(conn, username, password)
-    finally:
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        conn = get_db()
+        admin = conn.execute("SELECT * FROM platform_admins WHERE username=?", (username,)).fetchone()
+        if admin and check_password_hash(admin["password_hash"], password):
+            session.clear()
+            session["platform_admin_id"] = admin["id"]
+            session["platform_admin_name"] = admin["name"]
+            log_audit(conn, "platform_admin", admin["name"], "login")
+            conn.close()
+            return redirect(url_for("platform_dashboard"))
         conn.close()
-    if outcome is not None:
-        return outcome
-    flash("Invalid username or password.", "error")
-    return render_template("login.html")
+        flash("Invalid username or password.", "error")
+    return render_template("platform_login.html")
 
 
 @app.route("/platform/logout")
@@ -9922,6 +9301,14 @@ def ai_settings_page():
 CONSENT_RELATIONSHIPS = ["Parent", "Guardian", "Student (adult)", "School representative"]
 
 
+def _ai_classes():
+    c = get_db()
+    try:
+        return c.execute("SELECT id, name FROM classes WHERE school_id=? ORDER BY name", (current_school_id(),)).fetchall()
+    finally:
+        c.close()
+
+
 def record_ai_consent(conn, school_id, student_id, status, consenting_name, relationship, notes, actor_type, actor_id, actor_name, policy_version="1.0"):
     """Single writer for AI consent: updates the current record AND appends a history event, in one transaction."""
     prev = conn.execute("SELECT status FROM student_ai_consent WHERE student_id=? AND school_id=?", (student_id, school_id)).fetchone()
@@ -9944,71 +9331,53 @@ def record_ai_consent(conn, school_id, student_id, status, consenting_name, rela
     return previous
 
 
-def _ai_consent_bulk(conn, sid):
-    """Admin-wide consent management: apply one status to many students at once (e.g. a batch
-    of paper consent forms collected at the start of term, or a school-wide policy change),
-    instead of clicking Save once per student. Every student touched still gets their own
-    row in `record_ai_consent`'s history — this is a convenience for applying the SAME change
-    to many students in one submit, not a separate/weaker code path."""
-    student_ids = [i for i in request.form.getlist("student_ids", type=int) if i]
-    status = (request.form.get("bulk_status") or "").strip()
-    name = re.sub(r"\s+", " ", (request.form.get("bulk_consenting_name") or "").strip())[:120]
-    relationship = (request.form.get("bulk_relationship") or "").strip()
-    notes = (request.form.get("bulk_notes") or "").strip()[:300]
-    if not student_ids:
-        conn.close(); flash("Select at least one student first.", "error")
-        return redirect(url_for("ai_consent"))
-    if status not in ("pending", "granted", "withdrawn"):
-        conn.close(); flash("Choose a valid consent status.", "error")
-        return redirect(url_for("ai_consent"))
-    if status == "granted" and (not name or relationship not in CONSENT_RELATIONSHIPS):
-        conn.close()
-        flash("To record consent in bulk, enter who gave it and their relationship "
-              "(use 'School representative' for paper forms already collected and being logged together).", "error")
-        return redirect(url_for("ai_consent"))
-    # Tenant isolation: only student ids that genuinely belong to this school are touched,
-    # whatever ids were posted.
-    ph = ",".join("?" * len(student_ids))
-    valid_ids = [r["id"] for r in conn.execute(
-        f"SELECT st.id FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.id IN ({ph})",
-        (sid, *student_ids)).fetchall()]
-    changed = 0
-    try:
-        for student_id in valid_ids:
-            current = conn.execute("SELECT status FROM student_ai_consent WHERE student_id=? AND school_id=?", (student_id, sid)).fetchone()
-            if (current["status"] if current else "pending") == status:
-                continue  # already that status — not touched, not counted, not re-logged
-            record_ai_consent(conn, sid, student_id, status, name if status == "granted" else None,
-                               relationship if status == "granted" else None, notes,
-                               "school_admin", session["user_id"], session.get("name"))
-            changed += 1
-        if changed:
-            log_audit(conn, session.get("role"), session.get("name"), "ai_consent_bulk_changed",
-                       f"{changed} student(s) -> {status}" + (f" ({len(valid_ids) - changed} already '{status}')" if len(valid_ids) > changed else ""),
-                       school_id=sid)
-            conn.commit()
-        else:
-            conn.rollback()
-    except Exception:
-        conn.rollback(); conn.close(); app.logger.exception("Bulk AI consent could not be saved")
-        flash("The bulk update could not be saved. Nothing was changed - please try again or contact support.", "error")
-        return redirect(url_for("ai_consent"))
-    conn.close()
-    skipped = len(student_ids) - len(valid_ids)
-    msg = f"Consent set to '{status}' for {changed} student(s)." if changed else "No changes were needed — the selected students already had that status."
-    if skipped:
-        msg += f" ({skipped} selected id(s) were not in your school and were ignored.)"
-    flash(msg, "success" if changed else "info")
-    return redirect(url_for("ai_consent"))
-
-
 @app.route("/ai/consent", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def ai_consent():
     conn = get_db(); sid = current_school_id()
+    if request.method == "POST" and request.form.get("action") == "bulk":
+        # School-wide management: one decision for a class or the whole school, with a stated basis and an explicit confirmation.
+        status = (request.form.get("status") or "").strip()
+        scope = request.form.get("scope", "school")
+        basis = re.sub(r"\s+", " ", (request.form.get("basis") or "").strip())[:300]
+        class_filter = None
+        if scope.startswith("class:") and scope[6:].isdigit():
+            class_filter = int(scope[6:])
+            if not class_in_school(conn, class_filter):
+                conn.close(); flash("Class not found.", "error"); return redirect(url_for("ai_consent"))
+        errors = []
+        if status not in ("granted", "withdrawn"):
+            errors.append("Choose whether to record or withdraw consent.")
+        if status == "granted" and len(basis) < 10:
+            errors.append("Describe the basis for school-wide consent (for example the signed enrolment agreement and its date).")
+        if (request.form.get("confirm_text") or "").strip().upper() != ("GRANT CONSENT" if status == "granted" else "WITHDRAW CONSENT"):
+            errors.append(f"Type {'GRANT CONSENT' if status == 'granted' else 'WITHDRAW CONSENT'} to confirm.")
+        if errors:
+            conn.close(); flash(" ".join(errors), "error"); return redirect(url_for("ai_consent"))
+        sql = ("SELECT st.id, COALESCE(a.status,'pending') cs FROM students st JOIN classes c ON c.id=st.class_id LEFT JOIN student_ai_consent a ON a.student_id=st.id AND a.school_id=? "
+               "WHERE c.school_id=? AND st.is_active=1" + (" AND c.id=?" if class_filter else ""))
+        rows = conn.execute(sql, (sid, sid) + ((class_filter,) if class_filter else ())).fetchall()
+        changed = skipped = 0
+        try:
+            for r_ in rows:
+                if status == "granted" and r_["cs"] != "pending":
+                    skipped += 1; continue          # never overrides a student/parent who already decided (granted or withdrawn)
+                if status == "withdrawn" and r_["cs"] == "withdrawn":
+                    skipped += 1; continue
+                record_ai_consent(conn, sid, r_["id"], status, (session.get("name") if status == "granted" else None),
+                                  ("School representative" if status == "granted" else None), ("School-wide: " + basis) if basis else "School-wide withdrawal",
+                                  "school_admin_bulk", session["user_id"], session.get("name"))
+                changed += 1
+            log_audit(conn, session.get("role"), session.get("name"), "ai_consent_bulk",
+                      f"{status} for {'class ' + str(class_filter) if class_filter else 'the whole school'}: {changed} changed, {skipped} left as they were. Basis: {basis or '—'}", school_id=sid)
+            conn.commit()
+        except Exception:
+            conn.rollback(); conn.close(); app.logger.exception("Bulk AI consent failed")
+            flash("The school-wide change could not be saved and nothing was changed.", "error"); return redirect(url_for("ai_consent"))
+        conn.close()
+        flash(f"School-wide consent {status}: {changed} student(s) updated" + (f", {skipped} left unchanged (their own decision stands)." if skipped else "."), "success")
+        return redirect(url_for("ai_consent"))
     if request.method == "POST":
-        if request.form.get("bulk") == "1":
-            return _ai_consent_bulk(conn, sid)
         student_id = request.form.get("student_id", type=int)
         status = (request.form.get("status") or "").strip()
         name = re.sub(r"\s+", " ", (request.form.get("consenting_name") or "").strip())[:120]
@@ -10047,9 +9416,8 @@ def ai_consent():
         "WHERE c.school_id=? AND st.is_active=1 ORDER BY c.name,st.last_name", (sid, sid)).fetchall()
     history = conn.execute("SELECT e.*, s.first_name, s.last_name FROM student_ai_consent_events e JOIN students s ON s.id=e.student_id "
                            "WHERE e.school_id=? ORDER BY e.id DESC LIMIT 25", (sid,)).fetchall()
-    class_names = [r["name"] for r in conn.execute("SELECT DISTINCT name FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()]
     conn.close()
-    return render_template("ai_consent.html", students=students, history=history, relationships=CONSENT_RELATIONSHIPS, class_names=class_names)
+    return render_template("ai_consent.html", students=students, history=history, relationships=CONSENT_RELATIONSHIPS, classes=_ai_classes())
 
 
 @app.route("/ai/result-analysis")
@@ -10286,7 +9654,6 @@ _v61_helpers = dict(
     build_result_data=build_result_data, student_in_school=student_in_school, resolve_term=resolve_term,
     student_class_for_term=student_class_for_term, require_class_result_access=require_class_result_access,
     parent_child=parent_child, parent_login_required=parent_login_required, current_term=current_term,
-    result_class_published=result_class_published,
 )
 register_v61_routes(app, _v61_helpers)
 _AUTO_ADVANCE_IMPL = _v61_helpers["auto_advance_after_publish"]
@@ -10297,7 +9664,6 @@ register_v62_routes(app, dict(
     get_db=get_db, login_required=login_required, log_audit=log_audit, RESULT_BOOL_SETTINGS=RESULT_BOOL_SETTINGS, RESULT_TEMPLATES=RESULT_TEMPLATES,
     get_result_display=get_result_display, result_sheet_settings=result_sheet_settings, student_full_name=student_full_name,
     _actor_role_label=_actor_role_label, PDF_FONT_CHOICES=PDF_FONT_CHOICES, PARENT_PHOTOS_DIR=PARENT_PHOTOS_DIR, grade_for=grade_for,
-    PAGE_ORIENTATIONS=PAGE_ORIENTATIONS, FONT_SCALE_CHOICES=FONT_SCALE_CHOICES,
     ordinal_text=ordinal_text, all_terms_for_school=all_terms_for_school, require_class_result_access=require_class_result_access,
     resolve_term=resolve_term, build_broadsheet_data=build_broadsheet_data, parent_login_required=parent_login_required,
 ))

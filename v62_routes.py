@@ -18,12 +18,11 @@ SIGNATURE_LAYOUTS = [("split", "Teacher left, Principal right"), ("stacked", "St
 SECTIONS = [
     ("Identity & header", ["show_logo", "show_passport", "show_watermark"]),
     ("School information", ["show_address", "show_email", "show_phone", "show_motto"]),
-    ("Student details", ["show_admission_no", "show_class", "show_session", "show_term", "show_next_term_resumes"]),
+    ("Student details", ["show_admission_no", "show_class", "show_session", "show_term", "show_result_date", "show_resumption_date"]),
     ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_grading_key", "show_promotion"]),
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
                                "show_teacher_name", "show_principal_signature", "show_principal_sign_date", "show_principal_name"]),
-    ("Page & print", ["fit_to_page"]),
 ]
 
 
@@ -39,8 +38,6 @@ def register_v62_routes(app, h):
     actor_role_label = h["_actor_role_label"]
     PDF_FONT_CHOICES = h["PDF_FONT_CHOICES"]
     PARENT_PHOTOS_DIR = h["PARENT_PHOTOS_DIR"]
-    PAGE_ORIENTATIONS = h["PAGE_ORIENTATIONS"]
-    FONT_SCALE_CHOICES = h["FONT_SCALE_CHOICES"]
     labels = {k: l for k, l, _d in RESULT_BOOL_SETTINGS}
 
     def sid():
@@ -78,11 +75,9 @@ def register_v62_routes(app, h):
         rs["teacher_sig"] = None
         rs["principal_sig"] = None
         rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (sid(),)).fetchall()
-        # The preview uses fake data throughout, so "Next Term Resumes" is a sample date too, shown only when the toggle is on.
-        rs["next_term_resumes"] = today.strftime("%d/%m/%Y") if cfg_rs.get("show_next_term_resumes") else None
         return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=round(tot_all / len(details), 1),
                     position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
-                    promotion_status=info["promotion_status"],
+                    promotion_status=info["promotion_status"], result_date=(today.strftime("%d/%m/%Y") if cfg_rs["show_result_date"] else None),
                     teacher_name=None, principal_name=None, student_full_name=lambda s: f"{s['last_name']} {s['first_name']}")
 
     @app.route("/admin/result-display-settings", methods=["GET", "POST"])
@@ -121,17 +116,22 @@ def register_v62_routes(app, h):
                 pdf_font = f.get("pdf_font", school["pdf_font"] or "Helvetica")
                 if pdf_font not in PDF_FONT_CHOICES:
                     errors["pdf_font"] = "Choose one of the listed fonts."
-                page_orientation = f.get("page_orientation", "portrait")
-                if page_orientation not in {x[0] for x in PAGE_ORIENTATIONS}:
-                    errors["page_orientation"] = "Choose a page orientation."
-                font_scale = f.get("font_scale", "normal")
-                if font_scale not in {x[0] for x in FONT_SCALE_CHOICES}:
-                    errors["font_scale"] = "Choose a font size."
+                # Term-wide default result date
+                term_dates = {}
+                for t in terms:
+                    raw = (f.get(f"term_result_date_{t['id']}") or "").strip()
+                    if raw:
+                        d = pc.parse_date(raw)
+                        if not d:
+                            errors[f"term_{t['id']}"] = f"Result date for {t['name']} is not a valid date."
+                        else:
+                            term_dates[t["id"]] = d.isoformat()
+                    else:
+                        term_dates[t["id"]] = None
                 if not errors:
                     vals = {k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}
                     vals.update(template=tmpl, title=title or None, footer_text=footer or None, watermark_text=wm or None,
-                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig, text_align=text_align,
-                                page_orientation=page_orientation, font_scale=font_scale)
+                                accent_color=prim or None, secondary_color=sec or None, header_layout=layout, signature_layout=sig, text_align=text_align)
                     before = dict(cfg)
                     before["cumulative_enabled"] = school["cumulative_enabled"]
                     try:
@@ -142,9 +142,13 @@ def register_v62_routes(app, h):
                                      (pdf_font, 1 if f.get("auto_teacher_comment") else 0, 1 if f.get("auto_principal_comment") else 0,
                                       1 if f.get("cumulative_enabled") else 0, sid()))
                         vals["cumulative_enabled"] = 1 if f.get("cumulative_enabled") else 0
+                        for t in terms:
+                            conn.execute("UPDATE terms SET result_date=? WHERE id=? AND session_id IN (SELECT id FROM sessions WHERE school_id=?)",
+                                         (term_dates.get(t["id"]), t["id"], sid()))
                         ch = pc.diff(before, vals, list(vals))
                         if (school["pdf_font"] or "Helvetica") != pdf_font:
                             ch["pdf_font"] = [school["pdf_font"], pdf_font]
+                        ch["term_result_dates"] = {str(k): v for k, v in term_dates.items() if v}
                         pc.audit(conn, actor(), "result_display_settings_changed", "school", sid(), ch, ip=ip())
                         conn.commit()
                         flash("Result Display Settings saved. They now apply to the preview, printed results and PDFs.", "success")
@@ -154,8 +158,7 @@ def register_v62_routes(app, h):
                         app.logger.exception("Result display settings save failed")
                         errors["_form"] = "The settings could not be saved. Please try again."
                 cfg = {**cfg, **{k: (1 if f.get(k) else 0) for k, _l, _d in RESULT_BOOL_SETTINGS}, "template": tmpl, "title": title, "footer_text": footer,
-                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig, "text_align": text_align,
-                       "page_orientation": page_orientation, "font_scale": font_scale}
+                       "watermark_text": wm, "accent_color": prim, "secondary_color": sec, "header_layout": layout, "signature_layout": sig, "text_align": text_align}
                 school = {**dict(school), "pdf_font": pdf_font, "auto_teacher_comment": 1 if f.get("auto_teacher_comment") else 0,
                           "auto_principal_comment": 1 if f.get("auto_principal_comment") else 0, "cumulative_enabled": 1 if f.get("cumulative_enabled") else 0}
             # live sample through the real sheet component
@@ -164,10 +167,10 @@ def register_v62_routes(app, h):
                 preview = None
             else:
                 preview = sample_result(conn, preview_rs)
+            term_dates_now = {t["id"]: conn.execute("SELECT result_date FROM terms WHERE id=?", (t["id"],)).fetchone()[0] for t in terms}
             return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
                                    header_layouts=HEADER_LAYOUTS, text_aligns=TEXT_ALIGNS, signature_layouts=SIGNATURE_LAYOUTS, pdf_fonts=PDF_FONT_CHOICES, errors=errors,
-                                   page_orientations=PAGE_ORIENTATIONS, font_scales=FONT_SCALE_CHOICES,
-                                   preview=preview, terms=terms,
+                                   preview=preview, terms=terms, term_dates=term_dates_now,
                                    resumption_dates={t["id"]: conn.execute("SELECT resumption_date FROM terms WHERE id=?", (t["id"],)).fetchone()[0] for t in terms}), (422 if errors else 200)
         finally:
             conn.close()
