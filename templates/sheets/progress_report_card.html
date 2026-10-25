@@ -22,11 +22,9 @@
   </div>
   <aside class="rsx-prc-side">
     {% if rs.show_domains and domain_groups %}<div class="rsx-prc-dom">{% for g in domain_groups %}<div><div class="rsx-prc-bar">{{ g.label|upper }}</div><ul>{% for name, rating in g['items'] %}<li><span>{{ name }}</span><b>{{ rating }}/5</b></li>{% endfor %}</ul></div>{% endfor %}</div>{% endif %}
-    {% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
-    {% set show_domain_key = rs.show_domains and domain_groups %}
-    {% if show_grading_key or show_domain_key %}<div class="rsx-prc-bar">KEY</div><p class="rsx-prc-std">{% if show_grading_key %}<b>Grades:</b> {% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}-{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark|upper }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}{% if show_grading_key and show_domain_key %}<br>{% endif %}{% if show_domain_key %}<b>Domain ratings:</b> {{ domain_key }}{% endif %}</p>{% endif %}
+    {% if rs.show_grading_key and rs.grading_scale %}<div class="rsx-prc-bar">ACADEMIC STANDARD</div><p class="rsx-prc-std">{% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}-{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark|upper }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+    {% if rs.resumption_date %}<p class="rsx-prc-std"><i>Next Term Begins: {{ rs.resumption_date }}</i></p>{% endif %}
   </aside>
 </div>
 {{ signatures() }}
-{% if rs.next_term_resumes %}<p class="rsx-prc-std"><i>Next Term Resumes: {{ rs.next_term_resumes }}</i></p>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}

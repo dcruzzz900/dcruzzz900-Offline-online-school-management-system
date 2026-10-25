@@ -18,14 +18,12 @@
   <table class="rsx-grn-remarks"><tbody>
   {% if rs.show_teacher_comment %}<tr><th>Class Teacher Remarks:</th><td>{{ info.teacher_comment or '' }}</td></tr>{% endif %}
   {% if rs.show_principal_comment %}<tr><th>Principal Remarks:</th><td>{{ info.principal_comment or '' }}</td></tr>{% endif %}
+  {% if rs.resumption_date %}<tr><th>Resumption Date:</th><td>{{ rs.resumption_date }}</td></tr>{% endif %}
   {% if rs.show_attendance %}<tr><th>Attendance:</th><td>Opened {{ info.days_school_opened if info.days_school_opened is not none else '—' }} · Present {{ info.days_present if info.days_present is not none else '—' }} · Absent {{ info.days_absent if info.days_absent is not none else '—' }}</td></tr>{% endif %}
   <tr><th>Result Analysis:</th><td>{{ subjects_written }} subject(s) offered · average {{ average }} · {{ overall_remark }}{% if promotion_status %} · {{ promotion_status }}{% endif %}</td></tr>
-  {% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
-  {% set show_domain_key = rs.show_domains and domain_groups %}
-  {% if show_grading_key or show_domain_key %}<tr><th>Key:</th><td>{% if show_grading_key %}<b>Grades:</b> {% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark }}){% if not loop.last %} | {% endif %}{% endfor %}{% endif %}{% if show_grading_key and show_domain_key %} &nbsp;·&nbsp; {% endif %}{% if show_domain_key %}<b>Domain ratings:</b> {{ domain_key }}{% endif %}</td></tr>{% endif %}
+  {% if rs.show_grading_key and rs.grading_scale %}<tr><th>Grading:</th><td>{% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark }}){% if not loop.last %} | {% endif %}{% endfor %}</td></tr>{% endif %}
   </tbody></table>
-  {% if rs.show_domains and domain_groups %}<div class="rsx-grn-dom">{% from "sheets/_parts.html" import ticks with context %}{{ ticks([5,4,3,2,1], {5:'Excel.',4:'V.Good',3:'Good',2:'Fair',1:'Poor'}) }}</div>{% endif %}
+  {% if rs.show_domains and domain_groups %}<div class="rsx-grn-dom">{% from "sheets/_parts.html" import ticks with context %}{{ ticks([5,4,3,2,1], {5:'Excel.',4:'V.Good',3:'Good',2:'Fair',1:'Poor'}) }}<p class="rsx-key-line">{{ domain_key }}</p></div>{% endif %}
 </div>
 {{ signatures() }}
-{% if rs.next_term_resumes %}<p class="rsx-grn-next">Next Term Resumes: <b>{{ rs.next_term_resumes }}</b></p>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
