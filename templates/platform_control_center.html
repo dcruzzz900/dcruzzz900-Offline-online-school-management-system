@@ -44,12 +44,13 @@
   </div>
 </div>
 <div class="card no-print">
-  <h3>What requires attention?</h3>
-  <ul>
+  <details class="hlp"><summary class="hlp-t">What requires attention?</summary>
+  <ul class="hlp-b">
     <li>Tenant identity problems: missing/duplicate School ID or Tenant ID, or mismatched assigned tenants.</li>
     <li>Readiness problems: required school setup components are still incomplete.</li>
     <li>Account status problems: pending activation, suspension or archive status.</li>
   </ul>
+  </details>
   <a class="btn btn-small" href="{{ url_for('platform_schools') }}">← Manage Schools</a>
 </div>
 {% endblock %}

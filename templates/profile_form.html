@@ -88,15 +88,12 @@
   <datalist id="dl_states">{% for s in states %}<option value="{{ s }}">{% endfor %}</datalist>
   <div class="card"><h3>Photograph</h3>
     <div class="pf-media">
-      {% if kind == 'student' and mode != 'self' %}<div class="pf-field"><label>Passport photograph</label>
-        {% if photo_url %}<img src="{{ photo_url }}" alt="Saved passport photograph" style="max-width:120px;height:auto;object-fit:contain"><br>{% else %}<p class="muted">No photograph saved yet.</p>{% endif %}
-        <a class="btn btn-small btn-secondary" href="{{ cancel }}#passport">{{ 'Change on the student profile' if photo_url else 'Upload on the student profile' }}</a></div>
-      {% else %}<div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
+      <div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
         {% if photo_url %}<img src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}
         <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Passport photograph must not exceed 500 KB.">
         <small class="muted">PNG, JPG or GIF · maximum 500 KB</small>
         {% if kind == 'student' and photo_url %}<label class="pf-check"><input type="checkbox" name="remove_photo" value="1"> Remove current photograph</label>{% endif %}
-        {% if photo_error %}<div class="pf-err" role="alert">{{ photo_error }}</div>{% endif %}</div>{% endif %}
+        {% if photo_error %}<div class="pf-err" role="alert">{{ photo_error }}</div>{% endif %}</div>
       {% if has_signature %}<div class="pf-field{{ ' has-error' if signature_error }}"><label>Signature <em class="tag">Optional</em></label>
         {% if signature_url %}<img src="{{ signature_url }}" alt="Current signature"><br>{% endif %}
         <input type="file" name="signature" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB.">

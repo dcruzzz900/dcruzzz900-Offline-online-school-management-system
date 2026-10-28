@@ -5,10 +5,11 @@
     <a href="{{ url_for('admin_school') }}">&larr; Back to School Profile</a>
     &nbsp;·&nbsp;
     <button class="btn btn-gold" onclick="window.print()">🖨 Print Preview</button>
-    <p style="font-size:0.85rem; color:#666; margin-top:0.5rem;">
+    <details class="hlp"><summary class="hlp-t">What this page is</summary>
+    <p class="muted hlp-b" style="font-size:0.85rem; margin-top:0.5rem;">
         This is a sample result with dummy data, showing exactly how your current colour, header
         arrangement, and alignment settings will look on a real result sheet. Nothing here is saved.
-    </p>
+    </p></details>
 </div>
 
 {% set accent = settings.result_accent_color if settings and settings.result_accent_color else '#1f3a5f' %}

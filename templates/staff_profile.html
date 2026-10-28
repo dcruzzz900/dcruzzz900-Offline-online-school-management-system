@@ -36,7 +36,7 @@
 {% if is_self or can_manage and session.get('role') == 'admin' %}
 <div class="card" style="max-width:640px;">
     <h3>{{ 'Edit My Profile' if is_self else 'Edit this Profile' }}</h3>
-    <p class="muted">Add missing details and update your permitted personal information. Username, Staff ID, role, school and security settings are administrator-controlled.</p>
+    <details class="hlp"><summary class="hlp-t">What you can edit</summary><p class="muted hlp-b">Add missing details and update your permitted personal information. Username, Staff ID, role, school and security settings are administrator-controlled.</p></details>
     <a class="btn" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
     {% if is_self %}<a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a>{% endif %}
 </div>
@@ -45,12 +45,13 @@
 {% if is_self %}
 <div class="card" style="max-width:640px;">
     <h3>Digital Signature</h3>
-    <p style="font-size:0.9rem; color:#666;">
+    <details class="hlp"><summary class="hlp-t">How digital signatures work</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
         Upload a signature image once and have it stamped automatically on every result you sign,
         instead of signing each printed result by hand. Your teacher and principal signatures stay
         completely separate — this is only ever placed in the signature area for results where
         you are recorded as the signer.
-    </p>
+    </p></details>
     {% if staff.signature_filename %}
     <img src="{{ url_for('staff_signature', user_id=staff.id) }}" alt="Signature" style="max-height:60px; display:block; margin-bottom:0.75rem; background:#f9f9f9; padding:0.4rem;">
     <form method="POST" action="{{ url_for('toggle_my_signature') }}" class="inline" style="display:inline-block; margin-right:0.5rem;">

@@ -9,7 +9,8 @@
 </div>
 
 <div class="card">
-  <p class="muted" style="margin:0 0 .6rem">Recording for <strong>today only</strong> — {{ now_label }} (school time). The date and time come from the server; the device clock is ignored.</p>
+  <p class="muted" style="margin:0 0 .6rem">Recording for <strong>today only</strong> — {{ now_label }} (school time).</p>
+  <details class="hlp"><summary class="hlp-t">How this works</summary><p class="muted hlp-b">The date and time come from the server; the device clock is ignored.</p></details>
   <form method="GET" class="form-grid" style="align-items:end">
     <label>Search staff<input type="search" name="q" value="{{ search or '' }}" placeholder="Name, username or role"></label>
     <label>Status<select name="status"><option value="">All statuses</option>{% for st in statuses %}<option value="{{ st }}" {% if filter_status==st %}selected{% endif %}>{{ st }}</option>{% endfor %}</select></label>

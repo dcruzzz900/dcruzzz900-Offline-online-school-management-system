@@ -8,18 +8,25 @@
       <div class="hub-welcome-copy">
         <div class="hub-eyebrow">SECURE SCHOOL PORTAL</div>
         <h1>Welcome Back</h1>
-        <p>One sign-in for administrators, staff and parents.</p>
+        <p>One sign-in for administrators, staff, students and parents.</p>
       </div>
     </div>
     <div class="hub-content">
       <form method="POST" action="{{ url_for('login') }}" id="unifiedLoginForm" class="unified-login-form" autocomplete="on">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Username, Email or Phone<input name="username" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false" value="{{ request.form.get('username', '') }}"></label>
+        <label>Username, Email, Phone, Admission No. or Register No.<input name="username" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false" value="{{ request.form.get('username', '') }}"></label>
         <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
-        <label><span>School ID / Tenant ID <span class="optional">optional</span></span><input name="school_code" value="{{ request.form.get('school_code', '') }}" placeholder="Only if your school asks for it" autocapitalize="none"></label>
+        <details class="hlp">
+          <summary class="hlp-t">Student logging in for the first time?</summary>
+          <div class="hlp-b">
+            <label>Class Login Code <span class="optional">first login only</span><input type="text" name="class_code" maxlength="20" autocomplete="off" style="text-transform:uppercase" value="{{ request.form.get('class_code', '') }}" placeholder="From your Class / Form Teacher"></label>
+            <small class="muted">Enter the Class Login Code your Form Teacher gave you. After your first successful login you will not need it again. Student accounts are created by your school. There is no self-registration.</small>
+          </div>
+        </details>
+        <label><span>School ID / Tenant ID <span class="optional">optional</span></span><input name="school_code" value="{{ request.form.get('school_code', '') }}" placeholder="Only if your school asks for it, or if two schools share your number" autocapitalize="none"></label>
         <button class="hub-primary-btn" type="submit">Sign in <span>→</span></button>
-        <div class="unified-links"><a href="{{ url_for('recover') }}">Forgot password?</a><a href="{{ url_for('activate_school') }}">Activate Your School →</a></div>
-        <p class="unified-note">You are taken to the right dashboard for your account automatically. Students sign in on the <a href="{{ url_for('student_login') }}">Student login</a> page.</p>
+        <div class="unified-links"><a href="{{ url_for('account_recovery') }}">Forgot password?</a><a href="{{ url_for('activate_school') }}">Activate Your School →</a></div>
+        <p class="unified-note">You are taken to the right dashboard for your account automatically — administrators, staff, students and parents all sign in right here.</p>
       </form>
       <div class="hub-register-panel">
         <div><strong>New or Need to Register?</strong><span>Get started with your school or create your account.</span></div>

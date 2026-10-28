@@ -2,7 +2,7 @@
 {% block title %}Staff roles{% endblock %}
 {% block content %}
 <h1>Roles — {{ user.name }}</h1>
-<p class="muted">A staff member can hold several roles at once. Their permissions are the combination of every active role. Adding or removing a role takes effect immediately. Score entry still depends on the subject and class actually assigned to them.</p>
+<details class="hlp"><summary class="hlp-t">How roles work</summary><p class="muted hlp-b">A staff member can hold several roles at once. Their permissions are the combination of every active role. Adding or removing a role takes effect immediately. Score entry still depends on the subject and class actually assigned to them.</p></details>
 <div class="card"><h3>Title (optional)</h3>
 <form method="POST" action="{{ url_for('staff_set_title', user_id=user.id) }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>Title<select name="title"><option value="">No title</option>{% for t in staff_title_options() %}<option {% if user.title == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
