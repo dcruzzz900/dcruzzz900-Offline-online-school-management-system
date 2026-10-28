@@ -11,6 +11,7 @@
 <table class="rsx-prc-table"><thead><tr><th rowspan="2" class="l">SUBJECTS</th>{% if rs.show_score %}<th colspan="{{ 4 if show_ca3 else 3 }}">CONTINUOUS ASSESSMENT</th><th rowspan="2">TOTAL<br><small>({{ max_each }})</small></th>{% endif %}{% if rs.show_grade %}<th rowspan="2">GRADE</th>{% endif %}{% if rs.show_subject_position %}<th rowspan="2">POS.</th>{% endif %}<th rowspan="2">MAX</th><th rowspan="2">MIN</th><th rowspan="2">AVG</th>{% if rs.show_remarks %}<th rowspan="2">REMARKS</th>{% endif %}</tr>
 <tr>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exams</th>{% endif %}</tr></thead>
 <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td><span class="rsx-chip">{{ s.grade }}</span></td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}<td>{{ s.highest if s.highest is not none else '-' }}</td><td>{{ s.lowest if s.lowest is not none else '-' }}</td><td>{{ s.class_avg if s.class_avg is not none else '-' }}</td>{% if rs.show_remarks %}<td><small>{{ s.remark|upper }}</small></td>{% endif %}</tr>{% endfor %}</tbody></table>
+{% include "_cumulative_breakdown.html" %}
 <div class="rsx-prc-grid">
   <div class="rsx-prc-main">
     <div class="rsx-prc-bar">ACADEMIC ANALYSIS</div>
@@ -22,9 +23,11 @@
   </div>
   <aside class="rsx-prc-side">
     {% if rs.show_domains and domain_groups %}<div class="rsx-prc-dom">{% for g in domain_groups %}<div><div class="rsx-prc-bar">{{ g.label|upper }}</div><ul>{% for name, rating in g['items'] %}<li><span>{{ name }}</span><b>{{ rating }}/5</b></li>{% endfor %}</ul></div>{% endfor %}</div>{% endif %}
-    {% if rs.show_grading_key and rs.grading_scale %}<div class="rsx-prc-bar">ACADEMIC STANDARD</div><p class="rsx-prc-std">{% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}-{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark|upper }}){% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
-    {% if rs.resumption_date %}<p class="rsx-prc-std"><i>Next Term Begins: {{ rs.resumption_date }}</i></p>{% endif %}
+    {% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
+    {% set show_domain_key = rs.show_domains and domain_groups %}
+    {% if show_grading_key or show_domain_key %}<div class="rsx-prc-bar">KEY</div><p class="rsx-prc-std">{% if show_grading_key %}<b>Grades:</b> {% for g in rs.grading_scale %}{{ '%g'|format(g.min_score) }}-{{ '%g'|format(g.max_score) }}: {{ g.grade }} ({{ g.remark|upper }}){% if not loop.last %}, {% endif %}{% endfor %}{% endif %}{% if show_grading_key and show_domain_key %}<br>{% endif %}{% if show_domain_key %}<b>Domain ratings:</b> {{ domain_key }}{% endif %}</p>{% endif %}
   </aside>
 </div>
 {{ signatures() }}
+{% if rs.next_term_resumes %}<p class="rsx-prc-std"><i>Next Term Resumes: {{ rs.next_term_resumes }}</i></p>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}

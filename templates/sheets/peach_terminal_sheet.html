@@ -19,10 +19,11 @@
 {% if rs.show_score %}<table class="rsx-peach-summary"><thead><tr><th colspan="2">{{ term.name|upper }} PERFORMANCE SUMMARY</th></tr></thead><tbody>
 <tr><td class="l">Total Obtainable:</td><td>{{ total_obtainable }}</td></tr><tr><td class="l">Total Obtained:</td><td>{{ total }}</td></tr><tr><td class="l">Total Subjects Offered:</td><td>{{ subjects_written }}</td></tr>
 <tr><td class="l">%TAGE</td><td>{{ average }}%</td></tr><tr><td class="l">GRADE</td><td>{{ overall_grade }}</td></tr><tr><td colspan="2" class="c">{{ overall_remark|upper }}{% if rs.show_overall_position %} &nbsp;·&nbsp; POSITION {{ position_text }} OF {{ class_size }}{% endif %}</td></tr></tbody></table>{% endif %}
+{% include "_cumulative_breakdown.html" %}
 {% if rs.show_domains and domain_groups %}<div class="rsx-peach-dom">{% for g in domain_groups %}<table class="rsx-peach-box"><thead><tr><th colspan="2">{{ g.label|upper }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }} – {{ domain_labels.get(rating|int, '') }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div>{% endif %}
 {% if rs.show_teacher_comment or rs.show_principal_comment %}<table class="rsx-peach-remarks"><tbody>
 {% if rs.show_teacher_comment %}<tr><th>Class Teacher's Remark</th><td>{{ info.teacher_comment or '' }}</td><td class="sg">{% if rs.show_teacher_signature %}{% if rs.teacher_sig %}<img src="{{ rs.teacher_sig }}" alt="Class teacher signature">{% endif %}{% if teacher_name %}<small>{{ teacher_name|upper }}</small>{% endif %}{% endif %}</td></tr>{% endif %}
 {% if rs.show_principal_comment %}<tr><th>Principal's Remark</th><td>{{ info.principal_comment or '' }}</td><td class="sg">{% if rs.show_principal_signature %}{% if rs.principal_sig %}<img src="{{ rs.principal_sig }}" alt="Principal signature">{% endif %}{% if principal_name %}<small>{{ principal_name|upper }}</small>{% endif %}{% endif %}{% if rs.show_principal_sign_date and info.principal_signed_date %}<small>Date: {{ info.principal_signed_date|dmy }}</small>{% endif %}</td></tr>{% endif %}
 </tbody></table>{% endif %}
-{% if rs.resumption_date %}<p class="rsx-peach-next">Next School Begins: <u>{{ rs.resumption_date }}</u></p>{% endif %}
+{% if rs.next_term_resumes %}<p class="rsx-peach-next">Next Term Resumes: <u>{{ rs.next_term_resumes }}</u></p>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
