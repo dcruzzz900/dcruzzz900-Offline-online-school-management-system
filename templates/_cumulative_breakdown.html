@@ -1,0 +1,39 @@
+{# V87: the ONE "Cumulative / Annual Performance" component, used two ways --
+   (1) embedded inside every one of the 16 result-sheet designs when a school has Cumulative
+       Results switched on (included here from _result_sheet.html's else-branch and from each
+       templates/sheets/*.html file), and
+   (2) as the main table on the dedicated Annual/Cumulative Result page (_cumulative_sheet.html).
+   Both consume the exact same `cumulative` dict, built in exactly one place --
+   build_cumulative_result_data() in app.py -- so the figures can never drift apart between a
+   template switch and the standalone cumulative page, and every term's CA1/CA2/[CA3]/Exam/Total
+   breakdown (not just a single running total per term) is always shown the same way everywhere.
+   Renders nothing when cumulative results are off for this school, or there's no term to show yet. #}
+{% if cumulative and cumulative.terms %}
+<section class="rs-cumulative">
+  <h3 class="rs-h">Cumulative / Annual Performance</h3>
+  <div class="rs-scroll"><table class="rs-table rs-cum-table">
+    <thead>
+      <tr>
+        <th class="l" rowspan="2">Subject</th>
+        {% for tn in cumulative.terms %}<th colspan="{{ 5 if cumulative.show_ca3 else 4 }}">{{ tn }}</th>{% endfor %}
+        <th rowspan="2">Aggregate</th><th rowspan="2">Grade</th>
+      </tr>
+      <tr>
+        {% for tn in cumulative.terms %}<th>CA1</th><th>CA2</th>{% if cumulative.show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for name, s in cumulative.by_subject.items() %}
+      <tr>
+        <td class="l"><b>{{ name }}</b></td>
+        {% for c in s.term_components %}
+          {% if c %}<td>{{ c.ca1 if c.ca1 is not none else '-' }}</td><td>{{ c.ca2 if c.ca2 is not none else '-' }}</td>{% if cumulative.show_ca3 %}<td>{{ c.ca3 if c.ca3 is not none else '-' }}</td>{% endif %}<td>{{ c.exam if c.exam is not none else '-' }}</td><td><b>{{ c.total }}</b></td>
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td>{% endif %}
+        {% endfor %}
+        <td><b>{{ s.average }}</b></td><td>{{ s.grade }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}

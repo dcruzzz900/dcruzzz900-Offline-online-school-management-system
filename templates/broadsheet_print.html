@@ -9,15 +9,29 @@
 h1{margin:0;font-size:16pt;color:{{ rs.accent }};text-align:center;text-transform:uppercase}.bs-sub{text-align:center;margin:1mm 0 4mm;color:#444}
 table{width:100%;border-collapse:collapse;font-size:8.5pt}th{background:{{ rs.accent }};color:#fff;padding:1.4mm;border:1px solid {{ rs.accent }};text-align:center}td{border:1px solid #999;padding:1.2mm;text-align:center}td.l,th.l{text-align:left}tbody tr:nth-child(even){background:#f4f6f8}
 .bs-logo{display:block;margin:0 auto 2mm;max-height:18mm;max-width:40mm;object-fit:contain}
+.bs-contact{text-align:center;color:#444;font-size:8.5pt;margin:0 0 2mm}
 @media print{body{background:#fff}.bs-toolbar{display:none}.bs-page{width:auto;margin:0;padding:0;overflow:visible}table{page-break-inside:auto}tr{page-break-inside:avoid}thead{display:table-header-group}th,tbody tr:nth-child(even){-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<div class="bs-toolbar"><button type="button" onclick="window.print()">Print</button><a href="{{ pdf_url }}">Download PDF</a><a href="{{ back_url }}">Close</a></div>
+<div class="bs-toolbar"><button type="button" id="bsPrint">Print</button><a href="{{ pdf_url }}" id="bsDownload">Download PDF</a><a href="{{ back_url }}">Close</a></div>
 <div class="bs-page">
 {% if rs.logo %}<img class="bs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
 <h1>{{ rs.school_name }}</h1><div class="bs-sub">Broadsheet — {{ class_row.name }} — {{ term.session_name }}, {{ term.name }}</div>
-{% set _ca3 = ca3_on(term.id) %}<table><thead><tr><th rowspan="2">Pos.</th><th rowspan="2" class="l">Student</th><th rowspan="2">Adm. No.</th>{% for s in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ s.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th></tr><tr>{% for s in subjects %}<th>1st CA</th><th>2nd CA</th>{% if _ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}</tr></thead>
+{% if rs.contact %}<div class="bs-contact">{{ rs.contact }}</div>{% endif %}
+{% set _ca3 = ca3_on() %}<table><thead><tr><th rowspan="2">Pos.</th><th rowspan="2" class="l">Student</th><th rowspan="2">Adm. No.</th>{% for s in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ s.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th></tr><tr>{% for s in subjects %}<th>1st CA</th><th>2nd CA</th>{% if _ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}</tr></thead>
 <tbody>{% for r in rows %}<tr><td>{{ r.position }}</td><td class="l">{{ student_full_name(r.student) }}</td><td>{{ r.student.admission_no }}</td>{% for s in subjects %}{% set c = r.scores[s.id] %}<td>{{ c.ca1 }}</td><td>{{ c.ca2 }}</td>{% if _ca3 %}<td>{{ c.ca3 }}</td>{% endif %}<td>{{ c.exam }}</td><td><b>{{ c.total }}</b>{% if c.grade != '-' %} ({{ c.grade }}){% endif %}</td>{% endfor %}<td><b>{{ r.total }}</b></td><td>{{ r.average }}</td></tr>{% else %}<tr><td colspan="{{ 5 + subjects|length * (5 if _ca3 else 4) }}">No results yet.</td></tr>{% endfor %}</tbody></table>
 </div>
-{% if autoprint %}<script>window.addEventListener('load',function(){setTimeout(function(){window.print();},350);});</script>{% endif %}
-<script>(function(){function fit(){var box=document.querySelector('.bs-page'),t=box&&box.querySelector('table');if(!t)return;t.style.zoom=1;var avail=box.clientWidth,w=t.scrollWidth;if(w>avail+1){t.style.zoom=Math.max(.38,avail/w)}}
-window.addEventListener('load',fit);window.addEventListener('resize',fit);window.addEventListener('beforeprint',fit);if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fit)}})();</script></body></html>
+<script>
+/* Same font_scale preference as the individual result sheet (Page & Print settings), composed with the
+   broadsheet's own width-based auto-shrink: scale to the preferred size first, then shrink further only if that's
+   still wider than the page. Broadsheets stay landscape regardless of the per-sheet orientation setting. */
+var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
+(function(){function fit(){var box=document.querySelector('.bs-page'),t=box&&box.querySelector('table');if(!t)return;var base=RS_FONT_SCALE||1;t.style.zoom=base;var avail=box.clientWidth,w=t.scrollWidth;if(w>avail+1){t.style.zoom=Math.max(.38,base*avail/w)}}
+window.addEventListener('load',fit);window.addEventListener('resize',fit);window.addEventListener('beforeprint',fit);if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fit)}
+// Print = Download: a phone's own print pipeline doesn't reliably reproduce this page's colors or
+// the width-based auto-shrink above, so "Print" opens the already-correct Download PDF (with
+// ?inline=1, so the browser shows it to view/print from instead of saving it to Downloads the way
+// the plain Download PDF link still does) rather than calling window.print() on this page.
+function printPdf(){var dl=document.getElementById('bsDownload'),href=dl&&dl.getAttribute('href');if(!href)return;window.location.href=href+(href.indexOf('?')===-1?'?':'&')+'inline=1';}
+var prEl=document.getElementById('bsPrint');if(prEl)prEl.addEventListener('click',printPdf);
+{% if autoprint %}window.addEventListener('load',function(){setTimeout(printPdf,350);});{% endif %}
+})();</script></body></html>

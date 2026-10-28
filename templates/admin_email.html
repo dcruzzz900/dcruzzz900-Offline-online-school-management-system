@@ -2,7 +2,8 @@
 {% block title %}Email Settings{% endblock %}
 {% block content %}
 <h1>Email Settings</h1>
-<p style="color:#666; font-size:0.9rem;">
+<details class="hlp"><summary class="hlp-t">How email sending works</summary>
+<p class="muted hlp-b" style="font-size:0.9rem;">
     Configure an SMTP account so results can be emailed to parents from the
     broadsheet and result pages. This uses standard SMTP, so it works with
     most email providers and transactional email services (e.g. SendGrid,
@@ -10,7 +11,7 @@
     PythonAnywhere's free plan, outbound SMTP may be restricted — this
     generally requires a paid plan, or an HTTP-based provider. See
     DEPLOY_PYTHONANYWHERE.md for details.
-</p>
+</p></details>
 
 <div class="card" style="max-width:520px;">
     <h3>SMTP Configuration</h3>
@@ -46,7 +47,8 @@
 
 <div class="card" style="max-width:520px;">
     <h3>Send a Test Email</h3>
-    <p style="font-size:0.9rem; color:#666;">Save your settings above first, then send yourself a test to confirm it works.</p>
+    <details class="hlp"><summary class="hlp-t">Tip</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">Save your settings above first, then send yourself a test to confirm it works.</p></details>
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="test">

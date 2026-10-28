@@ -2,22 +2,24 @@
 {% block title %}My Class Register{% endblock %}
 {% block content %}
 <h1>My Class Register — {{ class_row.name }}</h1>
-<p style="color:#666; font-size:0.9rem;">
+<details class="hlp"><summary class="hlp-t">How this works</summary>
+<p class="muted hlp-b" style="font-size:0.9rem;">
     Enter your students' names exactly as written in your class register. You can add new
     students here and correct existing names, Admission No. / Register No., or parent
     contact details.
-</p>
+</p></details>
 
 <a class="btn btn-small" href="{{ url_for('roll_call', class_id=class_row.id) }}">Take Today's Roll Call</a>
 <a class="btn btn-small" href="{{ url_for('roll_call_history', class_id=class_row.id) }}">Attendance History</a>
 
 <div class="card">
     <h3>CSV Import/Export</h3>
-    <p style="font-size:0.9rem; color:#666;">
+    <details class="hlp"><summary class="hlp-t">How this works</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
         Download your class register as a CSV, fill it in on your computer (add new students or
         correct details), then upload it back. Existing students are matched by
         Admission No. / Register No. and updated; unmatched rows are added as new students.
-    </p>
+    </p></details>
     <a class="btn btn-small" href="{{ url_for('my_class_csv_template', class_id=class_row.id) }}">Download Class Register CSV</a>
     <form method="POST" action="{{ url_for('my_class_csv_upload', class_id=class_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

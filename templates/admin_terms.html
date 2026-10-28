@@ -61,10 +61,11 @@
 
 <div class="card">
     <h3>Terms</h3>
-    <p style="font-size:0.85rem; color:#666;">
+    <details class="hlp"><summary class="hlp-t">Why "Published" matters</summary>
+    <p class="muted hlp-b" style="font-size:0.85rem;">
         A term must be <b>Published</b> before its results can be emailed to parents — this
         keeps parents from being emailed mid-term while scores are still being entered.
-    </p>
+    </p></details>
     <table>
         <tr><th>Term</th><th>Session</th><th>Status</th><th>Resumption date</th><th>Published?</th><th>Action</th></tr>
         {% for t in terms %}

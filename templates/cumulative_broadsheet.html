@@ -1,11 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Cumulative Broadsheet{% endblock %}
 {% block content %}
-<div class="report-header">
-    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
-    <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
+<div class="report-header" style="border-bottom:3px solid {{ rs.accent if rs else '#1f3a5f' }};">
+    {% if rs and rs.logo %}<img src="{{ rs.logo }}" alt="{{ rs.school_name }}" class="report-logo"><br>
+    {% elif school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0; color:{{ rs.accent if rs else '#1f3a5f' }};">{{ (rs.school_name if rs else none) or school_name }}</h2>
+    {% if rs and rs.tagline %}<p style="margin:0 0 0.3rem; color:#666;">{{ rs.tagline }}</p>{% endif %}
+    {% if rs and rs.contact %}<p style="margin:0 0 0.3rem; color:#666;">{{ rs.contact }}</p>{% endif %}
     <h1>Annual / Cumulative Broadsheet</h1>
-    <p>{{ class_row.name }}{% if class_row.category %} ({{ class_row.category }}){% endif %} &mdash; {{ academic_session.name }}</p>
+    <p>{{ class_row.name }}{% if class_row.category %} ({{ class_row.category }}){% endif %} &mdash; {{ academic_session.name }}{% if selected_term %} &mdash; through {{ selected_term.name }}{% endif %}</p>
 </div>
 
 <div class="no-print" style="margin-bottom:1rem;">
@@ -16,16 +19,23 @@
             <option value="{{ s.id }}" {% if s.id == academic_session.id %}selected{% endif %}>{{ s.name }}{% if s.is_active %} (active){% endif %}</option>
             {% endfor %}
         </select>
+        <label style="display:inline; font-weight:normal; margin-left:0.75rem;">Through term:</label>
+        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+            {% for t in session_terms %}
+            <option value="{{ t.id }}" {% if selected_term and t.id == selected_term.id %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+        </select>
     </form>
     <a class="btn" href="{{ url_for('broadsheet', class_id=class_row.id) }}">&larr; Back to Term Broadsheet</a>
     <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
 </div>
 
-<p style="color:#666; font-size:0.85rem;">
-    Cumulative Average is the mean of each subject's totals across every term this session that
-    has a score recorded for it &mdash; a term with no score for a subject isn't counted, rather
-    than dragging the average down to 0.
-</p>
+<details class="hlp"><summary class="hlp-t">How this is calculated</summary>
+<p class="muted hlp-b" style="font-size:0.85rem;">
+    This consolidates every term through <b>{{ selected_term.name if selected_term else 'the selected term' }}</b>
+    &mdash; a later term's scores are never included, and a term with no score yet for a subject isn't
+    counted as zero, rather than dragging the average down.
+</p></details>
 
 <div style="overflow-x:auto;">
 <table>
@@ -49,4 +59,5 @@
     {% endfor %}
 </table>
 </div>
+{% if rs and rs.footer %}<p style="margin-top:1rem; color:#555; font-size:0.8rem; border-top:1px solid #aaa; padding-top:0.4rem;">{{ rs.footer }}</p>{% endif %}
 {% endblock %}

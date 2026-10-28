@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}Recent Activities{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">ACTIVITY LOG</div><h1>Recent Activities</h1><p>{{ total }} recorded event{{ 's' if total != 1 else '' }}{% if type_filter %} · filtered to {{ type_filter }}{% endif %}</p></div><a class="btn btn-secondary" href="{{ url_for('dashboard') }}">← Back to Dashboard</a></div>
+<div class="card" style="padding:.75rem 1rem;margin-bottom:14px"><form method="get" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label style="margin:0;font-size:12px" class="muted">Filter:</label>
+<a class="btn btn-small {{ '' if type_filter else 'btn-secondary' }}" href="{{ url_for('view_all_activities') }}">All</a>
+{% for t in types %}<a class="btn btn-small {{ 'btn-secondary' if type_filter != t else '' }}" href="{{ url_for('view_all_activities', type=t) }}">{{ t|capitalize }}</a>{% endfor %}
+</form></div>
+<div class="card">
+{% if activities %}<table><tr><th style="width:160px">When</th><th style="width:160px">Who</th><th style="width:110px">Type</th><th>What happened</th></tr>
+{% for a in activities %}<tr><td class="muted" style="font-size:12px">{{ a.ts }}</td><td>{{ a.actor }}</td><td><span class="badge">{{ a.type }}</span></td><td>{{ a.description }}</td></tr>{% endfor %}
+</table>
+<div style="display:flex;justify-content:space-between;margin-top:14px">
+{% if has_prev %}<a class="btn btn-small btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page-1) }}">← Newer</a>{% else %}<span></span>{% endif %}
+{% if has_next %}<a class="btn btn-small btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page+1) }}">Older →</a>{% endif %}
+</div>
+{% else %}<p class="muted">No activities recorded yet{% if type_filter %} for this filter{% endif %}.</p>{% endif %}
+</div>
+{% endblock %}

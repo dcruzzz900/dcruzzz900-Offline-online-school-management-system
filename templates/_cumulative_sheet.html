@@ -22,10 +22,9 @@
   <div><span>Grade</span><b>{{ grade }} ({{ remark }})</b></div>
   <div class="rs-pos"><span>Overall Position</span><b>{{ position }}{% if class_size %} <small>of {{ class_size }}</small>{% endif %}</b></div>
 </section>
-<section class="rs-perf">
-  <h3 class="rs-h">Academic Performance Through {{ selected_term.name if selected_term else 'the Selected Term' }}</h3>
-  <table class="rs-table"><thead><tr><th class="l">Subject</th>{% for t in terms %}<th>{{ t.name }}</th>{% endfor %}<th>Cumulative Avg</th><th>Grade</th></tr></thead>
-  <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% for v in s.term_values %}<td>{{ v if v is not none else '-' }}</td>{% endfor %}<td><b>{{ s.average }}</b></td><td>{{ s.grade }}</td></tr>{% endfor %}</tbody></table>
-</section>
+{# V87: the full per-term CA1/CA2/[CA3]/Exam/Total breakdown, via the same shared component
+   and the same "cumulative" figures embedded in a regular term result sheet uses -- see
+   _cumulative_breakdown.html. #}
+{% include "_cumulative_breakdown.html" %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
 </article>

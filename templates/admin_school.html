@@ -2,10 +2,11 @@
 {% block title %}School Profile{% endblock %}
 {% block content %}
 <h1>School Profile</h1>
-<p style="color:#666; font-size:0.9rem;">
+<details class="hlp"><summary class="hlp-t">Where this is used</summary>
+<p class="muted hlp-b" style="font-size:0.9rem;">
     This name and logo appear on the dashboard, broadsheet, and terminal
     results (on screen and in the downloaded PDFs). Update it anytime.
-</p>
+</p></details>
 
 <div class="card" style="max-width:520px;">
     <h3>Current Logo</h3>
@@ -32,6 +33,10 @@
           <label>School Contact Phone<input type="text" name="registered_phone" value="{{ settings.registered_phone if settings else '' }}"></label>
         </div>
 
+        <label style="margin-top:1rem;">School Address</label>
+        <textarea name="school_address" rows="2" maxlength="300" placeholder="e.g. 12 Unity Road, Goni-Gora, Kaduna">{{ settings.school_address if settings and settings.school_address else '' }}</textarea>
+        <p class="muted" style="margin:.2rem 0 0">Shown on result sheets and broadsheets when “Show School Address” is ON in Result Display Settings. Leave blank to omit it.</p>
+
         <label>Logo Image (PNG, JPG, or GIF — leave blank to keep the current one)</label>
         <input type="file" name="logo" accept=".png,.jpg,.jpeg,.gif">
 
@@ -57,13 +62,6 @@
             <option value="mdy" {% if settings and settings.date_format == 'mdy' %}selected{% endif %}>Month/Day/Year (Dec 31, 2026)</option>
             <option value="ymd" {% if settings and settings.date_format == 'ymd' %}selected{% endif %}>Year-Month-Day (2026-12-31)</option>
         </select>
-
-        
-        <p style="font-size:0.85rem; color:#999; margin-top:0.3rem;">
-            When on, this term's comment is generated from the student's grade/average instead of
-            what's typed on the result — handy when scores come in by CSV upload and no one
-            types a comment by hand.
-        </p>
 
         <label style="margin-top:1rem;">Fonts</label>
         <label>App Display Font</label>
@@ -104,11 +102,12 @@
 <div class="card" style="max-width:520px;">
     <h3>Custom Subdomain</h3>
     {% if base_domain %}
-    <p style="font-size:0.9rem; color:#666;">
+    <details class="hlp"><summary class="hlp-t">How this works</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
         Claim a subdomain and staff/students can sign in at
         <code>https://&lt;your-subdomain&gt;.{{ base_domain }}</code> with this school's own branding
         shown on the login page.
-    </p>
+    </p></details>
     {% else %}
     <p style="font-size:0.85rem; color:#b3261e;">
         This deployment hasn't been configured with a base domain yet, so a claimed subdomain won't

@@ -33,7 +33,7 @@
 <a href="{{ url_for('platform_settings_hub') }}" class="{{ 'active' if ep in ('platform_settings_hub','platform_backups','platform_notifications','platform_activation_requests') }}" {% if ep == 'platform_settings_hub' %}aria-current="page"{% endif %}>⚙️ Settings</a>
 <a href="{{ url_for('platform_logout') }}">⎋ Logout</a></nav></header>{% endif %}
 <main class="container">
-{% if session.get('user_id') or session.get('student_id') or session.get('platform_admin_id') %}<div id="liveClock" class="live-clock no-print" data-now="{{ server_now_ms or 0 }}" data-tz="{{ school_tz_name or 'Africa/Lagos' }}"></div>{% endif %}{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}{% block content %}{% endblock %}</main>
+{% if session.get('user_id') or session.get('student_id') or session.get('platform_admin_id') %}<div id="liveClock" class="live-clock no-print" data-now="{{ server_now_ms or 0 }}" data-tz="{{ school_tz_name or 'Africa/Lagos' }}"></div>{% endif %}{% if pdf_engine_down %}<div class="flash flash-error no-print">⚠ Results and broadsheets are currently printing in a plain, generic layout — your chosen colors, logo and result design aren't being applied to downloaded/printed PDFs. This means the PDF-rendering engine isn't set up on this server yet; see the "Step 3" note in the PythonAnywhere setup guide (<code>playwright install chromium</code>), or ask your developer.</div>{% endif %}{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}{% block content %}{% endblock %}</main>
 {% if session.get('user_id') %}</div></div>{% elif session.get('parent_id') %}</div>{% elif session.get('student_id') %}</div>{% elif session.get('platform_admin_id') %}</div>{% endif %}
 <script>
 (function(){
@@ -87,5 +87,4 @@
 })();
 </script>
 <script src="{{ url_for('static', filename='js/top-search.js') }}" defer></script><script src="{{ url_for('static', filename='js/shell-ui.js') }}" defer></script><script src="{{ url_for('static', filename='js/password-toggle.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/help-toggle.js') }}" defer></script>
 </body></html>
