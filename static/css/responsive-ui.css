@@ -13,3 +13,12 @@ table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;borde
 
 .tenant-chip{display:inline-block;margin:.4rem 0;padding:.45rem .7rem;border-radius:10px;background:#eef5fb;border:1px solid #d8e6f2;font-size:.82rem;color:#35536b;max-width:100%;overflow-wrap:anywhere}.tenant-chip code{font-size:.78em}
 @media(max-width:600px){.tenant-chip{font-size:.74rem}.tenant-chip strong{font-weight:700}}
+
+/* The broadsheet's table has a two-row rowspan/colspan header (S/N + Student span both rows; each subject's
+   "1st CA/2nd CA/Exam/Total" sits under one colspan'd subject heading). The sitewide table{display:block} rule
+   above breaks that: display:block throws away the table's row/column grid entirely, so rowspan/colspan have
+   nothing to measure against and the second header row's cells drift left under S/N/Student instead of staying
+   under their subject. The broadsheet already wraps its table in its own overflow-x:auto div for horizontal
+   scrolling on narrow screens, so it doesn't need (and is actively broken by) the generic rule's display:block —
+   putting it back to a real table just lets the wrapper's own scrolling do the job, with the header intact. */
+@media(max-width:700px){.bs-table{display:table;white-space:normal}}
