@@ -324,7 +324,7 @@ def register_v61_routes(app, h):
             add("Students", "admin_students", ("admin", "sub_admin")); add("Teachers", "admin_teachers", ("admin", "sub_admin"))
             add("Classes", "admin_classes", ("admin", "sub_admin")); add("Subjects", "admin_subjects", ("admin", "sub_admin"))
             add("School Setup", "admin_school", ("admin", "sub_admin")); add("Custom Fields", "admin_custom_fields", ("admin",))
-            add("Result Display Settings", "result_display_settings", ("admin", "sub_admin")); add("Educational Domains", "admin_domains", ("admin", "sub_admin"))
+            add("Result Display Settings", "result_display_settings", ("admin", "sub_admin")); add("Domain Ratings", "admin_domains", ("admin", "sub_admin"))
             add("Class Login Codes", "class_login_codes", ("admin", "sub_admin", "teacher"))
             add("Score Change History", "score_history_all", ("admin", "sub_admin"))
             add("Audit History", "admin_audit_history", ("admin",)); add("Timetable", "timetable_hub")
@@ -754,10 +754,14 @@ def register_v61_routes(app, h):
     def student_result_print(term_id):
         conn = get_db()
         try:
-            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=? AND t.is_published=1",
+            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?",
                                 (term_id, sid())).fetchone()
             enrolled = term and conn.execute("SELECT 1 FROM enrollments WHERE student_id=? AND session_id=?", (session["student_id"], term["session_id"])).fetchone()
-            if not term or not enrolled:
+            cls_for_term = enrolled and h["student_class_for_term"](conn, session["student_id"], term_id)
+            # Gate on THIS student's own class publication status, not the term-wide
+            # "at least one class published" flag — otherwise a different class getting
+            # published in the same term would wrongly unlock this print view too.
+            if not term or not enrolled or not h["result_class_published"](conn, sid(), cls_for_term, term_id):
                 flash("That term's result isn't available.", "error")
                 return redirect(url_for("student_dashboard"))
             return render_print(conn, session["student_id"], term, url_for("student_result_pdf", term_id=term_id), url_for("student_result", term_id=term_id))
@@ -770,9 +774,10 @@ def register_v61_routes(app, h):
         conn = get_db()
         try:
             child = h["parent_child"](conn, session["parent_id"], student_id)
-            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=? AND t.is_published=1",
+            term = conn.execute("SELECT t.*, se.name AS session_name FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?",
                                 (term_id, sid())).fetchone()
-            if not child or not term:
+            cls_for_term = child and term and h["student_class_for_term"](conn, student_id, term_id)
+            if not child or not term or not h["result_class_published"](conn, sid(), cls_for_term, term_id):
                 flash("That published result is not available.", "error")
                 return redirect(url_for("parent_children_page"))
             return render_print(conn, student_id, term, url_for("parent_result_pdf", student_id=student_id, term_id=term_id),

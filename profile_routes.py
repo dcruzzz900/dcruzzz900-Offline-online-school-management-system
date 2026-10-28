@@ -176,10 +176,6 @@ def register_profile_routes(app, h):
                 errors["email"] = "Email is already used by another student in this school."
         # passport photograph
         blob = ext = None
-        # One passport field: staff/admin manage a student's photograph ONLY on the Student Profile page card (upload / replace /
-        # remove). This form never accepts a second upload for them; a student editing their own profile still can.
-        if mode != "self":
-            files = {k: v for k, v in files.items() if k != "photo"}
         if files.get("photo") and files["photo"].filename:
             blob, ext, perr = pc.read_image_upload(files["photo"], pc.PASSPORT_MAX, "Passport photograph")
             if perr:
@@ -217,7 +213,7 @@ def register_profile_routes(app, h):
                 if student["photo_filename"]:
                     old_photo_path = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])
                 photo_changed = True
-            elif mode == "self" and form.get("remove_photo") == "1" and student["photo_filename"]:
+            elif form.get("remove_photo") == "1" and student["photo_filename"]:
                 conn.execute("UPDATE students SET photo_filename=NULL WHERE id=?", (sid,))
                 old_photo_path = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])
                 photo_changed = True

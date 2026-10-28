@@ -117,7 +117,7 @@ def register_v64(app, h):
             add(act("take_attendance", "Take Class Attendance", "✔", url_for("roll_call", class_id=cid), "Class",
                     "completed" if taken else "pending", "Today — Taken" if taken else "Today — Not Taken"))
             add(act("class_register", "Class Register", "☰", url_for("class_register", class_id=cid), "Class"))
-            add(act("domains", "Educational Domains", "★", url_for("class_results_list", class_id=cid), "Results", hint="Open a student's result to rate domains"))
+            add(act("domains", "Domain Ratings", "★", url_for("class_results_list", class_id=cid), "Results", hint="Open a student's result to rate domains"))
             add(act("ct_comments", "Class Teacher Comments", "✍", url_for("class_results_list", class_id=cid), "Results", hint="Open a student's result to write the comment"))
             st = core.publication_status(conn, school_id, cid, term["id"]) if term else "draft"
             add(act("submit_results", "Submit Results for Review", "⇪", url_for("result_workflow"), "Results",

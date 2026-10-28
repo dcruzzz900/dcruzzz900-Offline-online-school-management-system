@@ -60,6 +60,23 @@ pip install -r requirements.txt
 This installs Flask, ReportLab, and the other pieces the app needs. Wait for
 it to finish — you'll see your cursor return to a normal prompt.
 
+**Then run this one extra command — it's easy to miss and results/broadsheets
+will silently print in a plain, generic layout (none of your colors, logo
+placement, or chosen design) without it:**
+
+```
+playwright install chromium
+```
+
+This downloads the actual browser the app uses to turn your chosen result
+design into a PDF — "pip install" above only installs the small Python
+package that drives it, not the browser itself. It takes a minute or two
+and prints a lot of text; that's normal. If it finishes without an error,
+you're done. If it fails (some free PythonAnywhere accounts restrict which
+sites a Bash console can reach), come back and tell me what it printed — the
+app still works and still produces PDFs either way, just in the plain
+fallback layout until this succeeds.
+
 ---
 
 ## Step 4 — Create the Web App
