@@ -88,7 +88,7 @@ def result_table(h):
     page's own "Through term:" <select>, which (by design) always lists every term in the session as
     an option regardless of the chosen cutoff, so checking the whole page for a term name would be
     testing the selector, not the consolidated data."""
-    m = re.search(r"Academic Performance.*?<table[^>]*>(.*?)</table>", h, re.S)
+    m = re.search(r"Cumulative / Annual Performance.*?<table[^>]*>(.*?)</table>", h, re.S)
     return m.group(1) if m else ""
 
 

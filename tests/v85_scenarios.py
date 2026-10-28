@@ -257,12 +257,17 @@ check("a normal-sized result, with orientation='auto', renders as a portrait PDF
 # browser itself to fit better in landscape, and decideOrientation() picks it -- this is the "real
 # dual-orientation zoom measurement, not a heuristic" V79 deferred this for. A single long comment
 # paragraph can never save enough height to flip it (it's capped at half the page width by the
-# 2-column comments grid); a genuinely WIDE cumulative table does: 10 terms x (this class's 4
-# existing + 8 new) long-named subjects, which saves well over the ~29% margin decideOrientation()
-# requires. Verified end-to-end through the real route with pypdf's mediabox.
+# 2-column comments grid); a genuinely WIDE cumulative table does: 3 terms x (this class's 4
+# existing + 4 new) long-named subjects, which saves well over the ~29% margin decideOrientation()
+# requires. (V87: the cumulative section now shows every term's full CA1/CA2/[CA3]/Exam/Total
+# breakdown, not just one running-total column per term -- several times wider per term than
+# before -- so this used to need 10 terms x 8 long-named subjects to tip the scale; now 3 terms x
+# 4 does, and 10 x 8 so overloads even a landscape page with unavoidable per-term columns that
+# portrait and landscape end up equally (not differently) squeezed, which no longer exercises the
+# thing this check is about.) Verified end-to-end through the real route with pypdf's mediabox.
 c0 = db()
 extra_term_ids = []
-for i in range(3, 11):  # terms 3..10, on top of the existing term1/term2 -- 10 terms total
+for i in range(3, 4):  # term 3, on top of the existing term1/term2 -- 3 terms total
     c0.execute("INSERT INTO terms (name, session_id, is_active) VALUES (?, ?, 0)", (f"{i}th Term", session_id))
     extra_term_ids.append(c0.execute("SELECT id FROM terms WHERE name=?", (f"{i}th Term",)).fetchone()[0])
 c0.commit()
@@ -271,7 +276,7 @@ all_wide_term_ids = [term1, term2] + extra_term_ids
 
 class_id_1 = one("SELECT class_id FROM students WHERE id=1")["class_id"]
 wide_subject_ids = []
-for i in range(1, 9):  # 8 long-named subjects (on top of the class's existing 4) -- empirically
+for i in range(1, 5):  # 4 long-named subjects (on top of the class's existing 4) -- empirically
                         # the smallest set, under this school's REAL Result Display Settings
                         # (accent colors, watermark, footer -- all turned on earlier in this fixture
                         # for item B), that genuinely crosses decideOrientation()'s margin
@@ -288,7 +293,7 @@ for t in extra_term_ids:
 
 last_wide_term = extra_term_ids[-1]
 pdf_wide = ADMIN.get(f"/cumulative/student/1/pdf?session_id={session_id}&term_id={last_wide_term}")
-check("a cumulative result wide enough (10 terms x many long-named subjects) to genuinely overflow far more in portrait than landscape is measured and switched to a landscape PDF",
+check("a cumulative result wide enough (3 terms x many long-named subjects) to genuinely overflow far more in portrait than landscape is measured and switched to a landscape PDF",
       pdf_wide.status_code == 200 and pdf_is_landscape(pdf_wide.data), pdf_wide.status_code)
 
 pdf_normal_again = ADMIN.get("/result/1/pdf?term_id=1")

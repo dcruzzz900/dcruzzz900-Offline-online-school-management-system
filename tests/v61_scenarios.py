@@ -508,7 +508,7 @@ check("school can add its own domain and a skill in it", tid_new is not None and
 r = post(a_c, "/admin/domains", {"action": "add_domain", "label": "Academic-related skills"}, "/admin/domains")
 check("duplicate domain name refused", db().execute("SELECT COUNT(*) FROM educational_domains WHERE school_id=1 AND domain_key='academic_related_skills'").fetchone()[0] == 1)
 ed = html(a_c.get(f"/result/1?term_id={term_id}"))
-check("rating inputs grouped by domain on the result editor", "Educational domain ratings" in ed and "Academic-related skills" in ed and f'name="trait_{tid_new[0]}"' in ed)
+check("rating inputs grouped by domain on the result editor", "Domain Ratings" in ed and "Academic-related skills" in ed and f'name="trait_{tid_new[0]}"' in ed)
 conn = db(); conn.execute("UPDATE result_publication SET status='reopened'"); conn.commit(); conn.close()   # comments/ratings are drafts: unlocked while saving
 post(a_c, "/result/1/extra", {"term_id": term_id, f"trait_{tid_new[0]}": "5", f"trait_{tr[0]}": "4", "days_school_opened": "60", "days_present": "55", "days_absent": "5", "teacher_comment": "Good", "principal_comment": "Well done", "promotion_status": "Promoted to JSS 2"}, f"/result/1?term_id={term_id}")
 conn = db(); conn.execute("UPDATE result_publication SET status='published'"); conn.commit(); conn.close()
@@ -527,7 +527,10 @@ check("print page uses A4 @page and print stylesheet", "result-sheet.css" in pt)
 css = open(os.path.join(ROOT, "static/css/result-sheet.css")).read()
 check("CSS declares A4 page size and 210mm sheet", "size:A4" in css and "210mm" in css and "@media print" in css and "print-color-adjust" in css)
 check("print page has screen-only toolbar hidden when printing", "rs-toolbar" in pt and "@media print{body{background:#fff}.rs-toolbar{display:none}" in pt)
-check("auto-print only when asked", "setTimeout(function(){window.print()" not in pt and "setTimeout(function(){window.print()" in html(a_c.get(f"/result/1/print?term_id={term_id}&auto=1")))
+# V78: "Print" now opens the same PDF as "Download" (via ?inline=1) instead of calling
+# window.print() on the live page -- see tests/v78_scenarios.py for why. The autoprint marker
+# changed accordingly; this check now looks for that, not the literal old window.print() call.
+check("auto-print only when asked", "setTimeout(printPdf" not in pt and "setTimeout(printPdf" in html(a_c.get(f"/result/1/print?term_id={term_id}&auto=1")))
 check("print is not available across schools", oc.get(f"/result/1/print?term_id={term_id}").status_code in (302, 403, 404))
 check("unauthenticated print refused", A.app.test_client().get(f"/result/1/print?term_id={term_id}").status_code in (302, 401, 403))
 check("staff result page links to the dedicated print page, not window.print()", "result_print" in open(os.path.join(ROOT, "templates/result.html")).read() or "/print" in html(a_c.get(rs_url)))

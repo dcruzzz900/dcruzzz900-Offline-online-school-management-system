@@ -146,7 +146,10 @@ check("fit_to_page defaults to ON (unchanged behaviour: auto-shrink stays the on
 check("font_scale defaults to 'normal' (unchanged behaviour: today's fixed per-template sizes)", row["font_scale"] == "normal", dict(row))
 
 s = sheet()
-check("default sheet's @page rule has no 'landscape' (still portrait)", "@page{size:A4;margin:0}" in s or re.search(r"@page\{size:A4;margin:0\}", s), s[:600])
+# V91: @page now gives explicit "{width}mm {height}mm" dimensions (so it generalizes to every
+# paper size, not just A4) instead of the "A4"/"A4 landscape" keyword -- same A4 portrait page,
+# new format: width first (210mm) then height (297mm) for portrait.
+check("default sheet's @page rule is 210mm x 297mm (A4 portrait, width first)", "@page{size:210.0mm 297.0mm;margin:0}" in s, s[:600])
 check("RS_LANDSCAPE is false by default", "var RS_LANDSCAPE = false" in s, s)
 check("RS_FONT_SCALE is 1.0 by default", "var RS_FONT_SCALE = 1.0" in s, s)
 check("RS_FIT_TO_PAGE is true by default", "var RS_FIT_TO_PAGE = true" in s, s)
@@ -154,7 +157,9 @@ check("RS_FIT_TO_PAGE is true by default", "var RS_FIT_TO_PAGE = true" in s, s)
 # ---------------------------------------------------------------- 1) orientation
 run("UPDATE result_display_settings SET page_orientation='landscape' WHERE school_id=1")
 s = sheet()
-check("landscape setting renders an '@page{size:A4 landscape...}' override", "@page{size:A4 landscape;margin:0}" in s, s[:800])
+# V91: landscape swaps the two explicit dimensions (height first, 297mm, then width, 210mm)
+# rather than appending the 'landscape' keyword -- same effective page shape, new format.
+check("landscape setting renders a swapped '@page{size:297mm 210mm...}' override", "@page{size:297.0mm 210.0mm;margin:0}" in s, s[:800])
 check("RS_LANDSCAPE flips to true", "var RS_LANDSCAPE = true" in s, s)
 
 bs = broadsheet()

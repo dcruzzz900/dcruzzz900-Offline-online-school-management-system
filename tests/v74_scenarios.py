@@ -137,7 +137,7 @@ check("every help block has a tappable <summary class=\"hlp-t\">...</summary> tr
 expectations = [
     "Next Term Resumes", "resumption date already set for the", "following",
     "Passport: ON with no photo leaves the box blank",
-    "Orientation and font size apply to the individual result sheet",
+    "apply to the individual result sheet",  # V91: wording now also mentions paper size
     "A saved comment is never replaced by a suggestion",
     "the annual result (all terms of the session) becomes available",
     "Each term's own resumption date is set under",
