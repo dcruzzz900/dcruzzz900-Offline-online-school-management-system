@@ -8,11 +8,11 @@
 <tr><td><b>NUMBER IN CLASS:</b> {{ class_size }}</td><td><b>TERM:</b> {{ term.name }}</td><td><b>SESSION:</b> {{ term.session_name }}</td><td><b>STATUS:</b> {{ promotion_status or student_status or '—' }}</td></tr>
 {% if rs.show_score %}<tr><td><b>TOTAL MARKS OBTAINABLE:</b> {{ total_obtainable }}</td><td><b>TOTAL MARKS OBTAINED:</b> {{ total }}</td><td><b>AVERAGE:</b> {{ average }}</td>{% if rs.show_overall_position %}<td><b>POSITION:</b> {{ position_text }}</td>{% else %}<td></td>{% endif %}</tr>{% endif %}
 </tbody></table>
-<div class="rsx-grn-bar">COGNITIVE DOMAIN</div>
+{% if not show_cumulative %}<div class="rsx-grn-bar">COGNITIVE DOMAIN</div>
 <table class="rsx-grn-table"><thead>
 <tr><th rowspan="2" class="l">Subjects</th><th colspan="{{ 8 if show_ca3 else 7 }}">{{ term.name }} Result</th></tr>
 <tr>{% if rs.show_score %}<th>1st CA</th><th>2nd CA</th>{% if show_ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}{% if rs.show_remarks %}<th>Remarks</th>{% endif %}</tr></thead>
-<tbody>{% for s in subjects %}<tr><td class="l">{{ s.name|upper }}</td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td>{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for s in subjects %}<tr><td class="l">{{ s.name|upper }}</td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td>{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>{% endif %}
 {% include "_cumulative_breakdown.html" %}
 <div class="rsx-grn-bar">REMARKS, AFFECTIVE AND PSYCHOMOTOR DOMAINS</div>
 <div class="rsx-grn-lower">

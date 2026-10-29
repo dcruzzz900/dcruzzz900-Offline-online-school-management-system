@@ -6,9 +6,9 @@
 {% if rs.show_class %}<dt>Class:</dt><dd>{{ class_row.name }}</dd>{% endif %}
 {% if gender_text %}<dt>Gender:</dt><dd>{{ gender_text }}</dd>{% endif %}
 {% if rs.show_overall_position %}<dt>Position:</dt><dd>{{ position_text }} of {{ class_size }}</dd>{% endif %}</dl>{{ passport('rsx-cln-photo') }}</section>
-<h3 class="rsx-cln-h">Academic Performance ({{ max_each }}% Base)</h3>
+{% if not show_cumulative %}<h3 class="rsx-cln-h">Academic Performance ({{ max_each }}% Base)</h3>
 <table class="rsx-cln-table"><thead><tr><th class="l">Subject</th>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exams</th><th>Total</th>{% endif %}<th>Average</th>{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}</tr></thead>
-<tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}<td>{{ s.class_avg if s.class_avg is not none else '-' }}</td>{% if rs.show_grade %}<td><b>{{ s.grade }}</b></td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
+<tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}<td>{{ s.class_avg if s.class_avg is not none else '-' }}</td>{% if rs.show_grade %}<td><b>{{ s.grade }}</b></td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}</tr>{% endfor %}</tbody></table>{% endif %}
 {% include "_cumulative_breakdown.html" %}
 <div class="rsx-cln-two">
   {% if rs.show_score %}<div><h3 class="rsx-cln-h">Performance Summary</h3><div class="rsx-cln-big"><b>{{ average }}%</b><span>AVERAGE SCORE</span></div><p class="rsx-cln-kv"><span>Total Marks:</span><b>{{ total }} / {{ total_obtainable }}</b></p><p class="rsx-cln-kv"><span>Overall Grade:</span><b>{{ overall_grade }}</b></p></div>{% endif %}
