@@ -386,7 +386,15 @@ for tp, marker in SAMPLES.items():
     rp = ADMIN.get("/result/1/pdf?term_id=1"); pdf_ = PdfReader(io.BytesIO(rp.data)); ptxt = text_of(rp.data)
     check(f"[{tp}] PDF is one page and carries the real data", len(pdf_.pages) == 1 and "Obi" in ptxt and "Mathematics" in ptxt.title() or "MATHEMATICS" in ptxt, (len(pdf_.pages), ptxt[:120]))
     check(f"[{tp}] school details come from this school's profile", "12 Unity Road" in pr and "99 Other Street" not in pr)
-    check(f"[{tp}] class statistics are real numbers from the broadsheet", True if tp in ("assessment_dossier", "green_cumulative_report") else any(k in pr for k in ("Class average", "Class avg", "Highest", "AVG", "Average", "Class avg")))
+    # V94: this fixture (line 376) now also has cumulative_enabled=1 with real term-1 data, so on
+    # every design the per-term Academic Performance table -- the thing carrying these specific
+    # "Class average/AVG/Highest" columns, for boxed_grey_card/peach_terminal_sheet/
+    # clean_midterm_report -- is intentionally hidden in favor of Cumulative/Annual Performance
+    # (see V94_IMPLEMENTATION_NOTES.md). assessment_dossier/green_cumulative_report never had
+    # these particular class-stat columns at all, which is why they were already skipped here.
+    check(f"[{tp}] class statistics are real numbers from the broadsheet",
+          True if tp in ("assessment_dossier", "green_cumulative_report", "boxed_grey_card", "peach_terminal_sheet", "clean_midterm_report")
+          else any(k in pr for k in ("Class average", "Class avg", "Highest", "AVG", "Average", "Class avg")))
     check(f"[{tp}] next term resumes shown when ON and the following term's date is set", "11" in pr and ("11/01/2027" in pr or "2027" in pr))
     run("UPDATE result_display_settings SET show_address=0, show_next_term_resumes=0, show_teacher_comment=0 WHERE school_id=1")
     pr2 = html(ADMIN.get("/result/1/print?term_id=1"))

@@ -155,9 +155,17 @@ check("student 2's result sheet ALSO shows Overall Position 1st (not 2nd)", "1st
 check("student 3's result sheet shows Overall Position 3rd (not 2nd)", "3rd" in s3)
 
 # 3) This matches the subject-level position convention, which was already tie-aware:
-#    both tied students are 1st in Mathematics too.
+#    both tied students are 1st in Mathematics too. V94: this school has cumulative_enabled=1
+#    (line 106), so the result sheet's per-term Academic Performance table -- which is where
+#    subject-level positions actually render -- is intentionally hidden in favor of Cumulative/
+#    Annual Performance (see V94_IMPLEMENTATION_NOTES.md); subject position itself isn't a
+#    column on the cumulative table, so this check turns cumulative off just long enough to read
+#    it off the table it's always lived on, then restores the setting this fixture asked for.
+run("UPDATE schools SET cumulative_enabled=0 WHERE id=1")
+s1_subj, s2_subj = result_html(1, 1), result_html(2, 1)
+run("UPDATE schools SET cumulative_enabled=1 WHERE id=1")
 check("subject position for the tied students is ALSO 1st (consistent convention)",
-      s1.split("Mathematics")[1][:400].count("1st") >= 1 and s2.split("Mathematics")[1][:400].count("1st") >= 1)
+      s1_subj.split("Mathematics")[1][:400].count("1st") >= 1 and s2_subj.split("Mathematics")[1][:400].count("1st") >= 1)
 
 # 4) A clean, untied Term 2 case still ranks 1,2,3 as before (no regression for the normal case).
 for sid, ca1, ca2, ca3, exam in [(1, 20, 20, 10, 40), (2, 15, 15, 10, 35), (3, 10, 10, 5, 30)]:
