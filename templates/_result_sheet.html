@@ -1,5 +1,12 @@
 {# Dedicated printable result component. Result data + Result Display Settings (rs) decide everything shown. #}
 {% set t = rs.template %}
+{# When Cumulative/Annual results are switched on for this school AND there's actually a
+   cumulative table to show, the per-term Academic Performance breakdown (this term's CA1/CA2/
+   Exam/Total only) is redundant with it, so it's hidden rather than shown twice on one sheet.
+   When cumulative is off, or there's genuinely nothing to show there yet (e.g. only one term on
+   record so far), Academic Performance is exactly what it's always been. Shared with every
+   bespoke template in templates/sheets/*.html via Jinja's include-with-context. #}
+{% set show_cumulative = cumulative and cumulative.terms %}
 <article class="rs-sheet rs-{{ t }}" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}" data-template="{{ t }}">
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
 {% if t in sample_sheets %}{% include 'sheets/' ~ t ~ '.html' %}{% else %}
@@ -19,11 +26,11 @@
   <div><span>Subjects</span><b>{{ subjects_written }} of {{ subjects|length }}</b></div>
   {% if rs.show_overall_position %}<div class="rs-pos"><span>Overall Position</span><b>{{ position_text }}{% if class_size %} <small>of {{ class_size }}</small>{% endif %}</b></div>{% endif %}
 </section>
-<section class="rs-perf">
+{% if not show_cumulative %}<section class="rs-perf">
   <h3 class="rs-h">Academic Performance</h3>
   <table class="rs-table"><thead><tr><th class="l">Subject</th>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}{% if rs.show_remarks %}<th class="l">Remark</th>{% endif %}</tr></thead>
   <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
-</section>
+</section>{% endif %}
 {% include "_cumulative_breakdown.html" %}
 {% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
