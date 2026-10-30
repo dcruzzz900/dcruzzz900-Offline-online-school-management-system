@@ -2372,34 +2372,43 @@ def enrolment_by_class(conn, school_id, class_ids=None):
     return out
 
 
-def _attendance_week_buckets(conn, where_sql, params, weeks=8):
-    """Weekly (Monday-start) attendance-rate buckets -- present+late counted as attended, the
-    same convention student_attendance_stats already uses -- for the most recent `weeks`
-    calendar weeks that have at least one recorded day. date(date,'weekday 0','-6 days') always
-    resolves to that row's own Monday, whichever day of the week the record itself falls on, so
-    weeks with partial data are still bucketed correctly rather than split across two rows."""
+def _attendance_day_buckets(conn, where_sql, params, days=7):
+    """Daily attendance-rate buckets -- present+late counted as attended, the same convention
+    student_attendance_stats already uses -- for the most recent `days` calendar days that have
+    at least one recorded day (V96: replaced the old weekly/8-week view with a last-week daily
+    one, per Austin's request). Each bucket carries both the raw ISO date (for a tooltip/title)
+    and a short display label ("Mon 26") that's what the chart actually shows on its x-axis."""
     rows = conn.execute(
-        f"SELECT date(date,'weekday 0','-6 days') wk, COALESCE(detail_status, status) st "
+        f"SELECT date, COALESCE(detail_status, status) st "
         f"FROM attendance_records WHERE {where_sql}", params
     ).fetchall()
     buckets = {}
     for r in rows:
-        if not r["wk"]:
+        if not r["date"]:
             continue
-        b = buckets.setdefault(r["wk"], {"present": 0, "total": 0})
+        b = buckets.setdefault(r["date"], {"present": 0, "total": 0})
         b["total"] += 1
         if r["st"] in ("present", "late"):
             b["present"] += 1
-    weeks_sorted = sorted(buckets.keys())[-weeks:]
-    return [
-        {"week_start": wk, "rate": round(buckets[wk]["present"] / buckets[wk]["total"] * 100, 1) if buckets[wk]["total"] else None}
-        for wk in weeks_sorted
-    ]
+    days_sorted = sorted(buckets.keys())[-days:]
+    out = []
+    for d in days_sorted:
+        try:
+            label = datetime.datetime.strptime(d, "%Y-%m-%d").strftime("%a %d")
+        except ValueError:
+            label = d
+        out.append({
+            "date": d,
+            "label": label,
+            "rate": round(buckets[d]["present"] / buckets[d]["total"] * 100, 1) if buckets[d]["total"] else None,
+        })
+    return out
 
 
-def school_attendance_trend(conn, school_id, class_ids=None, weeks=8):
-    """School- (or, with class_ids, a staff member's own accessible classes') weekly
-    attendance-rate trend, for an 'Attendance Trend' chart. class_ids=None means every class."""
+def school_attendance_trend(conn, school_id, class_ids=None, days=7):
+    """School- (or, with class_ids, a staff member's own accessible classes') daily
+    attendance-rate trend over the last week, for an 'Attendance Trend' chart. class_ids=None
+    means every class."""
     if class_ids is not None:
         if not class_ids:
             return []
@@ -2408,12 +2417,13 @@ def school_attendance_trend(conn, school_id, class_ids=None, weeks=8):
     else:
         where = "class_id IN (SELECT id FROM classes WHERE school_id=?)"
         params = [school_id]
-    return _attendance_week_buckets(conn, where, params, weeks)
+    return _attendance_day_buckets(conn, where, params, days)
 
 
-def student_attendance_trend(conn, student_id, weeks=8):
-    """One student's own weekly attendance-rate trend, for the Student/Parent dashboards."""
-    return _attendance_week_buckets(conn, "student_id=?", (student_id,), weeks)
+def student_attendance_trend(conn, student_id, days=7):
+    """One student's own daily attendance-rate trend over the last week, for the Student/Parent
+    dashboards."""
+    return _attendance_day_buckets(conn, "student_id=?", (student_id,), days)
 
 
 def all_classes_performance(conn, school_id, term_id, class_ids=None):
