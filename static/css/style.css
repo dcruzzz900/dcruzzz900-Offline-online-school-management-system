@@ -540,3 +540,9 @@ details.hlp summary.hlp-t:focus-visible{outline:2px solid var(--theme-primary,#1
    browser already derives from <details>/<summary> itself. Status/empty-state messages, required-field
    labels, validation errors, security/consent warnings and short signposts are deliberately NOT
    wrapped -- see V74's and V86's implementation notes for the full reasoning. */
+
+/* V95: dashboard analytics charts (Chart.js canvases), Admin/Teacher/Student/Parent dashboards */
+.chart-card h3{margin:0 0 4px}
+.chart-card canvas{max-width:100%}
+.chart-card{position:relative}
+.chart-donut-wrap{max-width:320px;margin:10px auto 0}
