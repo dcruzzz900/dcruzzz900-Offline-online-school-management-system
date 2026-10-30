@@ -178,7 +178,7 @@ check("enrolment chart includes the new JSS2B class with its 1 student", "JSS2B"
 
 att_labels = js_array(adash, "attendanceLabels")
 att_rate = js_array(adash, "attendanceRate")
-check("attendance trend has real weekly buckets (3 distinct weeks recorded)", att_labels and len(att_labels) == 3, att_labels)
+check("attendance trend has real buckets (4 distinct days recorded -- V96 switched this from weekly/8-week to daily/last-week buckets)", att_labels and len(att_labels) == 4, att_labels)
 check("attendance rate is a real number, not 100% (one absence was recorded)", att_rate and any(r is not None and r < 100 for r in att_rate), att_rate)
 
 check("Top Performing Students ranks student 1 (95%) above student 2 (55%) above student 3 (30%)",
