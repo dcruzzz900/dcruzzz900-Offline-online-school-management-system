@@ -22,6 +22,22 @@
     return document.getElementById(id);
   }
 
+  // V96: charts were rendering oversized/"verbose" because the canvases had no height-
+  // constrained parent, so Chart.js's responsive resize had nothing stable to measure against.
+  // Every chart now lives inside a fixed-height .chart-wrap (set in CSS), which fixes that. For
+  // charts whose category count can grow (more classes, more subjects), growWrap() widens that
+  // wrap -- inside a horizontally scrollable .chart-scroll -- so bars stay readably spaced
+  // instead of being squeezed into a fixed width; the chart only grows, it never balloons in
+  // height, which is what made the old version feel so large.
+  function growWrap(canvas, count, perItem, minPx) {
+    var wrap = canvas.parentElement;
+    if (!wrap || !wrap.classList.contains("chart-wrap")) return;
+    var scroller = wrap.parentElement;
+    var avail = (scroller && scroller.classList.contains("chart-scroll")) ? scroller.clientWidth : wrap.clientWidth;
+    var natural = Math.max(minPx || 0, (count || 0) * (perItem || 70));
+    wrap.style.width = natural > avail ? natural + "px" : "100%";
+  }
+
   function commonGridOptions() {
     return {
       responsive: true,
@@ -34,6 +50,7 @@
   function renderClassPerformance(labels, avg, pass) {
     var c = el("chartClassPerf");
     if (!c || !labels || !labels.length) return;
+    growWrap(c, labels.length, 72, 0);
     new Chart(c, {
       type: "bar",
       data: {
@@ -76,6 +93,7 @@
   function renderEnrolment(labels, counts) {
     var c = el("chartEnrolment");
     if (!c || !labels || !labels.length) return;
+    growWrap(c, labels.length, 64, 0);
     new Chart(c, {
       type: "bar",
       data: { labels: labels, datasets: [{ label: "Students", data: counts, backgroundColor: COLOR_ENROLMENT, borderRadius: 4 }] },
@@ -86,6 +104,7 @@
   function renderAcademicTrend(labels, mine, classAvg) {
     var c = el("chartAcademicTrend");
     if (!c || !labels || !labels.length) return;
+    growWrap(c, labels.length, 70, 0);
     var datasets = [{ label: "My average %", data: mine, borderColor: COLOR_LINE, backgroundColor: "rgba(124,58,237,.12)", fill: true, tension: 0.35, pointRadius: 3 }];
     if (classAvg && classAvg.some(function (v) { return v !== null && v !== undefined; })) {
       datasets.push({ label: "Class average %", data: classAvg, borderColor: "#94a3b8", borderDash: [5, 4], pointRadius: 2, fill: false, tension: 0.35 });
@@ -100,6 +119,7 @@
   function renderSubjectBar(labels, scores) {
     var c = el("chartSubjectScores");
     if (!c || !labels || !labels.length) return;
+    growWrap(c, labels.length, 60, 0);
     new Chart(c, {
       type: "bar",
       data: { labels: labels, datasets: [{ label: "Score", data: scores, backgroundColor: COLOR_AVG, borderRadius: 4 }] },
