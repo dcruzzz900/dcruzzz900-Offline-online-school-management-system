@@ -2356,6 +2356,116 @@ def student_recent_activities(conn, school_id, student, limit=10):
     return items[:limit]
 
 
+def enrolment_by_class(conn, school_id, class_ids=None):
+    """Active-student headcount per class, for an 'Enrolment by Class Level' chart. Ordered by
+    class name, which already sorts correctly for the JSS1..SSS3-style naming this app's own
+    fixtures and docs use throughout. class_ids optionally restricts this to a staff member's
+    own accessible classes, rather than the whole school."""
+    classes = conn.execute("SELECT id, name FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    if class_ids is not None:
+        allowed = set(class_ids)
+        classes = [c for c in classes if c["id"] in allowed]
+    out = []
+    for c in classes:
+        n = conn.execute("SELECT COUNT(*) c FROM students WHERE class_id=? AND is_active=1", (c["id"],)).fetchone()["c"]
+        out.append({"class_id": c["id"], "class_name": c["name"], "count": n})
+    return out
+
+
+def _attendance_week_buckets(conn, where_sql, params, weeks=8):
+    """Weekly (Monday-start) attendance-rate buckets -- present+late counted as attended, the
+    same convention student_attendance_stats already uses -- for the most recent `weeks`
+    calendar weeks that have at least one recorded day. date(date,'weekday 0','-6 days') always
+    resolves to that row's own Monday, whichever day of the week the record itself falls on, so
+    weeks with partial data are still bucketed correctly rather than split across two rows."""
+    rows = conn.execute(
+        f"SELECT date(date,'weekday 0','-6 days') wk, COALESCE(detail_status, status) st "
+        f"FROM attendance_records WHERE {where_sql}", params
+    ).fetchall()
+    buckets = {}
+    for r in rows:
+        if not r["wk"]:
+            continue
+        b = buckets.setdefault(r["wk"], {"present": 0, "total": 0})
+        b["total"] += 1
+        if r["st"] in ("present", "late"):
+            b["present"] += 1
+    weeks_sorted = sorted(buckets.keys())[-weeks:]
+    return [
+        {"week_start": wk, "rate": round(buckets[wk]["present"] / buckets[wk]["total"] * 100, 1) if buckets[wk]["total"] else None}
+        for wk in weeks_sorted
+    ]
+
+
+def school_attendance_trend(conn, school_id, class_ids=None, weeks=8):
+    """School- (or, with class_ids, a staff member's own accessible classes') weekly
+    attendance-rate trend, for an 'Attendance Trend' chart. class_ids=None means every class."""
+    if class_ids is not None:
+        if not class_ids:
+            return []
+        where = f"class_id IN ({','.join('?' * len(class_ids))})"
+        params = list(class_ids)
+    else:
+        where = "class_id IN (SELECT id FROM classes WHERE school_id=?)"
+        params = [school_id]
+    return _attendance_week_buckets(conn, where, params, weeks)
+
+
+def student_attendance_trend(conn, student_id, weeks=8):
+    """One student's own weekly attendance-rate trend, for the Student/Parent dashboards."""
+    return _attendance_week_buckets(conn, "student_id=?", (student_id,), weeks)
+
+
+def all_classes_performance(conn, school_id, term_id, class_ids=None):
+    """Average score + pass rate for EVERY class (ordered by name), for a 'Student Performance
+    by Class' chart -- unlike ranked_class_performance (which deliberately drops a class with
+    zero assessed students so it's never unfairly flagged), this is for a chart that should show
+    every class's bar, with a genuine gap/zero where there's simply no data yet rather than
+    silently omitting that class from the picture."""
+    classes = conn.execute("SELECT id, name FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    if class_ids is not None:
+        allowed = set(class_ids)
+        classes = [c for c in classes if c["id"] in allowed]
+    out = []
+    for c in classes:
+        stats = class_term_result_stats(conn, school_id, c["id"], term_id)
+        out.append({"class_name": c["name"], "avg_score": stats["avg_score"], "pass_rate": stats["pass_rate"]})
+    return out
+
+
+def top_performing_students(conn, school_id, term_id, limit=5, class_ids=None):
+    """Every actively-assessed student this term, ranked by their own overall average across
+    whatever subjects they have scores in this term (the same compute_total/grade_for
+    convention class_term_result_stats already uses for a class), highest first. class_ids
+    optionally restricts this to a staff member's own accessible classes rather than the whole
+    school. A student with no scores recorded this term is left out entirely, never shown as 0%."""
+    classes = conn.execute("SELECT id, name FROM classes WHERE school_id=?", (school_id,)).fetchall()
+    if class_ids is not None:
+        allowed = set(class_ids)
+        classes = [c for c in classes if c["id"] in allowed]
+    rows = []
+    for c in classes:
+        subject_ids = [r["id"] for r in conn.execute(
+            "SELECT s.id FROM subjects s JOIN class_subjects cs ON cs.subject_id=s.id WHERE cs.class_id=?", (c["id"],)
+        ).fetchall()]
+        for st in conn.execute("SELECT * FROM students WHERE class_id=? AND is_active=1", (c["id"],)).fetchall():
+            total = 0.0
+            count = 0
+            for subj_id in subject_ids:
+                sc = conn.execute(
+                    "SELECT ca1,ca2,ca3,exam FROM scores WHERE student_id=? AND subject_id=? AND term_id=?",
+                    (st["id"], subj_id, term_id)
+                ).fetchone()
+                if sc:
+                    total += compute_total(sc["ca1"], sc["ca2"], sc["exam"], sc["ca3"])
+                    count += 1
+            if count == 0:
+                continue
+            rows.append({"student": st, "class_name": c["name"], "average": round(total / count, 1)})
+    rows.sort(key=lambda r: r["average"], reverse=True)
+    return rows[:limit]
+
+
 @app.route("/dashboard")
 @login_required()
 def dashboard():
@@ -2411,11 +2521,20 @@ def dashboard():
         alerts = plan_usage_alerts(conn, school_id)
         school = get_school(conn, school_id)
         plan = subscription_plan_for_school(conn, school)
+        # Dashboard analytics charts (Chart.js, rendered client-side from this JSON): class
+        # performance bars, gender donut, weekly attendance line, enrolment bars, and a Top
+        # Performing Students table -- all school-wide, matching Admin's full visibility.
+        enrolment = enrolment_by_class(conn, school_id)
+        attendance_trend = school_attendance_trend(conn, school_id)
+        top_students = top_performing_students(conn, school_id, term["id"]) if term else []
+        class_performance_chart = all_classes_performance(conn, school_id, term["id"]) if term else []
         conn.close()
         return render_template(
             "admin_dashboard.html", term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
             performance_trend=performance_trend, high_classes=high_classes, low_classes=low_classes,
-            activities=activities,
+            activities=activities, ranked_classes=ranked_classes, enrolment=enrolment,
+            attendance_trend=attendance_trend, top_students=top_students,
+            class_performance_chart=class_performance_chart, student_full_name=student_full_name,
         )
     else:
         assignments = conn.execute(
@@ -2460,13 +2579,23 @@ def dashboard():
         # never the whole school's feed, and never fabricated when there's simply nothing
         # recorded yet.
         activities = recent_activities(conn, school_id, limit=8, class_ids=[c["id"] for c in result_classes])
+        # Same dashboard analytics charts as Admin, but scoped to only the classes this staff
+        # member can actually see -- never the whole school's figures.
+        _class_ids = [c["id"] for c in result_classes]
+        enrolment = enrolment_by_class(conn, school_id, class_ids=_class_ids)
+        attendance_trend = school_attendance_trend(conn, school_id, class_ids=_class_ids)
+        top_students = top_performing_students(conn, school_id, term["id"], class_ids=_class_ids) if term else []
+        class_performance_chart = all_classes_performance(conn, school_id, term["id"], class_ids=_class_ids) if term else []
+        gender_stats = student_gender_stats(conn, "c.id IN ({})".format(",".join("?" * len(_class_ids)) or "NULL"), tuple(_class_ids)) if _class_ids else {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}
         conn.close()
         return render_template(
             "teacher_dashboard.html", term=term, assignments=assignments,
             position_label=POSITION_LABELS.get(session.get("position")),
             result_classes=result_classes, is_form_teacher=is_form_teacher,
             class_gender=class_gender, class_performance=class_performance, class_trend=class_trend,
-            activities=activities,
+            activities=activities, enrolment=enrolment, attendance_trend=attendance_trend,
+            top_students=top_students, class_performance_chart=class_performance_chart,
+            gender_stats=gender_stats, student_full_name=student_full_name,
         )
 
 
@@ -3896,7 +4025,7 @@ def parent_dashboard():
     # same published-results gate and the same per-student helpers the Student Dashboard uses,
     # so a parent and their child are never shown different figures for the same child.
     school_id = current_school_id()
-    performance = attendance = activities = None
+    performance = attendance = activities = attendance_trend = None
     if cards:
         selected_child = cards[0]["student"]
         child_published_terms = conn.execute(
@@ -3909,11 +4038,12 @@ def parent_dashboard():
         ).fetchall()
         performance = student_academic_performance(conn, school_id, selected_child["id"], child_published_terms)
         attendance = student_attendance_stats(conn, selected_child["id"])
+        attendance_trend = student_attendance_trend(conn, selected_child["id"])
         activities = student_recent_activities(conn, school_id, selected_child)
     conn.close()
     return render_template(
         "parent_dashboard.html", children=children, cards=cards,
-        performance=performance, attendance=attendance, activities=activities,
+        performance=performance, attendance=attendance, attendance_trend=attendance_trend, activities=activities,
     )
 
 @app.route("/parent/children")
@@ -8370,12 +8500,14 @@ def student_dashboard():
     school_id = current_school_id()
     performance = student_academic_performance(conn, school_id, student["id"], published_terms)
     attendance = student_attendance_stats(conn, student["id"])
+    attendance_trend = student_attendance_trend(conn, student["id"])
     activities = student_recent_activities(conn, school_id, student)
     conn.close()
     return render_template(
         "student_dashboard.html", student=student, class_row=class_row,
         published_terms=published_terms, student_full_name=student_full_name,
-        performance=performance, attendance=attendance, activities=activities,
+        performance=performance, attendance=attendance, attendance_trend=attendance_trend,
+        activities=activities,
     )
 
 
