@@ -542,7 +542,20 @@ details.hlp summary.hlp-t:focus-visible{outline:2px solid var(--theme-primary,#1
    wrapped -- see V74's and V86's implementation notes for the full reasoning. */
 
 /* V95: dashboard analytics charts (Chart.js canvases), Admin/Teacher/Student/Parent dashboards */
-.chart-card h3{margin:0 0 4px}
-.chart-card canvas{max-width:100%}
+/* V96: fixed the charts rendering oversized -- canvases had no height-constrained parent, so
+   Chart.js's responsive resize had nothing stable to size against. Every chart now sits in a
+   fixed-height .chart-wrap; a chart whose category count can grow (more classes, more subjects)
+   widens inside a horizontally-scrollable .chart-scroll instead of growing taller. Also added
+   small icon badges (.card-icon) to chart-card and a few other card titles. */
+.chart-card h3{margin:0 0 4px;display:flex;align-items:center;gap:9px}
 .chart-card{position:relative}
-.chart-donut-wrap{max-width:320px;margin:10px auto 0}
+.chart-wrap{position:relative;height:200px;margin-top:10px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+.chart-wrap-sm{height:160px}
+.chart-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;margin-top:10px}
+.chart-scroll .chart-wrap{margin-top:0;min-width:100%}
+.chart-donut-wrap{width:190px;height:190px;margin:10px auto 0;position:relative}
+.card-icon{width:32px;height:32px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--theme-primary) 12%,transparent);color:var(--theme-primary);flex-shrink:0}
+.card-icon svg{width:17px;height:17px}
+.icon-title{display:flex;align-items:center;gap:9px}
+@media(max-width:480px){.chart-wrap,.chart-wrap-sm{height:175px}}
