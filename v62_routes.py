@@ -92,7 +92,7 @@ def register_v62_routes(app, h):
         return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=average,
                     position=1, position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
                     promotion_status=info["promotion_status"], overall_grade=overall_grade, overall_remark=overall_remark,
-                    total_obtainable=len(details) * max_each, max_each=max_each, cumulative=None,
+                    total_obtainable=len(details) * max_each, max_each=max_each, cumulative=None, cum_summary=None,
                     teacher_name=None, principal_name=None, student_full_name=lambda s: f"{s['last_name']} {s['first_name']}")
 
     @app.route("/admin/result-display-settings", methods=["GET", "POST"])

@@ -149,50 +149,32 @@ def _hex(c, fallback):
         return colors.HexColor(fallback)
 
 
-# Layout differences for the V64 styles; the HTML/print CSS in static/css/result-sheet.css mirrors the same choices.
-STYLE_SPECS = {
-    "executive_band": {"header": "band", "head_align": "left", "id": "strip", "table": "rows"},
-    "minimal_clean": {"header": "plain", "id": "minimal", "table": "minimal"},
-    "ledger_classic": {"header": "ledger", "id": "ledger", "table": "ledger", "mono": True, "paper": "#fffdf5"},
-    "vibrant_cards": {"header": "band", "id": "cards", "table": "cards"},
-    "split_header": {"header": "split", "head_align": "left", "id": "topbar", "table": "rows"},
-}
-
-
 def _tint(color, amount):
     return colors.Color(1 - (1 - color.red) * amount, 1 - (1 - color.green) * amount, 1 - (1 - color.blue) * amount)
 
 
 def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#1f3a5f",
                       name_align=None, teacher_signature=None, principal_signature=None):
-    """One student's terminal result as flowables. Mirrors templates/_result_sheet.html: the same Result Display
-    Settings (data["rs"]) decide every section, so preview, print and PDF cannot disagree."""
+    """One student's terminal result as flowables. Mirrors templates/_result_sheet.html's per-term
+    state (V97/V98): there is now exactly one design, so (unlike the old per-style branching this
+    function used to have) nothing here is selected by a "template" choice any more -- the same
+    Result Display Settings (data["rs"]) decide every section, so preview, print and this PDF
+    fallback cannot disagree, and this fallback's own design never drifts back out of sync with it."""
     rs = data.get("rs") or {}
     info = data.get("info") or {}
     student, class_row = data["student"], data["class_row"]
     name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
     accent = _hex(rs.get("accent") or accent_color, "#1f3a5f")
-    second = _hex(rs.get("secondary") or "#c9a227", "#c9a227")
-    template = rs.get("template", "professional_classic")
-    compact = template == "compact_academic"
-    formal = template == "formal_school"
-    modern = template == "modern_academic"
-    spec = STYLE_SPECS.get(template, {})
-    dark_head = modern or spec.get("header") in ("band", "split")
     regular, bold = styles["Normal"].fontName, styles["Heading1"].fontName
-    if spec.get("mono"):
-        regular, bold = "Courier", "Courier-Bold"
-        for _n in ("Normal", "Heading1", "Heading2", "Heading3"):
-            styles[_n].fontName = bold if _n.startswith("Heading") else regular
-    head_align = TA_LEFT if spec.get("head_align") == "left" else TA_CENTER
-    base = 8.5 if compact else 9
-    pad = 2 if compact else 4
+    head_align = TA_CENTER
+    base = 9
+    pad = 4
     small = ParagraphStyle("rsSmall", parent=styles["Normal"], fontSize=7.5, textColor=colors.HexColor("#444444"))
     normal = ParagraphStyle("rsNormal", parent=styles["Normal"], fontSize=base, leading=base + 2)
     h3 = ParagraphStyle("rsH3", parent=styles["Heading3"], fontSize=10.5, textColor=accent, spaceBefore=4, spaceAfter=2)
-    school_style = ParagraphStyle("rsSchool", parent=styles["Heading1"], fontSize=16, textColor=colors.white if dark_head else accent, alignment=head_align, spaceAfter=0)
-    title_style = ParagraphStyle("rsTitle", parent=styles["Heading2"], fontSize=12, alignment=head_align, textColor=colors.white if dark_head else colors.black, spaceAfter=0)
-    sub_style = ParagraphStyle("rsSub", parent=styles["Normal"], fontSize=8.5, alignment=head_align, textColor=colors.white if dark_head else colors.HexColor("#444444"))
+    school_style = ParagraphStyle("rsSchool", parent=styles["Heading1"], fontSize=16, textColor=accent, alignment=head_align, spaceAfter=0)
+    title_style = ParagraphStyle("rsTitle", parent=styles["Heading2"], fontSize=12, alignment=head_align, textColor=colors.black, spaceAfter=0)
+    sub_style = ParagraphStyle("rsSub", parent=styles["Normal"], fontSize=8.5, alignment=head_align, textColor=colors.HexColor("#444444"))
     elements = []
 
     # ---- header: logo (only if enabled AND uploaded) | school text | passport (blank frame if none) ----------------
@@ -221,24 +203,14 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
           ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]
     if rs.get("show_passport"):
         hs += [("BOX", (2, 0), (2, 0), 0.8, colors.grey)]          # the frame stays even when empty: blank, never an avatar
-    if modern or spec.get("header") == "band":
-        hs += [("BACKGROUND", (0, 0), (-1, -1), accent), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]
-        if template == "vibrant_cards":
-            hs += [("LINEBELOW", (0, 0), (-1, -1), 5, second)]
-    elif spec.get("header") == "split":
-        hs += [("BACKGROUND", (0, 0), (1, 0), accent), ("BACKGROUND", (2, 0), (2, 0), colors.HexColor("#e9edf4")),
-               ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]
-    elif spec.get("header") == "plain":
-        hs += [("LINEBELOW", (0, 0), (-1, -1), 0.6, colors.HexColor("#bbbbbb")), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
-    elif spec.get("header") == "ledger":
-        hs += [("LINEABOVE", (0, 0), (-1, -1), 1.8, colors.black), ("LINEBELOW", (0, 0), (-1, -1), 1.8, colors.black),
-               ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
-    else:
-        hs += [("LINEBELOW", (0, 0), (-1, -1), 2.2 if not formal else 3, accent), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
+    hs += [("LINEBELOW", (0, 0), (-1, -1), 2.2, accent), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
     head.setStyle(TableStyle(hs))
     elements += [head, Spacer(1, 0.3 * cm)]
 
-    # ---- identity block -----------------------------------------------------------------------------------------------
+    # ---- identity block -- mirrors _result_sheet.html's rs-id strip exactly: Name, Adm./Reg. No.,
+    # Class/Arm, Academic Session, Term, Class Position (as "pos / class_size", not an ordinal) --
+    # Total Score/Average/No. of Subjects moved out of here and into the Academic Performance
+    # Summary section below, same as the HTML design. ------------------------------------------
     cells = [("Name:", name)]
     if rs.get("show_admission_no", True):
         cells.append(("Adm./Reg. No.:", student["admission_no"]))
@@ -248,13 +220,12 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         cells.append(("Academic Session:", term["session_name"]))
     if rs.get("show_term", True):
         cells.append(("Term:", term["name"]))
-    if rs.get("show_score", True):
-        cells += [("Total Score:", str(data["total"])), ("Average:", str(data["average"]))]
-    cells.append(("No. of Subjects:", f"{data.get('subjects_written', '-')} of {len(data['subjects'])}"))
     if rs.get("show_overall_position", True):
-        cells.append(("Overall Position:", f"{data.get('position_text', data['position'])} of {data['class_size']}"))
-    if data.get("result_date"):
-        cells.append(("Result Date:", data["result_date"]))
+        pos = data.get("position")
+        pos_str = str(pos) if pos is not None else "-"
+        if data.get("class_size"):
+            pos_str += f" / {data['class_size']}"
+        cells.append(("Class Position:", pos_str))
     rows = []
     for i in range(0, len(cells), 2):
         pair = cells[i:i + 2]
@@ -266,83 +237,103 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         rows.append(r)
     idt = Table(rows, colWidths=[3.2 * cm, 5.6 * cm, 3.4 * cm, 5.6 * cm])
     id_style = [("FONTNAME", (0, 0), (0, -1), bold), ("FONTNAME", (2, 0), (2, -1), bold), ("FONTSIZE", (0, 0), (-1, -1), base),
-                ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1), ("VALIGN", (0, 0), (-1, -1), "TOP")]
-    id_mode = spec.get("id")
-    if id_mode == "strip":
-        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f7f9")), ("LINEBEFORE", (0, 0), (0, -1), 2.2, second), ("LINEBEFORE", (2, 0), (2, -1), 2.2, second)]
-    elif id_mode == "minimal":
-        id_style += [("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.HexColor("#dddddd"))]
-    elif id_mode == "ledger":
-        id_style += [("GRID", (0, 0), (-1, -1), 1.0, colors.black)]
-    elif id_mode == "cards":
-        id_style += [("BACKGROUND", (0, 0), (-1, -1), _tint(accent, 0.11)), ("GRID", (0, 0), (-1, -1), 3, colors.white)]
-    elif id_mode == "topbar":
-        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f7f9")), ("LINEABOVE", (0, 0), (-1, 0), 2.5, accent)]
-    else:
-        id_style += [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f1f4f9") if modern else colors.white), ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc"))]
+                ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white), ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc"))]
     idt.setStyle(TableStyle(id_style))
     elements += [idt, Spacer(1, 0.25 * cm)]
 
-    # ---- subjects ---------------------------------------------------------------------------------------------------------
+    # ---- subjects -- Avg. column + TOTAL/AVERAGE footer rows, same as _result_sheet.html's table:
+    # Avg. is each subject's total divided by however many score components are in use (3, or 4
+    # once CA3 is on), and the footer only sums subjects that actually have a numeric total. -------
     show_ca3 = data.get("show_ca3")
+    divisor = 4 if show_ca3 else 3
     head_row = ["Subject"]
     if rs.get("show_score", True):
-        head_row += ["CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total"]
+        head_row += ["CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total", "Avg."]
+    if rs.get("show_subject_position"):
+        head_row.append("Pos.")
     if rs.get("show_grade", True):
         head_row.append("Grade")
-    if rs.get("show_subject_position"):
-        head_row.append("Position")
-    with_remarks = rs.get("show_remarks", True) and not compact
+    with_remarks = rs.get("show_remarks", True)
     if with_remarks:
         head_row.append("Remark")
     body = [head_row]
+    written = []
     for s in data["subjects"]:
+        total_is_num = isinstance(s.get("total"), (int, float))
+        if total_is_num:
+            written.append(s)
         r = [Paragraph(str(s["name"]).replace("&", "&amp;"), normal)]
         if rs.get("show_score", True):
-            r += [str(s["ca1"]), str(s["ca2"])] + ([str(s.get("ca3", "-"))] if show_ca3 else []) + [str(s["exam"]), str(s["total"])]
-        if rs.get("show_grade", True):
-            r.append(str(s["grade"]))
+            avg = round(s["total"] / divisor, 1) if total_is_num else "-"
+            r += [str(s["ca1"]), str(s["ca2"])] + ([str(s.get("ca3", "-"))] if show_ca3 else []) + [str(s["exam"]), str(s["total"]), str(avg)]
         if rs.get("show_subject_position"):
             r.append(str(s.get("position_text", "-")))
+        if rs.get("show_grade", True):
+            r.append(str(s["grade"]))
         if with_remarks:
             r.append(str(s["remark"]))
         body.append(r)
+    footer_rows = 0
+    if rs.get("show_score", True) and written:
+        def _col(key):
+            return sum(w[key] for w in written)
+        def _avg(key):
+            return round(_col(key) / len(written), 1)
+        tot_row = ["TOTAL"]
+        tot_row += [str(_col("ca1")), str(_col("ca2"))] + ([str(_col("ca3"))] if show_ca3 else []) + [str(_col("exam")), str(data["total"]), "-"]
+        avg_row = ["AVERAGE"]
+        avg_row += [str(_avg("ca1")), str(_avg("ca2"))] + ([str(_avg("ca3"))] if show_ca3 else []) + [str(_avg("exam")), str(data["average"]), str(round(data["average"] / divisor, 1))]
+        for extra_row in (tot_row, avg_row):
+            if rs.get("show_subject_position"):
+                extra_row.append("-")
+            if rs.get("show_grade", True):
+                extra_row.append("-")
+            if with_remarks:
+                extra_row.append("-")
+            body.append(extra_row)
+        footer_rows = 2
     n_cols = len(head_row)
-    name_w = 4.8 * cm
-    rem_w = 3.0 * cm if with_remarks else 0
+    name_w = 4.6 * cm
+    rem_w = 2.6 * cm if with_remarks else 0
     other = max(n_cols - 1 - (1 if with_remarks else 0), 1)
-    num_w = max(1.1 * cm, (17.8 * cm - name_w - rem_w) / other)
+    num_w = max(1.0 * cm, (17.8 * cm - name_w - rem_w) / other)
     widths = [name_w] + [num_w] * other + ([rem_w] if with_remarks else [])
     subj = Table(body, colWidths=widths, repeatRows=1)
-    hdr_bg = colors.white if formal else (second if modern else accent)
-    hdr_fg = accent if formal else (colors.black if modern else colors.white)
-    ts = [("BACKGROUND", (0, 0), (-1, 0), hdr_bg), ("TEXTCOLOR", (0, 0), (-1, 0), hdr_fg), ("FONTNAME", (0, 0), (-1, 0), bold),
+    ts = [("BACKGROUND", (0, 0), (-1, 0), accent), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), bold),
           ("FONTNAME", (0, 1), (-1, -1), regular), ("FONTSIZE", (0, 0), (-1, -1), base), ("ALIGN", (1, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-          ("GRID", (0, 0), (-1, -1), 0.5, accent if formal else colors.HexColor("#999999")),
+          ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#999999")),
           ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1),
-          ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f6f8")])]
-    tmode = spec.get("table")
-    if tmode == "rows":
-        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS")] + [("LINEBELOW", (0, 1), (-1, -1), 0.4, colors.HexColor("#d5d9e0"))]
-    elif tmode == "minimal":
-        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS", "BACKGROUND", "TEXTCOLOR")] + [
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black), ("LINEBELOW", (0, 0), (-1, 0), 1.4, colors.black), ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e2e2"))]
-    elif tmode == "ledger":
-        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS", "BACKGROUND", "TEXTCOLOR")] + [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#efe9d2")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.black), ("GRID", (0, 0), (-1, -1), 0.9, colors.black),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#fffdf5"), colors.HexColor("#faf5e1")])]
-    elif tmode == "cards":
-        ts = [t for t in ts if t[0] not in ("GRID", "ROWBACKGROUNDS")] + [
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_tint(accent, 0.07), colors.white]), ("LINEBELOW", (0, 1), (-1, -1), 0.8, colors.white)]
+          ("ROWBACKGROUNDS", (0, 1), (-1, (len(body) - footer_rows - 1) if footer_rows else -1), [colors.white, colors.HexColor("#f5f6f8")])]
     if with_remarks:
         ts.append(("ALIGN", (-1, 1), (-1, -1), "LEFT"))
+    if footer_rows:
+        ts += [("FONTNAME", (0, -footer_rows), (-1, -1), bold), ("BACKGROUND", (0, -footer_rows), (-1, -1), colors.HexColor("#eef1f6"))]
     subj.setStyle(TableStyle(ts))
     elements += [Paragraph("Academic Performance", h3), subj]
+
+    # ---- Academic Performance Summary -- the new 6-up strip _result_sheet.html adds under the
+    # table: Total Subjects, Total Score, Average Score, Percentage, Grade, Remark. ----------------
+    total_obtainable = data.get("total_obtainable")
+    pct = round(data["total"] / total_obtainable * 100, 1) if total_obtainable else 0
+    summary_cells = [
+        ("Total Subjects", str(data.get("subjects_written", "-"))),
+        ("Total Score", str(data["total"])),
+        ("Average Score", str(data["average"])),
+        ("Percentage", f"{pct}%"),
+        ("Grade", str(data.get("overall_grade", "-"))),
+        ("Remark", str(data.get("overall_remark", "-"))),
+    ]
+    sum_rows = [[Paragraph(f"<font size=7 color='#666666'>{lab}</font><br/><b>{val}</b>", normal) for lab, val in summary_cells[i:i + 3]] for i in range(0, len(summary_cells), 3)]
+    sumt = Table(sum_rows, colWidths=[17.8 * cm / 3] * 3)
+    sumt.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("LEFTPADDING", (0, 0), (-1, -1), 8)]))
+    elements += [Paragraph("Academic Performance Summary", h3), sumt]
 
     # ---- educational domains ------------------------------------------------------------------------------------------------
     groups = data.get("domain_groups") if rs.get("show_domains", True) else None
     if groups:
-        elements.append(Paragraph("Domain Ratings (1 = Poor · 2 = Fair · 3 = Good · 4 = Very Good · 5 = Excellent)", h3))
+        elements.append(Paragraph("Domain Ratings", h3))
         tables = []
         for g in groups:
             _L = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}
@@ -368,6 +359,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             att_cols.append(("Days Present", info.get("days_present")))
         if rs.get("show_days_absent", True):
             att_cols.append(("Days Absent", info.get("days_absent")))
+        att_cols.append(("Days Late", info.get("days_late")))
     if promo:
         att_cols.append(("Promotion / Status", promo))
     if att_cols:
@@ -379,7 +371,7 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     # ---- comments: separate boxes, separate values --------------------------------------------------------------------------------
     def comment_box(label, text):
         t = Table([[Paragraph(f"<b>{label}</b>", normal)], [Paragraph((text or "").replace("&", "&amp;").replace("\n", "<br/>") or "&nbsp;", normal)]], colWidths=[17.6 * cm],
-                  rowHeights=[None, 0.9 * cm if compact else 1.3 * cm])
+                  rowHeights=[None, 1.3 * cm])
         t.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#bbbbbb")), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
         return t
     if rs.get("show_teacher_comment", True) or rs.get("show_principal_comment", True):
@@ -409,9 +401,12 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
         elements += [Spacer(1, 0.2 * cm), sg]
 
     scale = rs.get("grading_scale") or []
-    if scale and (rs.get("show_grading_key", True) or template == "detailed_report"):
+    if scale and rs.get("show_grading_key", True):
         key = "; ".join(f"{g['grade']} = {g['min_score']:g}-{g['max_score']:g} ({g['remark']})" for g in scale)
-        elements += [Spacer(1, 0.2 * cm), Paragraph(f"<b>Grading key:</b> {key}", small)]
+        elements += [Spacer(1, 0.2 * cm), Paragraph(f"<b>Grading Scale:</b> {key}", small)]
+    domain_key = data.get("domain_key")
+    if groups and rs.get("show_domains", True) and domain_key:
+        elements += [Spacer(1, 0.1 * cm), Paragraph(f"<b>Domain Ratings Scale:</b> {domain_key}", small)]
     if rs.get("footer"):
         elements += [Spacer(1, 0.15 * cm), Paragraph(str(rs["footer"]).replace("&", "&amp;"), small)]
     # No "Issued <date>" line exists anywhere: a date appears only as the explicit, saved Result Date above.
