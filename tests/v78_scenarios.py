@@ -17,18 +17,23 @@ desktop Chrome's own print preview does. The HTML and CSS are identical either w
 rendering engine doing the printing differs, and that's an OS/browser-version difference we can't
 fully control from here.
 
-Fix: "Print" (the button, and the auto-print on load used when opened via a results page's own
-"Print" link) now navs to the exact same PDF the "Download" button serves, with ?inline=1 so the
-browser shows it to view/print from rather than saving it to Downloads outright. Since it's the
-exact same bytes as "Download" (not a second, independent rendering), Print and Download can no
-longer visually disagree. Applies to both the individual result sheet (templates/result_print.html)
-and the broadsheet (templates/broadsheet_print.html) -- the two pages with the elaborate, colorful,
-auto-shrunk "rs-*"/broadsheet design that a plain window.print() can't reliably reproduce.
+Fix (as of V78): "Print" (the button, and the auto-print on load used when opened via a results
+page's own "Print" link) navigated to the exact same PDF the "Download" button serves, with
+?inline=1 so the browser shows it to view/print from rather than saving it to Downloads outright.
 
-Verified two ways: real HTTP requests confirm ?inline=1 flips Content-Disposition from attachment to
-inline (and that a plain Download PDF request is untouched, still an attachment, by default), and a
-real headless-browser click on the Print button confirms it actually requests that exact PDF URL
-(not window.print()).
+*** V98 UPDATE: this was reverted. *** Austin later reported the opposite problem from a real
+device: tapping "Print" was forcing an automatic file download (a PDF landing in his phone's
+Downloads/file-manager app) instead of showing him anything to view or print -- on many phones and
+installed/PWA browsing contexts, navigating straight to a PDF response does exactly that regardless
+of ?inline=1/Content-Disposition:inline, which is the scenario this V78 fix didn't anticipate.
+"Print" now calls the browser's own native print dialog (window.print()) directly on the
+already-fitted HTML again, same as before V78 -- fit() reruns on 'beforeprint' so the one-page
+shrink still matches, and result-sheet.css already forces exact color reproduction in print
+(print-color-adjust:exact), which should cover the specific "flat, uncoloured, wrong-size" complaint
+that motivated V78 in the first place. "Download PDF" (a separate button/link) is untouched and
+still gives the exact Chromium-rendered PDF bytes to save. The PDF-route Content-Disposition
+behavior this file tests (plain vs ?inline=1) is unrelated to Print and still holds, so those checks
+are kept; the Print-button checks below were updated for the new window.print()-based behavior.
 
 Run: python tests/v78_scenarios.py"""
 import os
@@ -93,18 +98,20 @@ check("the same broadsheet PDF with ?inline=1 is served inline", rb.status_code 
 # plain generic-table layout, which prints fine as-is) -- confirm they still work at all.
 check("cumulative result PDF route is unaffected and still works", c.get("/cumulative/student/1/pdf?session_id=1").status_code in (200, 302))
 
-# ------------------------------------------------------------ 2) the print pages: a real Print button that targets that PDF, not window.print()
+# ------------------------------------------------------------ 2) the print pages (V98): Print is wired to window.print(), not a PDF redirect
 html = c.get("/result/1/print?term_id=1").get_data(as_text=True)
-check("the result print page's Print control has no inline window.print() handler anymore", 'onclick="window.print()"' not in html)
+check("the result print page's Print control has no inline onclick handler (wired up by script)", 'onclick="window.print()"' not in html)
 check("the result print page's Print button exists, wired up by script instead", 'id="rsPrint"' in html)
-check("the result print page's own script computes the inline PDF URL via rsDownload's href (same file as Download)", "rsDownload" in html and "inline=1" in html)
+check("the result print page's script calls window.print() directly for Print (V98), not a PDF redirect", "function doPrint(){" in html and "window.print();" in html)
+check("Download PDF is still a separate, unchanged link to the PDF file", "rsDownload" in html)
 
 html = c.get("/broadsheet/1/print?term_id=1").get_data(as_text=True)
-check("the broadsheet print page's Print control has no inline window.print() handler anymore", 'onclick="window.print()"' not in html)
+check("the broadsheet print page's Print control has no inline onclick handler (wired up by script)", 'onclick="window.print()"' not in html)
 check("the broadsheet print page's Print button exists, wired up by script instead", 'id="bsPrint"' in html)
-check("the broadsheet print page's own script computes the inline PDF URL via bsDownload's href (same file as Download)", "bsDownload" in html and "inline=1" in html)
+check("the broadsheet print page's script calls window.print() directly for Print (V98), not a PDF redirect", "function doPrint(){" in html and "window.print();" in html)
+check("Download PDF is still a separate, unchanged link to the PDF file", "bsDownload" in html)
 
-# ------------------------------------------------------------ 3) live-browser check: clicking Print actually requests that PDF (not a browser print dialog)
+# ------------------------------------------------------------ 3) live-browser check (V98): clicking Print does NOT trigger a PDF download/request
 try:
     from playwright.sync_api import sync_playwright
 
@@ -127,6 +134,7 @@ try:
 
         requested = []
         page.on("request", lambda req: requested.append(req.url) if "/result/1/pdf" in req.url else None)
+        page.add_init_script("window.print = function(){ window.__v98Printed = true; };")  # stub out the native dialog for this headless run
         page.goto(f"http://127.0.0.1:{PORT}/result/1/print?term_id=1")
         page.wait_for_load_state("networkidle")
         try:
@@ -134,8 +142,8 @@ try:
         except Exception:
             pass
         page.wait_for_timeout(800)
-        check("clicking the result page's Print button actually requested the inline PDF (same file as Download, not a browser print dialog)",
-              any("inline=1" in u for u in requested), requested)
+        check("clicking the result page's Print button did NOT request the PDF (no forced download)",
+              not any("/result/1/pdf" in u for u in requested), requested)
 
         browser.close()
 except ImportError:
