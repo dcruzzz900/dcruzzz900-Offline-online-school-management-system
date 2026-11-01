@@ -22,7 +22,12 @@
 <button type="button" id="rsPrint">Print</button><a href="{{ pdf_url }}" id="rsDownload">Download PDF</a><a href="{{ back_url }}">Close</a></div>
 <div class="rs-wrap">{% include "_cumulative_sheet.html" %}</div>
 <script>
-var RS_ORIENTATION = {{ (rs.page_orientation or 'portrait')|tojson }};
+// V98: unlike the per-term sheet, the Cumulative/Annual Performance table's width grows with the
+// number of terms in the session (every term repeats its own CA1/CA2/[CA3]/Exam/Total/Avg./Pos.
+// columns) -- so this page always auto-picks whichever orientation needs the least shrinking to
+// stay legible on one page (see decideOrientation() below), regardless of the school's saved
+// per-term "Page orientation" setting, which still applies to the per-term sheet unchanged.
+var RS_ORIENTATION = {{ 'auto'|tojson }};
 var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape')|tojson }};
 var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
 var RS_FIT_TO_PAGE = {{ (rs.fit_to_page if rs.fit_to_page is defined else true)|tojson }};
@@ -88,19 +93,22 @@ function updateControls(){
 }
 function step(dir){var i=STEPS.indexOf(live);if(i===-1){i=STEPS.indexOf(1);}
   i=Math.max(0,Math.min(STEPS.length-1,i+dir));live=STEPS[i];fit();updateControls();}
-function printPdf(){
-  var dl=document.getElementById('rsDownload'),href=dl&&dl.getAttribute('href');
-  if(!href)return;
-  window.location.href=href+(href.indexOf('?')===-1?'?':'&')+'inline=1';
+// Print = the browser's own native print dialog, called directly on this already-fitted HTML --
+// see result_print.html for the full rationale (a PDF redirect force-downloads on many phones/PWAs
+// instead of showing a view/print surface; fit() reruns on 'beforeprint' so the one-page shrink
+// still matches, and result-sheet.css already forces exact color reproduction in print).
+function doPrint(){
+  fit();
+  window.print();
 }
 var mEl=document.getElementById('rsFontMinus'),pEl=document.getElementById('rsFontPlus'),rEl=document.getElementById('rsFontReset'),prEl=document.getElementById('rsPrint');
 if(mEl)mEl.addEventListener('click',function(){step(-1);});
 if(pEl)pEl.addEventListener('click',function(){step(1);});
 if(rEl)rEl.addEventListener('click',function(){live=1;fit();updateControls();});
-if(prEl)prEl.addEventListener('click',printPdf);
+if(prEl)prEl.addEventListener('click',doPrint);
 window.addEventListener('load',function(){fit();updateControls();});
 window.addEventListener('beforeprint',fit);window.addEventListener('resize',fit);
-{% if autoprint %}window.addEventListener('load',function(){setTimeout(printPdf,350);});{% endif %}
+{% if autoprint %}window.addEventListener('load',function(){setTimeout(doPrint,350);});{% endif %}
 })();
 </script>
 </body></html>

@@ -33,7 +33,19 @@
     </tr></tfoot>{% endif %}
   </table></div>
 </section>
-<section class="rs-summary">
+{% endif %}
+{% include "_cumulative_breakdown.html" %}
+{% if show_cumulative %}<section class="rs-summary">
+  <h3 class="rs-h">Academic Performance Summary</h3>
+  <div class="rs-summary-grid">
+    <div><span>Total Subjects</span><b>{{ cum_summary.subjects_written if cum_summary else '-' }}</b></div>
+    <div><span>Total Score</span><b>{{ cum_summary.total if cum_summary and cum_summary.total is not none else '-' }}</b></div>
+    <div><span>Average Score</span><b>{{ cum_summary.average if cum_summary else '-' }}</b></div>
+    <div><span>Percentage</span><b>{{ ((cum_summary.average / cum_summary.max_each * 100)|round(1)) if cum_summary and cum_summary.average and cum_summary.max_each else 0 }}%</b></div>
+    <div><span>Grade</span><b>{{ cum_summary.grade if cum_summary else '-' }}</b></div>
+    <div><span>Remark</span><b>{{ cum_summary.remark if cum_summary else '-' }}</b></div>
+  </div>
+</section>{% else %}<section class="rs-summary">
   <h3 class="rs-h">Academic Performance Summary</h3>
   <div class="rs-summary-grid">
     <div><span>Total Subjects</span><b>{{ subjects_written }}</b></div>
@@ -43,9 +55,7 @@
     <div><span>Grade</span><b>{{ overall_grade }}</b></div>
     <div><span>Remark</span><b>{{ overall_remark }}</b></div>
   </div>
-</section>
-{% endif %}
-{% include "_cumulative_breakdown.html" %}
+</section>{% endif %}
 {% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
 {% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or (rs.show_promotion and promotion_status)) %}<section class="rs-att">

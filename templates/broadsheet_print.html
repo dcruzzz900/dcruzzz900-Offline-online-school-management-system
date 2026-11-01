@@ -27,11 +27,10 @@ table{width:100%;border-collapse:collapse;font-size:8.5pt}th{background:{{ rs.ac
 var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
 (function(){function fit(){var box=document.querySelector('.bs-page'),t=box&&box.querySelector('table');if(!t)return;var base=RS_FONT_SCALE||1;t.style.zoom=base;var avail=box.clientWidth,w=t.scrollWidth;if(w>avail+1){t.style.zoom=Math.max(.38,base*avail/w)}}
 window.addEventListener('load',fit);window.addEventListener('resize',fit);window.addEventListener('beforeprint',fit);if(window.matchMedia){var m=window.matchMedia('print');if(m.addEventListener)m.addEventListener('change',fit)}
-// Print = Download: a phone's own print pipeline doesn't reliably reproduce this page's colors or
-// the width-based auto-shrink above, so "Print" opens the already-correct Download PDF (with
-// ?inline=1, so the browser shows it to view/print from instead of saving it to Downloads the way
-// the plain Download PDF link still does) rather than calling window.print() on this page.
-function printPdf(){var dl=document.getElementById('bsDownload'),href=dl&&dl.getAttribute('href');if(!href)return;window.location.href=href+(href.indexOf('?')===-1?'?':'&')+'inline=1';}
-var prEl=document.getElementById('bsPrint');if(prEl)prEl.addEventListener('click',printPdf);
-{% if autoprint %}window.addEventListener('load',function(){setTimeout(printPdf,350);});{% endif %}
+// Print = the browser's own native print dialog, called directly on this already-fitted HTML --
+// see result_print.html for the full rationale (a PDF redirect force-downloads on many phones/PWAs
+// instead of showing a view/print surface, rather than calling window.print() on this page).
+function doPrint(){fit();window.print();}
+var prEl=document.getElementById('bsPrint');if(prEl)prEl.addEventListener('click',doPrint);
+{% if autoprint %}window.addEventListener('load',function(){setTimeout(doPrint,350);});{% endif %}
 })();</script></body></html>
