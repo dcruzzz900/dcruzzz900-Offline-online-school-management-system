@@ -3610,23 +3610,17 @@ def paper_dims_mm(cfg):
         return (PAPER_SIZES["A4"]["width_mm"], PAPER_SIZES["A4"]["height_mm"])
     d = PAPER_SIZES[size]
     return (d["width_mm"], d["height_mm"])
+# V97: Austin asked for one fixed, exact design -- matching the two reference result sheets he
+# sent -- as the sole result sheet for every school, and for the previous 16 selectable designs to
+# go away ("Remove all previous 16 result sheet, I don't want to use them again"). The key
+# "professional_classic" is kept (rather than invented fresh) purely so every school's existing
+# `result_display_settings.template` value -- and every already-saved settings row -- stays valid
+# with zero migration; _result_sheet.html no longer branches on this value at all, so every school
+# now renders the one new design regardless of what's stored here. The "Result sheet style" picker
+# card itself is removed from Result Display Settings (templates/result_display_settings.html) --
+# there is nothing left to choose between.
 RESULT_TEMPLATES = [
-    ("professional_classic", "Professional Classic", "Traditional bordered layout with a strong header rule."),
-    ("modern_academic", "Modern Academic", "Coloured header band, soft cards and clean tables."),
-    ("formal_school", "Formal School", "Serif typography and a double-ruled border for a formal certificate feel."),
-    ("compact_academic", "Compact Academic", "Tight rows so long subject lists stay on one page."),
-    ("detailed_report", "Detailed Report", "Adds the grading key and fuller remarks."),
-    ("executive_band", "Executive Band", "Full-width colour band header, left-aligned, ruled rows and accent-edged information cells."),
-    ("minimal_clean", "Minimal Clean", "Airy, borderless layout: hairline rules, a two-column information list and a plain table."),
-    ("ledger_classic", "Ledger Grid", "Accounting-ledger look: monospaced type, heavy full grid and a boxed information table on cream paper."),
-    ("vibrant_cards", "Vibrant Cards", "Rounded gradient header, tinted information cards and pill section headings."),
-    ("split_header", "Split Header", "Two-tone header with the school block on colour and the passport on a light panel."),
-    ("boxed_grey_card", "Boxed Grey Card", "Sample layout: bold centred school name, ruled student-details box, dark-grey subject table with class average, highest and lowest, traits and score-range tables, report rows."),
-    ("assessment_dossier", "Continuous Assessment Dossier", "Sample layout: letter-spaced title band, fill-in style student lines, numbered subjects, 1st/2nd/Exam/Sum columns and 5-4-3-2-1 tick grids for skills."),
-    ("peach_terminal_sheet", "Peach Terminal Sheet", "Sample layout: peach table headers with rotated column titles, attendance, grade-analysis and grade-scale side panels, performance-summary box."),
-    ("green_cumulative_report", "Green Cumulative Report", "Sample layout: framed header with passport, green section bars, term and cumulative result columns, remarks beside tick-box affective and psychomotor domains."),
-    ("progress_report_card", "Progress Report Card", "Sample layout: colour header band, student card with passport, max/min/average columns with grade chips, academic analysis, feedback quotes and a ratings side panel."),
-    ("clean_midterm_report", "Clean Mid-Term Report", "Sample layout: centred minimal header, details list beside the passport, light table with class average and highest, summary and attendance panels, remarks box."),
+    ("professional_classic", "My School Hub Classic", "The one, fixed result sheet design -- Academic Performance per term, Cumulative/Annual when that's switched on."),
 ]
 _LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
 

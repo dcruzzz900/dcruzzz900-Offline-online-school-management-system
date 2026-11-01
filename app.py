@@ -6352,7 +6352,6 @@ def _ca3_on():
 app.jinja_env.globals["ca3_on"] = _ca3_on
 from db import DOMAIN_RATING_LABELS
 app.jinja_env.globals["domain_labels"] = DOMAIN_RATING_LABELS
-app.jinja_env.globals["sample_sheets"] = ("boxed_grey_card", "assessment_dossier", "peach_terminal_sheet", "green_cumulative_report", "progress_report_card", "clean_midterm_report")
 app.jinja_env.globals["domain_key"] = " · ".join(f"{k} = {v}" for k, v in DOMAIN_RATING_LABELS.items())
 
 
@@ -6470,6 +6469,14 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
         (session_id, class_id),
     ).fetchall()
 
+    # V97: the new Cumulative/Annual result sheet shows, per subject, a position for EACH term
+    # (not just the overall cumulative one) -- exactly the same per-term/per-subject ranking the
+    # regular single-term sheet already shows via compute_subject_positions, just run once per
+    # term here so every term column on the cumulative table gets its own "Pos." figure.
+    cohort_ids = [s["id"] for s in students]
+    subject_ids = [s["id"] for s in subjects]
+    term_subj_pos = {t["id"]: compute_subject_positions(conn, cohort_ids, subject_ids, t["id"]) for t in terms}
+
     rows = []
     for st in students:
         subj_cumulative = {}
@@ -6477,6 +6484,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
         overall_count = 0
         for subj in subjects:
             term_values = []
+            term_positions = []
             present_totals = []
             for term in terms:
                 score = conn.execute(
@@ -6489,18 +6497,41 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
                     present_totals.append(t)
                 else:
                     term_values.append(None)
+                term_positions.append(term_subj_pos[term["id"]].get(subj["id"], {}).get(st["id"]))
             if present_totals:
                 cum_avg = round(sum(present_totals) / len(present_totals), 2)
                 grade, remark = grade_for(cum_avg, conn, school_id)
                 overall_total += cum_avg
                 overall_count += 1
+                cum_total = sum(present_totals)
             else:
-                cum_avg, grade, remark = "-", "-", "-"
-            subj_cumulative[subj["id"]] = {"term_values": term_values, "average": cum_avg, "grade": grade}
+                cum_avg, grade, remark, cum_total = "-", "-", "-", None
+            subj_cumulative[subj["id"]] = {
+                "term_values": term_values, "term_positions": term_positions,
+                "average": cum_avg, "grade": grade, "remark": remark, "cum_total": cum_total,
+            }
         overall_average = round(overall_total / overall_count, 2) if overall_count else 0
         rows.append({"student": st, "subjects": subj_cumulative, "average": overall_average})
 
     rows = rank_with_ties(rows, lambda r: r["average"])
+
+    # Overall Cumulative "Pos." per subject -- this student's rank, among their classmates, on
+    # that subject's cum_total (same competition-ranking convention as compute_subject_positions;
+    # ranking by cum_total rather than the rounded cum_avg keeps ties resolved on the real figure).
+    for subj in subjects:
+        ranked = sorted(
+            ((r["student"]["id"], r["subjects"][subj["id"]]["cum_total"]) for r in rows if r["subjects"][subj["id"]]["cum_total"] is not None),
+            key=lambda x: -x[1],
+        )
+        pos, prev, rank = 0, None, 0
+        positions = {}
+        for i, (stu, tot) in enumerate(ranked, 1):
+            if tot != prev:
+                rank = i
+                prev = tot
+            positions[stu] = rank
+        for r in rows:
+            r["subjects"][subj["id"]]["position"] = positions.get(r["student"]["id"])
 
     return subjects, terms, rows
 
@@ -6524,7 +6555,10 @@ def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None
     subject_details = []
     by_subject = {}
     for subj in subjects:
-        cell = my_row["subjects"][subj["id"]] if my_row else {"term_values": [None] * len(terms), "average": "-", "grade": "-"}
+        cell = my_row["subjects"][subj["id"]] if my_row else {
+            "term_values": [None] * len(terms), "term_positions": [None] * len(terms),
+            "average": "-", "grade": "-", "remark": "-", "cum_total": None, "position": None,
+        }
         components = []
         for term in terms:
             score = conn.execute(
@@ -6539,12 +6573,35 @@ def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None
         subject_details.append(detail)
         by_subject[subj["name"]] = detail
 
+    # V97: the TOTAL/AVERAGE footer rows on the Cumulative/Annual table -- one entry per term,
+    # summing/averaging only the subjects that actually have a score that term (a subject with
+    # nothing recorded yet is left out of that term's sum rather than dragging it down to 0),
+    # exactly the same convention the regular per-term sheet's own TOTAL/AVERAGE rows already use.
+    term_totals, term_averages = [], []
+    for i in range(len(terms)):
+        present = [d["term_components"][i] for d in subject_details if d["term_components"][i]]
+        if present:
+            keys = ("ca1", "ca2", "ca3", "exam", "total") if show_ca3 else ("ca1", "ca2", "exam", "total")
+            tot = {k: sum((c[k] or 0) for c in present) for k in keys}
+            term_totals.append(tot)
+            term_averages.append({k: round(tot[k] / len(present), 1) for k in keys})
+        else:
+            term_totals.append(None)
+            term_averages.append(None)
+    cum_totals = [d["cum_total"] for d in subject_details if d.get("cum_total") is not None]
+    cum_grand_total = sum(cum_totals) if cum_totals else None
+    cum_grand_average = round(cum_grand_total / len(subject_details), 1) if cum_grand_total is not None and subject_details else None
+
     # V87: the ONE shape every consumer of a cumulative breakdown uses -- the dedicated
     # Annual/Cumulative Result page (which spreads this whole dict into its template context,
     # so "cumulative" below becomes directly available there too) AND the cumulative section
-    # embedded in all 16 result-sheet designs (build_result_data() below just takes this same
-    # key instead of re-deriving its own copy). One calculation, used everywhere.
-    cumulative = {"terms": [t["name"] for t in terms], "by_subject": by_subject, "show_ca3": show_ca3}
+    # embedded in the result sheet (build_result_data() below just takes this same key instead of
+    # re-deriving its own copy). One calculation, used everywhere.
+    cumulative = {
+        "terms": [t["name"] for t in terms], "by_subject": by_subject, "show_ca3": show_ca3,
+        "term_totals": term_totals, "term_averages": term_averages,
+        "cum_grand_total": cum_grand_total, "cum_grand_average": cum_grand_average,
+    }
 
     return {
         "student": student, "class_row": class_row, "terms": terms, "subjects": subject_details,
@@ -6758,6 +6815,9 @@ def ordinal_text(n):
     return f"{n}{suf}"
 
 
+app.jinja_env.globals["ordinal_text"] = ordinal_text
+
+
 def result_sheet_settings(conn, school_id):
     """What a result sheet may show. Built ONLY from the central Result Display Settings (one row per school), plus
     the school's own identity (name, uploaded logo, address/contact). Used identically by preview, print and PDF."""
@@ -6913,6 +6973,13 @@ def build_result_data(conn, student_id, term_id):
     att = effective_attendance(conn, student_id, term_id, info)
     info["days_school_opened"], info["days_present"], info["days_absent"] = att["opened"], att["present"], att["absent"]
     info["attendance_from"] = att["source"]
+    # V97: "Days Late" on the new result sheet -- only meaningful when attendance comes from the
+    # real daily register (a manual Opened/Present/Absent entry has never tracked lateness, so it
+    # shows "-" rather than a guessed 0).
+    info["days_late"] = conn.execute(
+        "SELECT COUNT(*) c FROM attendance_records WHERE student_id=? AND term_id=? AND detail_status='late'",
+        (student_id, term_id)
+    ).fetchone()["c"] if att["source"] == "register" else None
 
     ratings = conn.execute(
         "SELECT st.name, st.category, r.rating FROM student_skill_ratings r "
@@ -11063,6 +11130,7 @@ register_v62_routes(app, dict(
     PAPER_SIZE_CHOICES=PAPER_SIZE_CHOICES, CUSTOM_MM_MIN=CUSTOM_MM_MIN, CUSTOM_MM_MAX=CUSTOM_MM_MAX,
     ordinal_text=ordinal_text, all_terms_for_school=all_terms_for_school, require_class_result_access=require_class_result_access,
     resolve_term=resolve_term, build_broadsheet_data=build_broadsheet_data, parent_login_required=parent_login_required,
+    get_grading_config=get_grading_config,
 ))
 
 # ---------- V63: functional-spec integration ----------
