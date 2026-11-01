@@ -28,7 +28,13 @@
    - RS_FIT_TO_PAGE: whether an overflowing sheet is auto-shrunk onto one page, or left to flow onto more than one.
    One page (when Fit to Page is on): if the sheet is taller than the page, scale it down so nothing is cut off or
    pushed to a second page; otherwise (or when Fit to Page is off and it already fits) pad it to fill the page. */
-var RS_ORIENTATION = {{ (rs.page_orientation or 'portrait')|tojson }};
+// V98: when this page is showing the Cumulative/Annual state (cumulative and cumulative.terms --
+// the same check _result_sheet.html itself uses), its Cumulative/Annual Performance table grows
+// wider with every extra term in the session, so this page always auto-picks whichever orientation
+// needs the least shrinking to stay legible on one page, regardless of the school's saved "Page
+// orientation" setting -- a genuine per-term sheet (no cumulative table on the page) still honors
+// that setting exactly as before.
+var RS_ORIENTATION = {{ ('auto' if (cumulative and cumulative.terms) else (rs.page_orientation or 'portrait'))|tojson }};
 var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape')|tojson }};
 var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
 var RS_FIT_TO_PAGE = {{ (rs.fit_to_page if rs.fit_to_page is defined else true)|tojson }};
@@ -129,25 +135,26 @@ function updateControls(){
 }
 function step(dir){var i=STEPS.indexOf(live);if(i===-1){i=STEPS.indexOf(1);}
   i=Math.max(0,Math.min(STEPS.length-1,i+dir));live=STEPS[i];fit();updateControls();}
-// Print = Download: a phone's own print pipeline doesn't reliably reproduce this page's colors or
-// the one-page auto-shrink above (it's the live HTML, printed by whatever engine the phone/browser
-// happens to use, not the one that builds Download PDF) -- so "Print" opens that same, already-
-// correct PDF (with ?inline=1, so the browser shows it to view/print from instead of saving it to
-// Downloads the way the plain Download PDF link still does), rather than calling window.print() on
-// this page and hoping the result matches.
-function printPdf(){
-  var dl=document.getElementById('rsDownload'),href=dl&&dl.getAttribute('href');
-  if(!href)return;
-  window.location.href=href+(href.indexOf('?')===-1?'?':'&')+'inline=1';
+// Print = the browser's own native print dialog, called directly on this already-fitted HTML --
+// NOT a redirect to the PDF (that was tried first, but on many phones and installed/PWA browsing
+// contexts, navigating straight to a PDF response just force-downloads it into Downloads instead
+// of showing it to view/print, which is exactly the broken "Print downloads a file" experience
+// this replaces). fit() re-runs right before print (see the 'beforeprint' listener below) so what
+// comes out of the print dialog matches the one-page shrink on screen, and result-sheet.css already
+// forces exact color reproduction in print (-webkit-print-color-adjust/print-color-adjust:exact).
+// Download PDF (the toolbar link) is unchanged and still gives an actual PDF file to save.
+function doPrint(){
+  fit();
+  window.print();
 }
 var mEl=document.getElementById('rsFontMinus'),pEl=document.getElementById('rsFontPlus'),rEl=document.getElementById('rsFontReset'),prEl=document.getElementById('rsPrint');
 if(mEl)mEl.addEventListener('click',function(){step(-1);});
 if(pEl)pEl.addEventListener('click',function(){step(1);});
 if(rEl)rEl.addEventListener('click',function(){live=1;fit();updateControls();});
-if(prEl)prEl.addEventListener('click',printPdf);
+if(prEl)prEl.addEventListener('click',doPrint);
 window.addEventListener('load',function(){fit();updateControls();});
 window.addEventListener('beforeprint',fit);window.addEventListener('resize',fit);
-{% if autoprint %}window.addEventListener('load',function(){setTimeout(printPdf,350);});{% endif %}
+{% if autoprint %}window.addEventListener('load',function(){setTimeout(doPrint,350);});{% endif %}
 })();
 </script>
 </body></html>
