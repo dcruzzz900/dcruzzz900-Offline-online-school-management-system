@@ -1,15 +1,12 @@
-{# Dedicated printable result component. Result data + Result Display Settings (rs) decide everything shown. #}
-{% set t = rs.template %}
-{# When Cumulative/Annual results are switched on for this school AND there's actually a
-   cumulative table to show, the per-term Academic Performance breakdown (this term's CA1/CA2/
-   Exam/Total only) is redundant with it, so it's hidden rather than shown twice on one sheet.
-   When cumulative is off, or there's genuinely nothing to show there yet (e.g. only one term on
-   record so far), Academic Performance is exactly what it's always been. Shared with every
-   bespoke template in templates/sheets/*.html via Jinja's include-with-context. #}
+{# V97: the ONE fixed result sheet design, replacing the previous 16 selectable styles, built to
+   match the two reference sheets Austin sent exactly -- a per-term "RESULT SHEET" when Cumulative/
+   Annual Results is off (or nothing to show there yet), and a "Cumulative / Annual Performance"
+   sheet when it's on. Result Display Settings (rs) still decides everything SHOWN (passport, logo,
+   which fields, colours, signatures, etc.) -- it just no longer decides which of several designs
+   to use, since there's only one now. #}
 {% set show_cumulative = cumulative and cumulative.terms %}
-<article class="rs-sheet rs-{{ t }}" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}" data-template="{{ t }}">
+<article class="rs-sheet rs-classic" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}">
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
-{% if t in sample_sheets %}{% include 'sheets/' ~ t ~ '.html' %}{% else %}
 <header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
   <div class="rs-head-text"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
@@ -22,15 +19,32 @@
   {% if rs.show_class %}<div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>{% endif %}
   {% if rs.show_session %}<div><span>Academic Session</span><b>{{ term.session_name }}</b></div>{% endif %}
   {% if rs.show_term %}<div><span>Term</span><b>{{ term.name }}</b></div>{% endif %}
-  {% if rs.show_score %}<div><span>Total Score</span><b>{{ total }}</b></div><div><span>Average</span><b>{{ average }}</b></div>{% endif %}
-  <div><span>Subjects</span><b>{{ subjects_written }} of {{ subjects|length }}</b></div>
-  {% if rs.show_overall_position %}<div class="rs-pos"><span>Overall Position</span><b>{{ position_text }}{% if class_size %} <small>of {{ class_size }}</small>{% endif %}</b></div>{% endif %}
+  {% if rs.show_overall_position %}<div class="rs-pos"><span>Class Position</span><b>{{ position if position is not none else '-' }}{% if class_size %} / {{ class_size }}{% endif %}</b></div>{% endif %}
 </section>
-{% if not show_cumulative %}<section class="rs-perf">
+{% if not show_cumulative %}{% set written_subjects = subjects|selectattr('total', 'number')|list %}<section class="rs-perf">
   <h3 class="rs-h">Academic Performance</h3>
-  <table class="rs-table"><thead><tr><th class="l">Subject</th>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_subject_position %}<th>Position</th>{% endif %}{% if rs.show_remarks %}<th class="l">Remark</th>{% endif %}</tr></thead>
-  <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody></table>
-</section>{% endif %}
+  <div class="rs-scroll"><table class="rs-table">
+    <thead><tr><th class="l">Subject</th>{% if rs.show_score %}<th>CA1</th><th>CA2</th>{% if show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Avg.</th>{% endif %}{% if rs.show_subject_position %}<th>Pos.</th>{% endif %}{% if rs.show_grade %}<th>Grade</th>{% endif %}{% if rs.show_remarks %}<th class="l">Remark</th>{% endif %}</tr></thead>
+    <tbody>{% for s in subjects %}<tr><td class="l"><b>{{ s.name }}</b></td>{% if rs.show_score %}<td>{{ s.ca1 }}</td><td>{{ s.ca2 }}</td>{% if show_ca3 %}<td>{{ s.ca3 }}</td>{% endif %}<td>{{ s.exam }}</td><td><b>{{ s.total }}</b></td><td>{{ (s.total / (4 if show_ca3 else 3))|round(1) if s.total is number else '-' }}</td>{% endif %}{% if rs.show_subject_position %}<td>{{ s.position_text }}</td>{% endif %}{% if rs.show_grade %}<td>{{ s.grade }}</td>{% endif %}{% if rs.show_remarks %}<td class="l">{{ s.remark }}</td>{% endif %}</tr>{% endfor %}</tbody>
+    {% if rs.show_score and written_subjects %}<tfoot><tr>
+      <td class="l"><b>TOTAL</b></td><td>{{ written_subjects|sum(attribute='ca1') }}</td><td>{{ written_subjects|sum(attribute='ca2') }}</td>{% if show_ca3 %}<td>{{ written_subjects|sum(attribute='ca3') }}</td>{% endif %}<td>{{ written_subjects|sum(attribute='exam') }}</td><td><b>{{ total }}</b></td><td>-</td>{% if rs.show_subject_position %}<td>-</td>{% endif %}{% if rs.show_grade %}<td>-</td>{% endif %}{% if rs.show_remarks %}<td>-</td>{% endif %}
+    </tr><tr>
+      <td class="l"><b>AVERAGE</b></td><td>{{ (written_subjects|sum(attribute='ca1') / written_subjects|length)|round(1) }}</td><td>{{ (written_subjects|sum(attribute='ca2') / written_subjects|length)|round(1) }}</td>{% if show_ca3 %}<td>{{ (written_subjects|sum(attribute='ca3') / written_subjects|length)|round(1) }}</td>{% endif %}<td>{{ (written_subjects|sum(attribute='exam') / written_subjects|length)|round(1) }}</td><td><b>{{ average }}</b></td><td>{{ (average / (4 if show_ca3 else 3))|round(1) }}</td>{% if rs.show_subject_position %}<td>-</td>{% endif %}{% if rs.show_grade %}<td>-</td>{% endif %}{% if rs.show_remarks %}<td>-</td>{% endif %}
+    </tr></tfoot>{% endif %}
+  </table></div>
+</section>
+<section class="rs-summary">
+  <h3 class="rs-h">Academic Performance Summary</h3>
+  <div class="rs-summary-grid">
+    <div><span>Total Subjects</span><b>{{ subjects_written }}</b></div>
+    <div><span>Total Score</span><b>{{ total }}</b></div>
+    <div><span>Average Score</span><b>{{ average }}</b></div>
+    <div><span>Percentage</span><b>{{ ((total / total_obtainable * 100)|round(1)) if total_obtainable else 0 }}%</b></div>
+    <div><span>Grade</span><b>{{ overall_grade }}</b></div>
+    <div><span>Remark</span><b>{{ overall_remark }}</b></div>
+  </div>
+</section>
+{% endif %}
 {% include "_cumulative_breakdown.html" %}
 {% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
@@ -38,7 +52,8 @@
   {% if rs.show_days_opened %}<div><span>Days School Opened</span><b>{{ info.days_school_opened if info.days_school_opened is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_present %}<div><span>Days Present</span><b>{{ info.days_present if info.days_present is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_absent %}<div><span>Days Absent</span><b>{{ info.days_absent if info.days_absent is not none else '—' }}</b></div>{% endif %}
-  {% if rs.show_promotion and promotion_status %}<div><span>Promotion / Status</span><b>{{ promotion_status }}</b></div>{% endif %}</section>{% endif %}
+  <div><span>Days Late</span><b>{{ info.days_late if info.days_late is not none else '—' }}</b></div>
+  {% if rs.show_promotion and promotion_status %}<div><span>Promotion Status</span><b>{{ promotion_status }}</b></div>{% endif %}</section>{% endif %}
 {% if rs.show_teacher_comment or rs.show_principal_comment %}<section class="rs-comments">
   {% if rs.show_teacher_comment %}<div><span>Class/Form Teacher's Comment</span><p>{{ info.teacher_comment if info.teacher_comment else '' }}</p></div>{% endif %}
   {% if rs.show_principal_comment %}<div><span>Principal's Comment</span><p>{{ info.principal_comment if info.principal_comment else '' }}</p></div>{% endif %}</section>{% endif %}
@@ -47,12 +62,11 @@
   {% if rs.show_principal_signature or rs.show_principal_sign_date %}<div>{% if rs.show_principal_signature %}{% if rs.principal_sig %}<img src="{{ rs.principal_sig }}" alt="Principal signature">{% else %}<i class="rs-line"></i>{% endif %}<span>Principal{% if principal_name %}: {{ principal_name }}{% endif %}</span>{% endif %}{% if rs.show_principal_sign_date %}<small>Date: {{ info.principal_signed_date|dmy if info.principal_signed_date else '' }}</small>{% endif %}</div>{% endif %}
 </section>{% endif %}
 {% if rs.next_term_resumes %}<section class="rs-ntr"><div><span>Next Term Resumes</span><b>{{ rs.next_term_resumes }}</b></div></section>{% endif %}
-{% set show_grading_key = (rs.show_grading_key or t == 'detailed_report') and rs.grading_scale %}
+{% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
 {% set show_domain_key = rs.show_domains and domain_groups %}
 {% if show_grading_key or show_domain_key %}<section class="rs-key">
-  {% if show_grading_key %}<div class="rs-key-row"><b>Grades:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</div>{% endif %}
-  {% if show_domain_key %}<div class="rs-key-row"><b>Domain ratings:</b> {{ domain_key }}</div>{% endif %}
+  {% if show_grading_key %}<div class="rs-key-row"><b>Grading Scale:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</div>{% endif %}
+  {% if show_domain_key %}<div class="rs-key-row"><b>Domain Ratings Scale:</b> {{ domain_key }}</div>{% endif %}
 </section>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
-{% endif %}
 </article>

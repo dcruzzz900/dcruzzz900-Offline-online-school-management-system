@@ -1,13 +1,12 @@
-{# V87: the ONE "Cumulative / Annual Performance" component, used two ways --
-   (1) embedded inside every one of the 16 result-sheet designs when a school has Cumulative
-       Results switched on (included here from _result_sheet.html's else-branch and from each
-       templates/sheets/*.html file), and
-   (2) as the main table on the dedicated Annual/Cumulative Result page (_cumulative_sheet.html).
-   Both consume the exact same `cumulative` dict, built in exactly one place --
-   build_cumulative_result_data() in app.py -- so the figures can never drift apart between a
-   template switch and the standalone cumulative page, and every term's CA1/CA2/[CA3]/Exam/Total
-   breakdown (not just a single running total per term) is always shown the same way everywhere.
-   Renders nothing when cumulative results are off for this school, or there's no term to show yet. #}
+{# V87, restyled/extended in V97 to match Austin's reference Cumulative/Annual Result sheet
+   exactly: every subject's per-term CA1/CA2/[CA3]/Exam/Total/Avg./Pos., then one Overall
+   Cumulative group (Total/Average/Pos./Grade/Remark), with TOTAL and AVERAGE footer rows across
+   all subjects. Used two ways -- (1) embedded in the result sheet when Cumulative/Annual Results
+   is switched on (_result_sheet.html's else-branch), and (2) as the main table on the dedicated
+   Annual/Cumulative Result page (_cumulative_sheet.html). Both consume the exact same `cumulative`
+   dict, built in exactly one place -- build_cumulative_result_data() in app.py -- so the figures
+   can never drift apart between the two views. Renders nothing when cumulative results are off
+   for this school, or there's no term to show yet. #}
 {% if cumulative and cumulative.terms %}
 <section class="rs-cumulative">
   <h3 class="rs-h">Cumulative / Annual Performance</h3>
@@ -15,11 +14,12 @@
     <thead>
       <tr>
         <th class="l" rowspan="2">Subject</th>
-        {% for tn in cumulative.terms %}<th colspan="{{ 5 if cumulative.show_ca3 else 4 }}">{{ tn }}</th>{% endfor %}
-        <th rowspan="2">Aggregate</th><th rowspan="2">Grade</th>
+        {% for tn in cumulative.terms %}<th colspan="{{ 7 if cumulative.show_ca3 else 6 }}">{{ tn }}</th>{% endfor %}
+        <th colspan="5">Overall Cumulative</th>
       </tr>
       <tr>
-        {% for tn in cumulative.terms %}<th>CA1</th><th>CA2</th>{% if cumulative.show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}
+        {% for tn in cumulative.terms %}<th>CA1</th><th>CA2</th>{% if cumulative.show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Avg.</th><th>Pos.</th>{% endfor %}
+        <th>Total</th><th>Average</th><th>Pos.</th><th>Grade</th><th>Remark</th>
       </tr>
     </thead>
     <tbody>
@@ -27,13 +27,37 @@
       <tr>
         <td class="l"><b>{{ name }}</b></td>
         {% for c in s.term_components %}
-          {% if c %}<td>{{ c.ca1 if c.ca1 is not none else '-' }}</td><td>{{ c.ca2 if c.ca2 is not none else '-' }}</td>{% if cumulative.show_ca3 %}<td>{{ c.ca3 if c.ca3 is not none else '-' }}</td>{% endif %}<td>{{ c.exam if c.exam is not none else '-' }}</td><td><b>{{ c.total }}</b></td>
-          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td>{% endif %}
+          {% if c %}<td>{{ c.ca1 if c.ca1 is not none else '-' }}</td><td>{{ c.ca2 if c.ca2 is not none else '-' }}</td>{% if cumulative.show_ca3 %}<td>{{ c.ca3 if c.ca3 is not none else '-' }}</td>{% endif %}<td>{{ c.exam if c.exam is not none else '-' }}</td><td><b>{{ c.total }}</b></td><td>{{ (c.total / (4 if cumulative.show_ca3 else 3))|round(1) if c.total is number else '-' }}</td><td>{{ ordinal_text(s.term_positions[loop.index0]) if s.term_positions[loop.index0] is not none else '-' }}</td>
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
         {% endfor %}
-        <td><b>{{ s.average }}</b></td><td>{{ s.grade }}</td>
+        <td><b>{{ s.cum_total if s.cum_total is not none else '-' }}</b></td>
+        <td>{{ s.average }}</td>
+        <td>{{ ordinal_text(s.position) if s.position is not none else '-' }}</td>
+        <td>{{ s.grade }}</td>
+        <td class="l">{{ s.remark }}</td>
       </tr>
       {% endfor %}
     </tbody>
+    <tfoot>
+      <tr>
+        <td class="l"><b>TOTAL</b></td>
+        {% for tt in cumulative.term_totals %}
+          {% if tt %}<td>{{ tt.ca1 }}</td><td>{{ tt.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ tt.ca3 }}</td>{% endif %}<td>{{ tt.exam }}</td><td><b>{{ tt.total }}</b></td><td>-</td><td>-</td>
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
+        {% endfor %}
+        <td><b>{{ cumulative.cum_grand_total if cumulative.cum_grand_total is not none else '-' }}</b></td>
+        <td colspan="4"></td>
+      </tr>
+      <tr>
+        <td class="l"><b>AVERAGE</b></td>
+        {% for ta in cumulative.term_averages %}
+          {% if ta %}<td>{{ ta.ca1 }}</td><td>{{ ta.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ ta.ca3 }}</td>{% endif %}<td>{{ ta.exam }}</td><td><b>{{ ta.total }}</b></td><td>-</td><td>-</td>
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
+        {% endfor %}
+        <td><b>{{ cumulative.cum_grand_average if cumulative.cum_grand_average is not none else '-' }}</b></td>
+        <td colspan="4"></td>
+      </tr>
+    </tfoot>
   </table></div>
 </section>
 {% endif %}

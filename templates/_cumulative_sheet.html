@@ -4,7 +4,7 @@
    watermark and footer. Deliberately simpler than the regular sheet's "template" gallery (no
    sample_sheets variants, no attendance/comments/signature sections) -- a cumulative/annual summary
    doesn't carry per-term attendance, comments or signatures, so there is nothing there to theme. #}
-<article class="rs-sheet" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}">
+<article class="rs-sheet rs-classic" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }}">
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
 <header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
