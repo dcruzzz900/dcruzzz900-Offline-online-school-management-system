@@ -6603,11 +6603,20 @@ def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None
         "cum_grand_total": cum_grand_total, "cum_grand_average": cum_grand_average,
     }
 
+    # V97: the new Academic Performance Summary strip (also shown on the cumulative/annual sheet
+    # now) needs a max-score-per-subject-per-term figure for its Percentage line, the same way
+    # build_result_data() already computes one for the per-term sheet.
+    _gc = get_grading_config(conn)
+    try:
+        max_each = sum((_gc[k] or 0) for k in ("ca1_max", "ca2_max", "ca3_max", "exam_max")) or 100
+    except (KeyError, IndexError, TypeError):
+        max_each = 100
+
     return {
         "student": student, "class_row": class_row, "terms": terms, "subjects": subject_details,
         "average": average, "grade": grade, "remark": remark,
         "position": my_row["position"] if my_row else "-", "class_size": len(rows),
-        "show_ca3": show_ca3, "cumulative": cumulative,
+        "show_ca3": show_ca3, "cumulative": cumulative, "max_each": max_each,
     }
 
 
@@ -7050,16 +7059,32 @@ def build_result_data(conn, student_id, term_id):
     # data differ -- only whether a given design has markup to show it (see _result_sheet.html
     # and templates/sheets/*.html, which all now include the shared _cumulative_breakdown.html).
     cumulative = None
+    cum_summary = None
     if school and school["cumulative_enabled"]:
         try:
             _sess = conn.execute("SELECT session_id FROM terms WHERE id=?", (term_id,)).fetchone()["session_id"]
-            cumulative = build_cumulative_result_data(conn, student_id, _sess)["cumulative"]
+            _cum_data = build_cumulative_result_data(conn, student_id, _sess)
+            cumulative = _cum_data["cumulative"]
+            # V97: the Academic Performance Summary strip now also shows on the cumulative/annual
+            # sheet -- using the SAME average/grade/remark the dedicated Annual/Cumulative Result
+            # page and the broadsheet already use (avg-of-term-totals), not the differently-scaled
+            # cum_grand_average inside the breakdown table itself (see cumulative dict notes),
+            # so the Grade shown here always matches the Grade shown everywhere else for this
+            # student's cumulative result.
+            cum_summary = {
+                "subjects_written": sum(1 for s in cumulative["by_subject"].values() if s.get("cum_total") is not None),
+                "total": cumulative.get("cum_grand_total"),
+                "average": _cum_data.get("average"),
+                "grade": _cum_data.get("grade"),
+                "remark": _cum_data.get("remark"),
+                "max_each": _cum_data.get("max_each"),
+            }
         except Exception:
             app.logger.exception("Cumulative columns unavailable for the result sheet")
     _dob = student["date_of_birth"] if "date_of_birth" in student.keys() else None
     return {
         "grade_distribution": sorted(_grade_counts.items()), "overall_grade": _overall_grade, "overall_remark": _overall_remark,
-        "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative,
+        "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative, "cum_summary": cum_summary,
         "gender_text": {"M": "Male", "F": "Female"}.get(student["gender"] if "gender" in student.keys() else None, ""), "dob_text": format_dmy(_dob) if _dob else "",
         "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
         "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
