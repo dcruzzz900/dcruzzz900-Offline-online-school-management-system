@@ -68,7 +68,7 @@ def register_v62_routes(app, h):
             details.append({"name": n, "ca1": a, "ca2": b, "ca3": 0, "exam": e, "total": total, "grade": grade, "remark": remark,
                             "position": i, "position_text": h["ordinal_text"](i)})
         today = datetime.date.today()
-        info = {"days_school_opened": 60, "days_present": 56, "days_absent": 4, "teacher_comment": "A focused and well-behaved pupil. Keep it up.",
+        info = {"days_school_opened": 60, "days_present": 56, "days_absent": 4, "days_late": 2, "teacher_comment": "A focused and well-behaved pupil. Keep it up.",
                 "principal_comment": "An excellent result. Congratulations.", "teacher_signed_date": today.isoformat(), "principal_signed_date": today.isoformat(),
                 "promotion_status": "Promoted to the next class", "attendance_from": "register"}
         domain_groups = [{"label": "Affective Domain", "items": [("Punctuality", 5), ("Neatness", 4), ("Honesty", 5)]},
@@ -82,9 +82,17 @@ def register_v62_routes(app, h):
         rs["grading_scale"] = conn.execute("SELECT grade,min_score,max_score,remark FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (sid(),)).fetchall()
         # The preview uses fake data throughout, so "Next Term Resumes" is a sample date too, shown only when the toggle is on.
         rs["next_term_resumes"] = today.strftime("%d/%m/%Y") if cfg_rs.get("show_next_term_resumes") else None
-        return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=round(tot_all / len(details), 1),
-                    position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
-                    promotion_status=info["promotion_status"],
+        average = round(tot_all / len(details), 1)
+        overall_grade, overall_remark = h["grade_for"](average, conn, sid())
+        gc = h["get_grading_config"](conn)
+        try:
+            max_each = sum((gc[k] or 0) for k in ("ca1_max", "ca2_max", "ca3_max", "exam_max")) or 100
+        except (KeyError, IndexError, TypeError):
+            max_each = 100
+        return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=average,
+                    position=1, position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
+                    promotion_status=info["promotion_status"], overall_grade=overall_grade, overall_remark=overall_remark,
+                    total_obtainable=len(details) * max_each, max_each=max_each, cumulative=None,
                     teacher_name=None, principal_name=None, student_full_name=lambda s: f"{s['last_name']} {s['first_name']}")
 
     @app.route("/admin/result-display-settings", methods=["GET", "POST"])
@@ -98,9 +106,11 @@ def register_v62_routes(app, h):
             terms = h["all_terms_for_school"](conn)
             if request.method == "POST":
                 f = request.form
-                tmpl = f.get("template", "")
-                if tmpl not in {t[0] for t in RESULT_TEMPLATES}:
-                    errors["template"] = "Choose one of the available result sheet styles."
+                # V97: there is only one result sheet design now (the "Result sheet style" picker
+                # was removed from the page), so this is no longer a user choice to validate --
+                # every school's `template` column just stays at the one key every row already
+                # defaults to, kept only so old rows and fixtures never need a migration.
+                tmpl = RESULT_TEMPLATES[0][0]
                 prim, sec = (f.get("accent_color") or "").strip(), (f.get("secondary_color") or "").strip()
                 if prim and not COLOR_RE.match(prim):
                     errors["accent_color"] = "Use a colour like #1f3a5f."
