@@ -344,31 +344,21 @@ run("UPDATE students SET photo_filename=NULL WHERE id=1")
 css_has = "object-fit:contain" in css_ and ".rs-passport.has-photo{border:0" in css_
 check("a photo fits inside the frame without cropping or an extra border (CSS)", css_has)
 
-# ======================================================== 12. structurally different templates
-import re as _re2
-areas = {}
-BUILTIN10 = [x[0] for x in __import__("db").RESULT_TEMPLATES][:10]
-for tp in BUILTIN10:
-    m = _re2.search(r"\.rs-%s\{[^}]*grid-template-columns:([^;]*);grid-template-areas:([^}]*)\}" % tp, css_)
-    areas[tp] = (m.group(1).strip(), m.group(2).strip()) if m else None
-grid_styles = {k: v for k, v in areas.items() if v}
-check("nine styles define their own page grid (the classic is the stacked baseline)", len(grid_styles) == 9, list(grid_styles))
-check("no two styles share the same arrangement of sections", len({v[1] for v in grid_styles.values()}) == len(grid_styles))
-check("the styles place the sections in different columns (sidebar, rail, cards, 3-column ledger)", len({v[0] for v in grid_styles.values()}) >= 6, {k: v[0] for k, v in grid_styles.items()})
+# ======================================================== 12. V97: the one fixed result-sheet design
+# The 16-style picker (ten built-in "structurally different" layouts plus six sample-inspired
+# ones) was removed per Austin's explicit request; RESULT_TEMPLATES now has exactly one entry and
+# every school is rendered through the same rs-classic markup, matching his reference sheets.
+tpls_all = [x[0] for x in __import__("db").RESULT_TEMPLATES]
+check("only the one fixed design remains", tpls_all == ["professional_classic"], tpls_all)
 W.publish(A, 1)
 run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,1,1,11,12,0,40),(1,2,1,8,9,0,31),(1,3,1,14,12,0,50),(1,4,1,10,10,0,35)")
-for tp in [x[0] for x in __import__("db").RESULT_TEMPLATES]:
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
-    rp = ADMIN.get("/result/1/pdf?term_id=1"); pg = PdfReader(io.BytesIO(rp.data)).pages
-    txt = re.sub(r"\s+", " ", text_of(rp.data).lower())
-    check(f"[{tp}] every style fits ONE page with signatures and grading key still present", len(pg) == 1 and any(k in txt for k in ("grading key", "grading:", "grade scale", "score range", "academic standard", "note:", "grading", "grades:", "domain ratings:", "key:")) and "class teacher" in txt, (len(pg), txt[-120:]))
-    check(f"[{tp}] preview and print use the same style class", f"rs-{tp}" in html(ADMIN.get("/result/1?term_id=1")) and f"rs-{tp}" in html(ADMIN.get("/result/1/print?term_id=1")))
-run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
+rp = ADMIN.get("/result/1/pdf?term_id=1"); pg = PdfReader(io.BytesIO(rp.data)).pages
+txt = re.sub(r"\s+", " ", text_of(rp.data).lower())
+check("the sheet fits ONE page with signatures and grading key still present", len(pg) == 1 and "grading scale" in txt and "class teacher" in txt, (len(pg), txt[-120:]))
+check("preview and print use the same fixed design", "rs-classic" in html(ADMIN.get("/result/1?term_id=1")) and "rs-classic" in html(ADMIN.get("/result/1/print?term_id=1")))
 run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
 
-# ======================================================== 12b. sample-inspired layouts
-SAMPLES = {"boxed_grey_card": "rsx-grey-head", "assessment_dossier": "rsx-dos-head", "peach_terminal_sheet": "rsx-peach-head",
-           "green_cumulative_report": "rsx-grn-head", "progress_report_card": "rsx-prc-head", "clean_midterm_report": "rsx-cln-head"}
+# ======================================================== 12b. the fixed design with real school branding + toggles
 W.publish(A, 1)
 for sid_ in (1, 2, 3):
     for sub, (a_, b_, e_) in zip((1, 2, 3, 4), ((11, 12, 40), (8, 9, 31), (14, 12, 50), (10, 10, 35))):
@@ -378,39 +368,28 @@ run("UPDATE result_display_settings SET show_next_term_resumes=1, show_address=1
 run("UPDATE terms SET resumption_date='2027-01-11' WHERE id=?", (tid2,))
 run("INSERT OR REPLACE INTO student_term_info(student_id,term_id,teacher_comment,principal_comment,days_school_opened,days_present,days_absent) VALUES(1,1,'Shows excellent ability to set goals.','A bright performance.',60,55,5)")
 ADMIN.get("/admin/result-display-settings")
-layouts = set()
-for tp, marker in SAMPLES.items():
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
-    pr = html(ADMIN.get("/result/1/print?term_id=1")); pv = html(ADMIN.get("/result/1?term_id=1"))
-    check(f"[{tp}] preview and print render the sample layout", marker in pr and marker in pv and f"rs-{tp}" in pr)
-    rp = ADMIN.get("/result/1/pdf?term_id=1"); pdf_ = PdfReader(io.BytesIO(rp.data)); ptxt = text_of(rp.data)
-    check(f"[{tp}] PDF is one page and carries the real data", len(pdf_.pages) == 1 and "Obi" in ptxt and "Mathematics" in ptxt.title() or "MATHEMATICS" in ptxt, (len(pdf_.pages), ptxt[:120]))
-    check(f"[{tp}] school details come from this school's profile", "12 Unity Road" in pr and "99 Other Street" not in pr)
-    # V94: this fixture (line 376) now also has cumulative_enabled=1 with real term-1 data, so on
-    # every design the per-term Academic Performance table -- the thing carrying these specific
-    # "Class average/AVG/Highest" columns, for boxed_grey_card/peach_terminal_sheet/
-    # clean_midterm_report -- is intentionally hidden in favor of Cumulative/Annual Performance
-    # (see V94_IMPLEMENTATION_NOTES.md). assessment_dossier/green_cumulative_report never had
-    # these particular class-stat columns at all, which is why they were already skipped here.
-    check(f"[{tp}] class statistics are real numbers from the broadsheet",
-          True if tp in ("assessment_dossier", "green_cumulative_report", "boxed_grey_card", "peach_terminal_sheet", "clean_midterm_report")
-          else any(k in pr for k in ("Class average", "Class avg", "Highest", "AVG", "Average", "Class avg")))
-    check(f"[{tp}] next term resumes shown when ON and the following term's date is set", "11" in pr and ("11/01/2027" in pr or "2027" in pr))
-    run("UPDATE result_display_settings SET show_address=0, show_next_term_resumes=0, show_teacher_comment=0 WHERE school_id=1")
-    pr2 = html(ADMIN.get("/result/1/print?term_id=1"))
-    check(f"[{tp}] toggles hide address, next term resumes and the teacher comment", "12 Unity Road" not in pr2 and "2027" not in pr2 and "Shows excellent ability" not in pr2 and "A bright performance." in pr2)
-    run("UPDATE result_display_settings SET show_all_comments=0 WHERE school_id=1")
-    check(f"[{tp}] the All Comments master switch hides both comments", "A bright performance." not in html(ADMIN.get("/result/1/print?term_id=1")))
-    run("UPDATE result_display_settings SET show_address=1, show_next_term_resumes=1, show_teacher_comment=1, show_all_comments=1 WHERE school_id=1")
-    layouts.add(re.sub(r"\s+", " ", re.sub(r">[^<]+<", "><", pr))[:1200])
-check("the six sample layouts have six different structures", len(layouts) == 6)
+pr = html(ADMIN.get("/result/1/print?term_id=1")); pv = html(ADMIN.get("/result/1?term_id=1"))
+check("preview and print render the fixed design", "rs-classic" in pr and "rs-classic" in pv)
+rp = ADMIN.get("/result/1/pdf?term_id=1"); pdf_ = PdfReader(io.BytesIO(rp.data)); ptxt = text_of(rp.data)
+check("PDF is one page and carries the real data", len(pdf_.pages) == 1 and "Obi" in ptxt and ("Mathematics" in ptxt.title() or "MATHEMATICS" in ptxt), (len(pdf_.pages), ptxt[:120]))
+check("school details come from this school's profile", "12 Unity Road" in pr and "99 Other Street" not in pr)
+# V94: cumulative_enabled=1 with real term-1 data (set above), so the per-term Academic
+# Performance table is intentionally hidden in favor of Cumulative/Annual Performance; the
+# Cumulative / Annual Performance table's own Overall Cumulative columns carry the per-subject
+# statistics instead (see V94_IMPLEMENTATION_NOTES.md).
+check("cumulative statistics are real numbers from the broadsheet", "rs-cum-table" in pr and any(k in pr for k in ("Average", "Total")))
+check("next term resumes shown when ON and the following term's date is set", "11" in pr and ("11/01/2027" in pr or "2027" in pr))
+run("UPDATE result_display_settings SET show_address=0, show_next_term_resumes=0, show_teacher_comment=0 WHERE school_id=1")
+pr2 = html(ADMIN.get("/result/1/print?term_id=1"))
+check("toggles hide address, next term resumes and the teacher comment", "12 Unity Road" not in pr2 and "2027" not in pr2 and "Shows excellent ability" not in pr2 and "A bright performance." in pr2)
+run("UPDATE result_display_settings SET show_all_comments=0 WHERE school_id=1")
+check("the All Comments master switch hides both comments", "A bright performance." not in html(ADMIN.get("/result/1/print?term_id=1")))
+run("UPDATE result_display_settings SET show_address=1, show_next_term_resumes=1, show_teacher_comment=1, show_all_comments=1 WHERE school_id=1")
 
-run("UPDATE result_display_settings SET template='green_cumulative_report' WHERE school_id=1")
 gc = html(ADMIN.get("/result/1/print?term_id=1"))
-check("the cumulative columns appear on the green layout when Cumulative / Annual is ON", "rs-cum-table" in gc)
+check("the cumulative columns appear when Cumulative / Annual is ON", "rs-cum-table" in gc)
 run("UPDATE schools SET cumulative_enabled=0 WHERE id=1")
 check("...and disappear when it is OFF", "rs-cum-table" not in html(ADMIN.get("/result/1/print?term_id=1")))
-run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
 run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
 
 # ======================================================== 6. timetable structure for all days

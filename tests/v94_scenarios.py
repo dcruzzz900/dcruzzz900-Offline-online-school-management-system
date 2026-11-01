@@ -142,20 +142,11 @@ def set_template(key, cumulative=True):
     post(ADMIN, "/admin/result-display-settings", data, "/admin/result-display-settings")
 
 
-# Per-template "this is the per-term Academic Performance table" marker, and (for the 4 generic
-# styles) the exact heading text -- distinct from clean_midterm_report's own "Academic Performance
-# (...% Base)" heading, which carries a different, non-colliding exact string.
+# V97: there is only one result sheet design now ("professional_classic") -- the 16-style picker
+# (including the other 9 designs this dict used to cover, each with its own markup) was removed
+# per Austin's explicit request.
 MARKERS = {
     "professional_classic": ('<h3 class="rs-h">Academic Performance</h3>', 'class="rs-perf"'),
-    "modern_academic": ('<h3 class="rs-h">Academic Performance</h3>', 'class="rs-perf"'),
-    "compact_academic": ('<h3 class="rs-h">Academic Performance</h3>', 'class="rs-perf"'),
-    "minimal_clean": ('<h3 class="rs-h">Academic Performance</h3>', 'class="rs-perf"'),
-    "assessment_dossier": ('rsx-dos-table', 'rsx-dos-table'),
-    "boxed_grey_card": ('rsx-grey-table', 'rsx-grey-table'),
-    "clean_midterm_report": ('Academic Performance (', 'rsx-cln-table'),
-    "green_cumulative_report": ('rsx-grn-table', 'rsx-grn-table'),
-    "peach_terminal_sheet": ('rsx-peach-table', 'rsx-peach-table'),
-    "progress_report_card": ('rsx-prc-table', 'rsx-prc-table'),
 }
 CUMULATIVE_MARKERS = ("Cumulative / Annual Performance", "rs-cum-table")
 
@@ -202,17 +193,14 @@ check("a student with no scores anywhere still gets the Cumulative / Annual Perf
 check("...and correspondingly, the duplicate per-term Academic Performance table stays hidden for them too",
       '<h3 class="rs-h">Academic Performance</h3>' not in nodata_page and 'class="rs-perf"' not in nodata_page)
 
-print("=== 4) Every include of _cumulative_breakdown.html stays unconditional in the template source (it already self-guards) ===")
+print("=== 4) _cumulative_breakdown.html's include stays unconditional in the template source (it already self-guards) ===")
 
-sheets_dir = os.path.join(ROOT, "templates", "sheets")
-for fn in ("assessment_dossier.html", "boxed_grey_card.html", "clean_midterm_report.html",
-           "green_cumulative_report.html", "peach_terminal_sheet.html", "progress_report_card.html"):
-    with open(os.path.join(sheets_dir, fn)) as f:
-        src = f.read()
-    check(f"[{fn}] still includes _cumulative_breakdown.html unconditionally", '{% include "_cumulative_breakdown.html" %}' in src, fn)
+# V97: templates/sheets/*.html (the 6 sample-inspired designs) were deleted along with the rest of
+# the 16-style picker, so the only include left to check is the one fixed design's own.
+check("templates/sheets/ was removed along with the 16-style picker", not os.path.isdir(os.path.join(ROOT, "templates", "sheets")))
 with open(os.path.join(ROOT, "templates", "_result_sheet.html")) as f:
     rs_src = f.read()
-check("[_result_sheet.html] still includes _cumulative_breakdown.html unconditionally too", '{% include "_cumulative_breakdown.html" %}' in rs_src)
+check("[_result_sheet.html] still includes _cumulative_breakdown.html unconditionally", '{% include "_cumulative_breakdown.html" %}' in rs_src)
 
 print(f"\n{PASS} passed, {len(FAIL)} failed")
 if FAIL:

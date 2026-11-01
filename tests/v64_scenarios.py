@@ -288,30 +288,15 @@ check("published broadsheet PDF builds with CA3 columns", code(pdf) == 200 and p
 check("print view carries the same columns", "3rd CA" in html(ADMIN.get("/broadsheet/1/print?term_id=1")))
 run("UPDATE grading_config SET ca3_max=0 WHERE school_id=1")
 check("CA3 disappears again when switched off", "3rd CA" not in html(ADMIN.get("/broadsheet/1?term_id=1")) and ADMIN.get("/broadsheet/1/pdf?term_id=1").data[:4] == b"%PDF")
-# ---------------- ten genuinely different result styles
+# ---------------- V97: the one fixed result-sheet design (the 16-style picker was removed)
 import db as _db
 tpls = [x[0] for x in _db.RESULT_TEMPLATES]
-check("ten built-in styles plus the six sample-inspired layouts are available", len(tpls) == 16, tpls)
-check("the settings page lists them all", all(x in html(ADMIN.get("/admin/result-display-settings")) for x in tpls) if code(ADMIN.get("/admin/result-display-settings")) == 200 else True)
-pdfs, structure = {}, {}
-for tp in tpls:
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
-    pv = ADMIN.get("/result/1/print?term_id=1")
-    rp = ADMIN.get("/result/1/pdf?term_id=1")
-    check(f"[{tp}] print page uses the style", code(pv) == 200 and f"rs-{tp}" in html(pv))
-    check(f"[{tp}] PDF builds", code(rp) == 200 and rp.data[:4] == b"%PDF")
-    pdfs[tp] = len(rp.data); open(f"/tmp/style_{tp}.pdf","wb").write(rp.data)
-css = open(os.path.join(ROOT, "static/css/result-sheet.css"), encoding="utf-8").read()
-import re as _re
-new_styles = ["executive_band", "minimal_clean", "ledger_classic", "vibrant_cards", "split_header"]
-sigs = set()
-for tp in new_styles:
-    rules = "".join(_re.findall(r"\.rs-%s[^{]*\{[^}]*\}" % tp, css))
-    check(f"[{tp}] changes header, information block, table and headings (not just colours)", all(k in rules for k in (".rs-head", ".rs-id", ".rs-table", ".rs-h")))
-    sigs.add(_re.sub(r"#[0-9a-fA-F]{3,8}|var\(--rs-[a-z]+\)", "C", rules))
-check("the five new styles have five different rule sets", len(sigs) == 5)
-check("PDF output differs between styles (not one layout recoloured)", len(set(pdfs.values())) >= 7, pdfs)
+check("only the one fixed design remains", tpls == ["professional_classic"], tpls)
 run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
+pv = ADMIN.get("/result/1/print?term_id=1")
+rp = ADMIN.get("/result/1/pdf?term_id=1")
+check("print page uses the fixed design", code(pv) == 200 and "rs-classic" in html(pv))
+check("PDF builds", code(rp) == 200 and rp.data[:4] == b"%PDF")
 
 W.unpublish(A, 1)
 run("DELETE FROM result_publication"); run("UPDATE terms SET is_published=0")
@@ -321,16 +306,14 @@ import html_pdf, io as _io
 from pypdf import PdfReader
 W.publish(A, 1)
 run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,1,1,11,12,0,40)")
-for tp in ("professional_classic", "vibrant_cards", "ledger_classic"):
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (tp,))
-    pr = html(ADMIN.get("/result/1/print?term_id=1"))
-    rp = ADMIN.get("/result/1/pdf?term_id=1")
-    reader = PdfReader(_io.BytesIO(rp.data))
-    ptxt = " ".join(pg.extract_text() or "" for pg in reader.pages)
-    check(f"[{tp}] PDF is one A4 page like the print page", len(reader.pages) == 1 and abs(float(reader.pages[0].mediabox.width) - 595) < 3)
-    must = ["TERMINAL REPORT SHEET", "Academic Performance", "Mathematics", "Grading key"]
-    check(f"[{tp}] PDF carries the same content as the print page", all((m.lower() in ptxt.lower()) == (m.lower() in re.sub('<[^>]+>', ' ', pr).lower()) or m.lower() in ptxt.lower() for m in must), ptxt[:200])
-    check(f"[{tp}] PDF is NOT the old reportlab layout", b"Skia/PDF" in rp.data[:2000] or b"Chromium" in rp.data[:4000] or b"Skia" in rp.data)
+pr = html(ADMIN.get("/result/1/print?term_id=1"))
+rp = ADMIN.get("/result/1/pdf?term_id=1")
+reader = PdfReader(_io.BytesIO(rp.data))
+ptxt = " ".join(pg.extract_text() or "" for pg in reader.pages)
+check("PDF is one A4 page like the print page", len(reader.pages) == 1 and abs(float(reader.pages[0].mediabox.width) - 595) < 3)
+must = ["Terminal Report Sheet", "Academic Performance", "Mathematics", "Grading Scale"]
+check("PDF carries the same content as the print page", all((m.lower() in ptxt.lower()) == (m.lower() in re.sub('<[^>]+>', ' ', pr).lower()) or m.lower() in ptxt.lower() for m in must), ptxt[:200])
+check("PDF is NOT the old reportlab layout", b"Skia/PDF" in rp.data[:2000] or b"Chromium" in rp.data[:4000] or b"Skia" in rp.data)
 cp = ADMIN.get("/class/1/results_pdf?term_id=1")
 nstud = one("SELECT COUNT(*) FROM students WHERE class_id=1 AND is_active=1")
 check("class bulk PDF has one page per student from the same sheet", len(PdfReader(_io.BytesIO(cp.data)).pages) == nstud)

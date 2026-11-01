@@ -108,37 +108,33 @@ run("UPDATE result_display_settings SET show_score=1, show_grade=1, show_passpor
 W.publish(A, 1)
 
 
-def sheet(template):
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (template,))
+def sheet():
     r = ADMIN.get("/result/1/print?term_id=1")
-    assert r.status_code == 200, (template, r.status_code)
+    assert r.status_code == 200, r.status_code
     return html(r)
 
 
-# ---------------------------------------------------------------- 1) Clean Mid-Term Report: "Highest" column gone
-s = sheet("clean_midterm_report")
-check("Clean Mid-Term Report no longer has a 'Highest' column header", "<th>Highest</th>" not in s, s)
-check("...and no stray 'Highest' label appears anywhere on the sheet", "Highest" not in s)
-check("...while 'Average' (the column next to it) is still there", "Average" in s)
+# ---------------------------------------------------------------- V97: the 16-style picker (the
+# "Clean Mid-Term Report", "Boxed Grey Card", "Progress Report Card", "Continuous Assessment
+# Dossier" and 12 other designs this file used to regression-test) was removed per Austin's
+# explicit request; there is now exactly one fixed design (templates/_result_sheet.html, class
+# "rs-classic") for every school. The passport-overlap and stray-column regressions this file used
+# to guard against were specific to those now-deleted bespoke layouts' own markup/CSS
+# (static/css/result-samples.css, also removed), so this file now just confirms the one remaining
+# design still renders its own Avg./Total columns and its passport correctly.
+s = sheet()
+check("the fixed design shows an 'Avg.' column next to the subject totals", "<th>Avg.</th>" in s, s)
 check("...and the table still renders scores/grades normally (no broken row)", "<td>11</td>" in s or "<td>11.0</td>" in s, s)
+check("the fixed design has no leftover per-style markup from the removed designs", "rsx-" not in s, s)
 
-# Regression: the OTHER sample templates that also show a "Highest" column were NOT touched by this phase.
-for tp, label in (("boxed_grey_card", "Highest in subject"), ("progress_report_card", None)):
-    s2 = sheet(tp)
-    if label:
-        check(f"[{tp}] its own 'Highest' column is untouched (this phase only changes Clean Mid-Term Report)", label in s2, s2)
-    else:
-        check(f"[{tp}] its own Highest/Lowest columns are untouched (still rendering a numeric 'Highest' value)",
-              re.search(r"<td>\d", s2) is not None)
-
-# ---------------------------------------------------------------- 2) Continuous Assessment Dossier: passport no longer overlaps the table
-css = open(os.path.join(ROOT, "static", "css", "result-samples.css"), encoding="utf-8").read()
-check("the identity section now reserves the passport's full height (prevents the table below from being overlapped)",
-      re.search(r"\.rsx-dos-id\{[^}]*min-height:30mm", css) is not None, css[:400])
-check("the passport is flush with the top of its container, not offset above it", ".rsx-dos-photo{position:absolute;right:0;top:0}" in css)
-s3 = sheet("assessment_dossier")
-check("Continuous Assessment Dossier still renders with its passport and identity section intact",
-      'class="rsx-dos-photo"' in s3 and 'class="rsx-dos-id"' in s3 and 'class="rsx-dos-table"' in s3)
+css_path = os.path.join(ROOT, "static", "css", "result-sheet.css")
+check("the old per-style sample stylesheet was removed", not os.path.exists(os.path.join(ROOT, "static", "css", "result-samples.css")))
+css = open(css_path, encoding="utf-8").read()
+check("the passport frame still has its no-crop, centred rules (now on the one fixed design)",
+      ".rs-passport.has-photo{border:0" in css and "object-fit:contain" in css, css[:400])
+s3 = sheet()
+check("the fixed design still renders with its passport and identity section intact",
+      'class="rs-passport' in s3 and 'class="rs-id"' in s3)
 
 print(f"\n{PASS} passed, {len(FAIL)} failed")
 if FAIL:

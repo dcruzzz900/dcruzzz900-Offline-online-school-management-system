@@ -168,9 +168,9 @@ ensure_show_address()
 rprint = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
 check("the address shows on the (generic/professional_classic) result sheet", "12 Unity Road, Goni-Gora, Kaduna" in rprint)
 
-set_template("green_cumulative_report")
+set_template("professional_classic")
 rprint_sample = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
-check("the address also shows on a 'sample' template design (green_cumulative_report)", "12 Unity Road, Goni-Gora, Kaduna" in rprint_sample)
+check("the address also shows with Cumulative/Annual results turned on", "12 Unity Road, Goni-Gora, Kaduna" in rprint_sample)
 
 bs = html(ADMIN.get(f"/broadsheet/{one('SELECT class_id FROM students WHERE id=1')['class_id']}/print?term_id={term1}")) if False else None
 # broadsheet_print.html is served inline from its PDF/print route; use the print route directly:
@@ -231,26 +231,22 @@ check("the dedicated Annual/Cumulative Result page shows the full breakdown tabl
 check("dedicated page: Mathematics term1 CA1=20 appears", re.search(r"Mathematics.*?20", dedicated, re.S) is not None)
 check("dedicated page: Mathematics term1 Total=80 appears (20+20+0+40)", "80" in dedicated)
 check("dedicated page: Mathematics term2 Total=40 appears (10+10+0+20)", "40" in dedicated)
-check("dedicated page: Aggregate column present", "Aggregate" in dedicated)
+check("dedicated page: Overall Cumulative column group present", "Overall Cumulative" in dedicated)
 
-SAMPLE_OF_16 = ("professional_classic", "modern_academic", "compact_academic", "minimal_clean",
-                "boxed_grey_card", "assessment_dossier", "peach_terminal_sheet", "green_cumulative_report",
-                "progress_report_card", "clean_midterm_report")
-check(f"sampling {len(SAMPLE_OF_16)} of the 16 real template keys", all(k in {t[0] for t in RESULT_TEMPLATES} for k in SAMPLE_OF_16), [t[0] for t in RESULT_TEMPLATES])
+# V97: there is only one result sheet design now ("professional_classic") -- the 16-style picker
+# (including the 9 other designs this loop used to check) was removed per Austin's explicit
+# request, so this just confirms the breakdown on the one remaining design.
+set_template("professional_classic")
+page = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
+check("cumulative breakdown section is present", "rs-cum-table" in page)
+check("shows the Cumulative / Annual Performance heading", "Cumulative / Annual Performance" in page)
+check("term1 CA1=20 for Mathematics is in the breakdown (not just a running total)", "20" in page and "80" in page)
+check("term2 figures (10, 40) are also present", "40" in page)
 
-for key in SAMPLE_OF_16:
-    set_template(key)
-    page = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
-    check(f"[{key}] cumulative breakdown section is present", "rs-cum-table" in page, key)
-    check(f"[{key}] shows the Cumulative / Annual Performance heading", "Cumulative / Annual Performance" in page, key)
-    check(f"[{key}] term1 CA1=20 for Mathematics is in the breakdown (not just a running total)", "20" in page and "80" in page, key)
-    check(f"[{key}] term2 figures (10, 40) are also present", "40" in page, key)
-
-# Turning cumulative OFF makes the section disappear everywhere, including the one template that
-# always had it (green_cumulative_report) -- confirms the setting is still authoritative.
+# Turning cumulative OFF makes the section disappear.
 run("UPDATE schools SET cumulative_enabled=0 WHERE id=1")
 off_page = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
-check("cumulative_enabled=0 hides the breakdown even on green_cumulative_report", "rs-cum-table" not in off_page)
+check("cumulative_enabled=0 hides the breakdown", "rs-cum-table" not in off_page)
 run("UPDATE schools SET cumulative_enabled=1 WHERE id=1")
 
 print("=== 6) PDF-rendering engine status: an admin sees a plain warning instead of a silent swap ===")

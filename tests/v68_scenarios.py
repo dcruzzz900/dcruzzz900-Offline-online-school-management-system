@@ -146,13 +146,14 @@ check("Obi Chinedu (tied top) is position 1 on the term broadsheet", "|1|" in ro
 check("Eze Amaka (tied top) is ALSO position 1, not 2", "|1|" in row_cells(bs1, "Eze Amaka"))
 check("Bakare Tunde (clearly behind) is position 3, not 2", "|3|" in row_cells(bs1, "Bakare Tunde"))
 
-# 2) Each tied student's own result sheet shows the same tie-aware "Overall Position".
+# 2) Each tied student's own result sheet shows the same tie-aware "Class Position" (V97: shown
+# as a plain number -- "1 / 3" -- not an ordinal word, so these checks match the number directly).
 s1 = result_html(1, 1)
 s2 = result_html(2, 1)
 s3 = result_html(3, 1)
-check("student 1's result sheet shows Overall Position 1st", "1st" in s1)
-check("student 2's result sheet ALSO shows Overall Position 1st (not 2nd)", "1st" in s2 and "2nd" not in s2.split("Overall Position")[1][:80] if "Overall Position" in s2 else False)
-check("student 3's result sheet shows Overall Position 3rd (not 2nd)", "3rd" in s3)
+check("student 1's result sheet shows Class Position 1", re.search(r"Class Position</span><b>1\s*/", s1) is not None, s1[s1.find("Class Position"):s1.find("Class Position") + 60])
+check("student 2's result sheet ALSO shows Class Position 1 (not 2)", re.search(r"Class Position</span><b>1\s*/", s2) is not None, s2[s2.find("Class Position"):s2.find("Class Position") + 60])
+check("student 3's result sheet shows Class Position 3 (not 2)", re.search(r"Class Position</span><b>3\s*/", s3) is not None, s3[s3.find("Class Position"):s3.find("Class Position") + 60])
 
 # 3) This matches the subject-level position convention, which was already tie-aware:
 #    both tied students are 1st in Mathematics too. V94: this school has cumulative_enabled=1

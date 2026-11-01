@@ -332,10 +332,11 @@ page = html(a_c.get("/admin/result-display-settings"))
 needed = ["Show Student Passport", "Show Overall Position", "Show Subject Position", "Show School Logo", "Show Attendance", "Show Days School Opened", "Show Days Present",
           "Show Days Absent", "Show Teacher / Class Teacher Comment", "Show Principal Comment", "Show Teacher Signature", "Show Teacher Sign Date", "Show Principal Signature",
           "Show Principal Sign Date", "Show Score / Mark", "Show Grade", "Show Remarks", "Show Student Admission No. / Register No.", "Show Class / Arm", "Show Academic Session",
-          "Show Term", "Show Next Term Resumes", "Result sheet style"]
+          "Show Term", "Show Next Term Resumes"]
 check("all required settings are on the Result Display Settings page", all(w in page for w in needed), [w for w in needed if w not in page])
-for tn in ("Professional Classic", "Modern Academic", "Formal School", "Compact Academic"):
-    check(f"style offered: {tn}", tn in page)
+# V97: the "Result sheet style" picker (Professional Classic / Modern Academic / Formal School /
+# Compact Academic / ...) was removed -- there is now exactly one fixed design for every school.
+check("the 'Result sheet style' picker was removed from the page", "Result sheet style" not in page)
 school_page = html(a_c.get("/admin/school"))
 dupes = [w for w in ("Show Overall Position", "Show Subject Position", "show_result_date", "auto_teacher_comment", "show_form_teacher_signature", "show_principal_signature", "Accent Colour", "pdf_font", "Report Font") if w in school_page]
 check("no duplicate result controls remain in School Setup", not dupes, dupes)
@@ -385,7 +386,10 @@ rds(a_c, [k for k in RES_ON if k != "show_passport"])
 check("passport OFF + photo uploaded: hidden completely (preview)", "rs-passport" not in sheet())
 check("passport OFF: hidden in the printed page", "rs-passport" not in html(a_c.get(f"/result/1/print?term_id={term_id}")).split("<body")[1])
 pdf_off = a_c.get(f"/result/1/pdf?term_id={term_id}").data
-check("passport toggle changes the PDF (image present vs absent)", len(pdf_on) > len(pdf_off) + 200, (len(pdf_on), len(pdf_off)))
+# V97: total PDF byte size is no longer a reliable signal on its own (the new, denser single
+# design's own layout/pagination differences can outweigh one small embedded photo), so check for
+# the embedded image stream directly instead.
+check("passport toggle changes the PDF (image XObject present vs absent)", pdf_on.count(b"/Image") > pdf_off.count(b"/Image"), (pdf_on.count(b"/Image"), pdf_off.count(b"/Image")))
 c1 = db(); c1.execute("UPDATE students SET photo_filename=NULL WHERE id=1"); c1.commit(); c1.close()
 rds(a_c, RES_ON)
 check("passport OFF + no photo: hidden", "rs-passport" not in (rds(a_c, [k for k in RES_ON if k != "show_passport"]) and sheet()))
@@ -405,8 +409,13 @@ rds(a_c, RES_ON)
 
 # ================================================================== every other toggle really toggles (preview)
 probes = {"show_attendance": "Days School Opened", "show_days_opened": "Days School Opened", "show_days_present": "Days Present", "show_days_absent": "Days Absent",
-          "show_teacher_comment": "Class/Form Teacher's Comment", "show_principal_comment": "Principal's Comment", "show_score": ">CA1<", "show_grade": ">Grade<",
-          "show_remarks": ">Remark<", "show_admission_no": "Admission / Register No.", "show_class": "Class / Arm", "show_session": "Academic Session", "show_term": ">Term<",
+          "show_teacher_comment": "Class/Form Teacher's Comment", "show_principal_comment": "Principal's Comment", "show_score": ">CA1<",
+          # V97: "Grade"/"Remark" also appear, unconditionally, as their own labels in the new
+          # Academic Performance Summary section (the overall grade/remark, a different figure
+          # from the per-subject column) -- so the probe has to target the per-subject <th> tag
+          # specifically, not any occurrence of the word on the sheet.
+          "show_grade": "<th>Grade</th>",
+          "show_remarks": '<th class="l">Remark</th>', "show_admission_no": "Admission / Register No.", "show_class": "Class / Arm", "show_session": "Academic Session", "show_term": ">Term<",
           "show_teacher_signature": "Class Teacher", "show_principal_signature": "Principal</span>", "show_teacher_sign_date": "Date:", "show_principal_sign_date": "Date:"}
 c1 = db()
 c1.execute("UPDATE student_term_info SET days_school_opened=NULL") if False else None
@@ -502,12 +511,12 @@ check("switching back to 'use register' shows the register again", re.search(r"D
 check("attendance of another school's students never leaks in", one("SELECT COUNT(*) FROM attendance_records WHERE student_id=%d" % one("SELECT id FROM students WHERE username='zed'")) == 0)
 
 # ================================================================== 15/16 one page, templates, 17 broadsheet
-for tn in ("professional_classic", "modern_academic", "formal_school", "compact_academic", "detailed_report"):
-    rds(a_c, RES_ON + ["show_subject_position", "show_result_date", "show_watermark"], template=tn)
-    check(f"[{tn}] preview uses the template", f'data-template="{tn}"' in sheet())
-    pdf = a_c.get(f"/result/1/pdf?term_id={term_id}").data
-    pages = len(re.findall(rb"/Type\s*/Page[^s]", pdf))
-    check(f"[{tn}] PDF is exactly one page", pdf[:4] == b"%PDF" and pages == 1, pages)
+# V97: one fixed design (the "Result sheet style" picker and the other 15 designs were removed).
+rds(a_c, RES_ON + ["show_subject_position", "show_result_date", "show_watermark"], template="professional_classic")
+check("preview uses the one fixed design", "rs-classic" in sheet())
+pdf = a_c.get(f"/result/1/pdf?term_id={term_id}").data
+pages = len(re.findall(rb"/Type\s*/Page[^s]", pdf))
+check("PDF is exactly one page", pdf[:4] == b"%PDF" and pages == 1, pages)
 pt = html(a_c.get(f"/result/1/print?term_id={term_id}"))
 check("print page contains only the sheet (no app chrome)", all(w not in pt for w in ("app-sidebar", "topbar", "csrf_token", "top-search", "Update Result Details", "Dashboard")), [w for w in ("app-sidebar", "topbar", "csrf_token", "top-search", "Update Result Details", "Dashboard") if w in pt])
 css = open(os.path.join(ROOT, "static/css/result-sheet.css")).read()

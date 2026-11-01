@@ -110,10 +110,11 @@ run("UPDATE result_display_settings SET show_domains=1, show_grading_key=1 WHERE
 W.publish(A, 1)
 
 
-def sheet(template):
-    run("UPDATE result_display_settings SET template=? WHERE school_id=1", (template,))
+def sheet(template=None):
+    # V97: there is only one result-sheet design now; `template` is accepted (and ignored) only so
+    # existing call sites don't all need rewriting.
     r = ADMIN.get("/result/1/print?term_id=1")  # the bare sheet only, no admin editor form below it
-    assert r.status_code == 200, (template, r.status_code)
+    assert r.status_code == 200, r.status_code
     return html(r)
 
 
@@ -128,44 +129,42 @@ check("the admin settings page is titled 'Domain Ratings'", "Domain Ratings" in 
 editor = html(ADMIN.get("/result/1?term_id=1"))
 check("the result editor's rating section is titled 'Domain Ratings'", "Domain Ratings" in editor and "Educational Domains" not in editor)
 
-# 2) On the result sheet itself (every structurally-different template), the heading/key never says "Educational Domains".
+# 2) On the result sheet itself (the one fixed design), the heading/key never says "Educational Domains".
+# V97: the 16-style picker is gone -- RESULT_TEMPLATES now has exactly one entry.
 ALL_TEMPLATES = [t[0] for t in RESULT_TEMPLATES]
-for tp in ALL_TEMPLATES:
-    s = sheet(tp)
-    check(f"[{tp}] result sheet never shows the old 'Educational Domains' name", "Educational Domains" not in s, tp)
+check("only the one fixed design remains", ALL_TEMPLATES == ["professional_classic"], ALL_TEMPLATES)
+s = sheet()
+check("result sheet never shows the old 'Educational Domains' name", "Educational Domains" not in s)
 
 # 3) With BOTH grading key and domain key switched on, both appear TOGETHER near each other (a combined
 #    key), not as two separate, far-apart blocks repeating the same information in different words.
-for tp in ("modern_academic", "detailed_report", "clean_midterm_report", "boxed_grey_card", "progress_report_card", "assessment_dossier", "green_cumulative_report"):
-    s = sheet(tp)
-    low = s.lower()
-    has_grade_info = any(k in low for k in ("grades:", "grading", "grade scale", "score range", "academic standard", "note:"))
-    has_domain_info = "domain ratings:" in low or "domain rating" in low
-    check(f"[{tp}] grading info is shown when the toggle is on", has_grade_info, tp)
-    check(f"[{tp}] domain-rating info is shown when the toggle is on", has_domain_info, tp)
+s = sheet()
+low = s.lower()
+has_grade_info = any(k in low for k in ("grades:", "grading", "grade scale", "score range", "academic standard", "note:"))
+has_domain_info = "domain ratings:" in low or "domain rating" in low
+check("grading info is shown when the toggle is on", has_grade_info)
+check("domain-rating info is shown when the toggle is on", has_domain_info)
 
-# 4) progress_report_card previously showed bare "x/5" ratings with NO legend anywhere on the sheet —
-#    a real gap closed by this phase: the legend must now actually be present, not just technically possible.
-s = sheet("progress_report_card")
-check("progress_report_card now has an actual domain-ratings legend (previously missing entirely)",
-      "domain ratings:" in s.lower() and ("poor" in s.lower() or "excellent" in s.lower()))
+# 4) the sheet must show an actual domain-ratings legend, not just bare "x/5" ratings with no key.
+s = sheet()
+check("domain ratings have an actual legend on the sheet",
+      "domain ratings scale:" in s.lower() and ("poor" in s.lower() or "excellent" in s.lower()))
 
 # 5) Each key is still independently togglable: domains-only (no grading key) still shows the domain legend,
 #    and grading-only (no domains) still shows the grade scale — turning one off never hides the other.
 run("UPDATE result_display_settings SET show_domains=1, show_grading_key=0 WHERE school_id=1")
-s = sheet("modern_academic")
+s = sheet()
 check("domains-only: the domain-ratings legend still appears when grading key is OFF", "domain ratings" in s.lower())
 run("UPDATE result_display_settings SET show_domains=0, show_grading_key=1 WHERE school_id=1")
-s = sheet("modern_academic")
+s = sheet()
 check("grading-only: the grade scale still appears when domains are OFF", any(k in s.lower() for k in ("grades:", "grading")))
 check("...and no stray 'domain ratings' label leaks in when domains are off", "domain ratings" not in s.lower())
 run("UPDATE result_display_settings SET show_domains=0, show_grading_key=0 WHERE school_id=1")
-s = sheet("modern_academic")
+s = sheet()
 check("neither on: no key section renders at all", "domain ratings" not in s.lower() and "grades:" not in s.lower())
 run("UPDATE result_display_settings SET show_domains=1, show_grading_key=1 WHERE school_id=1")
 
-# 6) PDF carries the same combined key as the print/preview page (same template, same content).
-run("UPDATE result_display_settings SET template='modern_academic' WHERE school_id=1")
+# 6) PDF carries the same combined key as the print/preview page (same design, same content).
 import io as _io
 from pypdf import PdfReader
 rp = ADMIN.get("/result/1/pdf?term_id=1")

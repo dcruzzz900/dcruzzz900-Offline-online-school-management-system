@@ -462,8 +462,8 @@ for ov, sb, label in pos_cases:
     check(f"settings saved [{label}]", r.status_code == 302, r.status_code)
     page = html(a_c.get(rs_url))
     sheet = page[page.index('class="rs-sheet'):] if 'class="rs-sheet' in page else page
-    check(f"[{label}] overall position {'shown' if ov else 'hidden'}", ("Overall Position" in sheet) == bool(ov), "Overall Position" in sheet)
-    check(f"[{label}] subject position column {'shown' if sb else 'hidden'}", ("<th>Position</th>" in sheet) == bool(sb))
+    check(f"[{label}] overall position {'shown' if ov else 'hidden'}", ("Class Position" in sheet) == bool(ov), "Class Position" in sheet)
+    check(f"[{label}] subject position column {'shown' if sb else 'hidden'}", ("<th>Pos.</th>" in sheet) == bool(sb))
     pdf = a_c.get(f"/result/1/pdf?term_id={term_id}")
     check(f"[{label}] PDF generated", pdf.status_code == 200 and pdf.data[:4] == b"%PDF", pdf.status_code)
 # ordinals + ties
@@ -473,7 +473,7 @@ check("positions use ordinals (1st)", "1st" in sheet)
 sheet2 = html(a_c.get(f"/result/2?term_id={term_id}"))
 sheet3 = html(a_c.get(f"/result/3?term_id={term_id}"))
 check("tied scores share a position (2nd,2nd) and the next is skipped", "2nd" in sheet2 and "2nd" in sheet3 and "3rd" not in sheet2.split("Academic Performance")[1].split("</table>")[0], "")
-check("overall position text on the sheet", re.search(r"Overall Position</span><b>\s*\d+(st|nd|rd|th)", sheet) is not None)
+check("overall position (class position) shown as a number on the sheet", re.search(r"Class Position</span><b>\s*\d+", sheet) is not None)
 conn = db()
 from app import compute_subject_positions
 pos = compute_subject_positions(conn, [1, 2, 3], [eng, subj], term_id)
@@ -482,19 +482,19 @@ conn.close()
 # scope: only students of the class are ranked
 conn = db(); pos = compute_subject_positions(conn, [zed], [eng], term_id); conn.close()
 check("other school's students never enter a ranking", pos[eng] == {})
-# templates
-for tmpl in ("professional_classic", "modern_academic", "formal_school", "compact_academic", "detailed_report"):
-    rds(a_c, template=tmpl, accent_color="#aa2200", secondary_color="#00aa88", title="Annual Report", footer_text="Thank you", watermark_text="MYSCHOOL",
-        on=[k for k in ALL_TOGGLES if k != "show_result_date"])
-    page = html(a_c.get(rs_url))
-    check(f"template '{tmpl}' is used", f'rs-{tmpl}' in page and f'data-template="{tmpl}"' in page)
-    check(f"[{tmpl}] branding: title, footer, watermark, colours", "Annual Report" in page and "Thank you" in page and "MYSCHOOL" in page and "#aa2200" in page)
-    check(f"[{tmpl}] PDF built", a_c.get(f"/result/1/pdf?term_id={term_id}").data[:4] == b"%PDF")
+# V97: there is only one result sheet design now ("professional_classic", rendered via the
+# rs-classic markup) -- the 16-style picker and its per-template loop are gone.
+rds(a_c, template="professional_classic", accent_color="#aa2200", secondary_color="#00aa88", title="Annual Report", footer_text="Thank you", watermark_text="MYSCHOOL",
+    on=[k for k in ALL_TOGGLES if k != "show_result_date"])
+page = html(a_c.get(rs_url))
+check("the one fixed design is used", "rs-classic" in page)
+check("branding: title, footer, watermark, colours", "Annual Report" in page and "Thank you" in page and "MYSCHOOL" in page and "#aa2200" in page)
+check("PDF built", a_c.get(f"/result/1/pdf?term_id={term_id}").data[:4] == b"%PDF")
 r = rds(a_c, template="evil", accent_color="red")
 check("invalid template/colour rejected", r.status_code == 422)
 r = rds(a_c, title="<script>x</script>")
 check("markup in branding text rejected", r.status_code == 422)
-check("teacher cannot change result display settings", staff("bmusa").get("/admin/result-display-settings").status_code in (302, 403) and rds(staff("bmusa"), template="modern_academic").status_code in (302, 403) and db().execute("SELECT template FROM result_display_settings WHERE school_id=1").fetchone()[0] != "modern_academic")
+check("teacher cannot change result display settings", staff("bmusa").get("/admin/result-display-settings").status_code in (302, 403) and rds(staff("bmusa"), accent_color="#123123").status_code in (302, 403) and db().execute("SELECT accent_color FROM result_display_settings WHERE school_id=1").fetchone()[0] != "#123123")
 oc.get("/admin/result-display-settings")
 check("other school's settings unaffected", db().execute("SELECT template FROM result_display_settings WHERE school_id=?", (sid2,)).fetchone()[0] == "professional_classic")
 check("result display settings changes are audited", "result_display_settings_changed" in {r_[0] for r_ in db().execute("SELECT action FROM rbac_audit_log")})
@@ -544,7 +544,7 @@ check("student print page works and is isolated", sp_.status_code == 200 and "Up
 check("student PDF works", c.get(f"/student/result/{term_id}/pdf").data[:4] == b"%PDF")
 check("student cannot print another student's sheet via the staff URL", c.get(f"/result/2/print?term_id={term_id}").status_code in (302, 401, 403))
 page = html(c.get(f"/student/result/{term_id}"))
-check("student sheet respects position settings (overall ON in last save)", "Overall Position" in page)
+check("student sheet respects position settings (overall ON in last save)", "Class Position" in page)
 
 # ------------------------------------------------------------------ 7/8 automatic term and session
 conn = db()
