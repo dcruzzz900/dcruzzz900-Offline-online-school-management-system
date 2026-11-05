@@ -5,8 +5,18 @@
    writes them; there is no longer a CSS-grid-area dispatch between layouts. */
 .rs-sheet{--rs-accent:#1f3a5f;--rs-second:#c9a227;position:relative;box-sizing:border-box;width:210mm;max-width:100%;min-height:277mm;margin:0 auto;padding:10mm;background:#fff;color:#111;font:10.5pt/1.35 Arial,Helvetica,sans-serif;overflow:hidden}
 .rs-sheet *{box-sizing:border-box}
-.rs-watermark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:54pt;font-weight:800;color:rgba(0,0,0,.05);transform:rotate(-30deg);pointer-events:none;text-align:center;z-index:0}
-.rs-sheet>*{position:relative;z-index:1}
+/* V99: the watermark text is often a full school name (sometimes long), so a fixed 54pt size could
+   wrap onto 2-3 lines; rotated -30deg, that tall multi-line block's bounding box could sprawl well
+   above its own true center and visually collide with the header even though it's centered in the
+   sheet -- narrower + smaller + tighter line-height keeps it compact and reliably centered instead. */
+.rs-watermark{position:absolute;inset:0;padding:0 11%;display:flex;align-items:center;justify-content:center;font-size:30pt;line-height:1.15;font-weight:800;color:rgba(0,0,0,.05);transform:rotate(-30deg);pointer-events:none;text-align:center;z-index:0;overflow-wrap:break-word;box-sizing:border-box}
+/* V99: excludes .rs-watermark -- it already sets its own position:absolute (to float behind the
+   content without taking up layout space) in a rule of EQUAL selector specificity to this one,
+   so without the :not() here, this later rule in the cascade was silently winning and flipping the
+   watermark back to position:relative -- which put it back in normal flow as a real block (sized to
+   its own wrapped/rotated text), pushing the header down and reading as a big empty-looking margin
+   at the top of the sheet. This is the root cause of that, not just a text-size issue. */
+.rs-sheet>*:not(.rs-watermark){position:relative;z-index:1}
 .rs-head{display:flex;align-items:center;gap:6mm;border-bottom:3px solid var(--rs-accent);padding-bottom:4mm;margin-bottom:4mm}
 .rs-head-text{flex:1;text-align:center}.rs-head-logo-left .rs-head-text{text-align:left}.rs-head-logo-right{flex-direction:row-reverse}.rs-head-logo-right .rs-head-text{text-align:right}
 .rs-head-logo-center{flex-direction:column;text-align:center}.rs-head-logo-center .rs-head-text{text-align:center}
@@ -51,7 +61,27 @@
 .rs-cumulative{margin-top:4mm}
 .rs-cum-table{font-size:7.5pt}.rs-cum-table th,.rs-cum-table td{padding:.9mm 1mm}
 
-@media (max-width:820px){.rs-sheet{width:100%;padding:5mm;min-height:0}.rs-id,.rs-att{grid-template-columns:repeat(2,1fr)}.rs-comments{grid-template-columns:1fr}.rs-summary-grid{grid-template-columns:repeat(2,1fr)}.rs-table{font-size:8.5pt}.rs-sheet .rs-scroll{overflow-x:auto}}
+/* V99: scoped to `screen` -- NOT bare `(max-width:820px)` as before. The downloaded-PDF Chromium
+   viewport (html_pdf.py) is a FIXED 794px wide (A4 width at 96dpi), which is itself BELOW this
+   820px breakpoint, and a phone's native print dialog also commonly keeps a <=820px layout width
+   -- so the old, unscoped rule was silently matching and applying these mobile-only overrides to
+   EVERY downloaded PDF and EVERY phone print, not just on-screen mobile viewing as intended
+   (see the .rs-scroll comment above: "only actually scrolls on small phone screens" was the
+   intent, but it wasn't actually screen-only). Three compounding, now-fixed results of that:
+   (1) .rs-scroll{overflow-x:auto} clipped the wide Cumulative/Annual table to whatever columns
+   fit in that ~794px box at its default (unscrolled) position -- on a downloaded cumulative PDF
+   this could visibly read as "only one term's columns show" even though the full multi-term data
+   was always there, just scrolled out of the static PDF snapshot. (2) the reduced 2-column
+   .rs-id/.rs-att grids and smaller 8.5pt .rs-table font were silently used in every PDF/print
+   instead of the intended full desktop layout, which is why a sheet (especially the wider
+   Cumulative/Annual one) could still look cramped/overflowing on A4 even after the fit-to-page JS
+   ran. (3) `width:100%` momentarily fighting the fit() script's own explicit mm-based width before
+   JS finished, adding to the same squeeze. `screen` excludes both: Chromium's PDF capture emulates
+   `media=print` (html_pdf.py calls page.emulate_media(media="print")) and so does every browser's
+   native print pipeline, so neither ever matches a `screen`-scoped query regardless of viewport
+   width -- restoring the full desktop layout, font size and un-clipped table to PDFs and prints,
+   while genuine on-screen phone viewing (the only case this was ever meant for) is unchanged. */
+@media screen and (max-width:820px){.rs-sheet{width:100%;padding:5mm;min-height:0}.rs-id,.rs-att{grid-template-columns:repeat(2,1fr)}.rs-comments{grid-template-columns:1fr}.rs-summary-grid{grid-template-columns:repeat(2,1fr)}.rs-table{font-size:8.5pt}.rs-sheet .rs-scroll{overflow-x:auto}}
 /* print: only the sheet, A4, correct margins */
 @page{size:A4;margin:0}
 @media print{
