@@ -58,11 +58,11 @@
 </section>{% endif %}
 {% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
-{% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or (rs.show_promotion and promotion_status)) %}<section class="rs-att">
+{% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or rs.show_days_late or (rs.show_promotion and promotion_status)) %}<section class="rs-att">
   {% if rs.show_days_opened %}<div><span>Days School Opened</span><b>{{ info.days_school_opened if info.days_school_opened is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_present %}<div><span>Days Present</span><b>{{ info.days_present if info.days_present is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_absent %}<div><span>Days Absent</span><b>{{ info.days_absent if info.days_absent is not none else '—' }}</b></div>{% endif %}
-  <div><span>Days Late</span><b>{{ info.days_late if info.days_late is not none else '—' }}</b></div>
+  {% if rs.show_days_late %}<div><span>Days Late</span><b>{{ info.days_late if info.days_late is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_promotion and promotion_status %}<div><span>Promotion Status</span><b>{{ promotion_status }}</b></div>{% endif %}</section>{% endif %}
 {% if rs.show_teacher_comment or rs.show_principal_comment %}<section class="rs-comments">
   {% if rs.show_teacher_comment %}<div><span>Class/Form Teacher's Comment</span><p>{{ info.teacher_comment if info.teacher_comment else '' }}</p></div>{% endif %}
