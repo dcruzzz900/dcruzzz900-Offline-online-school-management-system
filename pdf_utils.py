@@ -359,7 +359,8 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
             att_cols.append(("Days Present", info.get("days_present")))
         if rs.get("show_days_absent", True):
             att_cols.append(("Days Absent", info.get("days_absent")))
-        att_cols.append(("Days Late", info.get("days_late")))
+        if rs.get("show_days_late", True):
+            att_cols.append(("Days Late", info.get("days_late")))
     if promo:
         att_cols.append(("Promotion / Status", promo))
     if att_cols:

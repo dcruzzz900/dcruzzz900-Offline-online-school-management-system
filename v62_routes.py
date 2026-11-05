@@ -20,7 +20,7 @@ SECTIONS = [
     ("School information", ["show_address", "show_email", "show_phone", "show_motto"]),
     ("Student details", ["show_admission_no", "show_class", "show_session", "show_term", "show_next_term_resumes"]),
     ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_grading_key", "show_promotion"]),
-    ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent"]),
+    ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent", "show_days_late"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
                                "show_teacher_name", "show_principal_signature", "show_principal_sign_date", "show_principal_name"]),
     ("Page & print", ["fit_to_page"]),
@@ -56,8 +56,12 @@ def register_v62_routes(app, h):
         return (request.headers.get("X-Forwarded-For", request.remote_addr or "")[:64].split(",")[0]).strip()
 
     # ===================================================================== RESULT DISPLAY SETTINGS (the one place)
-    def sample_result(conn, cfg_rs):
-        """Realistic fake data rendered through the SAME sheet component, so the preview always matches print/PDF."""
+    def sample_result(conn, cfg_rs, cumulative_enabled=False):
+        """Realistic fake data rendered through the SAME sheet component, so the preview always matches print/PDF.
+        V99: when the school has Cumulative/Annual Results switched on, the preview now builds a fake
+        `cumulative`/`cum_summary` payload (two sample terms) too, so toggling it on and saving actually
+        shows what the cumulative/annual state looks like here -- previously this always hardcoded
+        cumulative=None, so the preview could never reflect that state at all."""
         school = conn.execute("SELECT * FROM schools WHERE id=?", (sid(),)).fetchone()
         subjects = [("Mathematics", 14, 13, 58), ("English Language", 12, 14, 55), ("Basic Science", 15, 12, 52), ("Social Studies", 11, 12, 49), ("Civic Education", 13, 15, 60)]
         details, tot_all = [], 0
@@ -89,10 +93,40 @@ def register_v62_routes(app, h):
             max_each = sum((gc[k] or 0) for k in ("ca1_max", "ca2_max", "ca3_max", "exam_max")) or 100
         except (KeyError, IndexError, TypeError):
             max_each = 100
+        cumulative = cum_summary = None
+        if cumulative_enabled:
+            # A second sample term, each subject a little different from term 1, so the cumulative
+            # table genuinely shows two distinct columns rather than the same figures twice.
+            term2_deltas = [(2, -1, 3), (0, 2, -2), (-1, 1, 4), (3, 0, 1), (1, -2, 2)]
+            by_subject, term_totals_acc, cum_grand_total = {}, [{"ca1": 0, "ca2": 0, "exam": 0, "total": 0} for _ in range(2)], 0
+            for i, ((n, a, b, e), (da, db, de)) in enumerate(zip(subjects, term2_deltas), 1):
+                t1 = {"ca1": a, "ca2": b, "ca3": None, "exam": e, "total": a + b + e}
+                a2, b2, e2 = a + da, b + db, e + de
+                t2 = {"ca1": a2, "ca2": b2, "ca3": None, "exam": e2, "total": a2 + b2 + e2}
+                cum_total = t1["total"] + t2["total"]
+                cum_grand_total += cum_total
+                cum_avg = round(cum_total / 2, 1)
+                grade, remark = h["grade_for"](cum_avg, conn, sid())
+                for idx, t in enumerate((t1, t2)):
+                    term_totals_acc[idx]["ca1"] += t["ca1"]; term_totals_acc[idx]["ca2"] += t["ca2"]
+                    term_totals_acc[idx]["exam"] += t["exam"]; term_totals_acc[idx]["total"] += t["total"]
+                by_subject[n] = {"term_components": [t1, t2], "term_positions": [i, i], "cum_total": cum_total,
+                                  "average": cum_avg, "position": i, "grade": grade, "remark": remark}
+            n_subj = len(subjects)
+            term_averages_acc = [{"ca1": round(tt["ca1"] / n_subj, 1), "ca2": round(tt["ca2"] / n_subj, 1),
+                                   "exam": round(tt["exam"] / n_subj, 1), "total": round(tt["total"] / n_subj, 1)} for tt in term_totals_acc]
+            cum_grand_average = round(cum_grand_total / n_subj, 1)
+            cumulative = {"terms": ["First Term", "Second Term"], "show_ca3": False, "by_subject": by_subject,
+                          "term_totals": term_totals_acc, "term_averages": term_averages_acc,
+                          "cum_grand_total": cum_grand_total, "cum_grand_average": cum_grand_average}
+            cum_average = round(sum(s["cum_total"] for s in by_subject.values()) / (n_subj * 2), 1)
+            cg, cr = h["grade_for"](cum_average, conn, sid())
+            cum_summary = {"subjects_written": n_subj, "total": cum_grand_total, "average": cum_average,
+                           "grade": cg, "remark": cr, "max_each": max_each}
         return dict(rs=rs, term=term, student=student, class_row={"name": "JSS 1A"}, subjects=details, total=tot_all, average=average,
                     position=1, position_text="1st", class_size=30, subjects_written=len(details), show_ca3=False, info=info, domain_groups=domain_groups,
                     promotion_status=info["promotion_status"], overall_grade=overall_grade, overall_remark=overall_remark,
-                    total_obtainable=len(details) * max_each, max_each=max_each, cumulative=None, cum_summary=None,
+                    total_obtainable=len(details) * max_each, max_each=max_each, cumulative=cumulative, cum_summary=cum_summary,
                     teacher_name=None, principal_name=None, student_full_name=lambda s: f"{s['last_name']} {s['first_name']}")
 
     @app.route("/admin/result-display-settings", methods=["GET", "POST"])
@@ -196,7 +230,7 @@ def register_v62_routes(app, h):
             if request.method == "POST" and errors:
                 preview = None
             else:
-                preview = sample_result(conn, preview_rs)
+                preview = sample_result(conn, preview_rs, cumulative_enabled=bool(school["cumulative_enabled"]))
             return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
                                    header_layouts=HEADER_LAYOUTS, text_aligns=TEXT_ALIGNS, signature_layouts=SIGNATURE_LAYOUTS, pdf_fonts=PDF_FONT_CHOICES, errors=errors,
                                    page_orientations=PAGE_ORIENTATIONS, font_scales=FONT_SCALE_CHOICES,
