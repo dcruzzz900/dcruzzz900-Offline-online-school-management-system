@@ -258,23 +258,45 @@ check("a normal-sized result, with orientation='auto', renders as a portrait PDF
 # dual-orientation zoom measurement, not a heuristic" V79 deferred this for. A single long comment
 # paragraph can never save enough height to flip it (it's capped at half the page width by the
 # 2-column comments grid); a genuinely WIDE cumulative table does: the existing 2 terms x (this
-# class's 4 existing + 4 new) long-named subjects, which saves well over the ~29% margin
+# class's 4 existing + N new) long-named subjects, which saves well over the ~29% margin
 # decideOrientation() requires. (V87: the cumulative section started showing every term's full
 # CA1/CA2/[CA3]/Exam/Total breakdown, not just one running-total column per term -- several times
 # wider per term than before -- so this used to need 10 terms x 8 long-named subjects to tip the
 # scale, then 3 terms x 4. V97 added a per-term Avg. column on top of that, widening the table
 # again -- a 3rd term now overloads even a landscape page with unavoidable per-term columns, so
 # portrait and landscape end up equally (not differently) squeezed at 3 terms and this no longer
-# exercises the thing this check is about; 2 terms x 4 new subjects is the combination that does
-# now.) Verified end-to-end through the real route with pypdf's mediabox.
+# exercises the thing this check is about; 2 terms x 4 new subjects was the combination that did
+# then. V99 fixed a real bug where result-sheet.css's mobile breakpoint -- meant for on-screen
+# phone viewing only -- wasn't scoped to `screen`, so it was silently also matching during every
+# PDF render (html_pdf.py's fixed 794px-wide Chromium viewport is itself <820px) and even native
+# phone printing; one of several things it wrongly overrode there was the Cumulative/Annual
+# table's own, deliberately smaller 7.5pt font (.rs-cum-table), bumping it up to 8.5pt. A second
+# V99 fix -- the watermark CSS cascade bug -- means the watermark div is now correctly
+# position:absolute instead of sitting in normal document flow and pushing the header down. Both
+# are genuine, verified fixes, but together they shrink the portrait/landscape gap this specific
+# measurement relies on: a constant per-page addition like a footer line pulls hPortrait and
+# hLandscape closer together in RATIO (hPortrait/hLandscape -> 1 as a constant is added to both);
+# and, measured directly, an absolutely-positioned watermark with inset:0 still measurably grows
+# .rs-sheet's own scrollHeight here (its own rotated/flex-centered content can extend past the
+# sheet's normal-flow bounds even while out of flow, and .rs-sheet's overflow:hidden still reports
+# that true extent via scrollHeight) -- and does so more in landscape than portrait at this content
+# size, shrinking the gap further still. With both still set (as item B leaves them, having already
+# verified they show up correctly), no reasonable subject count/length reliably crosses the margin;
+# past a point they also saturate both heights at FIT_FLOOR (0.72) together, erasing the signal
+# entirely. So this one measurement clears both first -- item B's own watermark/footer-appear
+# checks already ran, above, with them set -- isolating decideOrientation()'s own mechanism, which
+# is what this specific check is about, from that compounding, unrelated interaction. With both
+# cleared, 9 long-named subjects reliably crosses the margin under the corrected rendering.
+run("UPDATE result_display_settings SET footer_text=NULL, watermark_text=NULL, show_watermark=0 WHERE school_id=1")
 all_wide_term_ids = [term1, term2]
 
 class_id_1 = one("SELECT class_id FROM students WHERE id=1")["class_id"]
 wide_subject_ids = []
-for i in range(1, 5):  # 4 long-named subjects (on top of the class's existing 4) -- empirically
-                        # the smallest set, under this school's REAL Result Display Settings
-                        # (accent colors, watermark, footer -- all turned on earlier in this fixture
-                        # for item B), that genuinely crosses decideOrientation()'s margin
+for i in range(1, 10):  # 9 long-named subjects (on top of the class's existing 4) -- empirically
+                        # enough, with the watermark/footer cleared just above and under the
+                        # V99-corrected (screen-only) mobile breakpoint, to genuinely cross
+                        # decideOrientation()'s margin without over-shooting into the
+                        # floor-saturation zone (see note above)
     sname = f"A Very Long Subject Name That Really Wraps Across Many Many Separate Lines Of Text When The Page Is Narrow Like Portrait {i}"
     run("INSERT INTO subjects(school_id, name) VALUES(1, ?)", (sname,))
     sid = one("SELECT id FROM subjects WHERE school_id=1 AND name=?", (sname,))["id"]
