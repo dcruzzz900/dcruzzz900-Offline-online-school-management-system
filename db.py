@@ -3545,6 +3545,7 @@ RESULT_BOOL_SETTINGS = [
     ("show_days_opened", "Show Days School Opened", 1),
     ("show_days_present", "Show Days Present", 1),
     ("show_days_absent", "Show Days Absent", 1),
+    ("show_days_late", "Show Days Late", 1),
     ("show_teacher_comment", "Show Teacher / Class Teacher Comment", 1),
     ("show_principal_comment", "Show Principal Comment", 1),
     ("show_teacher_signature", "Show Teacher Signature", 1),
@@ -4044,6 +4045,17 @@ def migration_071_v91_paper_size(conn):
 
 
 STEPS.append(("paper_size_v91", migration_071_v91_paper_size))
+
+
+def migration_072_v99_days_late_toggle(conn):
+    """V99: V97 added a "Days Late" attendance figure to the result sheet unconditionally (no
+    on/off switch of its own, unlike Days School Opened/Present/Absent, which all have one) --
+    Austin asked for one. Purely additive, defaults to 1 (shown), so nothing changes for a school
+    that never opens this setting -- Days Late keeps appearing exactly as it already did."""
+    ensure_column(conn, "result_display_settings", "show_days_late", "INTEGER NOT NULL DEFAULT 1")
+
+
+STEPS.append(("days_late_toggle_v99", migration_072_v99_days_late_toggle))
 
 
 def term_sequence_next(conn, term):
