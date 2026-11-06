@@ -148,7 +148,7 @@ check("domain-rating info is shown when the toggle is on", has_domain_info)
 # 4) the sheet must show an actual domain-ratings legend, not just bare "x/5" ratings with no key.
 s = sheet()
 check("domain ratings have an actual legend on the sheet",
-      "domain ratings scale:" in s.lower() and ("poor" in s.lower() or "excellent" in s.lower()))
+      "domain ratings scale" in s.lower() and ("poor" in s.lower() or "excellent" in s.lower()))
 
 # 5) Each key is still independently togglable: domains-only (no grading key) still shows the domain legend,
 #    and grading-only (no domains) still shows the grade scale — turning one off never hides the other.

@@ -341,7 +341,8 @@ s7 = html(ADMIN.get("/result/1?term_id=1"))
 check("no photo -> a fallback avatar, the sheet still renders", "rs-passport-empty" in s7)
 buf = io.BytesIO(); Image.new("RGB", (300, 100), (120, 40, 40)).save(buf, "JPEG"); 
 run("UPDATE students SET photo_filename=NULL WHERE id=1")
-css_has = "object-fit:contain" in css_ and ".rs-passport.has-photo{border:0" in css_
+# V100: the sample shows the photo inside a thin pale-blue frame, so the frame is intentional now; the photo itself is still never cropped/stretched
+css_has = "object-fit:contain" in css_ and ".rs-passport.has-photo{border:1.5px solid var(--rs-line)" in css_
 check("a photo fits inside the frame without cropping or an extra border (CSS)", css_has)
 
 # ======================================================== 12. V97: the one fixed result-sheet design

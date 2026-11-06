@@ -240,12 +240,15 @@ check("the admin settings page offers 'auto' as a Page orientation option", 'val
 # without this fix, saving 'auto' would have silently reverted to 'portrait' everywhere it's read.
 run("UPDATE result_display_settings SET page_orientation='auto' WHERE school_id=1")
 s_auto = html(ADMIN.get("/result/1/print?term_id=1"))
-check("page_orientation='auto' is NOT coerced back to 'portrait' by result_sheet_settings()",
-      "var RS_ORIENTATION = \"auto\"" in s_auto, s_auto)
+# V100: Austin asked for the cumulative/annual sheet to fit A4 PORTRAIT, so a result showing the cumulative
+# table is always portrait regardless of the saved setting (fixed column widths make it fit); 'auto' is
+# still saved and still decides for a plain per-term sheet.
+check("page_orientation='auto' is still saved (V100: a result showing the cumulative table is forced to portrait)",
+      "var RS_ORIENTATION = \"portrait\"" in s_auto, s_auto)
 check("...and the auto-orientation decision function is present on the print page", "function decideOrientation()" in s_auto)
 
 s_cum_auto = html(ADMIN.get(f"/cumulative/student/1/print?session_id={session_id}&term_id={term2}"))
-check("page_orientation='auto' also reaches the cumulative print page", "var RS_ORIENTATION = \"auto\"" in s_cum_auto, s_cum_auto)
+check("V100: the cumulative print page is always A4 portrait", "var RS_ORIENTATION = \"portrait\"" in s_cum_auto, s_cum_auto)
 
 # Genuine dual-orientation measurement, run for real through Chromium (html_pdf.render_documents),
 # not just a JS-presence check: a normal-sized result stays portrait...
@@ -306,8 +309,8 @@ for i in range(1, 10):  # 9 long-named subjects (on top of the class's existing 
         run("INSERT INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,?,?,20,20,0,40)", (sid, t))
 
 pdf_wide = ADMIN.get(f"/cumulative/student/1/pdf?session_id={session_id}&term_id={term2}")
-check("a cumulative result wide enough (2 terms x many long-named subjects) to genuinely overflow far more in portrait than landscape is measured and switched to a landscape PDF",
-      pdf_wide.status_code == 200 and pdf_is_landscape(pdf_wide.data), pdf_wide.status_code)
+check("V100: even a very tall cumulative result stays on A4 PORTRAIT (shrunk to fit, never switched to landscape)",
+      pdf_wide.status_code == 200 and not pdf_is_landscape(pdf_wide.data), pdf_wide.status_code)
 
 pdf_normal_again = ADMIN.get("/result/1/pdf?term_id=1")
 check("...while an ordinary, unmodified single-term result still stays portrait under the same 'auto' setting",

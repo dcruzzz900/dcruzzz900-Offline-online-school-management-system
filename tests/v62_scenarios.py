@@ -401,7 +401,7 @@ b = io.BytesIO(); Image.new("RGB", (200, 80), (200, 30, 30)).save(b, "PNG")
 open(os.path.join(A.INSTANCE_DIR, "logo_test.png"), "wb").write(b.getvalue())
 run("UPDATE schools SET logo_filename='logo_test.png' WHERE id=1")
 check("logo ON + uploaded: the school's own logo appears", 'class="rs-logo" src="data:image/png' in sheet())
-check("logo keeps its aspect ratio (CSS never forces both width and height)", re.search(r"\.rs-logo\{[^}]*max-height:22mm;max-width:30mm;width:auto;height:auto;object-fit:contain", open(os.path.join(ROOT, "static/css/result-sheet.css")).read()) is not None)
+check("logo keeps its aspect ratio (CSS never forces both width and height)", re.search(r"\.rs-logo\{[^}]*max-height:26mm;max-width:30mm;width:auto;height:auto;object-fit:contain", open(os.path.join(ROOT, "static/css/result-sheet.css")).read()) is not None)
 pdf_logo_on = a_c.get(f"/result/1/pdf?term_id={term_id}").data
 rds(a_c, [k for k in RES_ON if k != "show_logo"])
 check("logo OFF: hidden in preview, print and PDF", "rs-logo" not in sheet() and "rs-logo" not in html(a_c.get(f"/result/1/print?term_id={term_id}")).split("<body")[1] and len(a_c.get(f"/result/1/pdf?term_id={term_id}").data) < len(pdf_logo_on))

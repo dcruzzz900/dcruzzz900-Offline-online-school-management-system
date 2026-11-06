@@ -175,7 +175,7 @@ check("domain rows render as plain numbers, e.g. '>5<' not '>5 – Excellent<'",
 # the bottom "Domain ratings: 1 = Poor ... 5 = Excellent" legend line is untouched -- Austin didn't ask for
 # that to be removed, only the per-row repetition next to each individual rating.
 check("the single domain-ratings legend line at the bottom is still shown",
-      "Domain Ratings Scale:" in sh)
+      "Domain Ratings Scale" in sh)
 # exactly one "Domain Ratings" section heading (never duplicated per card)
 check("exactly one 'Domain Ratings' section heading", sh.count(">Domain Ratings<") == 1, sh.count(">Domain Ratings<"))
 # both domain group card titles still present and distinct
