@@ -8,7 +8,7 @@
 <!-- Page orientation & paper size: see result_print.html for the full rationale -- identical
      mechanism, reused here so Preview = Print = PDF holds for the cumulative result too
      (V85 orientation, V91 paper size). -->
-<style id="rsPageSize">@page{size:{{ (rs.page_h_mm if rs.page_orientation == 'landscape' else rs.page_w_mm) }}mm {{ (rs.page_w_mm if rs.page_orientation == 'landscape' else rs.page_h_mm) }}mm;margin:0}</style>
+<style id="rsPageSize">@page{size:{{ rs.page_w_mm }}mm {{ rs.page_h_mm }}mm;margin:0}</style>
 </head>
 <body class="rs-print-page">
 <div class="rs-overflow-warning no-print" id="rsOverflowWarning">This result doesn't fit legibly on one page at the school's chosen font size, so it will print onto a second page instead of being shrunk further. To get it back onto one page: turn off an optional section in Result Display Settings, or reduce the font size below.</div>
@@ -27,8 +27,8 @@
 // columns) -- so this page always auto-picks whichever orientation needs the least shrinking to
 // stay legible on one page (see decideOrientation() below), regardless of the school's saved
 // per-term "Page orientation" setting, which still applies to the per-term sheet unchanged.
-var RS_ORIENTATION = {{ 'auto'|tojson }};
-var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape')|tojson }};
+var RS_ORIENTATION = {{ 'portrait'|tojson }};
+var RS_LANDSCAPE = {{ false|tojson }};
 var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
 var RS_FIT_TO_PAGE = {{ (rs.fit_to_page if rs.fit_to_page is defined else true)|tojson }};
 // V91: see result_print.html for the full rationale -- the configured portrait page size in mm.
@@ -75,9 +75,9 @@ var warn=document.getElementById('rsOverflowWarning'),stillOverflows=false;
 if(fitOn&&overflow){
   var z=Math.max(FIT_FLOOR,(max/h)*0.965);
   stillOverflows=(h*z)>max+1;
-  s.style.zoom=z;
+  s.style.zoom=z;s.style.maxWidth='none';s.style.width=(pageWmm/z)+'mm';
   if(!stillOverflows){s.style.minHeight=(max/z-1)+'px';}
-}else{s.style.zoom=base;if(!overflow||fitOn){s.style.minHeight=(max/base-1)+'px';}}
+}else{s.style.zoom=base;s.style.maxWidth='none';s.style.width=(pageWmm/base)+'mm';if(!overflow||fitOn){s.style.minHeight=(max/base-1)+'px';}}
 if(warn)warn.classList.toggle('is-shown',stillOverflows);
 s.style.height='';}
 function updateControls(){

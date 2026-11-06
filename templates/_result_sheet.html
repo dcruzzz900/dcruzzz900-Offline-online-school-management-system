@@ -9,7 +9,7 @@
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
 <header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
-  <div class="rs-head-text"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
+  {% set _n = (rs.school_name or '')|length %}<div class="rs-head-text"><h2 style="font-size:{{ 19 if _n <= 22 else 16 if _n <= 28 else 14 if _n <= 34 else 12.5 if _n <= 40 else 11 }}pt">{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
     <h1>{{ rs.title }}</h1>{% if rs.show_session or rs.show_term %}<p class="rs-term">{% if rs.show_session %}{{ term.session_name }}{% endif %}{% if rs.show_session and rs.show_term %} — {% endif %}{% if rs.show_term %}{{ term.name }}{% endif %}</p>{% endif %}</div>
   {% if rs.show_passport %}{% if rs.passport %}<div class="rs-passport has-photo"><img src="{{ rs.passport }}" alt="Student passport photograph"></div>{% else %}<div class="rs-passport rs-passport-empty" role="img" aria-label="No photograph on file"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg></div>{% endif %}{% endif %}
 </header>
@@ -57,7 +57,7 @@
   </div>
 </section>{% endif %}
 {% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
-  <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l" colspan="2">{{ g.label }}</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
+  <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l">{{ g.label }}</th><th>Rating</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
 {% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or rs.show_days_late or (rs.show_promotion and promotion_status)) %}<section class="rs-att">
   {% if rs.show_days_opened %}<div><span>Days School Opened</span><b>{{ info.days_school_opened if info.days_school_opened is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_present %}<div><span>Days Present</span><b>{{ info.days_present if info.days_present is not none else '—' }}</b></div>{% endif %}
@@ -75,8 +75,8 @@
 {% set show_grading_key = rs.show_grading_key and rs.grading_scale %}
 {% set show_domain_key = rs.show_domains and domain_groups %}
 {% if show_grading_key or show_domain_key %}<section class="rs-key">
-  {% if show_grading_key %}<div class="rs-key-row"><b>Grading Scale:</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</div>{% endif %}
-  {% if show_domain_key %}<div class="rs-key-row"><b>Domain Ratings Scale:</b> {{ domain_key }}</div>{% endif %}
+  {% if show_grading_key %}<div class="rs-key-row rs-key-grading"><b>Grading Scale</b> {% for g in rs.grading_scale %}<span>{{ g.grade }} = {{ '%g'|format(g.min_score) }}–{{ '%g'|format(g.max_score) }} ({{ g.remark }})</span>{% endfor %}</div>{% endif %}
+  {% if show_domain_key %}<div class="rs-key-row"><b>Domain Ratings Scale</b> {{ domain_key }}</div>{% endif %}
 </section>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
 </article>

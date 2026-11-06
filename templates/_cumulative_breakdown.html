@@ -8,9 +8,22 @@
    can never drift apart between the two views. Renders nothing when cumulative results are off
    for this school, or there's no term to show yet. #}
 {% if cumulative and cumulative.terms %}
-<section class="rs-cumulative">
+{# V100: fixed column widths computed from the term count, so the table is ALWAYS exactly the sheet width
+   (A4 portrait included) and the Remark column can never be pushed off the page. #}
+{% set per_term = 7 if cumulative.show_ca3 else 6 %}
+{% set n_terms = cumulative.terms|length %}
+{% set term_cols = n_terms * per_term %}
+{% set overall_w = 25.6 %}
+{% set col_w = [ [ (100 - overall_w - 10.5) / term_cols, 5.6 ]|min, 2.4 ]|max %}
+{% set subj_w = 100 - overall_w - term_cols * col_w %}
+<section class="rs-cumulative{% if n_terms >= 4 %} rs-cum-4{% endif %}{% if cumulative.show_ca3 %} rs-cum-ca3{% endif %}">
   <h3 class="rs-h">Cumulative / Annual Performance</h3>
-  <div class="rs-scroll"><table class="rs-table rs-cum-table">
+  <div class="rs-scroll rs-cum-scroll"><table class="rs-table rs-cum-table">
+    <colgroup>
+      <col style="width:{{ '%.2f'|format(subj_w) }}%">
+      {% for i in range(term_cols) %}<col style="width:{{ '%.2f'|format(col_w) }}%">{% endfor %}
+      <col style="width:4.8%"><col style="width:5.6%"><col style="width:3.8%"><col style="width:4.0%"><col style="width:7.4%">
+    </colgroup>
     <thead>
       <tr>
         <th class="l" rowspan="2">Subject</th>
@@ -34,7 +47,7 @@
         <td>{{ s.average }}</td>
         <td>{{ ordinal_text(s.position) if s.position is not none else '-' }}</td>
         <td>{{ s.grade }}</td>
-        <td class="l">{{ s.remark }}</td>
+        <td class="rs-rem">{{ s.remark }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -60,4 +73,5 @@
     </tfoot>
   </table></div>
 </section>
+<script src="{{ url_for('static', filename='js/result-fit.js') }}"></script>
 {% endif %}

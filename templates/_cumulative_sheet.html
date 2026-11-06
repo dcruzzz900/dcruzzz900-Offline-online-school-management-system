@@ -8,7 +8,7 @@
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
 <header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
-  <div class="rs-head-text"><h2>{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
+  {% set _n = (rs.school_name or '')|length %}<div class="rs-head-text"><h2 style="font-size:{{ 19 if _n <= 22 else 16 if _n <= 28 else 14 if _n <= 34 else 12.5 if _n <= 40 else 11 }}pt">{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
     <h1>Annual / Cumulative Result</h1>
     <p class="rs-term">{{ academic_session.name }}{% if selected_term %} &mdash; through {{ selected_term.name }}{% endif %}</p>
   </div>
