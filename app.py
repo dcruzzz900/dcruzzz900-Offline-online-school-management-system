@@ -82,7 +82,7 @@ def build_cumulative_result_pdf_html(data, academic_session, selected_term, rs):
     return build_cumulative_result_pdf(
         data, academic_session, school_name=school["name"] if school else None,
         student_full_name=student_full_name, font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=rs.get("accent") or "#1f3a5f",
+        accent_color=rs.get("accent") or "#0b2a6f", rs=rs,
     )
 
 
@@ -1255,7 +1255,7 @@ def inject_school_settings():
                 web_font_css=font["css"], web_font_google=font["google"],
                 school_timezone=school["timezone"] or "Africa/Lagos",
                 school_date_format=school["date_format"] or "dmy",
-                result_accent_color=school["result_accent_color"] or "#1f3a5f",
+                result_accent_color=school["result_accent_color"] or "#0b2a6f",
                 result_header_layout=school["result_header_layout"] or "logo-left",
                 theme_preset=school["theme_preset"] or "default",
                 dashboard_primary_color=school["dashboard_primary_color"] or "#1f6feb",
@@ -1269,7 +1269,7 @@ def inject_school_settings():
                 school_name_align="center",
                 cumulative_enabled=False, web_font_css=WEB_FONTS["system"]["css"], web_font_google=None,
                 school_timezone="Africa/Lagos", school_date_format="dmy",
-                result_accent_color="#1f3a5f", result_header_layout="logo-left",
+                result_accent_color="#0b2a6f", result_header_layout="logo-left",
                 theme_preset="default", dashboard_primary_color="#1f6feb",
                 dashboard_secondary_color="#0b3b75", dashboard_accent_color="#7c4dff",
                 dashboard_sidebar_style="dark", dashboard_header_style="solid",
@@ -4095,7 +4095,7 @@ def parent_result_pdf(student_id,term_id):
     if school and school["logo_filename"]:
         candidate=os.path.join(INSTANCE_DIR,school["logo_filename"])
         if os.path.exists(candidate): logo_path=candidate
-    conn.close(); buf=build_result_pdf(data,term,school_name=school["name"],logo_path=logo_path,student_full_name=student_full_name,font_choice=school["pdf_font"],accent_color=school["result_accent_color"] or "#1f3a5f",name_align=school["name_align"])
+    conn.close(); buf=build_result_pdf(data,term,school_name=school["name"],logo_path=logo_path,student_full_name=student_full_name,font_choice=school["pdf_font"],accent_color=school["result_accent_color"] or "#0b2a6f",name_align=school["name_align"])
     return pdf_response(buf,f"result_{child['admission_no']}_{term['name']}.pdf".replace(" ","_").replace("/","-"))
 
 @app.route("/parent/children/<int:student_id>/attendance")
@@ -6848,9 +6848,9 @@ def result_sheet_settings(conn, school_id):
         "school_name": g("name", ""), "tagline": (g("school_tagline") if cfg["show_motto"] else None), "logo": logo, "logo_path": logo_path,
         "template": cfg["template"], "title": cfg["title"] or "Terminal Report Sheet", "footer": cfg["footer_text"],
         "watermark": (cfg["watermark_text"] or g("name", "")) if cfg["show_watermark"] else None,
-        "contact": contact, "accent": cfg["accent_color"] or g("result_accent_color") or "#1f3a5f",
+        "contact": contact, "accent": cfg["accent_color"] or g("result_accent_color") or "#0b2a6f",
         "text_align": cfg["text_align"] if cfg["text_align"] in ("left", "center", "right") else "",
-        "secondary": cfg["secondary_color"] or "#c9a227", "header_layout": cfg["header_layout"], "signature_layout": cfg["signature_layout"],
+        "secondary": cfg["secondary_color"] or "#29a9e0", "header_layout": cfg["header_layout"], "signature_layout": cfg["signature_layout"],
         "pdf_font": g("pdf_font", "Helvetica"),
         "page_orientation": cfg["page_orientation"] if cfg["page_orientation"] in ("portrait", "landscape", "auto") else "portrait",
         "font_scale": cfg["font_scale"] if cfg["font_scale"] in FONT_SCALE_FACTORS else "normal",
@@ -7186,7 +7186,7 @@ def result_pdf(student_id):
         data, term, school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#0b2a6f",
         name_align=school["name_align"] if school else None,
         teacher_signature=teacher_signature, principal_signature=principal_signature,
     )
@@ -7721,7 +7721,7 @@ def class_results_pdf(class_id):
         data_list, term, school_name=school["name"] if school else None,
         logo_path=logo_path, student_full_name=student_full_name,
         font_choice=school["pdf_font"] if school else "Helvetica",
-        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#1f3a5f",
+        accent_color=school["result_accent_color"] if school and school["result_accent_color"] else "#0b2a6f",
         name_align=school["name_align"] if school else None,
     )
     fname = f"all_results_{class_row['name']}_{term['name']}.pdf".replace(" ", "_")

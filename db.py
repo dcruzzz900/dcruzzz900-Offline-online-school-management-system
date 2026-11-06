@@ -88,6 +88,13 @@ def table_sql(conn, table):
     return row["sql"] if row else ""
 
 
+# V100: every Affective / Psychomotor item on the Terminal Report Sheet sample, in the order the sample shows them.
+SAMPLE_AFFECTIVE_TRAITS = ["Emotional Stability", "Honesty", "Leadership", "Neatness", "Punctuality",
+                           "Relationship with Others", "Attitude to Work", "Cooperation"]
+SAMPLE_PSYCHOMOTOR_TRAITS = ["Club & Societies", "Handling of Tools", "Handwriting", "Sports/Games",
+                             "Drawing Skills", "Practical Skills", "Physical Coordination"]
+
+
 def migration_001_baseline(conn):
     with open(os.path.join(os.path.dirname(__file__), "schema.sql")) as f:
         conn.executescript(f.read())
@@ -1186,7 +1193,7 @@ def migration_034_result_theme(conn):
     """Per-school result-sheet visual theme: an accent colour and a header
     arrangement, on top of the existing font choice. Kept as plain columns
     (not JSON) so they stay simple to validate and to read from SQL."""
-    ensure_column(conn, "schools", "result_accent_color", "TEXT NOT NULL DEFAULT '#1f3a5f'")
+    ensure_column(conn, "schools", "result_accent_color", "TEXT NOT NULL DEFAULT '#0b2a6f'")
     ensure_column(conn, "schools", "result_header_layout", "TEXT NOT NULL DEFAULT 'logo-left'")
 
 
@@ -2019,12 +2026,12 @@ def seed_school_defaults(conn, school_id):
         "INSERT INTO grade_scale (school_id, grade, min_score, max_score, remark) VALUES (?,?,?,?,?)",
         [(school_id, *s) for s in scale],
     )
-    psychomotor = ["Handwriting", "Sports/Games", "Handling of Tools", "Club & Societies"]
-    affective = ["Punctuality", "Neatness", "Honesty", "Relationship with Others", "Leadership", "Emotional Stability"]
-    for t in psychomotor:
-        conn.execute("INSERT INTO skill_traits (school_id, name, category) VALUES (?,?, 'psychomotor')", (school_id, t))
-    for t in affective:
-        conn.execute("INSERT INTO skill_traits (school_id, name, category) VALUES (?,?, 'affective')", (school_id, t))
+    # V100: the full Affective / Psychomotor list from the Terminal Report Sheet sample, in sample order.
+    for i, t in enumerate(SAMPLE_AFFECTIVE_TRAITS, 1):
+        conn.execute("INSERT OR IGNORE INTO skill_traits (school_id, name, category) VALUES (?,?, 'affective')", (school_id, t))
+    for i, t in enumerate(SAMPLE_PSYCHOMOTOR_TRAITS, 1):
+        conn.execute("INSERT OR IGNORE INTO skill_traits (school_id, name, category) VALUES (?,?, 'psychomotor')", (school_id, t))
+    migration_073_v100_sample_domain_traits(conn)   # puts the new school's items in the sample's order
     conn.commit()
     ensure_school_v61_defaults(conn, school_id)
 
@@ -3111,7 +3118,7 @@ def migration_058_runtime_schema_repair(conn):
             ("dashboard_accent_color", "TEXT NOT NULL DEFAULT '#7c4dff'"),
             ("dashboard_sidebar_style", "TEXT NOT NULL DEFAULT 'dark'"),
             ("dashboard_header_style", "TEXT NOT NULL DEFAULT 'solid'"),
-            ("school_tagline", "TEXT"), ("result_accent_color", "TEXT DEFAULT '#1f3a5f'"),
+            ("school_tagline", "TEXT"), ("result_accent_color", "TEXT DEFAULT '#0b2a6f'"),
             ("result_header_layout", "TEXT DEFAULT 'logo-left'"), ("web_font", "TEXT DEFAULT 'system'"),
             ("pdf_font", "TEXT DEFAULT 'Helvetica'"), ("show_result_date", "INTEGER DEFAULT 1"),
             ("auto_teacher_comment", "INTEGER DEFAULT 0"), ("auto_principal_comment", "INTEGER DEFAULT 0"),
@@ -4056,6 +4063,57 @@ def migration_072_v99_days_late_toggle(conn):
 
 
 STEPS.append(("days_late_toggle_v99", migration_072_v99_days_late_toggle))
+
+
+def migration_073_v100_sample_domain_traits(conn):
+    """V100: the Terminal Report Sheet sample has 8 Affective and 7 Psychomotor items, but schools only
+    ever got 6 and 4. Adds every missing sample item to every existing school (as active, selectable
+    traits like all others -- they appear in Update Result Details and Domain settings), and, only for
+    a school whose items have never been re-ordered (all sort_order 0), puts the sample's order in
+    place. Never renames, deactivates or deletes anything a school already has; INSERT OR IGNORE
+    makes it safe to run repeatedly."""
+    cols = column_names(conn, "skill_traits")
+    for sch in conn.execute("SELECT id, COALESCE(NULLIF(tenant_id,''),CAST(id AS TEXT)) t FROM schools").fetchall():
+        for cat, names in (("affective", SAMPLE_AFFECTIVE_TRAITS), ("psychomotor", SAMPLE_PSYCHOMOTOR_TRAITS)):
+            existing = {r["name"].lower(): r for r in conn.execute(
+                "SELECT id, name, COALESCE(sort_order,0) so FROM skill_traits WHERE school_id=?", (sch["id"],)).fetchall()}
+            for name in names:
+                if name.lower() in existing:
+                    continue
+                if "tenant_id" in cols:
+                    conn.execute("INSERT OR IGNORE INTO skill_traits (school_id, tenant_id, name, category) VALUES (?,?,?,?)",
+                                 (sch["id"], sch["t"], name, cat))
+                else:
+                    conn.execute("INSERT OR IGNORE INTO skill_traits (school_id, name, category) VALUES (?,?,?)",
+                                 (sch["id"], name, cat))
+            if "sort_order" in cols:
+                rows = conn.execute("SELECT id, name, COALESCE(sort_order,0) so FROM skill_traits WHERE school_id=? AND category=?",
+                                    (sch["id"], cat)).fetchall()
+                if rows and all(r["so"] == 0 for r in rows):
+                    order = {n.lower(): i for i, n in enumerate(names, 1)}
+                    for r in rows:
+                        conn.execute("UPDATE skill_traits SET sort_order=? WHERE id=?",
+                                     (order.get(r["name"].lower(), 100), r["id"]))
+
+
+STEPS.append(("sample_domain_traits_v100", migration_073_v100_sample_domain_traits))
+
+
+def migration_074_v100_sample_colours(conn):
+    """V100: the result sheet now defaults to the Updated Terminal Report Sheet sample (navy + sky blue).
+    Schools still on the OLD built-in defaults (navy #1f3a5f / gold #c9a227) move to the new ones; a
+    colour a school picked for itself is never touched."""
+    if "result_accent_color" in column_names(conn, "schools"):
+        conn.execute("UPDATE schools SET result_accent_color='#0b2a6f' WHERE LOWER(result_accent_color)='#1f3a5f'")
+    if table_exists(conn, "result_display_settings"):
+        cols = column_names(conn, "result_display_settings")
+        if "accent_color" in cols:
+            conn.execute("UPDATE result_display_settings SET accent_color='#0b2a6f' WHERE LOWER(accent_color)='#1f3a5f'")
+        if "secondary_color" in cols:
+            conn.execute("UPDATE result_display_settings SET secondary_color='#29a9e0' WHERE LOWER(secondary_color)='#c9a227'")
+
+
+STEPS.append(("sample_colours_v100", migration_074_v100_sample_colours))
 
 
 def term_sequence_next(conn, term):
