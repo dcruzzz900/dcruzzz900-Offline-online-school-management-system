@@ -15,8 +15,8 @@
 <label>Result title<input name="title" maxlength="80" value="{{ cfg.title or '' }}" placeholder="Terminal Report Sheet"></label>
 <label>Footer text<input name="footer_text" maxlength="300" value="{{ cfg.footer_text or '' }}"></label>
 <label>Watermark text<input name="watermark_text" maxlength="40" value="{{ cfg.watermark_text or '' }}" placeholder="Defaults to the school name"></label>
-<label>Main colour<input type="color" name="accent_color" value="{{ cfg.accent_color or '#1f3a5f' }}"></label>
-<label>Second colour<input type="color" name="secondary_color" value="{{ cfg.secondary_color or '#c9a227' }}"></label>
+<label>Main colour<input type="color" name="accent_color" value="{{ cfg.accent_color or '#0b2a6f' }}"></label>
+<label>Second colour<input type="color" name="secondary_color" value="{{ cfg.secondary_color or '#29a9e0' }}"></label>
 <label>Logo position<select name="header_layout">{% for v,l in header_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.header_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
 <label>Header text alignment<select name="text_align">{% for v,l in text_aligns %}<option value="{{ v }}" {{ 'selected' if cfg.text_align == v }}>{{ l }}</option>{% endfor %}</select></label>
 <label>Signature placement<select name="signature_layout">{% for v,l in signature_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.signature_layout == v }}>{{ l }}</option>{% endfor %}</select></label>

@@ -6,7 +6,7 @@
 .rs-overflow-warning{display:none;sticky:0;background:#fff3cd;color:#664d03;border-bottom:1px solid #ffe69c;padding:10px 16px;font:600 13px/1.4 Arial;text-align:center}.rs-overflow-warning.is-shown{display:block}
 </style>
 <!-- V85: orientation, incl. 'auto' (decided below); V91: paper size, see rsPageSize script. -->
-<style id="rsPageSize">@page{size:{{ (rs.page_h_mm if rs.page_orientation == 'landscape' else rs.page_w_mm) }}mm {{ (rs.page_w_mm if rs.page_orientation == 'landscape' else rs.page_h_mm) }}mm;margin:0}</style>
+<style id="rsPageSize">@page{size:{{ (rs.page_h_mm if (rs.page_orientation == 'landscape' and not (cumulative and cumulative.terms)) else rs.page_w_mm) }}mm {{ (rs.page_w_mm if (rs.page_orientation == 'landscape' and not (cumulative and cumulative.terms)) else rs.page_h_mm) }}mm;margin:0}</style>
 </head>
 <body class="rs-print-page">
 <div class="rs-overflow-warning no-print" id="rsOverflowWarning">This result doesn't fit legibly on one page at the school's chosen font size, so it will print onto a second page instead of being shrunk further. To get it back onto one page: shorten a comment, turn off an optional section in Result Display Settings, or reduce the font size below.</div>
@@ -34,8 +34,8 @@
 // needs the least shrinking to stay legible on one page, regardless of the school's saved "Page
 // orientation" setting -- a genuine per-term sheet (no cumulative table on the page) still honors
 // that setting exactly as before.
-var RS_ORIENTATION = {{ ('auto' if (cumulative and cumulative.terms) else (rs.page_orientation or 'portrait'))|tojson }};
-var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape')|tojson }};
+var RS_ORIENTATION = {{ ('portrait' if (cumulative and cumulative.terms) else (rs.page_orientation or 'portrait'))|tojson }};
+var RS_LANDSCAPE = {{ (rs.page_orientation == 'landscape' and not (cumulative and cumulative.terms))|tojson }};
 var RS_FONT_SCALE = {{ (rs.font_scale_factor or 1.0)|tojson }};
 var RS_FIT_TO_PAGE = {{ (rs.fit_to_page if rs.fit_to_page is defined else true)|tojson }};
 // V91: the school's configured PORTRAIT page size in mm (width <= height) -- A4's 210x297 by
@@ -116,10 +116,10 @@ var warn=document.getElementById('rsOverflowWarning'),stillOverflows=false;
 if(fitOn&&overflow){
   var z=Math.max(FIT_FLOOR,(max/h)*0.965);
   stillOverflows=(h*z)>max+1;  // even at the legibility floor, it's still taller than one page
-  s.style.zoom=z;
+  s.style.zoom=z;s.style.maxWidth='none';s.style.width=(pageWmm/z)+'mm';
   if(!stillOverflows){s.style.minHeight=(max/z-1)+'px';}  // fits: pad to exactly one page
   // else: leave it at the floor size and let it grow past one page naturally -- never shrink further.
-}else{s.style.zoom=base;if(!overflow||fitOn){s.style.minHeight=(max/base-1)+'px';}}
+}else{s.style.zoom=base;s.style.maxWidth='none';s.style.width=(pageWmm/base)+'mm';if(!overflow||fitOn){s.style.minHeight=(max/base-1)+'px';}}
 if(warn)warn.classList.toggle('is-shown',stillOverflows);
 s.style.height='';}
 function updateControls(){
