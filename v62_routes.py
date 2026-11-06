@@ -75,8 +75,9 @@ def register_v62_routes(app, h):
         info = {"days_school_opened": 60, "days_present": 56, "days_absent": 4, "days_late": 2, "teacher_comment": "A focused and well-behaved pupil. Keep it up.",
                 "principal_comment": "An excellent result. Congratulations.", "teacher_signed_date": today.isoformat(), "principal_signed_date": today.isoformat(),
                 "promotion_status": "Promoted to the next class", "attendance_from": "register"}
-        domain_groups = [{"label": "Affective Domain", "items": [("Punctuality", 5), ("Neatness", 4), ("Honesty", 5)]},
-                         {"label": "Psychomotor Domain", "items": [("Handwriting", 4), ("Sports", 5)]}]
+        from db import SAMPLE_AFFECTIVE_TRAITS, SAMPLE_PSYCHOMOTOR_TRAITS   # V100: the preview shows every sample item
+        domain_groups = [{"label": "Affective Domain", "items": [(n, (5, 4, 4, 3, 3, 3, 4, 5)[i % 8]) for i, n in enumerate(SAMPLE_AFFECTIVE_TRAITS)]},
+                         {"label": "Psychomotor Domain", "items": [(n, (2, 3, 3, 3, 4, 3, 4)[i % 7]) for i, n in enumerate(SAMPLE_PSYCHOMOTOR_TRAITS)]}]
         student = {"first_name": "Sample", "last_name": "Student", "other_names": "", "admission_no": "ADM/001", "status": "Active"}
         term = {"name": "First Term", "session_name": "2025/2026"}
         rs = dict(cfg_rs)
@@ -147,9 +148,9 @@ def register_v62_routes(app, h):
                 tmpl = RESULT_TEMPLATES[0][0]
                 prim, sec = (f.get("accent_color") or "").strip(), (f.get("secondary_color") or "").strip()
                 if prim and not COLOR_RE.match(prim):
-                    errors["accent_color"] = "Use a colour like #1f3a5f."
+                    errors["accent_color"] = "Use a colour like #0b2a6f."
                 if sec and not COLOR_RE.match(sec):
-                    errors["secondary_color"] = "Use a colour like #c9a227."
+                    errors["secondary_color"] = "Use a colour like #29a9e0."
                 title = pc.clean(f.get("title"))[:80]
                 footer = pc.clean_multiline(f.get("footer_text"))[:300]
                 wm = pc.clean(f.get("watermark_text"))[:40]

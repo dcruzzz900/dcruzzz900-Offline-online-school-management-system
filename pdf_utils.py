@@ -153,281 +153,43 @@ def _tint(color, amount):
     return colors.Color(1 - (1 - color.red) * amount, 1 - (1 - color.green) * amount, 1 - (1 - color.blue) * amount)
 
 
-def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#1f3a5f",
+def _result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color="#0b2a6f",
                       name_align=None, teacher_signature=None, principal_signature=None):
-    """One student's terminal result as flowables. Mirrors templates/_result_sheet.html's per-term
-    state (V97/V98): there is now exactly one design, so (unlike the old per-style branching this
-    function used to have) nothing here is selected by a "template" choice any more -- the same
-    Result Display Settings (data["rs"]) decide every section, so preview, print and this PDF
-    fallback cannot disagree, and this fallback's own design never drifts back out of sync with it."""
-    rs = data.get("rs") or {}
-    info = data.get("info") or {}
-    student, class_row = data["student"], data["class_row"]
-    name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
-    accent = _hex(rs.get("accent") or accent_color, "#1f3a5f")
+    """V100: delegates to pdf_sheet.py, which draws the single "Updated Terminal Report Sheet" design --
+    the same sections, order and colours as templates/_result_sheet.html + result-sheet.css, including the
+    Cumulative / Annual Performance table -- so a downloaded PDF matches the print view even on hosts
+    where the Chromium-based path cannot run. Returns the page's flowables (already shrunk to one page)."""
+    import pdf_sheet
     regular, bold = styles["Normal"].fontName, styles["Heading1"].fontName
-    head_align = TA_CENTER
-    base = 9
-    pad = 4
-    small = ParagraphStyle("rsSmall", parent=styles["Normal"], fontSize=7.5, textColor=colors.HexColor("#444444"))
-    normal = ParagraphStyle("rsNormal", parent=styles["Normal"], fontSize=base, leading=base + 2)
-    h3 = ParagraphStyle("rsH3", parent=styles["Heading3"], fontSize=10.5, textColor=accent, spaceBefore=4, spaceAfter=2)
-    school_style = ParagraphStyle("rsSchool", parent=styles["Heading1"], fontSize=16, textColor=accent, alignment=head_align, spaceAfter=0)
-    title_style = ParagraphStyle("rsTitle", parent=styles["Heading2"], fontSize=12, alignment=head_align, textColor=colors.black, spaceAfter=0)
-    sub_style = ParagraphStyle("rsSub", parent=styles["Normal"], fontSize=8.5, alignment=head_align, textColor=colors.HexColor("#444444"))
-    elements = []
-
-    # ---- header: logo (only if enabled AND uploaded) | school text | passport (blank frame if none) ----------------
-    logo = _img_flow(rs.get("logo_path"), 1.9 * cm, 3 * cm) if rs.get("show_logo") and rs.get("header_layout") != "no-logo" else None
-    text_cell = [Paragraph((school_name or rs.get("school_name") or "").replace("&", "&amp;"), school_style)]
-    if rs.get("tagline"):
-        text_cell.append(Paragraph(str(rs["tagline"]).replace("&", "&amp;"), sub_style))
-    if rs.get("contact"):
-        text_cell.append(Paragraph(rs["contact"].replace("&", "&amp;"), sub_style))
-    text_cell.append(Paragraph((rs.get("title") or "Terminal Report Sheet").upper().replace("&", "&amp;"), title_style))
-    ses = [x for x in ((term["session_name"] if rs.get("show_session", True) else None), (term["name"] if rs.get("show_term", True) else None)) if x]
-    if ses:
-        text_cell.append(Paragraph(" &mdash; ".join(ses), sub_style))
-    passport_cell = ""
-    if rs.get("show_passport"):
-        pimg = _img_flow(rs.get("passport_path"), 3.0 * cm, 2.4 * cm)
-        passport_cell = pimg if pimg is not None else ""
-    left = logo if (logo is not None and rs.get("header_layout") in (None, "logo-left", "logo-center")) else ""
-    right = passport_cell
-    if logo is not None and rs.get("header_layout") == "logo-right":
-        left, right = right, logo
-        if not rs.get("show_passport"):
-            left = ""
-    head = Table([[left, text_cell, right]], colWidths=[3.2 * cm, 11.4 * cm, 3.2 * cm])
-    hs = [("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (0, 0), "LEFT"), ("ALIGN", (2, 0), (2, 0), "RIGHT"),
-          ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]
-    if rs.get("show_passport"):
-        hs += [("BOX", (2, 0), (2, 0), 0.8, colors.grey)]          # the frame stays even when empty: blank, never an avatar
-    hs += [("LINEBELOW", (0, 0), (-1, -1), 2.2, accent), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]
-    head.setStyle(TableStyle(hs))
-    elements += [head, Spacer(1, 0.3 * cm)]
-
-    # ---- identity block -- mirrors _result_sheet.html's rs-id strip exactly: Name, Adm./Reg. No.,
-    # Class/Arm, Academic Session, Term, Class Position (as "pos / class_size", not an ordinal) --
-    # Total Score/Average/No. of Subjects moved out of here and into the Academic Performance
-    # Summary section below, same as the HTML design. ------------------------------------------
-    cells = [("Name:", name)]
-    if rs.get("show_admission_no", True):
-        cells.append(("Adm./Reg. No.:", student["admission_no"]))
-    if rs.get("show_class", True):
-        cells.append(("Class / Arm:", class_row["name"]))
-    if rs.get("show_session", True):
-        cells.append(("Academic Session:", term["session_name"]))
-    if rs.get("show_term", True):
-        cells.append(("Term:", term["name"]))
-    if rs.get("show_overall_position", True):
-        pos = data.get("position")
-        pos_str = str(pos) if pos is not None else "-"
-        if data.get("class_size"):
-            pos_str += f" / {data['class_size']}"
-        cells.append(("Class Position:", pos_str))
-    rows = []
-    for i in range(0, len(cells), 2):
-        pair = cells[i:i + 2]
-        r = []
-        for lab, val in pair:
-            r += [lab, Paragraph(str(val).replace("&", "&amp;"), normal)]
-        while len(r) < 4:
-            r += ["", ""]
-        rows.append(r)
-    idt = Table(rows, colWidths=[3.2 * cm, 5.6 * cm, 3.4 * cm, 5.6 * cm])
-    id_style = [("FONTNAME", (0, 0), (0, -1), bold), ("FONTNAME", (2, 0), (2, -1), bold), ("FONTSIZE", (0, 0), (-1, -1), base),
-                ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("BACKGROUND", (0, 0), (-1, -1), colors.white), ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc"))]
-    idt.setStyle(TableStyle(id_style))
-    elements += [idt, Spacer(1, 0.25 * cm)]
-
-    # ---- subjects -- Avg. column + TOTAL/AVERAGE footer rows, same as _result_sheet.html's table:
-    # Avg. is each subject's total divided by however many score components are in use (3, or 4
-    # once CA3 is on), and the footer only sums subjects that actually have a numeric total. -------
-    show_ca3 = data.get("show_ca3")
-    divisor = 4 if show_ca3 else 3
-    head_row = ["Subject"]
-    if rs.get("show_score", True):
-        head_row += ["CA1", "CA2"] + (["CA3"] if show_ca3 else []) + ["Exam", "Total", "Avg."]
-    if rs.get("show_subject_position"):
-        head_row.append("Pos.")
-    if rs.get("show_grade", True):
-        head_row.append("Grade")
-    with_remarks = rs.get("show_remarks", True)
-    if with_remarks:
-        head_row.append("Remark")
-    body = [head_row]
-    written = []
-    for s in data["subjects"]:
-        total_is_num = isinstance(s.get("total"), (int, float))
-        if total_is_num:
-            written.append(s)
-        r = [Paragraph(str(s["name"]).replace("&", "&amp;"), normal)]
-        if rs.get("show_score", True):
-            avg = round(s["total"] / divisor, 1) if total_is_num else "-"
-            r += [str(s["ca1"]), str(s["ca2"])] + ([str(s.get("ca3", "-"))] if show_ca3 else []) + [str(s["exam"]), str(s["total"]), str(avg)]
-        if rs.get("show_subject_position"):
-            r.append(str(s.get("position_text", "-")))
-        if rs.get("show_grade", True):
-            r.append(str(s["grade"]))
-        if with_remarks:
-            r.append(str(s["remark"]))
-        body.append(r)
-    footer_rows = 0
-    if rs.get("show_score", True) and written:
-        def _col(key):
-            return sum(w[key] for w in written)
-        def _avg(key):
-            return round(_col(key) / len(written), 1)
-        tot_row = ["TOTAL"]
-        tot_row += [str(_col("ca1")), str(_col("ca2"))] + ([str(_col("ca3"))] if show_ca3 else []) + [str(_col("exam")), str(data["total"]), "-"]
-        avg_row = ["AVERAGE"]
-        avg_row += [str(_avg("ca1")), str(_avg("ca2"))] + ([str(_avg("ca3"))] if show_ca3 else []) + [str(_avg("exam")), str(data["average"]), str(round(data["average"] / divisor, 1))]
-        for extra_row in (tot_row, avg_row):
-            if rs.get("show_subject_position"):
-                extra_row.append("-")
-            if rs.get("show_grade", True):
-                extra_row.append("-")
-            if with_remarks:
-                extra_row.append("-")
-            body.append(extra_row)
-        footer_rows = 2
-    n_cols = len(head_row)
-    name_w = 4.6 * cm
-    rem_w = 2.6 * cm if with_remarks else 0
-    other = max(n_cols - 1 - (1 if with_remarks else 0), 1)
-    num_w = max(1.0 * cm, (17.8 * cm - name_w - rem_w) / other)
-    widths = [name_w] + [num_w] * other + ([rem_w] if with_remarks else [])
-    subj = Table(body, colWidths=widths, repeatRows=1)
-    ts = [("BACKGROUND", (0, 0), (-1, 0), accent), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), bold),
-          ("FONTNAME", (0, 1), (-1, -1), regular), ("FONTSIZE", (0, 0), (-1, -1), base), ("ALIGN", (1, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-          ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#999999")),
-          ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1),
-          ("ROWBACKGROUNDS", (0, 1), (-1, (len(body) - footer_rows - 1) if footer_rows else -1), [colors.white, colors.HexColor("#f5f6f8")])]
-    if with_remarks:
-        ts.append(("ALIGN", (-1, 1), (-1, -1), "LEFT"))
-    if footer_rows:
-        ts += [("FONTNAME", (0, -footer_rows), (-1, -1), bold), ("BACKGROUND", (0, -footer_rows), (-1, -1), colors.HexColor("#eef1f6"))]
-    subj.setStyle(TableStyle(ts))
-    elements += [Paragraph("Academic Performance", h3), subj]
-
-    # ---- Academic Performance Summary -- the new 6-up strip _result_sheet.html adds under the
-    # table: Total Subjects, Total Score, Average Score, Percentage, Grade, Remark. ----------------
-    total_obtainable = data.get("total_obtainable")
-    pct = round(data["total"] / total_obtainable * 100, 1) if total_obtainable else 0
-    summary_cells = [
-        ("Total Subjects", str(data.get("subjects_written", "-"))),
-        ("Total Score", str(data["total"])),
-        ("Average Score", str(data["average"])),
-        ("Percentage", f"{pct}%"),
-        ("Grade", str(data.get("overall_grade", "-"))),
-        ("Remark", str(data.get("overall_remark", "-"))),
-    ]
-    sum_rows = [[Paragraph(f"<font size=7 color='#666666'>{lab}</font><br/><b>{val}</b>", normal) for lab, val in summary_cells[i:i + 3]] for i in range(0, len(summary_cells), 3)]
-    sumt = Table(sum_rows, colWidths=[17.8 * cm / 3] * 3)
-    sumt.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                               ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("LEFTPADDING", (0, 0), (-1, -1), 8)]))
-    elements += [Paragraph("Academic Performance Summary", h3), sumt]
-
-    # ---- educational domains ------------------------------------------------------------------------------------------------
-    groups = data.get("domain_groups") if rs.get("show_domains", True) else None
-    if groups:
-        elements.append(Paragraph("Domain Ratings", h3))
-        tables = []
-        for g in groups:
-            _L = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}
-            rows_ = [[g["label"], "Rating"]] + [[n, f"{v} – {_L.get(int(v), '')}" if str(v).isdigit() else str(v)] for n, v in g["items"]]
-            t = Table(rows_, colWidths=[4.8 * cm, 2.4 * cm])
-            t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), accent), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("FONTNAME", (0, 0), (-1, 0), bold),
-                                   ("FONTNAME", (0, 1), (-1, -1), regular), ("FONTSIZE", (0, 0), (-1, -1), base - 0.5), ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-                                   ("ALIGN", (1, 0), (1, -1), "CENTER"), ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5)]))
-            tables.append(t)
-        for i in range(0, len(tables), 2):
-            pair = tables[i:i + 2]
-            row = Table([pair + [""] * (2 - len(pair))], colWidths=[8.9 * cm, 8.9 * cm])
-            row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
-            elements += [row, Spacer(1, 0.15 * cm)]
-
-    # ---- attendance --------------------------------------------------------------------------------------------------------------
-    promo = data.get("promotion_status") if rs.get("show_promotion", True) else None
-    att_cols = []
-    if rs.get("show_attendance", True):
-        if rs.get("show_days_opened", True):
-            att_cols.append(("Days School Opened", info.get("days_school_opened")))
-        if rs.get("show_days_present", True):
-            att_cols.append(("Days Present", info.get("days_present")))
-        if rs.get("show_days_absent", True):
-            att_cols.append(("Days Absent", info.get("days_absent")))
-        if rs.get("show_days_late", True):
-            att_cols.append(("Days Late", info.get("days_late")))
-    if promo:
-        att_cols.append(("Promotion / Status", promo))
-    if att_cols:
-        att = Table([[c[0] for c in att_cols], [("-" if c[1] is None else str(c[1])) for c in att_cols]])
-        att.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.grey), ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("FONTNAME", (0, 0), (-1, 0), bold),
-                                 ("FONTNAME", (0, 1), (-1, -1), regular), ("FONTSIZE", (0, 0), (-1, -1), base), ("TOPPADDING", (0, 0), (-1, -1), pad - 1), ("BOTTOMPADDING", (0, 0), (-1, -1), pad - 1)]))
-        elements += [Spacer(1, 0.25 * cm), att]
-
-    # ---- comments: separate boxes, separate values --------------------------------------------------------------------------------
-    def comment_box(label, text):
-        t = Table([[Paragraph(f"<b>{label}</b>", normal)], [Paragraph((text or "").replace("&", "&amp;").replace("\n", "<br/>") or "&nbsp;", normal)]], colWidths=[17.6 * cm],
-                  rowHeights=[None, 1.3 * cm])
-        t.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#bbbbbb")), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
-        return t
-    if rs.get("show_teacher_comment", True) or rs.get("show_principal_comment", True):
-        elements.append(Spacer(1, 0.25 * cm))
-        if rs.get("show_teacher_comment", True):
-            elements += [comment_box("Class/Form Teacher's Comment", info.get("teacher_comment")), Spacer(1, 0.15 * cm)]
-        if rs.get("show_principal_comment", True):
-            elements += [comment_box("Principal's Comment", info.get("principal_comment")), Spacer(1, 0.15 * cm)]
-
-    # ---- signatures + sign dates ------------------------------------------------------------------------------------------------------
-    def sign_cell(role, sig, name_text, show_sig, show_date, date_iso):
-        cell = []
-        if show_sig:
-            simg = _img_flow(sig["path"], 1.0 * cm, 4 * cm) if sig and sig.get("path") else None
-            cell.append(simg if simg is not None else Spacer(1, 1.0 * cm))
-            cell.append(Paragraph(f"{role}{(': ' + name_text) if name_text else ''}", ParagraphStyle("sg", parent=normal, alignment=TA_CENTER, borderPadding=0)))
-        if show_date:
-            cell.append(Paragraph(f"Date: {format_dmy(date_iso) if date_iso else ''}", ParagraphStyle("sd", parent=normal, alignment=TA_CENTER)))
-        return cell
-    tcell = sign_cell("Class Teacher", teacher_signature, data.get("teacher_name"), rs.get("show_teacher_signature", True), rs.get("show_teacher_sign_date", True), info.get("teacher_signed_date")) \
-        if (rs.get("show_teacher_signature", True) or rs.get("show_teacher_sign_date", True)) else ""
-    pcell = sign_cell("Principal", principal_signature, data.get("principal_name"), rs.get("show_principal_signature", True), rs.get("show_principal_sign_date", True), info.get("principal_signed_date")) \
-        if (rs.get("show_principal_signature", True) or rs.get("show_principal_sign_date", True)) else ""
-    if tcell or pcell:
-        sg = Table([[tcell, pcell]], colWidths=[8.8 * cm, 8.8 * cm])
-        sg.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("LINEABOVE", (0, 0), (0, 0), 0, colors.white)]))
-        elements += [Spacer(1, 0.2 * cm), sg]
-
-    scale = rs.get("grading_scale") or []
-    if scale and rs.get("show_grading_key", True):
-        key = "; ".join(f"{g['grade']} = {g['min_score']:g}-{g['max_score']:g} ({g['remark']})" for g in scale)
-        elements += [Spacer(1, 0.2 * cm), Paragraph(f"<b>Grading Scale:</b> {key}", small)]
-    domain_key = data.get("domain_key")
-    if groups and rs.get("show_domains", True) and domain_key:
-        elements += [Spacer(1, 0.1 * cm), Paragraph(f"<b>Domain Ratings Scale:</b> {domain_key}", small)]
-    if rs.get("footer"):
-        elements += [Spacer(1, 0.15 * cm), Paragraph(str(rs["footer"]).replace("&", "&amp;"), small)]
-    # No "Issued <date>" line exists anywhere: a date appears only as the explicit, saved Result Date above.
-    return elements
+    els, pal, wm = pdf_sheet.result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color=accent_color,
+                                              teacher_signature=teacher_signature, principal_signature=principal_signature,
+                                              regular=regular, bold=bold)
+    return pdf_sheet.one_page(els, pal, wm, bold)
 
 
 def _one_page(elements, doc):
-    """Shrink the sheet (never cut it) so one result is exactly one A4 page."""
+    """Result sheets are already wrapped into one-page frames by pdf_sheet; anything else is shrunk, never cut."""
     from reportlab.platypus import KeepInFrame
+    import pdf_sheet
+    if len(elements) == 1 and isinstance(elements[0], pdf_sheet.SheetFrame):
+        return elements
     return [KeepInFrame(doc.width, doc.height, elements, mode="shrink")]
 
 
+def _sheet_doc(buf):
+    import pdf_sheet
+    return SimpleDocTemplate(buf, pagesize=A4, leftMargin=pdf_sheet.MARGIN_X, rightMargin=pdf_sheet.MARGIN_X,
+                             topMargin=pdf_sheet.MARGIN_Y, bottomMargin=pdf_sheet.MARGIN_Y)
+
+
 def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
-                      accent_color="#1f3a5f", name_align=None, teacher_signature=None, principal_signature=None):
+                      accent_color="#0b2a6f", name_align=None, teacher_signature=None, principal_signature=None):
     if teacher_signature is None and data.get("teacher_signature_path"):
         teacher_signature = {"path": data.get("teacher_signature_path"), "name": data.get("teacher_name")}
     if principal_signature is None and data.get("principal_signature_path"):
         principal_signature = {"path": data.get("principal_signature_path"), "name": data.get("principal_name")}
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    doc = _sheet_doc(buf)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
     elements = _result_elements(data, term, school_name, logo_path, student_full_name, styles,
@@ -439,11 +201,11 @@ def build_result_pdf(data, term, school_name=None, logo_path=None, student_full_
 
 
 def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
-                             accent_color="#1f3a5f", name_align=None):
+                             accent_color="#0b2a6f", name_align=None):
     """One combined, printable PDF containing every student's terminal
     result in a class, each starting on its own page."""
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    doc = _sheet_doc(buf)
     styles = getSampleStyleSheet()
     _apply_pdf_font(styles, font_choice)
     elements = []
@@ -460,71 +222,18 @@ def build_class_results_pdf(data_list, term, school_name=None, logo_path=None, s
 
 
 def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None, student_full_name=None, font_choice="Helvetica",
-                                 accent_color="#1f3a5f", name_align=None):
-    """Annual/Cumulative Result: one column per term plus a cumulative
-    average/grade per subject, for the whole session rather than one term."""
+                                 accent_color="#0b2a6f", name_align=None, rs=None):
+    """Annual / Cumulative Result fallback (V100): the same Cumulative / Annual Performance table and
+    sheet design as the print view -- every term's CA1/CA2/Exam/Total/Avg./Pos. plus the Overall
+    Cumulative group, with fixed column widths so Remark is never cut off."""
+    import pdf_sheet
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    doc = _sheet_doc(buf)
     styles = getSampleStyleSheet()
     regular, bold = _apply_pdf_font(styles, font_choice)
-    section_style = ParagraphStyle("section", parent=styles["Heading3"], textColor=colors.HexColor(accent_color))
-
-    elements = _header_elements(
-        school_name, logo_path, "ANNUAL / CUMULATIVE RESULT", session["name"], styles,
-        accent_color=accent_color, name_align=name_align,
-    )
-
-    student = data["student"]
-    class_row = data["class_row"]
-    name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
-
-    info_table = Table([
-        ["Name:", name, "Adm./Reg. No.:", student["admission_no"]],
-        ["Class / Arm:", class_row["name"], "Category:" if class_row["category"] else "", class_row["category"] or ""],
-        ["Cumulative Average:", str(data["average"]), "Grade:", str(data["grade"])],
-        ["Position:", f"{data['position']} of {data['class_size']}", "", ""],
-    ], colWidths=[3.5 * cm, 5 * cm, 3.5 * cm, 5 * cm])
-    info_table.setStyle(TableStyle([
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("FONTNAME", (0, 0), (-1, -1), regular),
-        ("FONTNAME", (0, 0), (0, -1), bold),
-        ("FONTNAME", (2, 0), (2, -1), bold),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 0.5 * cm))
-
-    elements.append(Paragraph("Academic Performance Across the Session", section_style))
-    term_names = [t["name"] for t in data["terms"]]
-    subj_header = ["Subject"] + term_names + ["Cumulative Avg", "Grade"]
-    subj_data = [subj_header]
-    for s in data["subjects"]:
-        row = [s["name"]]
-        for v in s["term_values"]:
-            row.append(str(v) if v is not None else "-")
-        row.append(str(s["average"]))
-        row.append(str(s["grade"]))
-        subj_data.append(row)
-    col_widths = [5 * cm] + [2.2 * cm] * len(term_names) + [2.8 * cm, 2 * cm]
-    subj_table = Table(subj_data, repeatRows=1, colWidths=col_widths)
-    subj_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(accent_color)),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, -1), regular),
-        ("FONTNAME", (0, 0), (-1, 0), bold),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
-    ]))
-    elements.append(subj_table)
-    elements.append(Spacer(1, 0.3 * cm))
-    elements.append(Paragraph(
-        "Cumulative Average is the mean of the totals from every term above that has a score "
-        "recorded for that subject.", styles["Normal"],
-    ))
-
-    doc.build(elements)
+    els, pal, wm = pdf_sheet.cumulative_page_elements(data, session, school_name, logo_path, student_full_name, rs or {},
+                                                       accent_color=accent_color, regular=regular, bold=bold)
+    doc.build(pdf_sheet.one_page(els, pal, wm, bold))
     buf.seek(0)
     return buf
 
