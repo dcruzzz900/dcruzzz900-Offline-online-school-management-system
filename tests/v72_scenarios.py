@@ -131,7 +131,7 @@ css_path = os.path.join(ROOT, "static", "css", "result-sheet.css")
 check("the old per-style sample stylesheet was removed", not os.path.exists(os.path.join(ROOT, "static", "css", "result-samples.css")))
 css = open(css_path, encoding="utf-8").read()
 check("the passport frame still has its no-crop, centred rules (now on the one fixed design)",
-      ".rs-passport.has-photo{border:1.5px solid var(--rs-line)" in css and "object-fit:contain" in css, css[:400])
+      ".rs-passport.has-photo{border:0" in css and "object-fit:cover" in css, css[:400])
 s3 = sheet()
 check("the fixed design still renders with its passport and identity section intact",
       'class="rs-passport' in s3 and 'class="rs-id"' in s3)

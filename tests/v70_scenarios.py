@@ -132,7 +132,7 @@ check("the result editor's rating section is titled 'Domain Ratings'", "Domain R
 # 2) On the result sheet itself (the one fixed design), the heading/key never says "Educational Domains".
 # V97: the 16-style picker is gone -- RESULT_TEMPLATES now has exactly one entry.
 ALL_TEMPLATES = [t[0] for t in RESULT_TEMPLATES]
-check("only the one fixed design remains", ALL_TEMPLATES == ["professional_classic"], ALL_TEMPLATES)
+check("V101: six designs are offered, classic first", len(ALL_TEMPLATES) == 6 and ALL_TEMPLATES[0] == "professional_classic", ALL_TEMPLATES)
 s = sheet()
 check("result sheet never shows the old 'Educational Domains' name", "Educational Domains" not in s)
 

@@ -330,7 +330,9 @@ post(ADMIN, "/result/1/extra", {"term_id": "1", f"trait_{tid_}": "6", "attendanc
 check("a rating outside 1-5 is not saved", one("SELECT COUNT(*) FROM student_skill_ratings WHERE student_id=1 AND trait_id=?", (tid_,)) == 0)
 post(ADMIN, "/result/1/extra", {"term_id": "1", f"trait_{tid_}": "4", "attendance_source": "auto"}, "/result/1")
 check("a valid rating is saved", one("SELECT rating FROM student_skill_ratings WHERE student_id=1 AND trait_id=?", (tid_,)) == 4)
-check("the entry dropdown shows numbers with meanings", "4 – Very Good" in html(ADMIN.get("/result/1?term_id=1")) and "5 – Excellent" in html(ADMIN.get("/result/1?term_id=1")))
+# V101: ratings are entered in a tick-box table (1-5 columns headed with their meanings), not a dropdown
+_pg = html(ADMIN.get("/result/1?term_id=1"))
+check("the rating table shows numbers with meanings", 'class="rt"' in _pg and "Very Good" in _pg and "Excellent" in _pg and '<select name="trait_' not in _pg)
 W.publish(A, 1)
 s6 = sheet(); check("the sheet shows the rating with its meaning and a key", "4" in s6 and "Very Good" in s6 and "1 = Poor" in s6 and "5 = Excellent" in s6)
 check("the PDF shows the same meanings", "Very Good" in text_of(ADMIN.get("/result/1/pdf?term_id=1").data))
@@ -342,15 +344,17 @@ check("no photo -> a fallback avatar, the sheet still renders", "rs-passport-emp
 buf = io.BytesIO(); Image.new("RGB", (300, 100), (120, 40, 40)).save(buf, "JPEG"); 
 run("UPDATE students SET photo_filename=NULL WHERE id=1")
 # V100: the sample shows the photo inside a thin pale-blue frame, so the frame is intentional now; the photo itself is still never cropped/stretched
-css_has = "object-fit:contain" in css_ and ".rs-passport.has-photo{border:1.5px solid var(--rs-line)" in css_
-check("a photo fits inside the frame without cropping or an extra border (CSS)", css_has)
+# V101: the photo now FILLS the frame (cover, top-centred) and the frame has no border line
+css_has = "object-fit:cover" in css_ and ".rs-passport.has-photo{border:0" in css_
+check("a photo fills the frame with no border line (CSS)", css_has)
 
 # ======================================================== 12. V97: the one fixed result-sheet design
 # The 16-style picker (ten built-in "structurally different" layouts plus six sample-inspired
 # ones) was removed per Austin's explicit request; RESULT_TEMPLATES now has exactly one entry and
 # every school is rendered through the same rs-classic markup, matching his reference sheets.
 tpls_all = [x[0] for x in __import__("db").RESULT_TEMPLATES]
-check("only the one fixed design remains", tpls_all == ["professional_classic"], tpls_all)
+# V101: the classic design plus five more modern designs are selectable
+check("six designs are offered, classic first", len(tpls_all) == 6 and tpls_all[0] == "professional_classic", tpls_all)
 W.publish(A, 1)
 run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(1,1,1,11,12,0,40),(1,2,1,8,9,0,31),(1,3,1,14,12,0,50),(1,4,1,10,10,0,35)")
 rp = ADMIN.get("/result/1/pdf?term_id=1"); pg = PdfReader(io.BytesIO(rp.data)).pages

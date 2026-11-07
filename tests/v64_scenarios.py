@@ -291,7 +291,7 @@ check("CA3 disappears again when switched off", "3rd CA" not in html(ADMIN.get("
 # ---------------- V97: the one fixed result-sheet design (the 16-style picker was removed)
 import db as _db
 tpls = [x[0] for x in _db.RESULT_TEMPLATES]
-check("only the one fixed design remains", tpls == ["professional_classic"], tpls)
+check("V101: six designs are offered, classic first", len(__import__("db").RESULT_TEMPLATES) == 6 and __import__("db").RESULT_TEMPLATES[0][0] == "professional_classic")
 run("UPDATE result_display_settings SET template='professional_classic' WHERE school_id=1")
 pv = ADMIN.get("/result/1/print?term_id=1")
 rp = ADMIN.get("/result/1/pdf?term_id=1")
