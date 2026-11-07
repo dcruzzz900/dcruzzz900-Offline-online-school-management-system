@@ -23,7 +23,7 @@
 .rs-head h1{margin:1.5mm 0 0;font-size:20pt;line-height:1.1;font-weight:800;letter-spacing:.01em;text-transform:uppercase;color:var(--rs-accent)}
 .rs-tag,.rs-contact{margin:1mm 0 0;font-size:10pt;color:color-mix(in srgb,var(--rs-accent) 80%,#2b8fd0)}
 .rs-term{margin:1mm 0 0;font-size:12pt;color:var(--rs-accent)}
-.rs-passport{width:30mm;height:36mm;border:1.5px solid var(--rs-line);border-radius:1.5mm;background:var(--rs-band);flex:none;overflow:hidden}.rs-passport img{width:100%;height:100%;object-fit:cover;display:block}
+.rs-passport{width:30mm;height:36mm;border:0;border-radius:1.5mm;background:var(--rs-band);flex:none;overflow:hidden}.rs-passport img{width:100%;height:100%;object-fit:cover;display:block}
 /* identity boxes (flex so Class Position can take the rest of the second row, as on the sample) */
 .rs-id{display:flex;flex-wrap:wrap;gap:2.2mm;margin-bottom:3mm}
 .rs-id div{flex:1 1 calc(25% - 2.2mm);min-width:0;border:1.5px solid var(--rs-line);background:var(--rs-tint);padding:1.6mm 2.4mm;border-radius:2mm}
@@ -117,8 +117,8 @@
 .rs-sheet .rs-logo{max-width:30mm;max-height:24mm;width:auto;height:auto;object-fit:contain;flex:0 0 auto}
 
 /* passport: the whole photograph is shown (no stretching, no cropping), centred, without an extra frame; a neutral avatar stands in when there is none */
-.rs-passport.has-photo{border:1.5px solid var(--rs-line);background:#fff;display:flex;align-items:center;justify-content:center}
-.rs-passport.has-photo img{width:100%;height:100%;object-fit:contain;object-position:center}
+.rs-passport.has-photo{border:0;background:var(--rs-band);display:block}
+.rs-passport.has-photo img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
 .rs-passport.rs-passport-empty{background:var(--rs-band);display:flex;align-items:flex-end;justify-content:center}
 .rs-passport.rs-passport-empty svg{width:70%;height:70%;fill:color-mix(in srgb,var(--rs-accent) 45%,#8fb3d9)}
 
@@ -144,3 +144,127 @@
 @media screen and (max-width:820px){.rs-key-grading span{display:block;width:auto;white-space:normal;margin-right:0}}
 /* base.html adds an accessibility <caption> to every table; on the sheet the section banner is the title, so keep it for screen readers only */
 .rs-sheet table caption{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+
+/* ======================================================================================================
+   V101: six selectable designs. The classic one is the base above; the five below change layout and concept
+   but read the same settings (colours, toggles, fonts, header layout/alignment) and the same data.
+   Default header alignment of a design applies only when the school has NOT chosen "Header text alignment".
+   ====================================================================================================== */
+.rs-sheet .rs-cols{display:grid;grid-template-columns:62mm 1fr;gap:5mm;align-items:start;margin-top:1mm}
+
+/* ---------- 1. EXECUTIVE: solid header band, ruled details, solid table heads, striped rows ---------- */
+.rs-style-executive{background:#fff}
+.rs-style-executive .rs-head{background:var(--rs-accent);color:#fff;border:0;border-bottom:1.2mm solid var(--rs-second);border-radius:2mm 2mm 0 0;padding:4.5mm 6mm;margin-bottom:4mm}
+.rs-style-executive .rs-head h1,.rs-style-executive .rs-head h2,.rs-style-executive .rs-term{color:#fff}
+.rs-style-executive .rs-head .rs-tag,.rs-style-executive .rs-head .rs-contact{color:color-mix(in srgb,var(--rs-second) 45%,#fff)}
+.rs-style-executive .rs-head h1{font-size:15pt;letter-spacing:.14em;font-weight:700}
+.rs-style-executive .rs-passport{background:rgba(255,255,255,.16)}
+.rs-style-executive .rs-id{display:grid;grid-template-columns:repeat(3,1fr);gap:0 7mm;margin-bottom:2mm}
+.rs-style-executive .rs-id div,.rs-style-executive .rs-id .rs-pos{border:0;border-bottom:1px solid var(--rs-line);background:none;border-radius:0;padding:1.6mm 0;display:flex;justify-content:space-between;align-items:baseline;gap:3mm}
+.rs-style-executive .rs-id span{text-transform:none;font-size:9pt;color:color-mix(in srgb,var(--rs-accent) 65%,#fff)}.rs-style-executive .rs-id b{font-size:11pt;text-align:right}
+.rs-style-executive .rs-h{background:none;border-radius:0;padding:0 0 1.4mm;border-bottom:.7mm solid var(--rs-accent);font-size:12pt;letter-spacing:.06em;display:flex;align-items:center;gap:2.4mm}
+.rs-style-executive .rs-h:before{content:"";width:3.2mm;height:3.2mm;background:var(--rs-second);flex:none}
+.rs-style-executive .rs-scroll{border-radius:0;border:1px solid var(--rs-line)}
+.rs-style-executive .rs-table th{background:var(--rs-accent);color:#fff;border-color:color-mix(in srgb,var(--rs-accent) 70%,#fff)}
+.rs-style-executive .rs-table tbody tr:nth-child(even) td{background:var(--rs-tint)}
+.rs-style-executive .rs-table tfoot td{background:color-mix(in srgb,var(--rs-accent) 12%,#fff)}
+.rs-style-executive .rs-summary-grid{border-radius:0;border:0;gap:2mm;background:none;overflow:visible}
+.rs-style-executive .rs-summary-grid div{border:0;border-top:1.2mm solid var(--rs-second);background:var(--rs-tint)}.rs-style-executive .rs-summary-grid span{background:none;border:0;font-size:9pt;font-weight:600}
+.rs-style-executive .rs-domain-grid>.rs-mini{border-radius:0}.rs-style-executive .rs-mini th{background:var(--rs-accent);color:#fff}
+.rs-style-executive .rs-att div,.rs-style-executive .rs-comments div{border:0;border-left:1.2mm solid var(--rs-second);border-radius:0;background:var(--rs-tint)}
+.rs-style-executive .rs-key{border-top:.7mm solid var(--rs-accent)}
+
+/* ---------- 2. MINIMAL LINE: no fills, hairlines, left header, inline key figures ---------- */
+.rs-style-minimal_line{--rs-line:color-mix(in srgb,var(--rs-accent) 28%,#fff);--rs-tint:transparent;--rs-band:transparent;background:#fff}
+.rs-style-minimal_line .rs-head{border-bottom:.35mm solid var(--rs-accent);padding-bottom:3.5mm}
+.rs-style-minimal_line .rs-head:not([class*="rs-text-"]) .rs-head-text{text-align:left}
+.rs-style-minimal_line .rs-head h2{font-size:12pt!important;letter-spacing:.2em;font-weight:700}.rs-style-minimal_line .rs-head h1{font-size:23pt;font-weight:300;text-transform:none;letter-spacing:-.01em}
+.rs-style-minimal_line .rs-term{font-size:10pt;letter-spacing:.08em}
+.rs-style-minimal_line .rs-passport{border-radius:0;background:#eef1f5}
+.rs-style-minimal_line .rs-id{gap:0;border-bottom:1px solid var(--rs-line);padding-bottom:2mm;margin-bottom:2mm}
+.rs-style-minimal_line .rs-id div,.rs-style-minimal_line .rs-id .rs-pos{flex:1 1 auto;border:0;border-left:1px solid var(--rs-line);border-radius:0;background:none;padding:1mm 3mm}.rs-style-minimal_line .rs-id div:first-child{border-left:0;padding-left:0}
+.rs-style-minimal_line .rs-id span{font-size:7pt;letter-spacing:.14em}.rs-style-minimal_line .rs-id b{font-size:11pt;font-weight:600}
+.rs-style-minimal_line .rs-h{background:none;padding:0;border-radius:0;font-size:8.5pt;letter-spacing:.22em;font-weight:700;display:flex;align-items:center;gap:3mm;margin:5mm 0 2mm}
+.rs-style-minimal_line .rs-h:after{content:"";flex:1;height:1px;background:var(--rs-line)}
+.rs-style-minimal_line .rs-scroll{border:0;border-radius:0;background:none}
+.rs-style-minimal_line .rs-table th,.rs-style-minimal_line .rs-table td{border-width:0 0 1px 0;background:none}
+.rs-style-minimal_line .rs-table th{border-bottom:1.5px solid var(--rs-accent);font-weight:700}.rs-style-minimal_line .rs-table tfoot td{background:none;border-top:1.5px solid var(--rs-accent)}
+.rs-style-minimal_line .rs-summary-grid{border:0;border-radius:0;background:none}
+.rs-style-minimal_line .rs-summary-grid div{background:none;border-left:1px solid var(--rs-line)}.rs-style-minimal_line .rs-summary-grid div:first-child{border-left:0}
+.rs-style-minimal_line .rs-summary-grid span{background:none;border:0;font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.rs-style-minimal_line .rs-summary-grid b{background:none;font-weight:300;font-size:20pt}
+.rs-style-minimal_line .rs-domain-grid>.rs-mini{border:0;border-radius:0}.rs-style-minimal_line .rs-mini th{background:none;border-bottom:1.5px solid var(--rs-accent)}
+.rs-style-minimal_line .rs-att div,.rs-style-minimal_line .rs-comments div{border:0;border-top:1px solid var(--rs-line);border-radius:0;background:none;padding-left:0}
+.rs-style-minimal_line .rs-key{border-top:1px solid var(--rs-line)}
+
+/* ---------- 3. SIDEBAR PROFILE: tinted side panel + main column ---------- */
+.rs-style-sidebar_profile{background:#fff}
+.rs-style-sidebar_profile .rs-head{border-bottom:1.2mm solid var(--rs-accent);margin-bottom:3mm}
+.rs-style-sidebar_profile .rs-head:not([class*="rs-text-"]) .rs-head-text{text-align:left}
+.rs-style-sidebar_profile .rs-head h1{font-size:15pt;color:color-mix(in srgb,var(--rs-accent) 80%,var(--rs-second))}
+.rs-style-sidebar_profile .rs-side{background:var(--rs-band);border-radius:3mm;padding:3.5mm;display:flex;flex-direction:column;gap:2.4mm}
+.rs-style-sidebar_profile .rs-side>section{margin:0}
+.rs-style-sidebar_profile .rs-side .rs-id{flex-direction:column;gap:1.6mm;margin:0}
+.rs-style-sidebar_profile .rs-side .rs-id div,.rs-style-sidebar_profile .rs-side .rs-id .rs-pos{flex:0 0 auto;background:#fff;border:0;border-left:1.2mm solid var(--rs-accent);border-radius:1.5mm;padding:1.2mm 2.4mm}
+.rs-style-sidebar_profile .rs-side .rs-id b{font-size:10.5pt}
+.rs-style-sidebar_profile .rs-side .rs-h{background:var(--rs-accent);color:#fff;font-size:9pt;padding:1.4mm 2.4mm;margin:0 0 1.6mm;letter-spacing:.06em}
+.rs-style-sidebar_profile .rs-side .rs-att{flex-wrap:wrap;gap:1.6mm;margin:0}.rs-style-sidebar_profile .rs-side .rs-att div{flex:1 1 40%;background:#fff;border:0;border-radius:1.5mm}.rs-style-sidebar_profile .rs-side .rs-att div:last-child:not(:nth-child(-n+4)){flex:1 1 100%}
+.rs-style-sidebar_profile .rs-side .rs-att b{font-size:11pt}
+.rs-style-sidebar_profile .rs-side .rs-domain-grid{grid-template-columns:1fr;gap:2mm}.rs-style-sidebar_profile .rs-side .rs-mini{font-size:8pt}.rs-style-sidebar_profile .rs-side .rs-mini th{font-size:8.5pt;padding:1.2mm 2mm}.rs-style-sidebar_profile .rs-side .rs-mini td{padding:.7mm 2mm}
+.rs-style-sidebar_profile .rs-side .rs-key{flex-direction:column;gap:2mm;border-top:1px solid var(--rs-line);font-size:7pt;margin:0}.rs-style-sidebar_profile .rs-side .rs-key-row+.rs-key-row{border-left:0;padding-left:0}.rs-style-sidebar_profile .rs-side .rs-key-grading span{display:block;width:auto}
+.rs-style-sidebar_profile .rs-side .rs-ntr{border-top:0;margin:0}
+.rs-style-sidebar_profile .rs-main .rs-h{margin-top:0}.rs-style-sidebar_profile .rs-main .rs-summary{margin-top:3mm}
+.rs-style-sidebar_profile .rs-main .rs-summary-grid{grid-template-columns:repeat(3,1fr)}.rs-style-sidebar_profile .rs-main .rs-summary-grid div:nth-child(4){border-left:0}.rs-style-sidebar_profile .rs-main .rs-summary-grid div:nth-child(n+4){border-top:1px solid var(--rs-line)}
+.rs-style-sidebar_profile .rs-main .rs-comments{grid-template-columns:1fr}.rs-style-sidebar_profile .rs-main .rs-sign{gap:6mm}
+.rs-style-sidebar_profile .rs-cumulative{margin-bottom:2mm}
+
+/* ---------- 4. DASHBOARD CARDS: grey canvas, white cards, key figures first ---------- */
+.rs-style-dashboard_cards{background:#eef2f6}
+.rs-style-dashboard_cards .rs-head,.rs-style-dashboard_cards .rs-id,.rs-style-dashboard_cards .rs-perf,.rs-style-dashboard_cards .rs-cumulative,.rs-style-dashboard_cards .rs-sign,.rs-style-dashboard_cards .rs-key,.rs-style-dashboard_cards .rs-domains,.rs-style-dashboard_cards .rs-att,.rs-style-dashboard_cards .rs-comments div{background:#fff;border-radius:3mm;box-shadow:0 .3mm 1.2mm rgba(15,30,60,.16);border:0}
+.rs-style-dashboard_cards .rs-head{border-top:1.4mm solid var(--rs-accent);padding:3.5mm 4.5mm;margin-bottom:3mm}
+.rs-style-dashboard_cards .rs-head:not([class*="rs-text-"]) .rs-head-text{text-align:left}
+.rs-style-dashboard_cards .rs-id{display:flex;gap:0;padding:2mm 1mm;margin-bottom:3mm}
+.rs-style-dashboard_cards .rs-id div,.rs-style-dashboard_cards .rs-id .rs-pos{border:0;border-left:.8mm solid var(--rs-second);background:none;border-radius:0;box-shadow:none;margin-left:2.5mm;padding:.6mm 2.5mm}.rs-style-dashboard_cards .rs-id div:first-child{margin-left:0}
+.rs-style-dashboard_cards .rs-id .rs-pos{flex:1 1 auto}
+.rs-style-dashboard_cards .rs-summary{margin:0 0 3mm}.rs-style-dashboard_cards .rs-summary>.rs-h{display:none}
+.rs-style-dashboard_cards .rs-summary-grid{gap:2.4mm;border:0;background:none;border-radius:0;overflow:visible}
+.rs-style-dashboard_cards .rs-summary-grid div{background:#fff;border:0;border-top:1.2mm solid var(--rs-second);border-radius:2.5mm;box-shadow:0 .3mm 1.2mm rgba(15,30,60,.16);overflow:hidden}
+.rs-style-dashboard_cards .rs-summary-grid div:nth-child(2n){border-top-color:var(--rs-accent)}
+.rs-style-dashboard_cards .rs-summary-grid span{background:none;border:0;font-size:8.5pt;color:#5b6b80;padding:2mm 1mm 0}.rs-style-dashboard_cards .rs-summary-grid b{background:none;font-size:17pt;padding:1.5mm 1mm 3mm}
+.rs-style-dashboard_cards .rs-perf,.rs-style-dashboard_cards .rs-cumulative{padding:3mm;margin-top:0}
+.rs-style-dashboard_cards .rs-h{background:none;padding:0 0 1.6mm;margin:0 0 2mm;border-bottom:1px solid var(--rs-line);border-radius:0;font-size:11pt;text-transform:none;letter-spacing:0}
+.rs-style-dashboard_cards .rs-scroll{border-radius:2mm}
+.rs-style-dashboard_cards .rs-table th{background:var(--rs-tint)}
+.rs-style-dashboard_cards .rs-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin-top:3mm;align-items:stretch}
+.rs-style-dashboard_cards .rs-card-grid>.rs-domains{grid-column:1/-1;padding:3mm;margin:0}
+.rs-style-dashboard_cards .rs-card-grid>.rs-domains+*:last-child,.rs-style-dashboard_cards .rs-card-grid>:only-child{grid-column:1/-1}
+.rs-style-dashboard_cards .rs-card-grid .rs-att{margin:0;padding:3mm;flex-wrap:wrap;align-content:flex-start}.rs-style-dashboard_cards .rs-card-grid .rs-att div{flex:1 1 40%;background:var(--rs-tint);border:0;box-shadow:none}.rs-style-dashboard_cards .rs-card-grid .rs-att div:last-child:not(:nth-child(-n+4)){flex:1 1 100%}
+.rs-style-dashboard_cards .rs-card-grid .rs-comments{grid-template-columns:1fr;margin:0;gap:2.4mm}.rs-style-dashboard_cards .rs-card-grid .rs-comments div{padding:2.4mm 3mm}
+.rs-style-dashboard_cards .rs-domain-grid>.rs-mini{border:1px solid var(--rs-line);border-radius:2mm}
+.rs-style-dashboard_cards .rs-sign{padding:2mm 5mm 1.5mm;margin-top:3mm}.rs-style-dashboard_cards .rs-key{padding:2mm 4mm;margin-top:3mm}
+.rs-style-dashboard_cards .rs-foot{border-top:0}
+
+/* ---------- 5. BOLD BANNER: gradient hero, pills, colour tiles ---------- */
+.rs-style-bold_banner{background:#fff}
+.rs-style-bold_banner .rs-head{background:linear-gradient(115deg,var(--rs-accent) 0%,color-mix(in srgb,var(--rs-accent) 45%,var(--rs-second)) 100%);color:#fff;border:0;border-radius:4mm;padding:5mm 6mm;margin-bottom:3.5mm}
+.rs-style-bold_banner .rs-head h1,.rs-style-bold_banner .rs-head h2,.rs-style-bold_banner .rs-term{color:#fff}.rs-style-bold_banner .rs-head .rs-tag,.rs-style-bold_banner .rs-head .rs-contact{color:rgba(255,255,255,.85)}
+.rs-style-bold_banner .rs-head h1{font-size:17pt;letter-spacing:.08em}
+.rs-style-bold_banner .rs-passport{width:32mm;height:32mm;border-radius:50%;background:rgba(255,255,255,.2)}
+.rs-style-bold_banner .rs-id{gap:1.8mm}
+.rs-style-bold_banner .rs-id div,.rs-style-bold_banner .rs-id .rs-pos{flex:0 1 auto;display:flex;align-items:baseline;gap:2mm;border:0;border-radius:999px;background:var(--rs-band);padding:1.5mm 4mm}
+.rs-style-bold_banner .rs-id span{display:inline;font-size:7.5pt}.rs-style-bold_banner .rs-id b{display:inline;font-size:11pt}
+.rs-style-bold_banner .rs-h{display:inline-block;background:var(--rs-accent);color:#fff;border-radius:999px;padding:1.2mm 5mm;font-size:9.5pt;letter-spacing:.08em;margin:4.5mm 0 2mm}
+.rs-style-bold_banner .rs-scroll{border:0;border-radius:3mm;box-shadow:0 0 0 1px var(--rs-line)}
+.rs-style-bold_banner .rs-table th{background:color-mix(in srgb,var(--rs-second) 72%,var(--rs-accent));color:#fff;border-color:rgba(255,255,255,.35)}
+.rs-style-bold_banner .rs-table tbody tr:nth-child(even) td{background:var(--rs-tint)}.rs-style-bold_banner .rs-table tfoot td{background:var(--rs-band)}
+.rs-style-bold_banner .rs-summary-grid{gap:2.4mm;border:0;background:none;border-radius:0;overflow:visible}
+.rs-style-bold_banner .rs-summary-grid div{border:0;border-radius:3mm;background:linear-gradient(160deg,var(--rs-band),var(--rs-tint));overflow:hidden}
+.rs-style-bold_banner .rs-summary-grid span{background:none;border:0;font-size:9pt;padding-bottom:0}.rs-style-bold_banner .rs-summary-grid b{background:none}
+.rs-style-bold_banner .rs-domain-grid>.rs-mini{border:0;border-radius:3mm;box-shadow:0 0 0 1px var(--rs-line)}.rs-style-bold_banner .rs-mini th{background:color-mix(in srgb,var(--rs-second) 72%,var(--rs-accent));color:#fff}
+.rs-style-bold_banner .rs-att div{border:0;border-radius:4mm;background:var(--rs-band)}
+.rs-style-bold_banner .rs-comments div{border:0;border-radius:4mm;background:var(--rs-tint);border-left:1.4mm solid var(--rs-accent)}
+.rs-style-bold_banner .rs-key{border-top:0;background:var(--rs-tint);border-radius:3mm;padding:2.5mm 4mm}
+
+/* previews/phones: the two-column layout stacks on narrow screens */
+@media screen and (max-width:820px){.rs-sheet .rs-cols{grid-template-columns:1fr}.rs-style-executive .rs-id{grid-template-columns:1fr}.rs-style-dashboard_cards .rs-card-grid{grid-template-columns:1fr}.rs-style-dashboard_cards .rs-id{flex-wrap:wrap}.rs-style-bold_banner .rs-head{padding:4mm}}
