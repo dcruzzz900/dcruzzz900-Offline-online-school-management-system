@@ -3628,7 +3628,14 @@ def paper_dims_mm(cfg):
 # card itself is removed from Result Display Settings (templates/result_display_settings.html) --
 # there is nothing left to choose between.
 RESULT_TEMPLATES = [
-    ("professional_classic", "My School Hub Classic", "The one, fixed result sheet design -- Academic Performance per term, Cumulative/Annual when that's switched on."),
+    # V101: the classic sample design plus five more modern designs a school admin can choose between in
+    # Result Display Settings. Same data and same toggles in all of them; they differ in layout and concept.
+    ("professional_classic", "Classic Blue", "The original sample sheet: pale-blue banners and rounded boxes, read top to bottom."),
+    ("executive", "Executive", "Formal: solid colour header band, ruled details list and solid table headers with striped rows."),
+    ("minimal_line", "Minimal Line", "Clean and ink-friendly: no fills, hairlines only, left-aligned header and inline key figures."),
+    ("sidebar_profile", "Sidebar Profile", "Two columns: a tinted side panel (details, attendance, domains, keys) beside the results."),
+    ("dashboard_cards", "Dashboard Cards", "Card layout: key figures first, then the results table, then domains / attendance / comments as cards."),
+    ("bold_banner", "Bold Banner", "Colourful: gradient hero header, pill-shaped details and section tags, colour tiles for key figures."),
 ]
 _LEGACY_TEMPLATE = {"classic": "professional_classic", "modern": "modern_academic", "compact": "compact_academic", "detailed": "detailed_report"}
 

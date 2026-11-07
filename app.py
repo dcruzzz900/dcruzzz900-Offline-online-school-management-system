@@ -551,20 +551,31 @@ def _is_rate_limited(key, max_attempts, window_seconds):
         return False
 
 
-def rate_limit(max_attempts, window_seconds):
-    """Caps how many POSTs a single IP can make to the decorated route
-    within a trailing time window — every submission counts, not just
-    failed ones, so a script can't dodge the limit by mixing in the
-    occasional well-formed request. GET requests (just viewing the page)
-    are never limited. On rejection, redirects back to the same page with
-    a flash message rather than a bare error, so it fits the app's normal
-    error handling."""
+RATE_LIMIT_DISABLED = os.environ.get("RATE_LIMIT_DISABLED") == "1"   # load-testing only; never set in production
+
+
+def rate_limit(max_attempts, window_seconds, per_field=None, ip_max_attempts=None):
+    """Caps how many POSTs can be made to the decorated route within a trailing time window -- every submission
+    counts, not just failed ones. GET requests are never limited. On rejection, redirects back to the same page
+    with a flash message.
+
+    V102 (multi-school scale): the cap used to be per IP address only. Many people share one IP (a school's
+    Wi-Fi, a mobile carrier's gateway), so ten logins from a school locked everybody there out for five minutes.
+    With `per_field` (e.g. "username") the strict cap now applies to that IP + that username -- brute-forcing one
+    account is still blocked -- while the IP as a whole gets the much larger `ip_max_attempts` ceiling."""
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
-            if request.method == "POST":
-                key = f"{request.endpoint}:{request.remote_addr}"
-                if _is_rate_limited(key, max_attempts, window_seconds):
+            if request.method == "POST" and not RATE_LIMIT_DISABLED:
+                ip = request.remote_addr
+                if per_field:
+                    who = (request.form.get(per_field) or "").strip().lower()[:80]
+                    limited = _is_rate_limited(f"{request.endpoint}:{ip}:{who}", max_attempts, window_seconds)
+                    if not limited and ip_max_attempts:
+                        limited = _is_rate_limited(f"{request.endpoint}:{ip}", ip_max_attempts, window_seconds)
+                else:
+                    limited = _is_rate_limited(f"{request.endpoint}:{ip}", max_attempts, window_seconds)
+                if limited:
                     flash("Too many attempts from this connection. Please wait a few minutes and try again.", "error")
                     return redirect(request.path)
             return f(*args, **kwargs)
@@ -1435,7 +1446,7 @@ def staff_login(): return redirect(url_for("login"))
 def parent_login(): return redirect(url_for("login"))
 
 @app.route("/login", methods=["GET", "POST"])
-@rate_limit(max_attempts=10, window_seconds=300)
+@rate_limit(max_attempts=10, window_seconds=300, per_field="username", ip_max_attempts=600)
 def login():
     if request.method == "POST":
         identifier = request.form["username"].strip()
@@ -7548,13 +7559,14 @@ def result_extra(student_id):
     if "teacher_comment" in request.form:
         if can_edit_teacher_comment(conn, student_row["class_id"]):
             teacher_comment = request.form.get("teacher_comment", "").strip()[:1000]
-        elif (request.form.get("teacher_comment", "").strip()[:1000]) != (teacher_comment or ""):
-            conn.close(); flash("Only the Class/Form Teacher of this class (or the school administration) can change the Class Teacher's comment.", "error"); return redirect(back)
+        # V101: not allowed to edit this comment -> keep the stored one and carry on saving the rest (ratings,
+        # attendance...). It used to abort the whole save, which blocked form teachers whenever the Principal's
+        # comment box was shown (the read-only box is still submitted, and line-endings alone made it "differ").
     if "principal_comment" in request.form:
         if can_edit_principal_comment():
             principal_comment = request.form.get("principal_comment", "").strip()[:1000]
-        elif (request.form.get("principal_comment", "").strip()[:1000]) != (principal_comment or ""):
-            conn.close(); flash("Only the Principal (or the school administration) can change the Principal's comment.", "error"); return redirect(back)
+        # V101: a form teacher saving ratings with the Principal's comment shown is NOT an error: that field is
+        # ignored (the stored principal comment is kept) and the rest of the form is saved.
     # sign dates follow the same ownership as the comments they belong to
     if not can_edit_teacher_comment(conn, student_row["class_id"]):
         teacher_signed_date = ex.get("teacher_signed_date")
@@ -7591,7 +7603,10 @@ def result_extra(student_id):
     all_traits = conn.execute("SELECT * FROM skill_traits WHERE school_id=? AND COALESCE(is_active,1)=1", (current_school_id(),)).fetchall()
     for trait in all_traits:
         val = request.form.get(f"trait_{trait['id']}")
-        if val and val.isdigit() and 1 <= int(val) <= 5:
+        if val is not None and val.strip() == "":
+            # V101: the rating table sends a blank for "no rating" -> clear any earlier rating for that item
+            conn.execute("DELETE FROM student_skill_ratings WHERE student_id=? AND term_id=? AND trait_id=?", (student_id, term_id, trait["id"]))
+        elif val and val.isdigit() and 1 <= int(val) <= 5:
             conn.execute(
                 "INSERT INTO student_skill_ratings (student_id, term_id, trait_id, rating) "
                 "VALUES (?,?,?,?) ON CONFLICT(student_id, term_id, trait_id) "

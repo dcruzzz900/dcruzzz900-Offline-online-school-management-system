@@ -1,0 +1,13 @@
+# Real PostgreSQL for developing/testing the migration (run where Docker is available):
+#   docker compose -f docker-compose.postgres.yml up -d db
+#   export DATABASE_URL=postgresql://school:school@localhost:5432/school
+# Once the Phase-1 database layer exists, the same scenario suites (tests/v*_scenarios.py) run against it unchanged.
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_USER: school, POSTGRES_PASSWORD: school, POSTGRES_DB: school }
+    ports: ["5432:5432"]
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=512MB"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U school"], interval: 5s, retries: 10 }
+volumes: { pgdata: {} }
