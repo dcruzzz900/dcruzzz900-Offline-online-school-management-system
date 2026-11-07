@@ -254,14 +254,18 @@ def register_v63(app, h):
             problems.append("The class has no active students.")
         if not subjects:
             problems.append("No subjects are assigned to this class.")
+        # V101: a class result may be submitted (then reviewed, approved and published) as soon as AT LEAST ONE
+        # student has AT LEAST ONE saved score -- it no longer has to be complete for every student/subject.
+        # Scores that ARE saved are still validated (range, total, grade); a missing score is simply blank.
+        any_saved = False
         for st in students:
             name = student_full_name(st)
             for sub in subjects:
                 row = conn.execute("SELECT * FROM scores WHERE student_id=? AND subject_id=? AND term_id=?",
                                    (st["id"], sub["subject_id"], term_id)).fetchone()
                 if row is None:
-                    problems.append(f"{name}: no {sub['name']} score entered.")
                     continue
+                any_saved = True
                 ca1, ca2, ca3, exam = (row["ca1"] or 0), (row["ca2"] or 0), (row["ca3"] or 0), (row["exam"] or 0)
                 for msg in h["score_range_errors"](cfg, ca1, ca2, ca3, exam):
                     problems.append(f"{name} - {sub['name']}: {msg}.")
@@ -272,6 +276,8 @@ def register_v63(app, h):
                     grade = h["grade_for"](total, conn, school_id)
                     if not grade or not grade[0]:
                         problems.append(f"{name} - {sub['name']}: no grade matches a total of {total:g}.")
+        if students and subjects and not any_saved:
+            problems.append("No score has been entered and saved for this class and term yet. Save at least one student's score first.")
         return problems
 
     def review_summary(conn, school_id, class_id, term_id):

@@ -161,10 +161,10 @@ def _result_elements(data, term, school_name, logo_path, student_full_name, styl
     where the Chromium-based path cannot run. Returns the page's flowables (already shrunk to one page)."""
     import pdf_sheet
     regular, bold = styles["Normal"].fontName, styles["Heading1"].fontName
-    els, pal, wm = pdf_sheet.result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color=accent_color,
-                                              teacher_signature=teacher_signature, principal_signature=principal_signature,
-                                              regular=regular, bold=bold)
-    return pdf_sheet.one_page(els, pal, wm, bold)
+    els, pal, wm, page = pdf_sheet.result_elements(data, term, school_name, logo_path, student_full_name, styles, accent_color=accent_color,
+                                                    teacher_signature=teacher_signature, principal_signature=principal_signature,
+                                                    regular=regular, bold=bold)
+    return pdf_sheet.one_page(els, pal, wm, bold, page)
 
 
 def _one_page(elements, doc):
@@ -231,9 +231,9 @@ def build_cumulative_result_pdf(data, session, school_name=None, logo_path=None,
     doc = _sheet_doc(buf)
     styles = getSampleStyleSheet()
     regular, bold = _apply_pdf_font(styles, font_choice)
-    els, pal, wm = pdf_sheet.cumulative_page_elements(data, session, school_name, logo_path, student_full_name, rs or {},
-                                                       accent_color=accent_color, regular=regular, bold=bold)
-    doc.build(pdf_sheet.one_page(els, pal, wm, bold))
+    els, pal, wm, page = pdf_sheet.cumulative_page_elements(data, session, school_name, logo_path, student_full_name, rs or {},
+                                                             accent_color=accent_color, regular=regular, bold=bold)
+    doc.build(pdf_sheet.one_page(els, pal, wm, bold, page))
     buf.seek(0)
     return buf
 

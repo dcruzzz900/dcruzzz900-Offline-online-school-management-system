@@ -145,7 +145,7 @@ def register_v62_routes(app, h):
                 # was removed from the page), so this is no longer a user choice to validate --
                 # every school's `template` column just stays at the one key every row already
                 # defaults to, kept only so old rows and fixtures never need a migration.
-                tmpl = RESULT_TEMPLATES[0][0]
+                tmpl = f.get("template") if f.get("template") in {t[0] for t in RESULT_TEMPLATES} else (cfg.get("template") or RESULT_TEMPLATES[0][0])   # V101: school admin picks one of the six designs
                 prim, sec = (f.get("accent_color") or "").strip(), (f.get("secondary_color") or "").strip()
                 if prim and not COLOR_RE.match(prim):
                     errors["accent_color"] = "Use a colour like #0b2a6f."
@@ -232,7 +232,11 @@ def register_v62_routes(app, h):
                 preview = None
             else:
                 preview = sample_result(conn, preview_rs, cumulative_enabled=bool(school["cumulative_enabled"]))
-            return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES,
+            style_previews = []
+            if preview:
+                for key, label, desc in RESULT_TEMPLATES:
+                    style_previews.append((key, label, desc, {**preview, "rs": {**preview["rs"], "template": key}}))
+            return render_template("result_display_settings.html", cfg=cfg, school=school, sections=SECTIONS, labels=labels, templates=RESULT_TEMPLATES, style_previews=style_previews,
                                    header_layouts=HEADER_LAYOUTS, text_aligns=TEXT_ALIGNS, signature_layouts=SIGNATURE_LAYOUTS, pdf_fonts=PDF_FONT_CHOICES, errors=errors,
                                    page_orientations=PAGE_ORIENTATIONS, font_scales=FONT_SCALE_CHOICES,
                                    paper_sizes=PAPER_SIZE_CHOICES, custom_mm_min=CUSTOM_MM_MIN, custom_mm_max=CUSTOM_MM_MAX,
