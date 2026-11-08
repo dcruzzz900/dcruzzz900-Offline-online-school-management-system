@@ -61,11 +61,13 @@
 .rs-comments{display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin-top:3mm}
 .rs-comments div{border:1.5px solid var(--rs-line);background:var(--rs-tint);border-radius:2mm;padding:1.4mm 2.4mm;min-width:0}
 .rs-comments span{font-size:8.5pt}.rs-comments p{margin:.6mm 0 0;min-height:10mm;border:0;padding:0;font-size:11pt;line-height:1.3;color:var(--rs-accent)}
-/* signatures: ONE line above the name (the line itself or the signature image sits on it) */
-.rs-sign{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:5mm}.rs-sign div{text-align:center}
-.rs-sign img{max-height:14mm;max-width:50mm;display:block;margin:0 auto;border-bottom:1.5px solid var(--rs-accent)}
-.rs-line{display:block;height:10mm;border-bottom:1.5px solid var(--rs-accent)}
-.rs-sign span{display:block;margin-top:1mm;font-size:10.5pt}.rs-sign small{display:block;margin-top:.8mm;min-height:4mm;font-size:10.5pt;color:var(--rs-accent)}
+/* signatures: ONE line above the name (the line itself or the signature image sits on it).
+   V103: the blank space above the line was too tall (10mm) -> 6.5mm, so the signature sits close to its line. */
+.rs-sign{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:3mm}.rs-sign div{text-align:center}
+.rs-line-img{display:flex;align-items:flex-end;justify-content:center;height:auto;min-height:6.5mm}
+.rs-sign .rs-line img{max-height:11mm;max-width:50mm;display:block;margin:0 auto;border:0}   /* V103: the line is the wrapper, so it keeps its full width with a signature on it */
+.rs-line{display:block;height:6.5mm;border-bottom:1.5px solid var(--rs-accent)}
+.rs-sign span{display:block;margin-top:.6mm;font-size:10.5pt;line-height:1.2}.rs-sign small{display:block;margin-top:.4mm;min-height:3.5mm;font-size:10.5pt;line-height:1.2;color:var(--rs-accent)}
 .rs-sign-stacked{grid-template-columns:1fr;max-width:80mm}.rs-sign-right{grid-template-columns:1fr 1fr;margin-left:40%}
 /* keys */
 .rs-key{display:flex;gap:4mm;margin-top:4mm;padding-top:2mm;border-top:1.5px solid var(--rs-line);font-size:8.5pt;color:var(--rs-accent)}

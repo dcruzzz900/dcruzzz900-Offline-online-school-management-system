@@ -559,3 +559,4 @@ details.hlp summary.hlp-t:focus-visible{outline:2px solid var(--theme-primary,#1
 .card-icon svg{width:17px;height:17px}
 .icon-title{display:flex;align-items:center;gap:9px}
 @media(max-width:480px){.chart-wrap,.chart-wrap-sm{height:175px}}
+.status-badge.warning{background:#fff3cd;color:#7a5b00;border:1px solid #f0d98a}
