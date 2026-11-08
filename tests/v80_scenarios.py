@@ -193,8 +193,8 @@ cbs3 = ADMIN.get(f"/cumulative/{cls_id}?term_id={term3}")
 check("cumulative broadsheet: Third Term selected is labelled 'through 3rd Term'", "through 3rd Term" in html(cbs3), html(cbs3)[:600])
 # Student 1, Mathematics: term1 total=80, term2 total=40 -> through term1 average=80.0, through term2 average=60.0.
 # (the broadsheet cell shows "<average> (<grade>)", e.g. "80.0 (A)".)
-avg_t1 = re.search(r"<td>80\.0\s*\(", html(cbs1)) is not None
-avg_t2 = re.search(r"<td>60\.0\s*\(", html(ADMIN.get(f"/cumulative/{cls_id}?term_id={term2}"))) is not None
+avg_t1 = re.search(r"<td[^>]*>80\.0\s*\(", html(cbs1)) is not None
+avg_t2 = re.search(r"<td[^>]*>60\.0\s*\(", html(ADMIN.get(f"/cumulative/{cls_id}?term_id={term2}"))) is not None
 check("Mathematics' cumulative average through First Term alone is 80.0 (just that term's total)", avg_t1, html(cbs1)[:2000])
 check("Mathematics' cumulative average through First+Second Term is 60.0 (the mean of both terms' totals)", avg_t2)
 

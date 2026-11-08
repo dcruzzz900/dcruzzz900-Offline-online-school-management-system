@@ -126,7 +126,10 @@ run("INSERT OR REPLACE INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exa
 def sheet(term_id=1):
     r = a_c.get(f"/result/{student}?term_id={term_id}")
     assert r.status_code == 200, (term_id, r.status_code)
-    return html(r)
+    page = html(r)
+    # V103: the Academic Record page now also has a "Next Term Resumes" INPUT (outside the sheet); these scenarios are about the sheet itself
+    m = re.search(r'<article class="rs-sheet.*?</article>', page, re.S)
+    return m.group(0) if m else page
 
 
 # ---------------------------------------------------------------- scenarios

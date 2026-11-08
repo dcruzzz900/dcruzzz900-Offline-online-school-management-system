@@ -249,21 +249,16 @@ off_page = html(ADMIN.get(f"/result/1/print?term_id={term1}"))
 check("cumulative_enabled=0 hides the breakdown", "rs-cum-table" not in off_page)
 run("UPDATE schools SET cumulative_enabled=1 WHERE id=1")
 
-print("=== 6) PDF-rendering engine status: an admin sees a plain warning instead of a silent swap ===")
+print("=== 6) V103: the 'PDF engine not set up' warning banner was removed on request ===")
 
 _orig_engine_available = html_pdf.engine_available
 try:
     html_pdf.engine_available = lambda: False
     down_dash = html(ADMIN.get("/dashboard"))
-    check("admin sees a plain, always-visible warning when the PDF engine is unavailable",
-          "plain, generic layout" in down_dash or "pdf-rendering engine" in down_dash.lower() or "PDF-rendering engine" in down_dash)
-    check("the warning is NOT wrapped behind a collapsed Help control (it's critical system status)",
-          re.search(r'<details class="hlp"[^>]*>\s*<summary[^>]*>[^<]*plain', down_dash, re.I) is None)
+    check("V103: no 'plain, generic layout / PDF-rendering engine' banner is shown, even when the engine is unavailable",
+          "plain, generic layout" not in down_dash and "pdf-rendering engine" not in down_dash.lower())
 finally:
     html_pdf.engine_available = _orig_engine_available
-
-up_dash = html(ADMIN.get("/dashboard"))
-check("the warning disappears once the engine is available again", "plain, generic layout" not in up_dash)
 
 print(f"\n{PASS} passed, {len(FAIL)} failed")
 if FAIL:
