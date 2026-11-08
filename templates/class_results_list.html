@@ -2,6 +2,12 @@
 {% block title %}Terminal Results{% endblock %}
 {% block content %}
 <h1>Terminal Results — {{ class_row.name }}</h1>
+{% if review_info and review_info.status != 'draft' %}
+<div class="card" style="border-left:5px solid #1f6feb;margin:0 0 1rem;padding:.8rem 1rem">
+  <b>{{ review_info.label }}</b>{% if review_info.submitter %} — submitted by <b>{{ review_info.submitter }}</b>{% if review_info.submitted_at %} on {{ review_info.submitted_at[:16] }}{% endif %}{% endif %}.
+  Open any student below to check the submitted result, then go back to <a href="{{ url_for('result_workflow', term_id=term.id) }}">Result Workflow</a> to approve it or return it for correction.
+</div>
+{% endif %}
 
 <form method="GET" style="margin-bottom:1rem; display:inline-block;">
     <label style="display:inline; font-weight:normal;">Term:</label>

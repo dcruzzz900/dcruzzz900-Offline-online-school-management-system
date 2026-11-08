@@ -10,10 +10,12 @@
 {% if cumulative and cumulative.terms %}
 {# V100: fixed column widths computed from the term count, so the table is ALWAYS exactly the sheet width
    (A4 portrait included) and the Remark column can never be pushed off the page. #}
-{% set per_term = 7 if cumulative.show_ca3 else 6 %}
+{# V103: the Pos. columns (each term's subject position AND the overall one) follow the school's "Show subject position" switch #}
+{% set sp = (rs.show_subject_position if rs else true) %}
+{% set per_term = (7 if cumulative.show_ca3 else 6) - (0 if sp else 1) %}
 {% set n_terms = cumulative.terms|length %}
 {% set term_cols = n_terms * per_term %}
-{% set overall_w = 25.6 %}
+{% set overall_w = 25.6 if sp else 21.8 %}
 {% set col_w = [ [ (100 - overall_w - 10.5) / term_cols, 5.6 ]|min, 2.4 ]|max %}
 {% set subj_w = 100 - overall_w - term_cols * col_w %}
 <section class="rs-cumulative{% if n_terms >= 4 %} rs-cum-4{% endif %}{% if cumulative.show_ca3 %} rs-cum-ca3{% endif %}">
@@ -22,17 +24,17 @@
     <colgroup>
       <col style="width:{{ '%.2f'|format(subj_w) }}%">
       {% for i in range(term_cols) %}<col style="width:{{ '%.2f'|format(col_w) }}%">{% endfor %}
-      <col style="width:4.8%"><col style="width:5.6%"><col style="width:3.8%"><col style="width:4.0%"><col style="width:7.4%">
+      <col style="width:4.8%"><col style="width:5.6%">{% if sp %}<col style="width:3.8%">{% endif %}<col style="width:4.0%"><col style="width:7.4%">
     </colgroup>
     <thead>
       <tr>
         <th class="l" rowspan="2">Subject</th>
-        {% for tn in cumulative.terms %}<th colspan="{{ 7 if cumulative.show_ca3 else 6 }}">{{ tn }}</th>{% endfor %}
-        <th colspan="5">Overall Cumulative</th>
+        {% for tn in cumulative.terms %}<th colspan="{{ per_term }}">{{ tn }}</th>{% endfor %}
+        <th colspan="{{ 5 if sp else 4 }}">Overall Cumulative</th>
       </tr>
       <tr>
-        {% for tn in cumulative.terms %}<th>CA1</th><th>CA2</th>{% if cumulative.show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Avg.</th><th>Pos.</th>{% endfor %}
-        <th>Total</th><th>Average</th><th>Pos.</th><th>Grade</th><th>Remark</th>
+        {% for tn in cumulative.terms %}<th>CA1</th><th>CA2</th>{% if cumulative.show_ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Total</th><th>Avg.</th>{% if sp %}<th>Pos.</th>{% endif %}{% endfor %}
+        <th>Total</th><th>Average</th>{% if sp %}<th>Pos.</th>{% endif %}<th>Grade</th><th>Remark</th>
       </tr>
     </thead>
     <tbody>
@@ -40,12 +42,12 @@
       <tr>
         <td class="l"><b>{{ name }}</b></td>
         {% for c in s.term_components %}
-          {% if c %}<td>{{ c.ca1 if c.ca1 is not none else '-' }}</td><td>{{ c.ca2 if c.ca2 is not none else '-' }}</td>{% if cumulative.show_ca3 %}<td>{{ c.ca3 if c.ca3 is not none else '-' }}</td>{% endif %}<td>{{ c.exam if c.exam is not none else '-' }}</td><td><b>{{ c.total }}</b></td><td>{{ (c.total / (4 if cumulative.show_ca3 else 3))|round(1) if c.total is number else '-' }}</td><td>{{ ordinal_text(s.term_positions[loop.index0]) if s.term_positions[loop.index0] is not none else '-' }}</td>
-          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
+          {% if c %}<td>{{ c.ca1 if c.ca1 is not none else '-' }}</td><td>{{ c.ca2 if c.ca2 is not none else '-' }}</td>{% if cumulative.show_ca3 %}<td>{{ c.ca3 if c.ca3 is not none else '-' }}</td>{% endif %}<td>{{ c.exam if c.exam is not none else '-' }}</td><td><b>{{ c.total }}</b></td><td>{{ (c.total / (4 if cumulative.show_ca3 else 3))|round(1) if c.total is number else '-' }}</td>{% if sp %}<td>{{ ordinal_text(s.term_positions[loop.index0]) if s.term_positions[loop.index0] is not none else '-' }}</td>{% endif %}
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td>{% if sp %}<td>-</td>{% endif %}{% endif %}
         {% endfor %}
         <td><b>{{ s.cum_total if s.cum_total is not none else '-' }}</b></td>
         <td>{{ s.average }}</td>
-        <td>{{ ordinal_text(s.position) if s.position is not none else '-' }}</td>
+        {% if sp %}<td>{{ ordinal_text(s.position) if s.position is not none else '-' }}</td>{% endif %}
         <td>{{ s.grade }}</td>
         <td class="rs-rem">{{ s.remark }}</td>
       </tr>
@@ -55,20 +57,20 @@
       <tr>
         <td class="l"><b>TOTAL</b></td>
         {% for tt in cumulative.term_totals %}
-          {% if tt %}<td>{{ tt.ca1 }}</td><td>{{ tt.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ tt.ca3 }}</td>{% endif %}<td>{{ tt.exam }}</td><td><b>{{ tt.total }}</b></td><td>-</td><td>-</td>
-          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
+          {% if tt %}<td>{{ tt.ca1 }}</td><td>{{ tt.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ tt.ca3 }}</td>{% endif %}<td>{{ tt.exam }}</td><td><b>{{ tt.total }}</b></td><td>-</td>{% if sp %}<td>-</td>{% endif %}
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td>{% if sp %}<td>-</td>{% endif %}{% endif %}
         {% endfor %}
         <td><b>{{ cumulative.cum_grand_total if cumulative.cum_grand_total is not none else '-' }}</b></td>
-        <td colspan="4"></td>
+        <td colspan="{{ 4 if sp else 3 }}"></td>
       </tr>
       <tr>
         <td class="l"><b>AVERAGE</b></td>
         {% for ta in cumulative.term_averages %}
-          {% if ta %}<td>{{ ta.ca1 }}</td><td>{{ ta.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ ta.ca3 }}</td>{% endif %}<td>{{ ta.exam }}</td><td><b>{{ ta.total }}</b></td><td>-</td><td>-</td>
-          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td><td>-</td>{% endif %}
+          {% if ta %}<td>{{ ta.ca1 }}</td><td>{{ ta.ca2 }}</td>{% if cumulative.show_ca3 %}<td>{{ ta.ca3 }}</td>{% endif %}<td>{{ ta.exam }}</td><td><b>{{ ta.total }}</b></td><td>-</td>{% if sp %}<td>-</td>{% endif %}
+          {% else %}<td>-</td><td>-</td>{% if cumulative.show_ca3 %}<td>-</td>{% endif %}<td>-</td><td>-</td><td>-</td>{% if sp %}<td>-</td>{% endif %}{% endif %}
         {% endfor %}
         <td><b>{{ cumulative.cum_grand_average if cumulative.cum_grand_average is not none else '-' }}</b></td>
-        <td colspan="4"></td>
+        <td colspan="{{ 4 if sp else 3 }}"></td>
       </tr>
     </tfoot>
   </table></div>
