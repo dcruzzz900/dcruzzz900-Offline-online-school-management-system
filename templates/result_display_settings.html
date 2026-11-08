@@ -18,8 +18,8 @@
 <label>Result title<input name="title" maxlength="80" value="{{ cfg.title or '' }}" placeholder="Terminal Report Sheet"></label>
 <label>Footer text<input name="footer_text" maxlength="300" value="{{ cfg.footer_text or '' }}"></label>
 <label>Watermark text<input name="watermark_text" maxlength="40" value="{{ cfg.watermark_text or '' }}" placeholder="Defaults to the school name"></label>
-<label>Main colour<input type="color" name="accent_color" value="{{ cfg.accent_color or '#0b2a6f' }}"></label>
-<label>Second colour<input type="color" name="secondary_color" value="{{ cfg.secondary_color or '#29a9e0' }}"></label>
+<label>Accent colour <small class="muted">(headings, borders, key figures — also used by the PDF)</small><input type="color" name="accent_color" id="rsAccentInput" value="{{ cfg.accent_color or '#0b2a6f' }}"></label>
+<label>Second colour <small class="muted">(tints and highlights)</small><input type="color" name="secondary_color" id="rsSecondInput" value="{{ cfg.secondary_color or '#29a9e0' }}"></label>
 <label>Logo position<select name="header_layout">{% for v,l in header_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.header_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
 <label>Header text alignment<select name="text_align">{% for v,l in text_aligns %}<option value="{{ v }}" {{ 'selected' if cfg.text_align == v }}>{{ l }}</option>{% endfor %}</select></label>
 <label>Signature placement<select name="signature_layout">{% for v,l in signature_layouts %}<option value="{{ v }}" {{ 'selected' if cfg.signature_layout == v }}>{{ l }}</option>{% endfor %}</select></label>
@@ -45,4 +45,21 @@
 {% if preview %}<div class="card" id="preview"><h3>Preview <small class="muted">(sample data — shows the settings last saved)</small></h3><div class="rds-prev" id="rdsPrev"><div id="rdsPrevInner">{% with rs=preview.rs, term=preview.term, student=preview.student, class_row=preview.class_row, subjects=preview.subjects, total=preview.total, average=preview.average, position=preview.position, position_text=preview.position_text, class_size=preview.class_size, subjects_written=preview.subjects_written, show_ca3=preview.show_ca3, info=preview.info, domain_groups=preview.domain_groups, promotion_status=preview.promotion_status, overall_grade=preview.overall_grade, overall_remark=preview.overall_remark, total_obtainable=preview.total_obtainable, max_each=preview.max_each, cumulative=preview.cumulative, cum_summary=preview.cum_summary, teacher_name=preview.teacher_name, principal_name=preview.principal_name, student_full_name=preview.student_full_name %}{% include "_result_sheet.html" %}{% endwith %}</div></div></div>
 <script>(function(){function fit(){var w=document.getElementById('rdsPrev'),i=document.getElementById('rdsPrevInner');if(!w||!i)return;var s=i.querySelector('.rs-sheet');if(!s)return;var k=Math.min(1,(w.clientWidth-20)/s.offsetWidth);s.style.zoom=k;}window.addEventListener('load',fit);window.addEventListener('resize',fit);})();
 document.getElementById('rdsForm').addEventListener('submit',function(){var b=document.getElementById('rdsSave');b.disabled=true;b.textContent='Saving…';});</script>{% endif %}
+<script>
+/* V103: changing the Accent / Second colour here is applied at once to the live preview and to every design thumbnail
+   (and saved colours apply to every result sheet, print and PDF). */
+(function(){
+  function apply(){
+    var a=document.getElementById('rsAccentInput'), b=document.getElementById('rsSecondInput');
+    document.querySelectorAll('.rs-sheet').forEach(function(el){
+      if(a) el.style.setProperty('--rs-accent', a.value);
+      if(b) el.style.setProperty('--rs-second', b.value);
+    });
+  }
+  ['rsAccentInput','rsSecondInput'].forEach(function(id){
+    var el=document.getElementById(id); if(!el) return;
+    el.addEventListener('input',apply); el.addEventListener('change',apply);
+  });
+})();
+</script>
 {% endblock %}
