@@ -405,8 +405,28 @@ def register_v63(app, h):
         if not class_in_school(conn, class_id) or not term_ok:
             conn.close(); flash("Class or term not found.", "error"); return redirect(url_for("result_workflow"))
         ok, msg = transition(conn, class_id, term_id, action, request.form.get("reason"))
+        if ok and action == "approve":
+            # V103: tell the class/form teacher (and whoever submitted it) that the results were approved, and by whom.
+            try:
+                pub = core.get_publication(conn, school_id, class_id, term_id)
+                cls = conn.execute("SELECT name, form_teacher_id FROM classes WHERE id=?", (class_id,)).fetchone()
+                trm = conn.execute("SELECT name FROM terms WHERE id=?", (term_id,)).fetchone()
+                who = f"{session.get('name') or 'An authorised user'} ({actor_role_label()})"
+                recipients = {u for u in ((cls["form_teacher_id"] if cls else None), (pub["submitted_by"] if pub else None)) if u}
+                recipients.discard(session.get("user_id"))      # no need to notify yourself
+                for uid_ in recipients:
+                    conn.execute("INSERT INTO notifications(sender_label, school_id, target_role, target_user_id, title, message) VALUES (?,?,?,?,?,?)",
+                                 (who, school_id, "teacher", uid_, "Results approved",
+                                  f"The {trm['name'] if trm else 'term'} results for {cls['name'] if cls else 'your class'} that were submitted for review "
+                                  f"have been approved by {who}. They are now ready to be published."))
+                conn.commit()
+            except Exception:
+                pass            # a notification problem must never undo an approval
         conn.close()
         flash(msg, "success" if ok else "error")
+        if ok and action == "start_review":
+            # V103: "Start review" opens the class's submitted results straight away, so the reviewer can look at them.
+            return redirect(url_for("class_results_list", class_id=class_id, term_id=term_id, review=1))
         return redirect(url_for("result_workflow", term_id=term_id))
 
     @app.route("/results/workflow/<int:class_id>/<int:term_id>/history")

@@ -531,32 +531,33 @@ def term_table(data, rs, S, w=None):
     return [Spacer(1, 5), banner("Academic Performance", S, w), Spacer(1, 3), t]
 
 
-def cumulative_table(cum, S, w=None):
+def cumulative_table(cum, S, w=None, show_pos=True):
     """Cumulative / Annual Performance: fixed column widths computed from the term count (same formula as
     _cumulative_breakdown.html), so the table is ALWAYS exactly the page width and Remark is never cut off."""
     w = w or W
     pal = S.pal
     ca3 = bool(cum.get("show_ca3"))
     terms = list(cum["terms"])
-    per = 7 if ca3 else 6
+    per = (7 if ca3 else 6) - (0 if show_pos else 1)     # V103: Pos. columns follow "Show subject position"
     nt = len(terms)
     term_cols = nt * per
-    overall_pct = 25.6
+    overall_pct = 25.6 if show_pos else 21.8
     col_pct = max(2.4, min(5.6, (100 - overall_pct - 10.5) / term_cols))
     subj_pct = 100 - overall_pct - term_cols * col_pct
     pt = w / 100.0
-    widths = [subj_pct * pt] + [col_pct * pt] * term_cols + [4.8 * pt, 5.6 * pt, 3.8 * pt, 4.0 * pt, 7.4 * pt]
+    widths = [subj_pct * pt] + [col_pct * pt] * term_cols + [4.8 * pt, 5.6 * pt] + ([3.8 * pt] if show_pos else []) + [4.0 * pt, 7.4 * pt]
+    nov = 5 if show_pos else 4
     fs = max(4.9, min(7.0, (col_pct * pt - 1.6) / 2.9))
     div = 4 if ca3 else 3
     sty_n = S.p(fs, align=TA_CENTER, leading=fs * 1.2)
     sty_subj = S.p(min(8, fs + 1), bold=True, leading=(fs + 1) * 1.2)
     sty_rem = S.p(max(4.8, fs - .3), align=TA_CENTER, leading=fs * 1.2)
-    sub = ["CA1", "CA2"] + (["CA3"] if ca3 else []) + ["Exam", "Total", "Avg.", "Pos."]
+    sub = ["CA1", "CA2"] + (["CA3"] if ca3 else []) + ["Exam", "Total", "Avg."] + (["Pos."] if show_pos else [])
     head0 = ["Subject"]
     for tn in terms:
         head0 += [str(tn)] + [""] * (per - 1)
-    head0 += ["Overall Cumulative", "", "", "", ""]
-    head1 = [""] + sub * nt + ["Total", "Average", "Pos.", "Grade", "Remark"]
+    head0 += ["Overall Cumulative"] + [""] * (nov - 1)
+    head1 = [""] + sub * nt + ["Total", "Average"] + (["Pos."] if show_pos else []) + ["Grade", "Remark"]
     body = [head0, head1]
     for name, s in cum["by_subject"].items():
         r = [Paragraph(_esc(name), sty_subj)]
@@ -568,21 +569,23 @@ def cumulative_table(cum, S, w=None):
                 if ca3:
                     r.append(str(c["ca3"] if c.get("ca3") is not None else "-"))
                 r += [str(c["exam"] if c.get("exam") is not None else "-"), Paragraph(f"<b>{_esc(tot)}</b>", sty_n),
-                      str(round(tot / div, 1)) if isinstance(tot, (int, float)) else "-", _ord(pos) if pos is not None else "-"]
+                      str(round(tot / div, 1)) if isinstance(tot, (int, float)) else "-"] + ([_ord(pos) if pos is not None else "-"] if show_pos else [])
             else:
                 r += ["-"] * per
-        r += [Paragraph(f"<b>{_esc(s['cum_total'] if s.get('cum_total') is not None else '-')}</b>", sty_n), str(s.get("average", "-")),
-              _ord(s["position"]) if s.get("position") is not None else "-", str(s.get("grade", "-")), Paragraph(_esc(s.get("remark", "")), sty_rem)]
+        r += [Paragraph(f"<b>{_esc(s['cum_total'] if s.get('cum_total') is not None else '-')}</b>", sty_n), str(s.get("average", "-"))]
+        if show_pos:
+            r.append(_ord(s["position"]) if s.get("position") is not None else "-")
+        r += [str(s.get("grade", "-")), Paragraph(_esc(s.get("remark", "")), sty_rem)]
         body.append(r)
 
     def foot(label, per_term, overall):
         r = [label]
         for x in per_term:
             if x:
-                r += [str(x["ca1"]), str(x["ca2"])] + ([str(x["ca3"])] if ca3 else []) + [str(x["exam"]), str(x["total"]), "-", "-"]
+                r += [str(x["ca1"]), str(x["ca2"])] + ([str(x["ca3"])] if ca3 else []) + [str(x["exam"]), str(x["total"]), "-"] + (["-"] if show_pos else [])
             else:
                 r += ["-"] * per
-        r += [str(overall if overall is not None else "-"), "", "", "", ""]
+        r += [str(overall if overall is not None else "-")] + [""] * (nov - 1)
         return r
     body.append(foot("TOTAL", cum.get("term_totals") or [None] * nt, cum.get("cum_grand_total")))
     body.append(foot("AVERAGE", cum.get("term_averages") or [None] * nt, cum.get("cum_grand_average")))
@@ -598,7 +601,7 @@ def cumulative_table(cum, S, w=None):
         a = 1 + i * per
         st.append(("SPAN", (a, 0), (a + per - 1, 0)))
     o = 1 + term_cols
-    st += [("SPAN", (o, 0), (o + 4, 0)), ("SPAN", (o + 1, n - 2), (o + 4, n - 2)), ("SPAN", (o + 1, n - 1), (o + 4, n - 1))]
+    st += [("SPAN", (o, 0), (o + nov - 1, 0)), ("SPAN", (o + 1, n - 2), (o + nov - 1, n - 2)), ("SPAN", (o + 1, n - 1), (o + nov - 1, n - 1))]
     t.setStyle(TableStyle(st))
     return [Spacer(1, 5), banner("Cumulative / Annual Performance", S, w), Spacer(1, 3), t]
 
@@ -731,19 +734,19 @@ def signatures(cells, S, w=None):
     for role, sig, name, show_sig, show_date, date_iso in cells:
         rows, st = [], []
         if show_sig:
-            simg = _img(sig, 1.1 * cm, 4 * cm) if sig else None
-            rows.append([simg if simg is not None else Spacer(1, 1.1 * cm)])
+            simg = _img(sig, 0.9 * cm, 4 * cm) if sig else None
+            rows.append([simg if simg is not None else Spacer(1, 0.65 * cm)])
             st.append(("LINEBELOW", (0, 0), (0, 0), 1.1, pal.accent))
             rows.append([Paragraph(f"{_esc(role)}{(': ' + _esc(name)) if name else ''}", S.p(10 if w == W else 8.5, align=TA_CENTER))])
         if show_date:
             rows.append([Paragraph(f"Date: {format_dmy(date_iso) if date_iso else ''}", S.p(10 if w == W else 8.5, align=TA_CENTER))])
         t = Table(rows, colWidths=[colw])
-        t.setStyle(TableStyle(st + [("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 1.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5)]))
+        t.setStyle(TableStyle(st + [("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
         built.append(t)
     hw = w / 2
     row = Table([[b for b in built] + [""] * (2 - len(built))], colWidths=[hw, hw])
     row.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM")]))
-    return [Spacer(1, 0.3 * cm), row]
+    return [Spacer(1, 0.2 * cm), row]
 
 
 def keys(grading, domain_key_on, S, w=None, narrow=False):
@@ -802,7 +805,7 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
 
     ids = [("Name", name, False)]
     if rs.get("show_admission_no", True):
-        ids.append(("Admission No.", student["admission_no"], False))
+        ids.append(("Admission / Register No.", student["admission_no"], False))
     if rs.get("show_class", True):
         ids.append(("Class / Arm", class_row["name"], False))
     if rs.get("show_session", True):
@@ -837,7 +840,7 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
                                  ("show_days_absent", "Days Absent", "days_absent"), ("show_days_late", "Days Late", "days_late")):
             if rs.get(flag, True):
                 att.append((label, info.get(key), 1))
-    if promo:
+    if promo and rs.get("show_attendance", True):          # same rule as the print sheet: the whole block follows "Show attendance"
         att.append(("Promotion Status", promo, 2.4))
     cm_items = []
     if rs.get("show_teacher_comment", True):
@@ -856,7 +859,7 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
     foot = [Spacer(1, 4), Paragraph(_esc(rs["footer"]), S.p(8))] if rs.get("footer") else []
 
     def table_part(w):
-        return cumulative_table(cum, S, w) if show_cum else term_table(data, rs, S, w)
+        return cumulative_table(cum, S, w, rs.get("show_subject_position", True)) if show_cum else term_table(data, rs, S, w)
 
     els = header(data, term, rs, S, school_name, logo_path)
 
@@ -939,7 +942,7 @@ def cumulative_page_elements(data, session, school_name, logo_path, student_full
     els += id_boxes(ids, S)
     cum = data.get("cumulative")
     if cum and cum.get("terms"):
-        els += cumulative_table(cum, S)
+        els += cumulative_table(cum, S, None, rs.get("show_subject_position", True))
     if rs.get("footer"):
         els += [Spacer(1, 4), Paragraph(_esc(rs["footer"]), S.p(8))]
     return els, pal, rs.get("watermark"), _page_color(S)
