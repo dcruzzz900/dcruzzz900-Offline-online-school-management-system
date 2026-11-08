@@ -1288,27 +1288,12 @@ def inject_school_settings():
 
 
 @app.context_processor
-def inject_pdf_engine_status():
-    """V87: a School Admin/Sub-Admin should SEE when results/broadsheets are printing in the
-    plain fallback layout instead of their chosen design, rather than silently getting a
-    generic PDF with no explanation (what Austin reported as an "old result fallback
-    interfering with printing"). engine_available() is cheap after its first real check per
-    process (it just reads a cached bool), so this costs nothing on every other request."""
-    if session.get("role") in ("admin", "sub_admin"):
-        try:
-            return {"pdf_engine_down": not html_pdf.engine_available()}
-        except Exception:
-            return {"pdf_engine_down": False}
-    return {"pdf_engine_down": False}
-
-
-@app.context_processor
 def inject_unread_notifications():
     count = 0
     if "user_id" in session:
         conn = get_db()
         row = conn.execute("SELECT last_notification_seen_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
-        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, session.get("role"), session.get("school_id"))
+        count = get_unread_notification_count(conn, row["last_notification_seen_id"] if row else 0, session.get("role"), session.get("school_id"), user_id=session.get("user_id"))
         conn.close()
     elif "student_id" in session:
         conn = get_db()
@@ -3145,7 +3130,7 @@ def notifications_inbox():
     conn = get_db()
     _prev = conn.execute("SELECT last_notification_seen_id FROM users WHERE id=?", (session["user_id"],)).fetchone()
     seen_before = (_prev["last_notification_seen_id"] if _prev else 0) or 0
-    notifications = get_visible_notifications(conn, session.get("role"), session.get("school_id"))
+    notifications = get_visible_notifications(conn, session.get("role"), session.get("school_id"), user_id=session.get("user_id"))
     if notifications:
         conn.execute("UPDATE users SET last_notification_seen_id=? WHERE id=?", (notifications[0]["id"], session["user_id"]))
         conn.commit()
@@ -6496,6 +6481,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
         for subj in subjects:
             term_values = []
             term_positions = []
+            term_components = []   # V103: every term's CA1/CA2/(CA3)/Exam/Total, so the broadsheet can show them all
             present_totals = []
             for term in terms:
                 score = conn.execute(
@@ -6506,8 +6492,10 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
                     t = compute_total(score["ca1"], score["ca2"], score["exam"], score["ca3"])
                     term_values.append(t)
                     present_totals.append(t)
+                    term_components.append({"ca1": score["ca1"], "ca2": score["ca2"], "ca3": score["ca3"], "exam": score["exam"], "total": t})
                 else:
                     term_values.append(None)
+                    term_components.append(None)
                 term_positions.append(term_subj_pos[term["id"]].get(subj["id"], {}).get(st["id"]))
             if present_totals:
                 cum_avg = round(sum(present_totals) / len(present_totals), 2)
@@ -6518,7 +6506,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
             else:
                 cum_avg, grade, remark, cum_total = "-", "-", "-", None
             subj_cumulative[subj["id"]] = {
-                "term_values": term_values, "term_positions": term_positions,
+                "term_values": term_values, "term_positions": term_positions, "term_components": term_components,
                 "average": cum_avg, "grade": grade, "remark": remark, "cum_total": cum_total,
             }
         overall_average = round(overall_total / overall_count, 2) if overall_count else 0
@@ -6718,9 +6706,10 @@ def cumulative_broadsheet(class_id):
     # unlike the single-student sheet's FIT_FLOOR/orientation mechanism) -- a deliberate, smaller
     # scope than the single-student cumulative result got.
     rs = result_sheet_settings(conn, current_school_id())
+    show_ca3 = ca3_enabled(get_grading_config(conn))
     conn.close()
     return render_template(
-        "cumulative_broadsheet.html", class_row=class_row, academic_session=session_row, subjects=subjects,
+        "cumulative_broadsheet.html", show_ca3=show_ca3, class_row=class_row, academic_session=session_row, subjects=subjects,
         terms=terms, rows=rows, all_sessions=all_sessions, student_full_name=student_full_name,
         selected_term=selected_term, session_terms=session_terms, rs=rs,
     )
@@ -7058,7 +7047,9 @@ def build_result_data(conn, student_id, term_id):
     # (First Term shows Second Term's date, etc.), and it's left blank rather than guessed
     # when that hasn't been configured yet.
     _ntr = next_term_resumes_info(conn, term_row_for_dates) if term_row_for_dates else {"date_iso": None}
-    rs["next_term_resumes"] = format_dmy(_ntr["date_iso"]) if (rs.get("show_next_term_resumes") and _ntr.get("date_iso")) else None
+    # V103: a date entered on this student's Academic Record page wins; otherwise the school-wide date of the next term.
+    _ntr_iso = (info.get("next_term_resumes") or "").strip() or _ntr.get("date_iso")
+    rs["next_term_resumes"] = format_dmy(_ntr_iso) if (rs.get("show_next_term_resumes") and _ntr_iso) else None
     _overall_grade, _overall_remark = grade_for(average, conn, school_id) if subjects_written else ("-", "-")
     # V87: the cumulative section embedded in a term result (only when the school has the
     # Cumulative / Annual Result switched on) now reuses build_cumulative_result_data()'s own
@@ -7098,7 +7089,7 @@ def build_result_data(conn, student_id, term_id):
         "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative, "cum_summary": cum_summary,
         "gender_text": {"M": "Male", "F": "Female"}.get(student["gender"] if "gender" in student.keys() else None, ""), "dob_text": format_dmy(_dob) if _dob else "",
         "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
-        "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
+        "ntr_iso": _ntr_iso, "ntr_default_iso": _ntr.get("date_iso"), "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
         "average": my_row["average"] if my_row else 0,
@@ -7594,6 +7585,13 @@ def result_extra(student_id):
         (student_id, term_id, d_pres, d_abs, d_open, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date,
          teacher_signed_by, principal_signed_by, promotion_status, result_date, source),
     )
+    if "next_term_resumes" in request.form:
+        _raw = (request.form.get("next_term_resumes") or "").strip()
+        try:
+            _val = datetime.datetime.strptime(_raw, "%Y-%m-%d").strftime("%Y-%m-%d") if _raw else None
+        except ValueError:
+            _val = None
+        conn.execute("UPDATE student_term_info SET next_term_resumes=? WHERE student_id=? AND term_id=?", (_val, student_id, term_id))
     _pc.audit(conn, {"type": "staff", "id": session.get("user_id"), "name": session.get("name"), "role": _actor_role_label(),
                      "school_id": current_school_id(), "tenant_id": session.get("tenant_id")}, "result_details_saved", "student", student_id,
               _pc.diff(ex or {"k": None}, {"teacher_comment": teacher_comment, "principal_comment": principal_comment, "result_date": result_date,
@@ -7691,10 +7689,24 @@ def class_results_list(class_id):
     ).fetchall()
     class_row = conn.execute("SELECT * FROM classes WHERE id=?", (class_id,)).fetchone()
     all_terms = all_terms_for_school(conn)
+    # V103: show where this class's result stands (and who submitted it) so a reviewer who just clicked "Start review"
+    # lands on the submitted results with the context they need.
+    review_info = None
+    try:
+        pubrow = conn.execute(
+            "SELECT p.status, p.submitted_at, p.last_reason, u.name AS submitter FROM result_publication p "
+            "LEFT JOIN users u ON u.id=p.submitted_by WHERE p.class_id=? AND p.term_id=? AND p.school_id=?",
+            (class_id, term["id"], current_school_id())).fetchone()
+        if pubrow:
+            review_info = {"status": pubrow["status"], "label": {"draft": "Draft", "submitted": "Submitted for review", "under_review": "Under review", "returned": "Returned for correction",
+                                                                 "approved": "Approved — ready to publish", "published": "Published", "reopened": "Reopened — correction"}.get(pubrow["status"], pubrow["status"]),
+                           "submitter": pubrow["submitter"], "submitted_at": pubrow["submitted_at"]}
+    except Exception:
+        review_info = None
     conn.close()
     return render_template(
         "class_results_list.html", students=students, class_row=class_row, term=term,
-        student_full_name=student_full_name, all_terms=all_terms,
+        student_full_name=student_full_name, all_terms=all_terms, review_info=review_info,
     )
 
 

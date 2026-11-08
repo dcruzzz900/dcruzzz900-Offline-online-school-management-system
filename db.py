@@ -2464,22 +2464,23 @@ def notification_target_role(role):
     return "admin" if role in ("admin", "sub_admin") else role
 
 
-def get_visible_notifications(conn, role, school_id, limit=50):
+def get_visible_notifications(conn, role, school_id, limit=50, user_id=None):
     target = notification_target_role(role)
     return conn.execute(
         "SELECT n.*, s.name as school_name FROM notifications n LEFT JOIN schools s ON s.id=n.school_id "
         "WHERE (n.school_id IS NULL OR n.school_id=?) AND (n.target_role='all' OR n.target_role=?) "
+        "AND (n.target_user_id IS NULL OR n.target_user_id=?) "
         "ORDER BY n.id DESC LIMIT ?",
-        (school_id, target, limit),
+        (school_id, target, user_id, limit),
     ).fetchall()
 
 
-def get_unread_notification_count(conn, last_seen_id, role, school_id):
+def get_unread_notification_count(conn, last_seen_id, role, school_id, user_id=None):
     target = notification_target_role(role)
     row = conn.execute(
         "SELECT COUNT(*) c FROM notifications WHERE id > ? AND (school_id IS NULL OR school_id=?) "
-        "AND (target_role='all' OR target_role=?)",
-        (last_seen_id or 0, school_id, target),
+        "AND (target_role='all' OR target_role=?) AND (target_user_id IS NULL OR target_user_id=?)",
+        (last_seen_id or 0, school_id, target, user_id),
     ).fetchone()
     return row["c"]
 
@@ -4121,6 +4122,24 @@ def migration_074_v100_sample_colours(conn):
 
 
 STEPS.append(("sample_colours_v100", migration_074_v100_sample_colours))
+
+
+def migration_075_v103_student_next_term_resumes(conn):
+    """V103: 'Next Term Resumes' can now be entered on the Academic Record (Terminal Result) page for a student's
+    result. Stored per student+term; when empty the school-wide date set for the next term (Terms page) is used."""
+    ensure_column(conn, "student_term_info", "next_term_resumes", "TEXT")
+
+
+STEPS.append(("student_next_term_resumes_v103", migration_075_v103_student_next_term_resumes))
+
+
+def migration_076_v103_targeted_notifications(conn):
+    """V103: a notification can be addressed to ONE staff member (e.g. 'your class results were approved' goes to the
+    class/form teacher who submitted them), not just to a whole role. NULL = everyone in target_role as before."""
+    ensure_column(conn, "notifications", "target_user_id", "INTEGER")
+
+
+STEPS.append(("targeted_notifications_v103", migration_076_v103_targeted_notifications))
 
 
 def term_sequence_next(conn, term):
