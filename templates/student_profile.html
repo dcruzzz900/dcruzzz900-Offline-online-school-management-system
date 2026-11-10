@@ -8,8 +8,8 @@
     <div class="grid-2">
         <div>
             {% if student.photo_filename %}
-            <img src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo"
-                 style="max-width:120px; max-height:150px; display:block; margin-bottom:0.75rem; border:1px solid #ddd;">
+            <img class="passport-img" src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo"
+                >
             {% endif %}
             <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
             <p><b>Class / Arm:</b> {{ class_row.name }}</p>
@@ -40,19 +40,8 @@
 
 <div class="card">
     <h3>Passport Photo</h3>
-    <p style="font-size:0.9rem; color:#666;">Optional. Requires an internet connection to upload.</p>
-    <form method="POST" action="{{ url_for('upload_student_photo', student_id=student.id) }}" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="file" name="photo" data-max-bytes="512000" data-size-message="Passport image must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif" required><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
-        <button class="btn btn-small" type="submit">{% if student.photo_filename %}Replace Photo{% else %}Upload Photo{% endif %}</button>
-    </form>
-    {% if student.photo_filename %}
-    <form method="POST" action="{{ url_for('remove_student_photo', student_id=student.id) }}" style="margin-top:0.5rem;"
-          onsubmit="return confirm('Remove this student\'s passport photo?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove Photo</button>
-    </form>
-    {% endif %}
+    <p style="font-size:0.9rem; color:#666;">One passport photograph is used everywhere (result sheets, dashboards, parent and teacher views). To upload, replace or remove it, use <a href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Profile &rarr; Photograph</a>.</p>
+    {% if student.photo_filename %}<img class="passport-img" src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo">{% else %}<p class="muted">No photograph uploaded yet.</p>{% endif %}
 </div>
 
 {% if enrollment_history %}

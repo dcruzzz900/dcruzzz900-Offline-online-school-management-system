@@ -89,7 +89,7 @@
   <div class="card"><h3>Photograph</h3>
     <div class="pf-media">
       <div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
-        {% if photo_url %}<img src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}
+        {% if photo_url %}<img class="passport-img" src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}
         <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Passport photograph must not exceed 500 KB.">
         <small class="muted">PNG, JPG or GIF · maximum 500 KB</small>
         {% if kind == 'student' and photo_url %}<label class="pf-check"><input type="checkbox" name="remove_photo" value="1"> Remove current photograph</label>{% endif %}

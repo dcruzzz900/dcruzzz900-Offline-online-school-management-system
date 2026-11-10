@@ -64,11 +64,11 @@
     </form>
 </div>
 
-<div class="card">
+{% if session.get('role') != 'teacher' %}<div class="card">
     <h3>Staff Attendance</h3>
     <p style="font-size:0.9rem; color:#666;">Present/Absent/Late/Leave totals per staff member for a date range, with CSV, Excel and PDF export.</p>
     <a class="btn btn-small" href="{{ url_for('staff_attendance_history') }}">Go to Staff Attendance History &amp; Reports</a>
-</div>
+</div>{% endif %}
 
 <div class="card">
     <h3>Student Academic History</h3>
