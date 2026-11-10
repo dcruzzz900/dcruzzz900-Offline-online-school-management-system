@@ -15,7 +15,7 @@
 {% set _font = {'Times-Roman':'"Times New Roman",Times,serif','Courier':'"Courier New",Courier,monospace'}.get(rs.pdf_font, 'Arial,Helvetica,sans-serif') %}
 {% set b_head %}<header class="rs-head rs-head-{{ rs.header_layout }}{% if rs.text_align %} rs-text-{{ rs.text_align }}{% endif %}">
   {% if rs.logo and rs.header_layout != 'no-logo' %}<img class="rs-logo" src="{{ rs.logo }}" alt="School logo">{% endif %}
-  {% set _n = (rs.school_name or '')|length %}<div class="rs-head-text"><h2 style="font-size:{{ 19 if _n <= 22 else 16 if _n <= 28 else 14 if _n <= 34 else 12.5 if _n <= 40 else 11 }}pt">{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}
+  {% set _n = (rs.school_name or '')|length %}<div class="rs-head-text"><h2 style="font-size:{{ 19 if _n <= 22 else 16 if _n <= 28 else 14 if _n <= 34 else 12.5 if _n <= 40 else 11 }}pt">{{ rs.school_name }}</h2>{% if rs.tagline %}<p class="rs-tag">{{ rs.tagline }}</p>{% endif %}{% if rs.contact %}<p class="rs-contact">{{ rs.contact }}</p>{% endif %}{% if rs.custom_info %}<p class="rs-custominfo">{% for l, v in rs.custom_info %}<span><b>{{ l }}:</b> {{ v }}</span>{% endfor %}</p>{% endif %}
     <h1>{{ rs.title }}</h1>{% if rs.show_session or rs.show_term %}<p class="rs-term">{% if rs.show_session %}{{ term.session_name }}{% endif %}{% if rs.show_session and rs.show_term %} — {% endif %}{% if rs.show_term %}{{ term.name }}{% endif %}</p>{% endif %}</div>
   {% if rs.show_passport %}{% if rs.passport %}<div class="rs-passport has-photo"><img src="{{ rs.passport }}" alt="Student passport photograph"></div>{% else %}<div class="rs-passport rs-passport-empty" role="img" aria-label="No photograph on file"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg></div>{% endif %}{% endif %}
 </header>
@@ -69,6 +69,8 @@
 {% set b_domains %}{% if rs.show_domains and domain_groups %}<section class="rs-domains"><h3 class="rs-h">Domain Ratings</h3>
   <div class="rs-domain-grid">{% for g in domain_groups %}<table class="rs-table rs-mini"><thead><tr><th class="l">{{ g.label }}</th><th>Rating</th></tr></thead><tbody>{% for name, rating in g['items'] %}<tr><td class="l">{{ name }}</td><td>{{ rating }}</td></tr>{% endfor %}</tbody></table>{% endfor %}</div></section>{% endif %}
 {% endset %}
+{% set b_custom %}{% if rs.show_additional_fields and custom_fields %}<section class="rs-custom"><h3 class="rs-h">Additional Information</h3><div class="rs-custom-grid">{% for l, v in custom_fields %}<div><span>{{ l }}</span><b>{{ v }}</b></div>{% endfor %}</div></section>{% endif %}
+{% endset %}
 {% set b_att %}{% if rs.show_attendance and (rs.show_days_opened or rs.show_days_present or rs.show_days_absent or rs.show_days_late or (rs.show_promotion and promotion_status)) %}<section class="rs-att">
   {% if rs.show_days_opened %}<div><span>Days School Opened</span><b>{{ info.days_school_opened if info.days_school_opened is not none else '—' }}</b></div>{% endif %}
   {% if rs.show_days_present %}<div><span>Days Present</span><b>{{ info.days_present if info.days_present is not none else '—' }}</b></div>{% endif %}
@@ -99,8 +101,8 @@
 <article class="rs-sheet rs-classic rs-style-{{ _tpl }} rs-layout-{{ _layout }}" style="--rs-accent:{{ rs.accent }};--rs-second:{{ rs.secondary }};font-family:{{ _font }}">
 {% if rs.watermark %}<div class="rs-watermark" aria-hidden="true">{{ rs.watermark }}</div>{% endif %}
 {{ b_head }}
-{% if _layout == 'sidebar' %}{% if show_cumulative %}{{ b_perf }}{% endif %}<div class="rs-cols"><aside class="rs-side">{{ b_id }}{{ b_att }}{{ b_domains }}{{ b_ntr }}{{ b_key }}</aside><div class="rs-main">{% if not show_cumulative %}{{ b_perf }}{% endif %}{{ b_summary }}{{ b_comments }}{{ b_sign }}</div></div>
-{% elif _layout == 'cards' %}{{ b_id }}{{ b_summary }}{{ b_perf }}<div class="rs-card-grid">{{ b_domains }}{{ b_att }}{{ b_comments }}</div>{{ b_sign }}{{ b_ntr }}{{ b_key }}
-{% else %}{{ b_id }}{{ b_perf }}{{ b_summary }}{{ b_domains }}{{ b_att }}{{ b_comments }}{{ b_sign }}{{ b_ntr }}{{ b_key }}{% endif %}
+{% if _layout == 'sidebar' %}{% if show_cumulative %}{{ b_perf }}{% endif %}<div class="rs-cols"><aside class="rs-side">{{ b_id }}{{ b_att }}{{ b_domains }}{{ b_ntr }}{{ b_key }}</aside><div class="rs-main">{% if not show_cumulative %}{{ b_perf }}{% endif %}{{ b_summary }}{{ b_custom }}{{ b_comments }}{{ b_sign }}</div></div>
+{% elif _layout == 'cards' %}{{ b_id }}{{ b_summary }}{{ b_perf }}<div class="rs-card-grid">{{ b_domains }}{{ b_custom }}{{ b_att }}{{ b_comments }}</div>{{ b_sign }}{{ b_ntr }}{{ b_key }}
+{% else %}{{ b_id }}{{ b_perf }}{{ b_summary }}{{ b_domains }}{{ b_custom }}{{ b_att }}{{ b_comments }}{{ b_sign }}{{ b_ntr }}{{ b_key }}{% endif %}
 {{ b_foot }}
 </article>

@@ -15,8 +15,8 @@
 {% set per_term = (7 if cumulative.show_ca3 else 6) - (0 if sp else 1) %}
 {% set n_terms = cumulative.terms|length %}
 {% set term_cols = n_terms * per_term %}
-{% set overall_w = 25.6 if sp else 21.8 %}
-{% set col_w = [ [ (100 - overall_w - 10.5) / term_cols, 5.6 ]|min, 2.4 ]|max %}
+{% set overall_w = 24.6 if sp else 20.8 %}
+{% set col_w = [ [ (100 - overall_w - 9.6) / term_cols, 5.6 ]|min, 2.4 ]|max %}
 {% set subj_w = 100 - overall_w - term_cols * col_w %}
 <section class="rs-cumulative{% if n_terms >= 4 %} rs-cum-4{% endif %}{% if cumulative.show_ca3 %} rs-cum-ca3{% endif %}">
   <h3 class="rs-h">Cumulative / Annual Performance</h3>
@@ -24,7 +24,7 @@
     <colgroup>
       <col style="width:{{ '%.2f'|format(subj_w) }}%">
       {% for i in range(term_cols) %}<col style="width:{{ '%.2f'|format(col_w) }}%">{% endfor %}
-      <col style="width:4.8%"><col style="width:5.6%">{% if sp %}<col style="width:3.8%">{% endif %}<col style="width:4.0%"><col style="width:7.4%">
+      <col style="width:5.0%"><col style="width:5.2%">{% if sp %}<col style="width:3.8%">{% endif %}<col style="width:4.0%"><col style="width:6.6%">
     </colgroup>
     <thead>
       <tr>

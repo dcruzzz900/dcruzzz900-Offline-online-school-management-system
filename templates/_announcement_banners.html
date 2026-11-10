@@ -1,0 +1,11 @@
+{# V104: temporary announcement banners (dashboards only; supplied by the announcements context processor) #}
+{% if announcement_banners %}
+<div class="ann-wrap" role="region" aria-label="Announcements">
+{% for a in announcement_banners %}
+  <div class="ann ann-{{ a.level }}" role="status">
+    <div class="ann-body"><b>{{ a.title }}</b><span>{{ a.message }}</span></div>
+    {% if a.dismissible %}<form method="POST" action="{{ url_for('announcement_dismiss', ann_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="ann-x" type="submit" aria-label="Dismiss announcement" title="Dismiss">&times;</button></form>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endif %}

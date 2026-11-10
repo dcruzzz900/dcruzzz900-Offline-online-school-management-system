@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<h1>Announcements</h1>
+<p class="muted">Temporary banners shown at the top of the chosen users' dashboards until they expire.
+{% if scope == 'platform' %}As Super Admin you can reach every school or one school.{% else %}Only users of your school will see them.{% endif %}</p>
+<div class="card">
+  <h3>New announcement</h3>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if scope == 'platform' %}<label>Send to<select name="school_id"><option value="">All schools</option>{% for s in schools %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Title<input name="title" maxlength="150" required></label>
+    <label>Message<textarea name="message" rows="3" maxlength="2000" required></textarea></label>
+    <div class="form-grid">
+      <label>Show to<select name="audience">{% for k, l in audiences %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+      <label>Style<select name="level">{% for k, l in levels %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+      <label>Starts <small class="muted">(optional - blank = now)</small><input type="datetime-local" name="starts_at"></label>
+      <label>Expires <span class="req">*</span><input type="datetime-local" name="expires_at" required></label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="dismissible" value="1" checked style="width:auto"> Users may dismiss (close) it</label>
+    <button class="btn" type="submit">Publish announcement</button>
+  </form>
+</div>
+<div class="card">
+  <h3>Announcements</h3>
+  {% if rows %}<div class="table-wrap"><table><thead><tr><th>Title</th>{% if scope == 'platform' %}<th>School</th>{% endif %}<th>Audience</th><th>Expires (UTC)</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for r in rows %}<tr><td><b>{{ r.title }}</b><br><small class="muted">{{ r.message[:90] }}{% if r.message|length > 90 %}…{% endif %}</small></td>
+    {% if scope == 'platform' %}<td>{{ r.school_name or 'All schools' }}</td>{% endif %}
+    <td>{{ r.audience }}</td><td>{{ r.expires_at }}</td>
+    <td>{% if not r.is_active %}Removed{% elif r.expires_at and r.expires_at <= now %}Expired{% elif r.starts_at and r.starts_at > now %}Scheduled{% else %}<b>Live</b>{% endif %}</td>
+    <td>{% if r.is_active %}<form method="POST" style="margin:0"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="act" value="remove"><input type="hidden" name="id" value="{{ r.id }}"><button class="btn btn-small" style="background:#b3261e" type="submit">Remove</button></form>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<p class="muted">No announcements yet.</p>{% endif %}
+</div>
+{% endblock %}

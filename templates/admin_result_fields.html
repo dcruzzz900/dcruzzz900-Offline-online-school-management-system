@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block title %}Additional Result Fields{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1>Additional Result Fields</h1>
+<p>Add information or assessment fields that the default result sheet does not have (for example <i>Hobbies</i>, <i>Number of subjects offered</i>, <i>Conduct grade</i>). Teachers fill them in per student under <b>Update Result Details</b>; they print in an "Additional Information" block. For rated behaviour and skills (1&ndash;5) use <a href="{{ url_for('admin_domains') }}">Domain Ratings</a>.</p></div></div>
+<form method="POST" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add"><h3>Add a field</h3>
+<div class="form-grid"><label>Field name<input name="label" maxlength="60" required placeholder="e.g. Hobbies"></label>
+<label>Type<select name="field_type">{% for k, l in types %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+<label>Options <small class="muted">(choice: comma-separated list; number: optional maximum)</small><input name="options" maxlength="300" placeholder="e.g. Excellent, Good, Fair  or  100"></label></div>
+<button class="btn">Add field</button></form>
+<div class="card" style="margin-top:12px">{% if rows %}{% for r in rows %}
+<form method="POST" class="form-grid" style="border-bottom:1px solid #eee;padding:.5rem 0;align-items:end;{{ 'opacity:.6' if not r.is_active }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="field_id" value="{{ r.id }}">
+<label>Field name <small class="muted">({{ r.field_type }}){% if not r.is_active %} hidden{% endif %}</small><input name="label" value="{{ r.label }}" maxlength="60" required></label>
+{% if r.field_type != 'text' %}<label>Options<input name="options" value="{{ r.options or '' }}" maxlength="300"></label>{% else %}<input type="hidden" name="options" value="">{% endif %}
+<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="show_on_sheet" value="1" style="width:auto" {{ 'checked' if r.show_on_sheet }}> Print on result sheet</label>
+<div style="white-space:nowrap"><button class="btn btn-small" name="action" value="update">Save</button>
+<button class="btn btn-small btn-secondary" name="action" value="toggle">{{ 'Hide' if r.is_active else 'Show' }}</button>
+<button class="btn btn-small btn-secondary" name="action" value="move" onclick="this.form.direction.value='up'" title="Move up">&#9650;</button><button class="btn btn-small btn-secondary" name="action" value="move" onclick="this.form.direction.value='down'" title="Move down">&#9660;</button><input type="hidden" name="direction" value="down"></div></form>
+{% endfor %}{% else %}<p class="muted">No additional fields yet.</p>{% endif %}</div>
+{% endblock %}
