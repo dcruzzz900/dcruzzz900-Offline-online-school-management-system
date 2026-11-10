@@ -232,7 +232,8 @@ r = t_c.get("/staff/2")
 check("staff can view own profile", r.status_code == 200)
 r = t_c.get("/staff/2/edit")
 check("staff edit page opens", r.status_code == 200 and 'name="first_name"' in html(r) and "Name used at signup" in html(r))
-check("staff protected fields read-only", 'name="username"' not in html(r) and 'name="staff_id"' not in html(r))
+# V104: Staff / Employee ID is no longer admin-only; username/role/position stay protected
+check("staff protected fields read-only (username/role); Staff ID is editable", 'name="username"' not in html(r) and 'name="staff_id"' in html(r))
 sp_ok = {"first_name": "Ada", "surname": "Okafor", "other_names": "Grace", "phone": "08022223333", "email": "ada@example.com",
          "date_of_birth": "1985-04-12", "gender": "F", "state": "Anambra", "lga": "Awka South", "address": "5 Church Street, Awka",
          "qualifications": "B.Ed Mathematics", "subjects_taught": "Mathematics"}
@@ -243,7 +244,7 @@ r = post(t_c, "/staff/2/edit", dict(sp_ok, username="hijack", staff_id="STF-999"
 check("staff valid save ok", r.status_code == 302, (r.status_code, html(r)[:400]))
 u = dict(db().execute("SELECT * FROM users WHERE id=2").fetchone())
 check("staff persisted", u["phone"] == "08022223333" and u["state"] == "Anambra" and u["qualifications"] == "B.Ed Mathematics" and u["name"] == "Ada Okafor Grace")
-check("staff protected fields untouched", u["username"] == "aokafor" and u["staff_id"] is None and u["role"] == "teacher" and u["position"] == "form_teacher" and u["school_id"] == 1 and u["tenant_id"] == "1" and u["is_active"] == 1)
+check("staff protected fields untouched", u["username"] == "aokafor" and u["staff_id"] == "STF-999" and u["role"] == "teacher" and u["position"] == "form_teacher" and u["school_id"] == 1 and u["tenant_id"] == "1" and u["is_active"] == 1)
 check("signup name retained", u["signup_name"] == "Mrs. Ada Okafor")
 cc = db()
 try:

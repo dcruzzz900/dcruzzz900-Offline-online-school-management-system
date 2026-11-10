@@ -289,9 +289,9 @@ r = change_role(uid_t, "Nonexistent Role")
 check("an unknown role is refused", one("SELECT rbac_role FROM users WHERE id=?", (uid_t,)) == "Teacher")
 
 # ================================================================== 26. username case
-r = post(a_c, "/admin/teachers", {"name": "John Smith", "username": "JohnSmith", "password": "Passw0rd#1", "position": "subject_teacher", "rbac_role": "Teacher", "email": "", "phone": ""}, "/admin/teachers")
+r = post(a_c, "/admin/teachers", {"name": "John Smith", "username": "JohnSmith", "staff_id": "S-JS-1", "password": "Passw0rd#1", "position": "subject_teacher", "rbac_role": "Teacher", "email": "", "phone": ""}, "/admin/teachers")
 check("staff username keeps the case the admin typed", one("SELECT username FROM users WHERE LOWER(username)='johnsmith'") == "JohnSmith", one("SELECT username FROM users WHERE LOWER(username)='johnsmith'"))
-r = post(a_c, "/admin/teachers", {"name": "John Two", "username": "johnsmith", "password": "Passw0rd#1", "position": "subject_teacher", "rbac_role": "Teacher", "email": "", "phone": ""}, "/admin/teachers")
+r = post(a_c, "/admin/teachers", {"name": "John Two", "username": "johnsmith", "staff_id": "S-JS-2", "password": "Passw0rd#1", "position": "subject_teacher", "rbac_role": "Teacher", "email": "", "phone": ""}, "/admin/teachers")
 check("usernames differing only by case are refused (no ambiguity)", one("SELECT COUNT(*) FROM users WHERE LOWER(username)='johnsmith'") == 1)
 check("login works with the stored case", "dashboard" in (staff("JohnSmith", "Passw0rd#1").get("/dashboard").request.path))
 c = A.app.test_client(); post(c, "/login", {"username": "johnsmith", "password": "Passw0rd#1"}, "/login")
