@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 from functools import wraps
 import os
+import csv_import as csvi
 import sqlite3
 import io
 import csv as csv_module
@@ -1637,7 +1638,9 @@ def register():
         username=request.form.get("username","").strip(); code=request.form.get("signup_code","").strip()
         first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); other=request.form.get("other_names","").strip()
         password=request.form.get("password",""); confirm=request.form.get("confirm_password","")
+        staff_id_val=" ".join(request.form.get("staff_id","").split())[:40]      # V104: required at staff registration
         errors=[]
+        if not staff_id_val: errors.append("Staff / Employee ID is required.")
         if not re.fullmatch(r"[A-Za-z0-9_.]{4,30}",username): errors.append("Username must be 4–30 characters using letters, numbers, underscore or period.")
         if len(first)<2 or len(first)>50 or not re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ' -]+",first): errors.append("First name is required.")
         if len(last)<2 or len(last)>50 or not re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ' -]+",last): errors.append("Surname is required.")
@@ -1647,6 +1650,7 @@ def register():
         row,msg=verify_signup_code(conn,code,"staff",consume=False)
         if not row: errors.append(msg)
         elif conn.execute("SELECT 1 FROM users WHERE LOWER(username)=LOWER(?)",(username,)).fetchone(): errors.append("This username is already in use.")
+        elif staff_id_val and conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(staff_id)=LOWER(?)",(row["school_id"],staff_id_val)).fetchone(): errors.append(f"Staff / Employee ID '{staff_id_val}' is already registered in this school.")
         if errors:
             for e in errors: flash(e,"error")
             conn.close(); return render_template("register.html")
@@ -1654,6 +1658,7 @@ def register():
             full=" ".join(x for x in (first,last,other) if x)
             cur=conn.execute("INSERT INTO users(school_id,tenant_id,name,first_name,surname,other_names,username,password_hash,role,first_login_required,account_status,signup_status,activation_status) VALUES(?,?,?,?,?,?,?, ?,'teacher',1,'active','approved','active')",(row["school_id"],row["tenant_id"],full,first,last,other or None,username,generate_password_hash(password)))
             uid=cur.lastrowid
+            conn.execute("UPDATE users SET staff_id=? WHERE id=?",(staff_id_val,uid))
             apply_active_role(conn, uid, row["school_id"], "Teacher", None, "System (staff signup)", reason="Initial role on staff signup", action="role_assigned_on_signup")
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id) VALUES(?,?,?,?,?,?,?,?)",(uid,"staff","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id()))
             verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True)
@@ -3729,7 +3734,7 @@ def admin_students():
         if not first: errors.append("First name is required.")
         if not last: errors.append("Last name is required.")
         if request.form.get("gender") not in ("M","F"): errors.append("Gender is required.")
-        if conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))",(school_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already used by another student in this school.")
+        if conn.execute("SELECT 1 FROM students s WHERE s.class_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))",(class_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already used by another student in this class. (The same number may be used in a different class.)")
         if errors:
             for e in errors: flash(e,"error")
         else:
@@ -4362,6 +4367,7 @@ def students_csv_template():
 @app.route("/admin/students/bulk_upload", methods=["POST"])
 @login_required("admin", "sub_admin")
 def students_bulk_upload():
+    """V104: validate EVERY row first; save nothing unless the whole file is valid (no half imports, nothing overwritten)."""
     file = request.files.get("csv_file")
     if not file or file.filename == "":
         flash("Please choose a CSV file to upload.", "error")
@@ -4369,26 +4375,16 @@ def students_bulk_upload():
 
     conn = get_db()
     school_id = current_school_id()
-    classes_by_name = {
-        row["name"].strip().lower(): row["id"]
-        for row in conn.execute("SELECT * FROM classes WHERE school_id=?", (school_id,)).fetchall()
-    }
-
+    classes_by_name = {row["name"].strip().lower(): row["id"] for row in conn.execute("SELECT id, name FROM classes WHERE school_id=?", (school_id,)).fetchall()}
     try:
-        text = file.read().decode("utf-8-sig")
-    except Exception:
+        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name", "class_name"),
+                                        optional=("other_names", "gender", "date_of_birth", "religion", "parent_name", "parent_address",
+                                                  "parent_email", "parent_phone", "parent_relationship"))
+    except csvi.CsvProblem as exc:
         conn.close()
-        flash("Could not read that file — please upload a plain CSV file.", "error")
+        flash(f"Import not done: {exc}", "error")
         return redirect(url_for("admin_students"))
 
-    reader = csv_module.DictReader(io.StringIO(text))
-    required_cols = {"admission_no", "first_name", "last_name", "class_name"}
-    if not required_cols.issubset(set(c.strip() for c in (reader.fieldnames or []))):
-        conn.close()
-        flash(f"CSV must at least have these columns: {', '.join(sorted(required_cols))}. Download the template for reference.", "error")
-        return redirect(url_for("admin_students"))
-
-    added, skipped = 0, []
     allowed, message, _state = plan_limit_check(conn, school_id, "students", 0)
     if not allowed:
         conn.close()
@@ -4399,55 +4395,59 @@ def students_bulk_upload():
     plan = subscription_plan_for_school(conn, school)
     current_usage = school_plan_usage(conn, school_id)["students"]
     student_limit = plan["max_students"] if plan and "max_students" in plan.keys() else None
-    for i, row in enumerate(reader, start=2):
-        if student_limit is not None and current_usage + added >= student_limit:
-            skipped.append(f"Row {i}: student plan limit reached ({student_limit})")
-            continue
-        adm = (row.get("admission_no") or "").strip()
-        fn = (row.get("first_name") or "").strip()
-        ln = (row.get("last_name") or "").strip()
-        other_names = (row.get("other_names") or "").strip() or None
-        gender = (row.get("gender") or "").strip().upper()[:1]
-        class_name = (row.get("class_name") or "").strip().lower()
-        dob = (row.get("date_of_birth") or "").strip() or None
-        religion = (row.get("religion") or "").strip() or None
-        parent_name = (row.get("parent_name") or "").strip() or None
-        parent_address = (row.get("parent_address") or "").strip() or None
-        parent_email = (row.get("parent_email") or "").strip() or None
-        parent_phone = (row.get("parent_phone") or "").strip() or None
-        parent_relationship = (row.get("parent_relationship") or "").strip() or None
 
-        if not (adm and fn and ln and class_name):
-            skipped.append(f"Row {i}: missing required field(s)")
-            continue
-        class_id = classes_by_name.get(class_name)
-        if not class_id:
-            skipped.append(f"Row {i}: class '{row.get('class_name')}' doesn't exist — create it first")
-            continue
-        try:
+    errors, ready, seen = [], [], {}
+    for n, row in rows:
+        before = len(errors)
+        adm, fn, ln = row.get("admission_no", ""), row.get("first_name", ""), row.get("last_name", "")
+        for col, val in (("admission_no", adm), ("first_name", fn), ("last_name", ln), ("class_name", row.get("class_name", ""))):
+            if not val:
+                errors.append(f"Row {n}, column {col}: required but empty")
+        if row.get("__extra__"):
+            errors.append(f"Row {n}: has more values than headings (put values that contain commas in quotes)")
+        class_id = classes_by_name.get((row.get("class_name") or "").strip().lower())
+        if row.get("class_name") and not class_id:
+            errors.append(f"Row {n}, column class_name: class '{row['class_name']}' does not exist - create it first or fix the spelling")
+        gender, e1 = csvi.v_gender(row.get("gender", ""))
+        dob, e2 = csvi.v_date(row.get("date_of_birth", ""))
+        pemail, e3 = csvi.v_email(row.get("parent_email", ""))
+        pphone, e4 = csvi.v_phone(row.get("parent_phone", ""))
+        for col, e in (("gender", e1), ("date_of_birth", e2), ("parent_email", e3), ("parent_phone", e4)):
+            if e:
+                errors.append(f"Row {n}, column {col}: {e}")
+        if adm and class_id:
+            key = (class_id, adm.lower())
+            if key in seen:
+                errors.append(f"Row {n}, column admission_no: '{adm}' is repeated in this file for class '{row['class_name']}' (first on row {seen[key]})")
+            else:
+                seen[key] = n
+                if conn.execute("SELECT 1 FROM students WHERE class_id=? AND LOWER(TRIM(admission_no))=LOWER(?)", (class_id, adm)).fetchone():
+                    errors.append(f"Row {n}, column admission_no: '{adm}' already exists in class '{row['class_name']}' (the same number is allowed in a different class)")
+        if len(errors) == before:
+            ready.append((adm, fn, ln, row.get("other_names") or None, gender, class_id, dob, row.get("religion") or None, row.get("parent_name") or None,
+                          row.get("parent_address") or None, pemail, pphone, row.get("parent_relationship") or None))
+    if not errors and student_limit is not None and current_usage + len(ready) > student_limit:
+        errors.append(f"Your plan allows {student_limit} students; this file would take you to {current_usage + len(ready)}")
+    if errors:
+        conn.close()
+        flash(f"No students were imported - nothing was changed. {len(errors)} problem(s) to fix: {csvi.summarize(errors)}", "error")
+        return redirect(url_for("admin_students"))
+    try:
+        for (adm, fn, ln, other, gender, class_id, dob, religion, pn, pa, pe, pp, pr) in ready:
             cur = conn.execute(
                 "INSERT INTO students (school_id, tenant_id, admission_no, first_name, last_name, other_names, gender, "
                 "class_id, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (school_id, tenant_id, adm, fn, ln, other_names, gender if gender in ("M", "F") else None,
-                 class_id, dob, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship),
-            )
+                (school_id, tenant_id, adm, fn, ln, other, gender, class_id, dob, religion, pn, pa, pe, pp, pr))
             upsert_enrollment(conn, cur.lastrowid, class_id)
-            added += 1
-        except Exception:
-            skipped.append(f"Row {i}: Admission No./Register No. '{adm}' is already used by another student in class '{row.get('class_name')}'")
-
-    conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        flash("The import could not be completed, so nothing was saved. Please check the file and try again.", "error")
+        return redirect(url_for("admin_students"))
     conn.close()
-
-    if added:
-        flash(f"Imported {added} student(s) successfully.", "success")
-    if skipped:
-        preview = "; ".join(skipped[:8]) + (f" (+{len(skipped)-8} more)" if len(skipped) > 8 else "")
-        flash(f"Skipped {len(skipped)} row(s): {preview}", "error")
-    if not added and not skipped:
-        flash("No rows found in that file.", "error")
-
+    flash(f"Imported {len(ready)} student(s) successfully." + (f" (Ignored columns that are not part of the template: {', '.join(ignored)}.)" if ignored else ""), "success")
     return redirect(url_for("admin_students"))
 
 
@@ -4471,10 +4471,15 @@ def admin_teachers():
         email = request.form.get("email", "").strip() or None
         phone = request.form.get("phone", "").strip() or None
         password = request.form["password"]
+        staff_id_val = " ".join((request.form.get("staff_id") or "").split())[:40]     # V104: Staff / Employee ID is required when registering staff
         rbac_role=request.form.get("rbac_role","Teacher").strip()
         if rbac_role not in ROLE_CATALOG or rbac_role == "School Admin": rbac_role="Teacher"
         position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer","Vice Principal / Deputy Principal":"vice_principal"}.get(rbac_role)
-        if email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
+        if not staff_id_val:
+            flash("Staff / Employee ID is required.", "error")
+        elif conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(staff_id)=LOWER(?)", (school_id, staff_id_val)).fetchone():
+            flash(f"Staff / Employee ID '{staff_id_val}' is already used by another staff member in this school.", "error")
+        elif email and conn.execute("SELECT 1 FROM users WHERE LOWER(email)=LOWER(?)", (email,)).fetchone():
             flash("That email is already in use by another account.", "error")
         elif phone and conn.execute("SELECT 1 FROM users WHERE phone=?", (phone,)).fetchone():
             flash("That phone number is already in use by another account.", "error")
@@ -4484,6 +4489,7 @@ def admin_teachers():
             try:
                 tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
                 cur=conn.execute("INSERT INTO users (school_id,tenant_id,name,username,email,phone,password_hash,role,position,rbac_role) VALUES (?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,name,username,email,phone,generate_password_hash(password),"teacher",position,rbac_role))
+                conn.execute("UPDATE users SET staff_id=? WHERE id=?", (staff_id_val, cur.lastrowid))
                 ra=conn.execute("INSERT INTO role_assignments(user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at) VALUES (?,?,?,'All',?,'active',?,?,CURRENT_TIMESTAMP)",(cur.lastrowid,school_id,tenant,rbac_role,session.get("user_id"),session.get("user_id"))).lastrowid
                 for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra,perm))
                 conn.commit()
@@ -4973,7 +4979,7 @@ def admin_terms():
                     "UPDATE terms SET is_active=0 WHERE session_id IN (SELECT id FROM sessions WHERE school_id=?)",
                     (school_id,),
                 )
-                conn.execute("UPDATE terms SET is_active=1 WHERE id=?", (tid,))
+                conn.execute("UPDATE terms SET is_active=1, activated_at=COALESCE(activated_at, CURRENT_TIMESTAMP) WHERE id=?", (tid,))
                 conn.commit()
                 flash("Active term updated.", "success")
         elif action in ("publish_term", "unpublish_term"):
@@ -5683,6 +5689,26 @@ def my_class():
     return render_template("my_class_picker.html", classes=classes)
 
 
+@app.route("/my-class/attendance")
+@login_required()
+def student_attendance_hub():
+    """V104: 'Student Attendance' for class/form teachers: only the classes/arms they are assigned to (the roll-call page itself
+    re-checks the assignment). One class -> straight to its roll call; several -> pick one."""
+    conn = get_db()
+    class_ids = form_teacher_class_ids(conn, session["user_id"])
+    if not class_ids:
+        conn.close()
+        flash("You are not currently assigned as a Class/Form Teacher for any class, so there is no student attendance to take. Please ask your administrator to assign you.", "error")
+        return redirect(url_for("dashboard"))
+    if len(class_ids) == 1:
+        conn.close()
+        return redirect(url_for("roll_call", class_id=list(class_ids)[0]))
+    qs = ",".join("?" for _ in class_ids)
+    classes = conn.execute(f"SELECT * FROM classes WHERE id IN ({qs}) AND school_id=? ORDER BY name", (*class_ids, current_school_id())).fetchall()
+    conn.close()
+    return render_template("my_attendance_picker.html", classes=classes)
+
+
 @app.route("/my-class/<int:class_id>", methods=["GET", "POST"])
 @login_required()
 def my_class_roster(class_id):
@@ -5919,78 +5945,83 @@ def my_class_csv_template(class_id):
 @app.route("/my-class/<int:class_id>/csv_upload", methods=["POST"])
 @login_required()
 def my_class_csv_upload(class_id):
+    """V104: validate everything first; existing students are updated ONLY with the cells the file actually fills in
+    (a blank cell never erases saved data) and nothing is saved unless the whole file is valid."""
     conn = get_db()
     class_row = _require_own_class(conn, class_id)
     if not class_row:
         conn.close()
         flash("You're not the form teacher for that class.", "error")
         return redirect(url_for("dashboard"))
-
     file = request.files.get("csv_file")
     if not file or file.filename == "":
         conn.close()
         flash("Please choose a CSV file to upload.", "error")
         return redirect(url_for("my_class_roster", class_id=class_id))
-
-    existing_by_adm = {
-        s["admission_no"]: s["id"]
-        for s in conn.execute("SELECT * FROM students WHERE class_id=?", (class_id,)).fetchall()
-    }
-    text = file.read().decode("utf-8-sig")
-    reader = csv_module.DictReader(io.StringIO(text))
-    required_cols = {"admission_no", "first_name", "last_name"}
-    if not required_cols.issubset(set(c.strip() for c in (reader.fieldnames or []))):
+    try:
+        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name"),
+                                        optional=("other_names", "gender", "date_of_birth", "religion", "parent_name", "parent_address",
+                                                  "parent_email", "parent_phone", "parent_relationship"))
+    except csvi.CsvProblem as exc:
         conn.close()
-        flash(f"CSV must at least have these columns: {', '.join(sorted(required_cols))}. Download the template for reference.", "error")
+        flash(f"Import not done: {exc}", "error")
         return redirect(url_for("my_class_roster", class_id=class_id))
-
-    added, updated, skipped = 0, 0, []
-    for i, row in enumerate(reader, start=2):
-        adm = (row.get("admission_no") or "").strip()
-        fn = (row.get("first_name") or "").strip()
-        ln = (row.get("last_name") or "").strip()
-        if not (adm and fn and ln):
-            skipped.append(f"Row {i}: missing required field(s)")
-            continue
-        fields = (
-            row.get("other_names", "").strip() or None,
-            row.get("gender", "").strip().upper()[:1] or None,
-            row.get("date_of_birth", "").strip() or None,
-            row.get("religion", "").strip() or None,
-            row.get("parent_name", "").strip() or None,
-            row.get("parent_address", "").strip() or None,
-            row.get("parent_email", "").strip() or None,
-            row.get("parent_phone", "").strip() or None,
-            row.get("parent_relationship", "").strip() or None,
-        )
-        try:
-            if adm in existing_by_adm:
-                conn.execute(
-                    "UPDATE students SET first_name=?, last_name=?, other_names=?, gender=?, date_of_birth=?, "
-                    "religion=?, parent_name=?, parent_address=?, parent_email=?, parent_phone=?, parent_relationship=? "
-                    "WHERE id=?",
-                    (fn, ln, *fields, existing_by_adm[adm]),
-                )
+    existing = {(s["admission_no"] or "").strip().lower(): s["id"] for s in conn.execute("SELECT id, admission_no FROM students WHERE class_id=?", (class_id,)).fetchall()}
+    errors, plan_rows, seen = [], [], {}
+    for n, row in rows:
+        before = len(errors)
+        adm, fn, ln = row.get("admission_no", ""), row.get("first_name", ""), row.get("last_name", "")
+        for col, val in (("admission_no", adm), ("first_name", fn), ("last_name", ln)):
+            if not val:
+                errors.append(f"Row {n}, column {col}: required but empty")
+        if row.get("__extra__"):
+            errors.append(f"Row {n}: has more values than headings (put values that contain commas in quotes)")
+        gender, e1 = csvi.v_gender(row.get("gender", ""))
+        dob, e2 = csvi.v_date(row.get("date_of_birth", ""))
+        pemail, e3 = csvi.v_email(row.get("parent_email", ""))
+        pphone, e4 = csvi.v_phone(row.get("parent_phone", ""))
+        for col, e in (("gender", e1), ("date_of_birth", e2), ("parent_email", e3), ("parent_phone", e4)):
+            if e:
+                errors.append(f"Row {n}, column {col}: {e}")
+        if adm:
+            if adm.lower() in seen:
+                errors.append(f"Row {n}, column admission_no: '{adm}' is repeated in this file (first on row {seen[adm.lower()]})")
+            seen.setdefault(adm.lower(), n)
+        if len(errors) == before:
+            plan_rows.append((adm, fn, ln, {"other_names": row.get("other_names") or None, "gender": gender, "date_of_birth": dob, "religion": row.get("religion") or None,
+                                            "parent_name": row.get("parent_name") or None, "parent_address": row.get("parent_address") or None,
+                                            "parent_email": pemail, "parent_phone": pphone, "parent_relationship": row.get("parent_relationship") or None}))
+    if errors:
+        conn.close()
+        flash(f"No changes were saved. {len(errors)} problem(s) to fix: {csvi.summarize(errors)}", "error")
+        return redirect(url_for("my_class_roster", class_id=class_id))
+    added = updated = 0
+    try:
+        for adm, fn, ln, extra in plan_rows:
+            sid_existing = existing.get(adm.lower())
+            if sid_existing:
+                sets, vals = ["first_name=?", "last_name=?"], [fn, ln]
+                for col, val in extra.items():
+                    if val not in (None, ""):                       # blank cell = leave the saved value alone
+                        sets.append(f"{col}=?"); vals.append(val)
+                conn.execute(f"UPDATE students SET {', '.join(sets)} WHERE id=? AND class_id=?", (*vals, sid_existing, class_id))
                 updated += 1
             else:
                 cur = conn.execute(
-                    "INSERT INTO students (admission_no, first_name, last_name, other_names, gender, class_id, "
-                    "date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (adm, fn, ln, fields[0], fields[1], class_id, fields[2], fields[3], fields[4], fields[5], fields[6], fields[7], fields[8]),
-                )
+                    "INSERT INTO students (admission_no, first_name, last_name, other_names, gender, class_id, date_of_birth, religion, parent_name, "
+                    "parent_address, parent_email, parent_phone, parent_relationship) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (adm, fn, ln, extra["other_names"], extra["gender"], class_id, extra["date_of_birth"], extra["religion"], extra["parent_name"],
+                     extra["parent_address"], extra["parent_email"], extra["parent_phone"], extra["parent_relationship"]))
                 upsert_enrollment(conn, cur.lastrowid, class_id)
                 added += 1
-        except Exception:
-            skipped.append(f"Row {i}: couldn't save '{fn} {ln}' ({adm})")
-
-    conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        flash("The import could not be completed, so nothing was saved. Please check the file and try again.", "error")
+        return redirect(url_for("my_class_roster", class_id=class_id))
     conn.close()
-    if added or updated:
-        flash(f"Imported: {added} new student(s) added, {updated} existing student(s) updated.", "success")
-    if skipped:
-        preview = "; ".join(skipped[:8]) + (f" (+{len(skipped)-8} more)" if len(skipped) > 8 else "")
-        flash(f"Skipped {len(skipped)} row(s): {preview}", "error")
+    flash(f"Imported: {added} new student(s) added, {updated} existing student(s) updated.", "success")
     return redirect(url_for("my_class_roster", class_id=class_id))
 
 
@@ -6192,17 +6223,15 @@ def score_csv_template(class_id, subject_id):
     buf = io.StringIO()
     writer = csv_module.writer(buf)
     use_ca3 = ca3_enabled(config)
-    maxes = f"CA1: {config['ca1_max']}, CA2: {config['ca2_max']}, " + (f"CA3: {config['ca3_max']}, " if use_ca3 else "") + f"Exam: {config['exam_max']}"
-    writer.writerow([f"# Max marks — {maxes}"])
-    writer.writerow(["admission_no", "student_name", "ca1", "ca2"] + (["ca3"] if use_ca3 else []) + ["exam", "total"])
+    # V104: headings are exactly the fields the import reads (no student_name / total columns, no comment row)
+    writer.writerow(["admission_no", "ca1", "ca2"] + (["ca3"] if use_ca3 else []) + ["exam"])
     for s in students:
         sc = existing.get(s["id"])
         ca1 = sc["ca1"] if sc else ""
         ca2 = sc["ca2"] if sc else ""
         ca3 = (sc["ca3"] or 0) if sc else ""
         exam = sc["exam"] if sc else ""
-        total = compute_total(ca1, ca2, exam, ca3 or 0) if sc else ""
-        writer.writerow([s["admission_no"], student_full_name(s), ca1, ca2] + ([ca3] if use_ca3 else []) + [exam, total])
+        writer.writerow([s["admission_no"], ca1, ca2] + ([ca3] if use_ca3 else []) + [exam])
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     fname = f"scores_{class_row['name']}_{subject_row['name']}.csv".replace(" ", "_")
     return send_file(mem, mimetype="text/csv", as_attachment=True, download_name=fname)
@@ -6237,57 +6266,76 @@ def score_csv_upload(class_id, subject_id):
         flash("Please choose a CSV file to upload.", "error")
         return redirect(url_for("score_entry", class_id=class_id, subject_id=subject_id))
 
-    students_by_adm = {
-        s["admission_no"]: s
-        for s in conn.execute("SELECT * FROM students WHERE class_id=?", (class_id,)).fetchall()
-    }
+    students_by_adm = {(s["admission_no"] or "").strip().lower(): s for s in conn.execute("SELECT * FROM students WHERE class_id=?", (class_id,)).fetchall()}
     config = get_grading_config(conn)
-    text = file.read().decode("utf-8-sig")
-    # Skip a leading "# Max marks..." comment line if present (from our own
-    # template). The CSV writer may have wrapped it in quotes since it
-    # contains commas, so check for both forms.
-    lines = text.splitlines()
-    if lines and lines[0].strip().lstrip('"').startswith("#"):
-        text = "\n".join(lines[1:])
-    reader = csv_module.DictReader(io.StringIO(text))
-    updated, skipped = 0, []
-    for i, row in enumerate(reader, start=2):
-        adm = (row.get("admission_no") or "").strip()
-        student = students_by_adm.get(adm)
+    use_ca3 = ca3_enabled(config)
+    score_cols = ("ca1", "ca2", "ca3", "exam") if use_ca3 else ("ca1", "ca2", "exam")
+    try:
+        rows, ignored = csvi.read_table(file, required=("admission_no",), optional=("ca1", "ca2", "ca3", "exam"), min_any=set(score_cols))
+    except csvi.CsvProblem as exc:
+        conn.close()
+        flash(f"Import not done: {exc}", "error")
+        return redirect(url_for("score_entry", class_id=class_id, subject_id=subject_id))
+    existing_scores = {r["student_id"]: r for r in conn.execute("SELECT * FROM scores WHERE subject_id=? AND term_id=?", (subject_id, term["id"])).fetchall()}
+    errors, ready, seen = [], [], {}
+    for n, row in rows:
+        adm = row.get("admission_no", "")
+        if not adm:
+            errors.append(f"Row {n}, column admission_no: required but empty")
+            continue
+        student = students_by_adm.get(adm.lower())
         if not student:
-            skipped.append(f"Row {i}: no student with Admission No./Register No. '{adm}' in this class")
+            errors.append(f"Row {n}, column admission_no: no student with Admission No./Register No. '{adm}' in this class")
             continue
-        sid = student["id"]
-        student_label = f"{student_full_name(student)} ({adm})"
+        if adm.lower() in seen:
+            errors.append(f"Row {n}, column admission_no: '{adm}' is repeated in this file (first on row {seen[adm.lower()]})")
+            continue
+        seen[adm.lower()] = n
+        vals, bad = {}, False
+        for col in score_cols:
+            v, e = csvi.v_number(row.get(col, ""))
+            if e:
+                errors.append(f"Row {n}, column {col}: {e}")
+                bad = True
+            vals[col] = v
+        if bad:
+            continue
+        if all(v is None for v in vals.values()):
+            continue                                              # nothing provided for this student -> leave the saved scores alone
+        cur = existing_scores.get(student["id"])
+        merged = {c: (vals.get(c) if vals.get(c) is not None else (float(cur[c] or 0) if cur is not None else 0.0)) for c in ("ca1", "ca2", "ca3", "exam")}
+        if not use_ca3:
+            merged["ca3"] = 0.0
+        label = f"{student_full_name(student)} ({adm})"
+        range_errs = score_range_errors(config, merged["ca1"], merged["ca2"], merged["ca3"], merged["exam"])
+        if range_errs:
+            errors.append(f"Row {n} ({label}): " + "; ".join(range_errs))
+            continue
+        ready.append((student["id"], label, n, merged))
+    if not errors and not ready:
+        conn.close()
+        flash("The file contains no scores to import (every score cell was empty).", "error")
+        return redirect(url_for("score_entry", class_id=class_id, subject_id=subject_id))
+    if not errors:
         try:
-            ca1 = float(row.get("ca1") or 0)
-            ca2 = float(row.get("ca2") or 0)
-            ca3 = float(row.get("ca3") or 0) if ca3_enabled(config) else 0.0
-            exam = float(row.get("exam") or 0)
-        except ValueError:
-            skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): CA1/CA2/CA3/Exam must be numbers")
-            continue
-
-        row_errors = score_range_errors(config, ca1, ca2, ca3, exam)
-        if row_errors:
-            skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): " + "; ".join(row_errors))
-            continue
-
-        try:
-            save_score(conn, sid, subject_id, term["id"], ca1, ca2, ca3, exam, session["user_id"],
-                       reason=request.form.get("change_reason"), source="csv_import")
-        except ScoreChangeError as exc:
-            skipped.append(f"Row {i} ({student_label}, {subject_row['name']}): {exc}")
-            continue
-        updated += 1
-
-    conn.commit()
+            for sid, label, n, m in ready:
+                try:
+                    save_score(conn, sid, subject_id, term["id"], m["ca1"], m["ca2"], m["ca3"], m["exam"], session["user_id"],
+                               reason=request.form.get("change_reason"), source="csv_import")
+                except ScoreChangeError as exc:
+                    errors.append(f"Row {n} ({label}): {exc}")
+                    break
+            if not errors:
+                conn.commit()
+        except Exception:
+            errors.append("an unexpected error stopped the import")
+    if errors:
+        conn.rollback()
+        conn.close()
+        flash(f"No scores were saved - nothing was changed. {len(errors)} problem(s) to fix: {csvi.summarize(errors)}", "error")
+        return redirect(url_for("score_entry", class_id=class_id, subject_id=subject_id))
     conn.close()
-    if updated:
-        flash(f"Updated scores for {updated} student(s) from the uploaded file.", "success")
-    if skipped:
-        preview = "; ".join(skipped[:8]) + (f" (+{len(skipped)-8} more)" if len(skipped) > 8 else "")
-        flash(f"Skipped {len(skipped)} row(s): {preview}", "error")
+    flash(f"Updated scores for {len(ready)} student(s) from the uploaded file.", "success")
     return redirect(url_for("score_entry", class_id=class_id, subject_id=subject_id))
 
 
@@ -6437,6 +6485,18 @@ def resolve_term_in_session(conn, session_id, requested_term_id=None):
     return active or terms[-1]
 
 
+def only_activated_terms(conn, terms, keep_term_id=None):
+    """V104: result sheets/broadsheets show a term only once the School Admin has activated it (or it is published / has
+    recorded scores, which can only follow activation). A never-activated Second/Third Term is not displayed as an empty column."""
+    used = {r[0] for r in conn.execute("SELECT DISTINCT term_id FROM scores")}
+    out = []
+    for t in terms:
+        keys = t.keys()
+        if (t["id"] == keep_term_id or ("activated_at" in keys and t["activated_at"]) or t["is_active"] or ("is_published" in keys and t["is_published"]) or t["id"] in used):
+            out.append(t)
+    return out
+
+
 def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=None):
     """Annual/Cumulative broadsheet: for each subject, averages the totals
     from every term UP TO AND INCLUDING upto_term_id (chronologically -- 1st/2nd/3rd
@@ -6458,6 +6518,7 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
         if upto_term:
             cutoff = term_sort_key(upto_term)
             terms = [t for t in terms if term_sort_key(t) <= cutoff]
+    terms = only_activated_terms(conn, terms, upto_term_id)
     students = conn.execute(
         "SELECT s.* FROM students s "
         "LEFT JOIN enrollments e ON e.student_id = s.id AND e.session_id = ? "
@@ -6866,6 +6927,11 @@ def result_sheet_settings(conn, school_id):
     # one master switch: when "All comments" is OFF neither comment is shown, whatever the individual switches say
     if not cfg["show_all_comments"]:
         rs["show_teacher_comment"] = rs["show_principal_comment"] = False
+    # V104: Custom School Information fields the admin ticked "Show on result sheets" (only when the display switch is on)
+    rs["custom_info"] = []
+    if rs.get("show_custom_info", True):
+        rs["custom_info"] = [[r["label"], r["value"]] for r in conn.execute(
+            "SELECT label, value FROM school_custom_info WHERE school_id=? AND show_on_result=1 AND TRIM(COALESCE(value,''))<>'' ORDER BY sort_order, id", (school_id,)).fetchall()]
     return rs
 
 
@@ -6905,6 +6971,43 @@ def validate_attendance(opened, present, absent):
     if p + a != o:
         return None, None, None, f"Days Present ({p}) + Days Absent ({a}) = {p + a}, which does not equal Days School Opened ({o}). Please correct the figures."
     return o, p, a, None
+
+
+def apply_published_sheet_snapshot(conn, rs, school_id, class_id, term_id):
+    """V104: a PUBLISHED class result keeps the design + display settings it was published with. Settings changed later
+    only affect results that are not published yet. (A result published before this version has no snapshot: the
+    settings in force the first time it is shown are frozen then.)"""
+    try:
+        row = conn.execute("SELECT status, sheet_snapshot FROM result_publication WHERE school_id=? AND class_id=? AND term_id=?",
+                           (school_id, class_id, term_id)).fetchone()
+    except Exception:
+        return rs
+    if not row or row["status"] != "published":
+        return rs
+    if row["sheet_snapshot"]:
+        import json as _json
+        try:
+            merged = dict(rs); merged.update(_json.loads(row["sheet_snapshot"])); return merged
+        except Exception:
+            return rs
+    return rs
+
+
+def freeze_legacy_published_sheets():
+    """Run once at start-up: class results that were published BEFORE sheet snapshots existed get the school's current
+    design/settings frozen now, so they keep today's appearance from here on. Safe to run on every start (only fills NULLs)."""
+    import json as _json
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT DISTINCT school_id FROM result_publication WHERE status='published' AND sheet_snapshot IS NULL").fetchall()
+        for r in rows:
+            snap = _json.dumps(result_sheet_settings(conn, r["school_id"]))
+            conn.execute("UPDATE result_publication SET sheet_snapshot=? WHERE school_id=? AND status='published' AND sheet_snapshot IS NULL", (snap, r["school_id"]))
+        conn.commit()
+    except Exception:
+        pass
+    finally:
+        conn.close()
 
 
 def build_result_data(conn, student_id, term_id):
@@ -7030,7 +7133,15 @@ def build_result_data(conn, student_id, term_id):
         fallback=conn.execute("SELECT u.id,u.name,u.signature_filename,u.use_digital_signature FROM users u WHERE u.school_id=? AND u.role='teacher' AND (u.rbac_role IN ('Principal','Head Teacher') OR u.position IN ('principal')) AND COALESCE(u.is_active,1)=1 ORDER BY u.id LIMIT 1",(school_id,)).fetchone()
         if fallback:
             info=dict(info); info["principal_signed_by"]=fallback["id"]
-    rs = result_sheet_settings(conn, school_id)
+    # V104: school-defined additional fields (label/value pairs that print; inputs for the Update Result Details form)
+    custom_fields, custom_field_inputs = [], []
+    _vals = {r["field_id"]: r["value"] for r in conn.execute("SELECT field_id, value FROM result_custom_values WHERE student_id=? AND term_id=?", (student_id, term_id)).fetchall()}
+    for _f in conn.execute("SELECT * FROM result_custom_fields WHERE school_id=? AND is_active=1 ORDER BY sort_order, id", (school_id,)).fetchall():
+        custom_field_inputs.append({"id": _f["id"], "label": _f["label"], "type": _f["field_type"], "options": [o.strip() for o in (_f["options"] or "").split(",") if o.strip()] if _f["field_type"] == "choice" else [],
+                                    "max": _f["options"] if _f["field_type"] == "number" else None, "value": _vals.get(_f["id"]) or ""})
+        if _f["show_on_sheet"] and _vals.get(_f["id"]):
+            custom_fields.append([_f["label"], _vals[_f["id"]]])
+    rs = apply_published_sheet_snapshot(conn, result_sheet_settings(conn, school_id), school_id, historical_class_id, term_id)
     teacher_signature_user = _signature_user("teacher_signed_by") if rs["show_teacher_signature"] else None
     principal_signature_user = _signature_user("principal_signed_by") if rs["show_principal_signature"] else None
     teacher_name = teacher_signature_user["name"] if teacher_signature_user and rs["show_teacher_name"] else None
@@ -7089,7 +7200,7 @@ def build_result_data(conn, student_id, term_id):
         "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative, "cum_summary": cum_summary,
         "gender_text": {"M": "Male", "F": "Female"}.get(student["gender"] if "gender" in student.keys() else None, ""), "dob_text": format_dmy(_dob) if _dob else "",
         "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
-        "ntr_iso": _ntr_iso, "ntr_default_iso": _ntr.get("date_iso"), "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
+        "custom_fields": custom_fields, "custom_field_inputs": custom_field_inputs, "ntr_iso": _ntr_iso, "ntr_default_iso": _ntr.get("date_iso"), "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
         "average": my_row["average"] if my_row else 0,
@@ -7585,6 +7696,23 @@ def result_extra(student_id):
         (student_id, term_id, d_pres, d_abs, d_open, teacher_comment, principal_comment, teacher_signed_date, principal_signed_date,
          teacher_signed_by, principal_signed_by, promotion_status, result_date, source),
     )
+    # V104: additional result fields (school-defined text / number / choice)
+    from result_fields import clean_value as _cf_clean
+    _cf_errors = []
+    for _f in conn.execute("SELECT * FROM result_custom_fields WHERE school_id=? AND is_active=1", (current_school_id(),)).fetchall():
+        _key = f"cf_{_f['id']}"
+        if _key not in request.form:
+            continue
+        _val, _err = _cf_clean(_f, request.form.get(_key))
+        if _err:
+            _cf_errors.append(_err)
+        elif _val is None:
+            conn.execute("DELETE FROM result_custom_values WHERE student_id=? AND term_id=? AND field_id=?", (student_id, term_id, _f["id"]))
+        else:
+            conn.execute("DELETE FROM result_custom_values WHERE student_id=? AND term_id=? AND field_id=?", (student_id, term_id, _f["id"]))
+            conn.execute("INSERT INTO result_custom_values(school_id, student_id, term_id, field_id, value) VALUES (?,?,?,?,?)", (current_school_id(), student_id, term_id, _f["id"], _val))
+    for _e in _cf_errors:
+        flash(_e + " (not saved)", "error")
     if "next_term_resumes" in request.form:
         _raw = (request.form.get("next_term_resumes") or "").strip()
         try:
@@ -8528,7 +8656,7 @@ def _try_student_login(conn, identifier, password, class_code_raw, hint):
     if len(matches) > 1:
         # Several schools have a student with this number AND this exact password. Only reachable with a correct
         # password, so it leaks nothing; we refuse rather than guess whose account to open.
-        return blocked("Your details match more than one school. Open \"Two schools use my number?\", enter your School ID and try again.")
+        return blocked("Your details match more than one school or class. Sign in with your username instead, or open \"Two schools use my number?\", enter your School ID or Class Code and try again.")
     # Count failures against the accounts this identifier points to (only when the password was wrong),
     # then let the caller try other account types rather than assuming this login attempt was
     # necessarily a student's -- a real student number exists, but it might still be a coincidental
@@ -11193,7 +11321,7 @@ register_v63(app, dict(
     student_full_name=student_full_name, _actor_role_label=_actor_role_label, ROLE_CATALOG=ROLE_CATALOG, canonical_rbac_role=canonical_rbac_role,
     active_role_assignments=active_role_assignments, security_event=security_event, get_grading_config=get_grading_config,
     score_range_errors=score_range_errors, compute_total=compute_total, grade_for=grade_for, all_terms_for_school=all_terms_for_school,
-    AUTO_ADVANCE=AUTO_ADVANCE, assignable_roles=assignable_roles, plan_limit_check=plan_limit_check, upsert_enrollment=upsert_enrollment,
+    result_sheet_settings=result_sheet_settings, AUTO_ADVANCE=AUTO_ADVANCE, assignable_roles=assignable_roles, plan_limit_check=plan_limit_check, upsert_enrollment=upsert_enrollment,
 ))
 
 from v64_spec import register_v64
@@ -11216,6 +11344,18 @@ register_profile_routes(app, dict(
     active_role_assignments=active_role_assignments, security_event=security_event, POSITION_LABELS=POSITION_LABELS,
 ))
 
+
+# V104: temporary dashboard announcement banners
+from announcements import register_announcements
+import v63_core as _v63core
+register_announcements(app, dict(get_db=get_db, login_required=login_required, platform_admin_required=platform_admin_required,
+                                 log_audit=log_audit, school_tz=_v63core.school_tz))
+
+from result_fields import register_result_fields
+register_result_fields(app, dict(get_db=get_db, login_required=login_required, log_audit=log_audit))
+
+# V104: freeze the look of results that were published before snapshots existed (once; only fills NULLs)
+freeze_legacy_published_sheets()
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"

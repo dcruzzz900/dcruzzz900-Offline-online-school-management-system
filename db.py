@@ -3554,6 +3554,8 @@ RESULT_BOOL_SETTINGS = [
     ("show_days_present", "Show Days Present", 1),
     ("show_days_absent", "Show Days Absent", 1),
     ("show_days_late", "Show Days Late", 1),
+    ("show_custom_info", "Show custom school information (chosen fields)", 1),
+    ("show_additional_fields", "Show additional information fields", 1),
     ("show_teacher_comment", "Show Teacher / Class Teacher Comment", 1),
     ("show_principal_comment", "Show Principal Comment", 1),
     ("show_teacher_signature", "Show Teacher Signature", 1),
@@ -4140,6 +4142,113 @@ def migration_076_v103_targeted_notifications(conn):
 
 
 STEPS.append(("targeted_notifications_v103", migration_076_v103_targeted_notifications))
+
+
+def migration_077_v104_term_activation(conn):
+    """V104: remember WHEN a term was first activated by the School Admin, so result sheets / broadsheets only ever show
+    terms that have really been activated (a never-activated Second/Third Term is not displayed). Back-fills terms that are
+    already active, published, or have scores, so existing results look exactly as before."""
+    ensure_column(conn, "terms", "activated_at", "TEXT")
+    conn.execute("UPDATE terms SET activated_at=COALESCE(activated_at, CURRENT_TIMESTAMP) WHERE activated_at IS NULL AND "
+                 "(is_active=1 OR is_published=1 OR id IN (SELECT DISTINCT term_id FROM scores))")
+
+
+STEPS.append(("term_activation_v104", migration_077_v104_term_activation))
+
+
+def migration_078_v104_published_sheet_snapshot(conn):
+    """V104: when a class result is published, the school's result-sheet design + display settings at that moment are
+    stored with the publication (JSON) and used from then on to render that class's published results, so later
+    design/configuration changes never alter an already-published result."""
+    ensure_column(conn, "result_publication", "sheet_snapshot", "TEXT")
+
+
+STEPS.append(("published_sheet_snapshot_v104", migration_078_v104_published_sheet_snapshot))
+
+
+def migration_079_v104_admission_unique_per_class(conn):
+    """V104: an Admission No. / Register No. must be unique WITHIN A CLASS; the same number may be used in different classes.
+    Replaces the school-wide unique index and triggers (an index/trigger change only -- no student data is touched)."""
+    conn.execute("DROP INDEX IF EXISTS ux_students_school_admission")
+    for t in ("trg_students_admission_unique_ins", "trg_students_admission_unique_upd"):
+        conn.execute(f"DROP TRIGGER IF EXISTS {t}")
+    dup = """EXISTS (SELECT 1 FROM students s WHERE s.class_id=NEW.class_id
+                   AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(NEW.admission_no)){self_clause})"""
+    conn.execute("""CREATE TRIGGER trg_students_admission_unique_ins BEFORE INSERT ON students FOR EACH ROW
+        WHEN NEW.admission_no IS NOT NULL AND """ + dup.format(self_clause="") + """
+        BEGIN SELECT RAISE(ABORT,'Admission No. / Register No. already exists in this class'); END""")
+    conn.execute("""CREATE TRIGGER trg_students_admission_unique_upd BEFORE UPDATE OF admission_no, class_id ON students FOR EACH ROW
+        WHEN NEW.admission_no IS NOT NULL AND """ + dup.format(self_clause=" AND s.id<>OLD.id") + """
+        BEGIN SELECT RAISE(ABORT,'Admission No. / Register No. already exists in this class'); END""")
+
+
+STEPS.append(("admission_unique_per_class_v104", migration_079_v104_admission_unique_per_class))
+
+
+def migration_080_v104_announcements(conn):
+    """V104: temporary dashboard announcement banners (school-scoped or platform-wide) + per-user dismissals."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER,                      -- NULL = platform-wide (sent by the Super Admin to every school)
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        audience TEXT NOT NULL DEFAULT 'all',   -- all | admin | teacher | student | parent
+        level TEXT NOT NULL DEFAULT 'info',     -- info | success | warning
+        dismissible INTEGER NOT NULL DEFAULT 1,
+        starts_at TEXT,                         -- UTC 'YYYY-MM-DD HH:MM:SS' (NULL = immediately)
+        expires_at TEXT,                        -- UTC; the banner disappears at this moment
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_by INTEGER,
+        created_by_label TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS announcement_dismissals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        announcement_id INTEGER NOT NULL,
+        actor_type TEXT NOT NULL,               -- user | student | parent
+        actor_id INTEGER NOT NULL,
+        dismissed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (announcement_id, actor_type, actor_id))""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_announcements_school_expiry ON announcements(school_id, expires_at)")
+
+
+STEPS.append(("announcements_v104", migration_080_v104_announcements))
+
+
+def migration_081_v104_custom_school_info(conn):
+    """V104: Custom School Information becomes usable: each field can be chosen for the result sheet, and a display setting
+    switches the whole block on/off."""
+    ensure_column(conn, "school_custom_info", "show_on_result", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "result_display_settings", "show_custom_info", "INTEGER NOT NULL DEFAULT 1")
+
+
+STEPS.append(("custom_school_info_v104", migration_081_v104_custom_school_info))
+
+
+def migration_082_v104_result_custom_fields(conn):
+    """V104: School Admins can define ADDITIONAL information/assessment fields for the result sheet (text, number or a choice list),
+    with their own names, order and visibility, filled in per student and term."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS result_custom_fields (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL, tenant_id TEXT,
+        label TEXT NOT NULL,
+        field_type TEXT NOT NULL DEFAULT 'text',      -- text | number | choice
+        options TEXT,                                 -- choice: comma-separated list; number: optional max value
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        show_on_sheet INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_result_custom_fields_label ON result_custom_fields(school_id, LOWER(label))")
+    conn.execute("""CREATE TABLE IF NOT EXISTS result_custom_values (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER NOT NULL, term_id INTEGER NOT NULL, field_id INTEGER NOT NULL,
+        value TEXT,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (student_id, term_id, field_id))""")
+    ensure_column(conn, "result_display_settings", "show_additional_fields", "INTEGER NOT NULL DEFAULT 1")
+
+
+STEPS.append(("result_custom_fields_v104", migration_082_v104_result_custom_fields))
 
 
 def term_sequence_next(conn, term):
