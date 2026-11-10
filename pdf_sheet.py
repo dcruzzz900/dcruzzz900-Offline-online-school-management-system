@@ -310,6 +310,8 @@ def header(data, term, rs, S, school_name, logo_path, title_override=None, sessi
         cell.append(Paragraph(_esc(rs["tagline"]), S.p(9, color=sub, align=al)))
     if rs.get("contact"):
         cell.append(Paragraph(_esc(rs["contact"]), S.p(9, color=sub, align=al)))
+    if rs.get("custom_info"):
+        cell.append(Paragraph("&nbsp;&nbsp;&nbsp;".join(f"<b>{_esc(l)}:</b> {_esc(v)}" for l, v in rs["custom_info"]), S.p(8, color=sub, align=al, leading=10)))
     cell.append(Spacer(1, 3))
     ttl = _esc(title_override or rs.get("title") or "Terminal Report Sheet")
     if S.key == "minimal_line":
@@ -541,13 +543,13 @@ def cumulative_table(cum, S, w=None, show_pos=True):
     per = (7 if ca3 else 6) - (0 if show_pos else 1)     # V103: Pos. columns follow "Show subject position"
     nt = len(terms)
     term_cols = nt * per
-    overall_pct = 25.6 if show_pos else 21.8
-    col_pct = max(2.4, min(5.6, (100 - overall_pct - 10.5) / term_cols))
+    overall_pct = 24.6 if show_pos else 20.8
+    col_pct = max(2.4, min(5.6, (100 - overall_pct - 9.6) / term_cols))
     subj_pct = 100 - overall_pct - term_cols * col_pct
     pt = w / 100.0
-    widths = [subj_pct * pt] + [col_pct * pt] * term_cols + [4.8 * pt, 5.6 * pt] + ([3.8 * pt] if show_pos else []) + [4.0 * pt, 7.4 * pt]
+    widths = [subj_pct * pt] + [col_pct * pt] * term_cols + [5.0 * pt, 5.2 * pt] + ([3.8 * pt] if show_pos else []) + [4.0 * pt, 6.6 * pt]
     nov = 5 if show_pos else 4
-    fs = max(4.9, min(7.0, (col_pct * pt - 1.6) / 2.9))
+    fs = max(5.2, min(7.3, (col_pct * pt - 1.0) / 2.75))      # V104: larger scores (was max 7.0 / more padding)
     div = 4 if ca3 else 3
     sty_n = S.p(fs, align=TA_CENTER, leading=fs * 1.2)
     sty_subj = S.p(min(8, fs + 1), bold=True, leading=(fs + 1) * 1.2)
@@ -690,6 +692,18 @@ def domain_tables(groups, S, w=None, stack=False, with_banner=True):
     return out
 
 
+def custom_fields_block(items, S, w=None, cols=3):
+    """V104: 'Additional Information' (school-defined fields) as label/value boxes."""
+    w = w or W
+    out = [Spacer(1, 3), banner("Additional Information", S, w), Spacer(1, 3)]
+    gap = GAP
+    cw = (w - gap * (cols - 1)) / cols
+    for i in range(0, len(items), cols):
+        ch = items[i:i + cols]
+        out += [_row_of([_label_box(l, v, cw, S, big=10.5) for l, v in ch], [cw] * len(ch)), Spacer(1, 4)]
+    return out
+
+
 def attendance(items, S, w=None, per_row=None):
     """items: [(label, value, weight)]"""
     w = w or W
@@ -740,8 +754,9 @@ def signatures(cells, S, w=None):
             rows.append([Paragraph(f"{_esc(role)}{(': ' + _esc(name)) if name else ''}", S.p(10 if w == W else 8.5, align=TA_CENTER))])
         if show_date:
             rows.append([Paragraph(f"Date: {format_dmy(date_iso) if date_iso else ''}", S.p(10 if w == W else 8.5, align=TA_CENTER))])
-        t = Table(rows, colWidths=[colw])
-        t.setStyle(TableStyle(st + [("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
+        t = Table(rows, colWidths=[colw], hAlign="CENTER")
+        # V104: ALIGN CENTER so an uploaded signature image is centred on its line (it was left-aligned in the downloaded PDF)
+        t.setStyle(TableStyle(st + [("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "BOTTOM"), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
         built.append(t)
     hw = w / 2
     row = Table([[b for b in built] + [""] * (2 - len(built))], colWidths=[hw, hw])
@@ -842,6 +857,7 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
                 att.append((label, info.get(key), 1))
     if promo and rs.get("show_attendance", True):          # same rule as the print sheet: the whole block follows "Show attendance"
         att.append(("Promotion Status", promo, 2.4))
+    cust = [(l, v) for l, v in (data.get("custom_fields") or [])] if rs.get("show_additional_fields", True) else []
     cm_items = []
     if rs.get("show_teacher_comment", True):
         cm_items.append(("Class/Form Teacher's Comment", info.get("teacher_comment")))
@@ -877,6 +893,8 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
         left += ntr + keys(scale, bool(groups), S, inner, narrow=True)
         right = [] if show_cum else table_part(MW)
         right += summary_strip(cells, S, MW, cols=3)
+        if cust:
+            right += custom_fields_block(cust, S, MW, cols=2)
         if cm_items:
             right += [Spacer(1, 6)] + comments(cm_items, S, MW, stack=True)
         if sg:
@@ -894,6 +912,8 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
         els += [_card(table_part(wi), W, S), Spacer(1, 6)]
         if groups:
             els += [_card(domain_tables(groups, S, wi), W, S), Spacer(1, 6)]
+        if cust:
+            els += [_card(custom_fields_block(cust, S, wi), W, S), Spacer(1, 6)]
         half = (W - 8) / 2
         side = []
         if att:
@@ -916,6 +936,8 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
     els += summary_strip(cells, S)
     if groups:
         els += domain_tables(groups, S)
+    if cust:
+        els += custom_fields_block(cust, S)
     if att:
         els += attendance(att, S)
     if cm_items:

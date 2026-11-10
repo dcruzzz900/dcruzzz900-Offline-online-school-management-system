@@ -166,8 +166,8 @@ def register_profile_routes(app, h):
         if "admission_no" not in errors and editable({"key": "admission_no", "self_edit": False, "staff_edit": False, "admin_only": True}) \
                 and new.get("admission_no"):
             clash = conn.execute(
-                "SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.id<>? "
-                "AND LOWER(TRIM(s.admission_no))=LOWER(?)", (school_id(), sid, new["admission_no"])).fetchone()
+                "SELECT 1 FROM students s WHERE s.class_id=? AND s.id<>? "
+                "AND LOWER(TRIM(s.admission_no))=LOWER(?)", (student["class_id"], sid, new["admission_no"])).fetchone()   # V104: unique within the class only
             if clash:
                 errors["admission_no"] = "Admission No. / Register No. is already used by another student in this school."
         if new.get("email") and "email" not in errors:

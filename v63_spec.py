@@ -55,6 +55,7 @@ def register_v63(app, h):
     canonical_rbac_role = h["canonical_rbac_role"]
     active_role_assignments = h["active_role_assignments"]
     security_event = h["security_event"]
+    result_sheet_settings = h.get("result_sheet_settings")
 
     # ------------------------------------------------------------------ small helpers
     def sid():
@@ -405,6 +406,15 @@ def register_v63(app, h):
         if not class_in_school(conn, class_id) or not term_ok:
             conn.close(); flash("Class or term not found.", "error"); return redirect(url_for("result_workflow"))
         ok, msg = transition(conn, class_id, term_id, action, request.form.get("reason"))
+        if ok and action == "publish" and result_sheet_settings:
+            # V104: freeze the sheet design/configuration as it is NOW; later changes never touch this published result.
+            try:
+                import json as _json
+                conn.execute("UPDATE result_publication SET sheet_snapshot=? WHERE school_id=? AND class_id=? AND term_id=?",
+                             (_json.dumps(result_sheet_settings(conn, school_id)), school_id, class_id, term_id))
+                conn.commit()
+            except Exception:
+                pass
         if ok and action == "approve":
             # V103: tell the class/form teacher (and whoever submitted it) that the results were approved, and by whom.
             try:
@@ -609,8 +619,8 @@ def register_v63(app, h):
         if f.get("gender") not in ("M", "F"):
             errors.append("Gender is required.")
         admission = f.get("admission_no", "").strip() or (next_admission_number(conn, school_id) if not errors else "")
-        if admission and conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))", (school_id, admission)).fetchone():
-            errors.append("That admission number is already used in this school.")
+        if admission and class_id and conn.execute("SELECT 1 FROM students s WHERE s.class_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))", (class_id, admission)).fetchone():
+            errors.append("That admission number is already used in this class. (The same number may be used in a different class.)")
         register_no = f.get("register_no", "").strip() or (next_register_number(conn, class_id) if class_id else None)
         if class_id and register_no and conn.execute("SELECT 1 FROM students WHERE class_id=? AND TRIM(register_no)=TRIM(?)", (class_id, register_no)).fetchone():
             errors.append("That register number is already used in this class.")

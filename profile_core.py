@@ -78,7 +78,7 @@ STAFF_SPECS = [
     _f("address", "Address", "address", False, True, True, maxlen=300),
     _f("qualifications", "Qualification", "text", False, True, True, maxlen=200),
     _f("subjects_taught", "Subjects Taught (as declared)", "text", False, True, True, maxlen=300),
-    _f("staff_id", "Staff / Employee ID", "text", False, False, False, admin_only=True, maxlen=40),
+    _f("staff_id", "Staff / Employee ID", "text", False, True, True, maxlen=40),   # V104: not admin-only/protected any more
 ]
 STAFF_PROTECTED = {"role", "position", "rbac_role", "school_id", "tenant_id", "is_active", "password_hash",
                    "security_question", "security_answer_hash", "account_status", "signup_status",

@@ -466,6 +466,25 @@ def register_v61_routes(app, h):
                         order = conn.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM skill_traits WHERE school_id=?", (sid(),)).fetchone()[0]
                         conn.execute("INSERT INTO skill_traits(school_id,tenant_id,name,category,sort_order) VALUES(?,?,?,?,?)", (sid(), tid(), name, d["domain_key"], order))
                         pc.audit(conn, actor(), "educational_trait_created", "skill_trait", name, {"domain": d["label"]}, ip=ip())
+                    elif act in ("move_domain", "move_trait"):
+                        # V104: display order is controlled by the school (up / down); the sheets read sort_order everywhere
+                        step = -1 if request.form.get("dir") == "up" else 1
+                        if act == "move_domain":
+                            table, target = "educational_domains", request.form.get("domain_id", type=int)
+                            ids = [r[0] for r in conn.execute("SELECT id FROM educational_domains WHERE school_id=? ORDER BY sort_order, id", (sid(),)).fetchall()]
+                        else:
+                            tr = conn.execute("SELECT * FROM skill_traits WHERE id=? AND school_id=?", (request.form.get("trait_id", type=int), sid())).fetchone()
+                            if not tr:
+                                raise ValueError("Item not found.")
+                            table, target = "skill_traits", tr["id"]
+                            ids = [r[0] for r in conn.execute("SELECT id FROM skill_traits WHERE school_id=? AND category=? ORDER BY sort_order, name", (sid(), tr["category"])).fetchall()]
+                        if target in ids:
+                            i = ids.index(target); j = i + step
+                            if 0 <= j < len(ids):
+                                ids[i], ids[j] = ids[j], ids[i]
+                                for n, idv in enumerate(ids, 1):
+                                    conn.execute(f"UPDATE {table} SET sort_order=? WHERE id=? AND school_id=?", (n, idv, sid()))
+                        msg = "Order updated."
                     elif act in ("toggle_trait", "rename_trait"):
                         t = conn.execute("SELECT * FROM skill_traits WHERE id=? AND school_id=?", (request.form.get("trait_id", type=int), sid())).fetchone()
                         if not t:

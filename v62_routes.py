@@ -17,9 +17,9 @@ SIGNATURE_LAYOUTS = [("split", "Teacher left, Principal right"), ("stacked", "St
 # Section grouping for the settings page. Every key here is stored in result_display_settings, nowhere else.
 SECTIONS = [
     ("Identity & header", ["show_logo", "show_passport", "show_watermark"]),
-    ("School information", ["show_address", "show_email", "show_phone", "show_motto"]),
+    ("School information", ["show_address", "show_email", "show_phone", "show_motto", "show_custom_info"]),
     ("Student details", ["show_admission_no", "show_class", "show_session", "show_term", "show_next_term_resumes"]),
-    ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_grading_key", "show_promotion"]),
+    ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_additional_fields", "show_grading_key", "show_promotion"]),
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent", "show_days_late"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
                                "show_teacher_name", "show_principal_signature", "show_principal_sign_date", "show_principal_name"]),
@@ -297,8 +297,8 @@ def register_v62_routes(app, h):
                         if not 2 <= len(label) <= 60 or any(c in label + value for c in "<>"):
                             raise ValueError("Give the field a name of 2-60 characters (no < or >).")
                         order = conn.execute("SELECT COALESCE(MAX(sort_order),0)+1 FROM school_custom_info WHERE school_id=?", (sid(),)).fetchone()[0]
-                        conn.execute("INSERT INTO school_custom_info(school_id,tenant_id,label,value,sort_order,created_by) VALUES(?,?,?,?,?,?)",
-                                     (sid(), session.get("tenant_id"), label, value, order, session.get("name")))
+                        conn.execute("INSERT INTO school_custom_info(school_id,tenant_id,label,value,sort_order,created_by,show_on_result) VALUES(?,?,?,?,?,?,?)",
+                                     (sid(), session.get("tenant_id"), label, value, order, session.get("name"), 1 if request.form.get("show_on_result") else 0))
                         pc.audit(conn, actor(), "school_info_added", "school_custom_info", label, {"label": label, "value": value}, ip=ip())
                         msg = "Field added."
                     elif act in ("update", "delete"):
@@ -312,7 +312,7 @@ def register_v62_routes(app, h):
                         else:
                             if not 2 <= len(label) <= 60 or any(c in label + value for c in "<>"):
                                 raise ValueError("Give the field a name of 2-60 characters (no < or >).")
-                            conn.execute("UPDATE school_custom_info SET label=?, value=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (label, value, row["id"]))
+                            conn.execute("UPDATE school_custom_info SET label=?, value=?, show_on_result=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (label, value, 1 if request.form.get("show_on_result") else 0, row["id"]))
                             pc.audit(conn, actor(), "school_info_updated", "school_custom_info", row["id"], pc.diff(row, {"label": label, "value": value}, ["label", "value"]), ip=ip())
                             msg = "Field updated."
                     else:
