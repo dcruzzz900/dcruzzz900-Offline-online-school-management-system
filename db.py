@@ -1804,7 +1804,44 @@ def migration_053_billing_finalization(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_billing_recovery_status ON billing_renewal_recovery(status,next_attempt_at)")
 
 
-STEPS = [    ("ai_layer", migration_048_ai_layer),
+
+def migration_076_ai_v2_cbt_module(conn):
+    """V0.2 AI module additions: feature toggles and school/tenant-scoped CBT drafts.
+
+    Existing My School Hub AI tables, consent records and audit history are reused.
+    No user, student, school or tenant identity tables are duplicated.
+    """
+    for col, typ in [
+        ("teacher_assistant", "INTEGER NOT NULL DEFAULT 1"),
+        ("cbt_generator", "INTEGER NOT NULL DEFAULT 0"),
+        ("attendance_intelligence", "INTEGER NOT NULL DEFAULT 1"),
+        ("management_assistant", "INTEGER NOT NULL DEFAULT 1"),
+    ]:
+        ensure_column(conn, "school_ai_settings", col, typ)
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_cbt_sets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        title TEXT NOT NULL, subject TEXT NOT NULL, class_name TEXT NOT NULL,
+        topic TEXT NOT NULL, question_count INTEGER NOT NULL, difficulty TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','reviewed','approved','rejected')),
+        questions_json TEXT NOT NULL, generated_by INTEGER NOT NULL, reviewed_by INTEGER,
+        reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_cbt_sets_tenant_school ON ai_cbt_sets(tenant_id,school_id,created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_cbt_sets_school_status ON ai_cbt_sets(school_id,status,created_at)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_usage_monthly (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,
+        month_key TEXT NOT NULL, provider TEXT NOT NULL, feature TEXT NOT NULL,
+        request_count INTEGER NOT NULL DEFAULT 0, estimated_tokens INTEGER NOT NULL DEFAULT 0,
+        estimated_cost_ngn REAL NOT NULL DEFAULT 0, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(school_id,month_key,provider,feature)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ai_usage_monthly_tenant ON ai_usage_monthly(tenant_id,school_id,month_key)")
+    for row in conn.execute("SELECT id FROM schools").fetchall():
+        conn.execute("INSERT OR IGNORE INTO school_ai_settings(school_id) VALUES (?)", (row["id"],))
+
+
+STEPS = [("ai_layer", migration_048_ai_layer),
     ("school_theme", migration_049_school_theme),
     ("offline_sync", migration_024_offline_sync),
     ("deferred_actions", migration_025_deferred_actions),
@@ -4249,6 +4286,7 @@ def migration_082_v104_result_custom_fields(conn):
 
 
 STEPS.append(("result_custom_fields_v104", migration_082_v104_result_custom_fields))
+STEPS.append(("ai_v2_cbt_module", migration_076_ai_v2_cbt_module))
 
 
 def term_sequence_next(conn, term):
