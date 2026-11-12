@@ -1,8 +1,15 @@
 {% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% block title %}Dashboard · {{ school_name }}{% endblock %}{% block content %}
-<div class="page-heading"><div><div class="eyebrow">SCHOOL ADMINISTRATION</div><h1><span data-greeting>{{ time_greeting }}</span>, {{ session.get('name') }}.</h1><p>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}Set an active academic term to get started.{% endif %}</p><div class="tenant-chip">School ID <strong>{{ school_code or session.get('school_code') or '—' }}</strong><span>•</span> Tenant <strong>{{ session.get('tenant_id') or '—' }}</strong></div></div><a class="btn" href="{{ url_for('admin_setup_wizard') }}">Complete School Setup →</a></div>
+<section class="hub-dashboard-hero">
+  <div class="hub-hero-copy"><span class="hub-hero-kicker">MY SCHOOL HUB · SCHOOL ADMINISTRATION</span>
+    <h1><span data-greeting>{{ time_greeting }}</span>, {{ session.get('name') }}!</h1>
+    <p>{% if term %}Here is your school overview for {{ term.session_name }} · {{ term.name }}.{% else %}Here is an overview of your school system.{% endif %}</p>
+  </div><div class="hub-hero-meta"><span>🏫 {{ school_name }}</span><span>📍 {{ school_code or session.get('school_code') or 'School Portal' }}</span></div>
+</section>
+<div class="page-heading hub-dashboard-heading"><div><div class="eyebrow">SCHOOL OVERVIEW</div><h2>Dashboard overview</h2><p>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}Set an active academic term to get started.{% endif %}</p><div class="tenant-chip">School ID <strong>{{ school_code or session.get('school_code') or '—' }}</strong><span>•</span> Tenant <strong>{{ session.get('tenant_id') or '—' }}</strong></div></div><a class="btn" href="{{ url_for('admin_setup_wizard') }}">Complete School Setup →</a></div>
 <div class="stat-grid"><div class="stat-box"><div class="num">{{ stats.students }}</div><div class="label">Students</div></div><div class="stat-box"><div class="num">{{ stats.teachers }}</div><div class="label">Staff</div></div><div class="stat-box"><div class="num">{{ stats.classes }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">{{ stats.subjects }}</div><div class="label">Subjects</div></div></div>
 {% if gender_stats %}<div class="gender-stat-card"><span class="gender-stat-title">Students by gender</span><div class="gender-stat"><span class="gender-icon boys" aria-hidden="true">♂</span><div><div class="gender-num">{{ gender_stats.boys }}</div><div class="gender-label">Boys</div></div></div><div class="gender-stat"><span class="gender-icon girls" aria-hidden="true">♀</span><div><div class="gender-num">{{ gender_stats.girls }}</div><div class="gender-label">Girls</div></div></div>{% if gender_stats.unspecified %}<div class="gender-stat"><span class="gender-icon" style="background:#eee;color:#666" aria-hidden="true">?</span><div><div class="gender-num">{{ gender_stats.unspecified }}</div><div class="gender-label">Unspecified</div></div></div>{% endif %}</div>{% endif %}
 
+<section class="hub-dashboard-charts">
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('bar') }}</span>Student Performance by Class</h3><p class="muted">Average score and pass rate per class, {% if term %}{{ term.name }}{% else %}current term{% endif %}.</p>
 {% if class_performance_chart %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf" role="img" aria-label="Student performance by class"></canvas></div></div>{% else %}<p class="muted" style="margin-top:14px">No classes to chart yet.</p>{% endif %}</div>
 
@@ -15,6 +22,7 @@
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('building') }}</span>Enrolment by Class Level</h3><p class="muted">Active students per class.</p>
 {% if enrolment %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartEnrolment" role="img" aria-label="Enrolment by class level"></canvas></div></div>{% else %}<p class="muted" style="margin-top:14px">No classes yet.</p>{% endif %}</div>
 
+</section>
 <div class="card ai-dashboard-banner"><div><span class="eyebrow">✦ AI POWERED</span><h3>Your school intelligence center</h3><p>Analyse performance, draft comments, detect trends and ask natural-language questions about your school's academic data.</p></div><a class="btn" href="{{ url_for('ai_command_center') }}">Open AI Assistant →</a></div>
 {% include "partials/quick_actions.html" %}
 <div class="grid-2">
