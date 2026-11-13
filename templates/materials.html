@@ -64,6 +64,9 @@
 {% endif %}
 
 <div class="ms-card">
+  <div class="ms-search" style="margin-bottom:0.85rem;">
+    <input type="text" id="materialSearch" placeholder="Search materials…" oninput="filterMaterials(this.value)">
+  </div>
   <h3 class="ms-card-title">Materials{% if class_id %} — {{ accessible_classes|selectattr('id','equalto',class_id)|map(attribute='name')|first }}{% endif %}</h3>
   {% if not items %}
   <div class="ms-empty"><div class="icon">📖</div><p>No materials here yet.</p></div>

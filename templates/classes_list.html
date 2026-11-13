@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Results · Classes{% endblock %}
+{% block title %}Results · {{ school_name }}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
@@ -8,24 +8,54 @@
 {% block content %}
 <div class="ms-page-header">
   <div>
-    <h1>Classes</h1>
-    <p class="subtitle">Open broadsheet or terminal results by class</p>
+    <h1>Results</h1>
+    <p class="subtitle">View terminal results and broadsheets by class</p>
   </div>
 </div>
 
-<div class="ms-card">
+<div class="ms-filter-bar">
+  <div class="ms-form-group">
+    <label>Session</label>
+    <select disabled><option>Active session</option></select>
+  </div>
+  <div class="ms-form-group">
+    <label>Term</label>
+    <select disabled><option>Active term</option></select>
+  </div>
+  <div class="ms-form-group">
+    <label>Class</label>
+    <select id="resultsClassJump" onchange="if(this.value) location.href=this.value;">
+      <option value="">— select class —</option>
+      {% for c in classes %}
+      {% if accessible == 'all' or c.id in accessible %}
+      <option value="{{ url_for('class_results_list', class_id=c.id) }}">{{ c.name }}</option>
+      {% endif %}
+      {% endfor %}
+    </select>
+  </div>
+  <a class="ms-btn ms-btn-primary" href="#classResults">Load Results</a>
+</div>
+
+<div class="ms-card" id="classResults">
   <div class="ms-table-wrap">
     <table class="ms-table">
-      <thead><tr><th>Class</th><th>Actions</th></tr></thead>
+      <thead>
+        <tr>
+          <th>S/N</th>
+          <th>Class</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
       <tbody>
         {% for c in classes %}
         <tr>
+          <td>{{ loop.index }}</td>
           <td><strong>{{ c.name }}</strong></td>
           <td>
             {% if accessible == 'all' or c.id in accessible %}
             <div class="actions">
-              <a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
-              <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('class_results_list', class_id=c.id) }}">Terminal Results</a>
+              <a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('class_results_list', class_id=c.id) }}">View Results</a>
+              <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
             </div>
             {% else %}
             <span style="color:#94a3b8;font-size:0.85rem;">No result access</span>
@@ -33,7 +63,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="2"><div class="ms-empty"><div class="icon">🏫</div><p>No classes yet.</p></div></td></tr>
+        <tr><td colspan="3"><div class="ms-empty"><div class="icon">📄</div><p>No classes yet.</p></div></td></tr>
         {% endfor %}
       </tbody>
     </table>

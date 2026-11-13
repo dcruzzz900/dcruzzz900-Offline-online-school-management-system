@@ -18,31 +18,39 @@
   </div>
 </div>
 
+<div class="ms-tabs">
+  <button type="button" class="active" data-tab="all" onclick="filterNotifs('all', this)">All ({{ notifications|length if notifications else 0 }})</button>
+  <button type="button" data-tab="unread" onclick="filterNotifs('unread', this)">Unread</button>
+</div>
+
 <div class="ms-card">
   {% if notifications %}
     {% for n in notifications %}
     {% set is_unread = n.id > (seen_before or 0) %}
-    <div style="padding:1rem; margin-bottom:0.65rem; border-radius:12px; border:1px solid {% if is_unread %}#bfdbfe{% else %}#e2e8f0{% endif %}; background:{% if is_unread %}#eff6ff{% else %}#fff{% endif %};">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.75rem;">
-        <div style="flex:1;min-width:0;">
-          <h3 style="margin:0 0 0.35rem; font-size:0.98rem; font-weight:650; color:#0f172a;">
-            {% if is_unread %}<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2563eb;margin-right:0.4rem;vertical-align:middle;" title="Unread"></span>{% endif %}
-            {{ n.title }}
-          </h3>
-          <p style="margin:0 0 0.4rem; font-size:0.88rem; color:#334155; white-space:pre-wrap; line-height:1.45;">{{ n.message }}</p>
-          <p style="margin:0; font-size:0.78rem; color:#94a3b8;">
-            From {{ n.sender_label }}{% if n.school_name %} · {{ n.school_name }}{% elif n.school_id is none %} · All Schools{% endif %}
-          </p>
-        </div>
-        <span style="font-size:0.78rem; color:#94a3b8; white-space:nowrap;">{{ n.created_at|dmy }}</span>
+    <div class="ms-notif-item" data-unread="{{ '1' if is_unread else '0' }}">
+      <div class="icon {% if 'result' in (n.title or '')|lower %}success{% elif 'fee' in (n.title or '')|lower or 'remind' in (n.title or '')|lower %}warning{% elif 'system' in (n.title or '')|lower or 'update' in (n.title or '')|lower %}system{% else %}info{% endif %}">
+        {% if 'result' in (n.title or '')|lower %}✓{% elif 'fee' in (n.title or '')|lower %}🔔{% elif 'system' in (n.title or '')|lower %}↓{% else %}ℹ️{% endif %}
       </div>
+      <div class="body">
+        <p class="title">{% if is_unread %}● {% endif %}{{ n.title }}</p>
+        <p class="msg">{{ n.body or n.message or '' }}</p>
+      </div>
+      <div class="date">{{ n.created_at|dmy if n.created_at is defined else '' }}</div>
     </div>
     {% endfor %}
   {% else %}
-    <div class="ms-empty">
-      <div class="icon">🔔</div>
-      <p>No notifications yet.</p>
-    </div>
+    <div class="ms-empty"><div class="icon">🔔</div><p>No notifications yet.</p></div>
   {% endif %}
 </div>
+
+<script>
+function filterNotifs(mode, btn) {
+  document.querySelectorAll('.ms-tabs button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.ms-notif-item').forEach(function(el) {
+    if (mode === 'all') el.style.display = '';
+    else el.style.display = el.dataset.unread === '1' ? '' : 'none';
+  });
+}
+</script>
 {% endblock %}

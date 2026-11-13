@@ -8,23 +8,22 @@
 {% block content %}
 <div class="ms-page-header">
   <div>
-    <h1>Assign Subjects</h1>
+    <h1>Assign Subject</h1>
     <p class="subtitle">Link subjects to classes and assign teachers</p>
   </div>
 </div>
 
-<div class="ms-card" style="max-width:520px;">
-  <h3 class="ms-card-title">New Assignment</h3>
-  <form method="POST">
+<div class="ms-card">
+  <form method="POST" class="ms-filter-bar" style="border:none;padding:0;margin:0;background:transparent;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="ms-form-group">
-      <label>Class <span class="ms-req">*</span></label>
+      <label>Class</label>
       <select name="class_id" required>
         {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
       </select>
     </div>
     <div class="ms-form-group">
-      <label>Subject <span class="ms-req">*</span></label>
+      <label>Subject</label>
       <select name="subject_id" required>
         {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
       </select>
@@ -36,7 +35,7 @@
         {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
       </select>
     </div>
-    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.85rem;">Assign</button>
+    <button class="ms-btn ms-btn-primary" type="submit">Assign Subject</button>
   </form>
 </div>
 
@@ -45,16 +44,22 @@
   <div class="ms-table-wrap">
     <table class="ms-table">
       <thead>
-        <tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Change Teacher</th><th>Actions</th></tr>
+        <tr>
+          <th>S/N</th>
+          <th>Class</th>
+          <th>Subject</th>
+          <th>Teacher</th>
+          <th>Action</th>
+        </tr>
       </thead>
       <tbody>
         {% for a in assignments %}
         <tr>
+          <td>{{ loop.index }}</td>
           <td>{{ a.class_name }}</td>
           <td><strong>{{ a.subject_name }}</strong></td>
-          <td>{{ a.teacher_name or '—' }}</td>
           <td>
-            <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline">
+            <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline" style="display:inline-flex;gap:0.35rem;align-items:center;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <select name="teacher_id" style="padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;" onchange="this.form.submit()">
                 <option value="">— unassigned —</option>
@@ -66,9 +71,9 @@
           </td>
           <td>
             <form method="POST" action="{{ url_for('delete_class_subject', cs_id=a.id) }}"
-                  onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');">
+                  onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');" style="display:inline;">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Remove</button>
+              <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Delete</button>
             </form>
           </td>
         </tr>
