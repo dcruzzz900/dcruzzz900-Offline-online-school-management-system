@@ -28,16 +28,39 @@
   </div>
 </div>
 {% else %}
+<div class="ms-card" style="padding:0.85rem 1.15rem;">
+  <form method="GET" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+    <label style="font-weight:600;font-size:0.85rem;">Class</label>
+    <select name="class_id" onchange="this.form.submit()" style="padding:0.45rem 0.7rem;border-radius:8px;border:1px solid #e2e8f0;">
+      {% for c in accessible_classes %}
+      <option value="{{ c.id }}" {% if c.id == class_id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+    {% if session_id %}<input type="hidden" name="session_id" value="{{ session_id }}">{% endif %}
+  </form>
+</div>
 
 {% if can_upload %}
 <div class="ms-card" style="max-width:560px;">
   <h3 class="ms-card-title">Upload Material</h3>
-  <form method="POST" enctype="multipart/form-data" action="{{ url_for('materials', class_id=class_id) }}">
+  <form method="POST" enctype="multipart/form-data" action="{{ url_for('materials', class_id=class_id, session_id=session_id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="class_id" value="{{ class_id }}">
+    <input type="hidden" name="session_id" value="{{ session_id or '' }}">
+    {% if all_sessions %}
+    <div class="ms-form-group">
+      <label>Session</label>
+      <select name="session_id">
+        {% for s in all_sessions %}
+        <option value="{{ s.id }}" {% if session_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="ms-form-group">
       <label>Subject</label>
       <select name="subject_id">
-        {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        {% for s in subjects %}<option value="{{ s.id }}" {% if selected_subject_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
     </div>
     <div class="ms-form-group">

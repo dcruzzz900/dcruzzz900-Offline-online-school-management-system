@@ -6,6 +6,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-app.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/desktop-shell.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-mobile.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-desktop.css') }}">
 {% block extra_head %}{% endblock %}
 </head>
 <body{% if session.get('user_id') %} data-auth-school-id="{{ session.get('school_id') }}"{% endif %}>
@@ -41,21 +43,70 @@
 {% if session.get('user_id') or session.get('student_id') or session.get('platform_admin_id') %}<div id="liveClock" class="live-clock no-print" data-now="{{ server_now_ms or 0 }}" data-tz="{{ school_tz_name or 'Africa/Lagos' }}"></div>{% endif %}{% with messages=get_flashed_messages(with_categories=true) %}{% for category,message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}{% include "_announcement_banners.html" %}
 {# ===== Mobile App Chrome (visible ≤768px) ===== #}
 {% if session.get('user_id') or session.get('student_id') or session.get('platform_admin_id') %}
-<header class="ms-mobile-topbar no-print">
-  <a class="ms-back" href="javascript:history.back()" aria-label="Back">‹</a>
-  <div class="ms-brand">
+<header class="ms-mobile-topbar mobile-header no-print">
+  <button type="button" class="header-icon ms-back" onclick="document.getElementById('mshDrawer')&&document.getElementById('mshDrawer').classList.add('open')" aria-label="Open menu">☰</button>
+  <div class="ms-brand header-brand">
     {% if school_logo_url %}
-    <img src="{{ school_logo_url }}" alt="">
+    <img src="{{ school_logo_url }}" alt="" class="brand-logo school-crest">
     {% else %}
-    <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="">
+    <span class="brand-logo school-crest" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#2563eb;border-radius:50%;width:36px;height:36px;font-size:1.1rem;">🎓</span>
     {% endif %}
     <div class="ms-brand-text">
-      <strong>My School Hub</strong>
-      <span>{{ school_name }}</span>
+      <strong>{{ school_name }}</strong>
+      <span>{{ school_tagline or 'My School Hub' }}</span>
     </div>
   </div>
-  <a class="ms-home" href="{{ url_for('dashboard') }}" aria-label="Home">⌂</a>
+  <a class="header-icon notification-btn" href="{{ url_for('notifications_inbox') if session.get('user_id') else url_for('dashboard') }}" aria-label="Notifications">
+    🔔{% if unread_notifications %}<em>{{ unread_notifications }}</em>{% endif %}
+  </a>
 </header>
+{# Mobile drawer menu #}
+<div id="mshDrawer" class="msh-drawer-backdrop no-print" onclick="if(event.target===this)this.classList.remove('open')">
+  <aside class="msh-drawer" onclick="event.stopPropagation()">
+    <div class="drawer-top">
+      <div class="brand-logo" style="width:40px;height:40px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;">🎓</div>
+      <div><b>My School Hub</b><small>{{ school_name }}</small></div>
+      <button type="button" onclick="document.getElementById('mshDrawer').classList.remove('open')" aria-label="Close">✕</button>
+    </div>
+    <div class="drawer-profile">
+      <div class="profile-mini">{{ (session.get('name') or 'U')[0]|upper }}</div>
+      <div><b>{{ session.get('name') or 'User' }}</b><small>{{ position_label or session.get('role') }}</small></div>
+    </div>
+    <div class="drawer-links">
+      <a href="{{ url_for('dashboard') }}">🏠 Dashboard</a>
+      {% if session.get('role') in ['admin','sub_admin'] %}
+      <a href="{{ url_for('admin_class_subjects') }}">📘 Assign Subject</a>
+      <a href="{{ url_for('classes_list') }}">📄 Results</a>
+      <a href="{{ url_for('classes_list') }}">📊 Broadsheet</a>
+      <a href="{{ url_for('admin_terms') }}">📅 Session &amp; Terms</a>
+      <a href="{{ url_for('registrar_dashboard') }}">👤 Register Student</a>
+      <a href="{{ url_for('staff_attendance') }}">✓ Staff Attendance</a>
+      <a href="{{ url_for('admin_theme') }}">🎨 Themes &amp; Branding</a>
+      <a href="{{ url_for('materials') }}">📚 Learning Materials</a>
+      <a href="{{ url_for('timetable_hub') }}">🗓️ Timetable</a>
+      <a href="{{ url_for('result_workflow') }}">✔ Result Approval</a>
+      <a href="{{ url_for('school_billing_portal') }}">💳 Billings</a>
+      <a href="{{ url_for('admin_promote') }}">⬆️ Promote Students</a>
+      {% endif %}
+      <a href="{{ url_for('settings_hub') }}">⚙️ Settings</a>
+      <a href="{{ url_for('logout') }}" style="color:#fca5a5;">Logout</a>
+    </div>
+  </aside>
+</div>
+<style>
+.msh-drawer-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;}
+.msh-drawer-backdrop.open{display:block;}
+.msh-drawer{position:absolute;left:0;top:0;bottom:0;width:min(86vw,320px);background:#0b1f3a;color:#fff;padding:1rem;overflow-y:auto;box-shadow:8px 0 30px rgba(0,0,0,.25);}
+.drawer-top{display:flex;align-items:center;gap:.65rem;margin-bottom:1rem;}
+.drawer-top b{display:block;font-size:.95rem;}
+.drawer-top small{display:block;opacity:.75;font-size:.75rem;}
+.drawer-top button{margin-left:auto;background:transparent;border:0;color:#fff;font-size:1.2rem;cursor:pointer;}
+.drawer-profile{display:flex;gap:.65rem;align-items:center;padding:.75rem;background:rgba(255,255,255,.08);border-radius:12px;margin-bottom:1rem;}
+.profile-mini{width:40px;height:40px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700;}
+.drawer-links a{display:block;padding:.7rem .5rem;color:#cbd5e1;text-decoration:none;border-radius:8px;font-size:.9rem;font-weight:550;}
+.drawer-links a:hover{background:rgba(255,255,255,.08);color:#fff;}
+@media(min-width:769px){.msh-drawer-backdrop,.ms-mobile-topbar{display:none!important;}}
+</style>
 {% endif %}
 {% block content %}{% endblock %}</main>
 {% if session.get('user_id') %}</div></div>{% elif session.get('parent_id') %}</div>{% elif session.get('student_id') %}</div>{% elif session.get('platform_admin_id') %}</div>{% endif %}

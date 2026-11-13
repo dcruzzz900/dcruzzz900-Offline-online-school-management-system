@@ -4,10 +4,27 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-mobile.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-desktop.css') }}">
+<style>
+/* Source-integrated dashboards: mobile vs desktop */
+.msh-mobile-dashboard { display: none; }
+.msh-desktop-dashboard { display: none; }
+.ms-dashboard-desktop { display: none; }
+@media (max-width: 768px) {
+  .msh-mobile-dashboard { display: block; }
+  body .app-sidebar { display: none !important; }
+}
+@media (min-width: 769px) {
+  .msh-desktop-dashboard { display: block; }
+}
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="ms-dashboard">
+{% include "partials/mobile_admin_dashboard.html" %}
+{% include "partials/desktop_admin_dashboard.html" %}
+<div class="ms-dashboard ms-dashboard-desktop">
 
   {# ========== Welcome Banner ========== #}
   <div class="ms-welcome">
