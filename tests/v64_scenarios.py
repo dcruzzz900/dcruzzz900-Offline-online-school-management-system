@@ -174,7 +174,7 @@ def labels(c, path="/dashboard"):
 
 # ---------------- Quick Actions: staff (combined from all roles; shortcuts only)
 r = FT.get("/dashboard"); h_ = html(r)
-check("staff dashboard shows Quick Actions", code(r) == 200 and "Quick Actions" in h_)
+check("staff dashboard shows Quick Access (V105: renamed from Quick Actions)", code(r) == 200 and "Quick Access" in h_ and "Quick Actions" not in h_)
 for lab in ("Enter Scores", "Take Class Attendance", "Class Register", "Domain Ratings", "Class Teacher Comments", "Submit Results for Review", "My Profile"):
     check(f"Form/Subject teacher sees '{lab}'", lab in h_ or "View All Actions" in h_ and lab in html(FT.get('/dashboard')), lab)
 check("pending indicator on Enter Scores", "Pending" in h_)
@@ -182,7 +182,7 @@ check("attendance indicator shows Today — Not Taken", "Today — Not Taken" in
 check("a teacher without the Registrar role does NOT see registrar actions", "Register Student" not in h_ and "Transfer Student" not in h_)
 check("a teacher never sees Assign Subjects (admin)", "Assign Subjects" not in h_)
 tzh = labels(TZ)
-check("unassigned staff only get the basic shortcuts", "Quick Actions" in tzh and "Enter Scores" not in tzh and "Take Class Attendance" not in tzh)
+check("unassigned staff only get the basic shortcuts", "Quick Access" in tzh and "Enter Scores" not in tzh and "Take Class Attendance" not in tzh)
 post(ADMIN, "/admin/staff/3/roles", {"action": "add", "role": "Registrar / Admissions Officer"}, "/admin/staff/3/roles")
 tzh = labels(staff("teze"))
 check("adding the Registrar role immediately adds its Quick Actions", "Register Student" in tzh and "Update Student Status" in tzh)

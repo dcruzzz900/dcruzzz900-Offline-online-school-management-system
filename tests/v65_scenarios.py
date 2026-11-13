@@ -224,11 +224,10 @@ check("the signature can be removed", one("SELECT signature_filename FROM users 
 
 # ======================================================== 3. dashboard separation
 ad = html(ADMIN.get("/dashboard"))
-check("admin dashboard has separate Academic workspace and School operations cards", "Academic workspace" in ad and "School operations" in ad)
-_content = ad[ad.index('id="quick-actions"'):]
-check("Staff Attendance appears once in the dashboard content (not in both Quick Actions and School operations)", _content.count("Staff Attendance") == 1)
-check("Assign Subjects is under Academic workspace, not repeated in Quick Actions", _content.count("Assign Subjects") == 1)
-check("Quick Actions carry tasks only (no copy of the workspace menus)", "Classes</a>" in _content and _content.count(">Classes<") == 1 and _content.count(">Subjects<") == 1)
+# V105: the admin dashboard follows the approved design: the Academic workspace / School operations / Quick actions blocks are gone
+check("admin dashboard no longer has Academic workspace, School operations or Quick Actions", all(x not in ad for x in ("Academic workspace", "School operations", "Quick Actions", 'id="quick-actions"')))
+check("admin dashboard has a Quick Access panel with the tiles from the design", "Quick Access" in ad and all(x in ad for x in ("My Profile", "Assign Subject", "Broadsheet", "Score History", "Promote Students", "Result Approval")))
+check("Staff Attendance appears once in the Quick Access tiles", ad[ad.index("Quick Access"):].count(">Staff Attendance<") <= 1)
 
 # ======================================================== 4/17. one home for result settings
 th = html(ADMIN.get("/admin/theme"))

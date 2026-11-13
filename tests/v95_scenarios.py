@@ -151,7 +151,7 @@ TEACHER = staff("aokafor")  # assigned only to class1's subjects, per the projec
 
 print("=== 1) Admin Dashboard: all 4 analytics charts render with real, correctly-ranked data ===")
 
-adash = html(ADMIN.get("/dashboard"))
+adash = html(ADMIN.get("/admin/analytics"))
 check("Chart.js is loaded", "chart.js@4.4.4" in adash or "Chart.js" in adash or "chart.umd" in adash)
 check("Student Performance by Class canvas present", 'id="chartClassPerf"' in adash)
 check("Gender Distribution canvas present", 'id="chartGender"' in adash)
@@ -195,7 +195,7 @@ cur.execute("INSERT INTO users (school_id, tenant_id, name, username, password_h
 c.commit()
 c.close()
 ADMIN2 = staff("admin2")
-dash2 = html(ADMIN2.get("/dashboard"))
+dash2 = html(ADMIN2.get("/admin/analytics"))
 check("a second, empty school's admin dashboard never shows school 1's classes/students",
       "JSS1A" not in dash2 and "JSS2B" not in dash2 and "Obi Chinedu" not in dash2, dash2[:0] or "ok")
 

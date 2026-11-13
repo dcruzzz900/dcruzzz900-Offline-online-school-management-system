@@ -165,7 +165,8 @@ check(f"automatic orientation on a Custom 180x280mm page still picks one of the 
 print("=== 4) Dashboards (Phases 2-5) are completely unaffected by paper size ===")
 
 adash = html(ADMIN.get("/dashboard"))
-check("admin dashboard still renders with a Custom result-sheet paper size in effect", "Recent Activities" in adash and "School Result Performance" in adash, adash[:200])
+analytics = html(ADMIN.get("/admin/analytics"))
+check("admin dashboard and analytics still render with a Custom result-sheet paper size in effect", "Recent Activities" in adash and "School Result Performance" in analytics, adash[:200])
 tdash = html(TEACHER.get("/dashboard"))
 check("teacher dashboard still renders fine too", "Recent Class Activities" in tdash, tdash[:200])
 

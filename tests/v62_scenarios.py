@@ -605,7 +605,8 @@ check("changes are audited", {"school_info_added", "school_info_updated", "schoo
 
 # ================================================================== 22 greeting, 23 AI card, 21 responsive, 24/25 menu
 dash = html(a_c.get("/dashboard"))
-check("dashboard greeting is time-based (no 'Good day')", "Good day" not in dash and re.search(r"data-greeting>Good (morning|afternoon|evening)</span>, Administrator", dash) is not None, re.findall(r"<h1>.{0,120}", dash))
+# V105: the admin dashboard follows the approved design: "Welcome, <name>!" (time-based greeting is still used on the other dashboards)
+check("dashboard greeting is 'Welcome, <name>!' (no 'Good day')", "Good day" not in dash and re.search(r"<h1>Welcome, <span data-first-name>Administrator</span>!</h1>", dash) is not None, re.findall(r"<h1>.{0,120}", dash))
 js = open(os.path.join(ROOT, "static/js/shell-ui.js")).read()
 check("browser refines it to the user's local time (morning <12, afternoon <17, else evening)", "h<12?'Good morning'" in js and "h<17?'Good afternoon':'Good evening'" in js)
 check("greeting script is loaded", "shell-ui.js" in dash)
@@ -614,7 +615,8 @@ for hr, expect in ((6, "Good morning"), (13, "Good afternoon"), (19, "Good eveni
     check(f"hour {hr} -> {expect}" if hr != 2 else "hour 2 follows the same rule", g == expect or hr == 2)
 css = open(os.path.join(ROOT, "static/css/style.css")).read()
 check("AI card: light text on the dark gradient, wraps, no clipping", re.search(r"\.ai-dashboard-banner p\{color:#e8ecff!important[^}]*overflow-wrap:anywhere", css) is not None and "flex-wrap:wrap" in css.split("V62 UI fixes")[1])
-check("AI card text is present and visible on the dashboard", "AI POWERED" in dash and "Open AI Assistant" in dash)
+# V105: the approved dashboard has no AI card; the AI Assistant stays one tap away in the menu
+check("AI Assistant is reachable from the menu (the dashboard design has no AI card)", 'href="/ai"' in dash and ">AI Assistant<" in dash)
 check("login/signup layouts: stack on tablets and phones, no horizontal scroll", "@media(max-width:900px){.beautiful-auth{grid-template-columns:1fr" in css and "overflow-x:hidden" in css)
 check("viewport meta present on auth pages", all('name="viewport"' in html(A.app.test_client().get(u)) for u in ("/login", "/student/login", "/register-school")))
 nav = html(root.get("/platform/dashboard"))

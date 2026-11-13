@@ -11,7 +11,10 @@ def test_approved_role_catalog_present():
 
 def test_production_navigation_is_merged_and_renamed():
     assert 'Reports &amp; Analytics' in BASE
-    assert '>Reports</span>' not in BASE
+    # V105: the phone bottom tab bar (approved mobile design) has a 'Reports' tab; the SIDEBAR menu must still have no standalone Reports item
+    _side = BASE[BASE.index('<aside class="app-sidebar"'):BASE.index('</aside>')]
+    assert '>Reports</span>' not in _side
+    assert BASE.count('>Reports</span>') <= 1 and ('mobile-tabs' in BASE[:BASE.index('>Reports</span>')] if '>Reports</span>' in BASE else True)
     assert '>Analytics</span>' not in BASE
     assert 'Staff Attendance' in BASE
 

@@ -194,7 +194,8 @@ c.close()
 
 ADMIN2 = staff("admin2")
 dash2 = html(ADMIN2.get("/dashboard"))
-check("second school's admin sees none of school 1's activity", "New Student" not in dash2 and "Other Classmate" not in dash2, dash2)
+act2 = (re.search(r'<ul class="ad-acts">.*?</ul>', dash2, re.S) or [dash2])[0]     # V105: look at the Recent Activities panel (the Quick Access tile "Register New Student" also contains the words)
+check("second school's admin sees none of school 1's activity", "New Student" not in act2 and "Other Classmate" not in dash2, act2)
 check("...and gets the honest empty state instead", "No activities recorded yet" in dash2, dash2)
 
 print(f"\n{PASS} passed, {len(FAIL)} failed")

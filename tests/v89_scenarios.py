@@ -127,7 +127,7 @@ check("average score around 58.3% shown ((95+20+60)/3)", "58.3%" in tdash, tdash
 
 print("=== 2) Admin Dashboard: performance trend + High-Performing Classes ===")
 
-adash = html(ADMIN.get("/dashboard"))
+adash = html(ADMIN.get("/admin/analytics"))
 check("School Result Performance Trend card present", "School Result Performance Trend" in adash)
 check("term1's avg score (58.3%) appears in the trend", "58.3%" in adash, adash)
 check("JSS1A appears in High-Performing Classes (it's the only class with data)", "High-Performing Classes" in adash and "JSS1A" in adash, adash)
@@ -162,7 +162,7 @@ c.close()
 # A single subject, failing score -> overall average well below the school average and below 50% pass rate.
 run("INSERT INTO scores(student_id,subject_id,term_id,ca1,ca2,ca3,exam) VALUES(?,?,?,2,2,0,5)", (weak_student, math_id, term1))
 
-adash2 = html(ADMIN.get("/dashboard"))
+adash2 = html(ADMIN.get("/admin/analytics"))
 check("JSS1A (avg 58.3%) is still in High-Performing Classes", "High-Performing Classes" in adash2 and "JSS1A" in adash2, adash2)
 check("JSS1X (avg 9%) now appears in Classes Needing Improvement, not High-Performing",
       "Classes Needing Improvement" in adash2 and "JSS1X" in adash2, adash2)
@@ -189,7 +189,7 @@ c.commit()
 c.close()
 
 ADMIN2 = staff("admin2")
-dash2 = html(ADMIN2.get("/dashboard"))
+dash2 = html(ADMIN2.get("/admin/analytics"))
 check("second school's admin sees no high-performing classes from school 1", "JSS1A" not in dash2 and "JSS1X" not in dash2, dash2)
 check("second school (no classes at all) shows the empty state, not a crash", "No classes with recorded scores yet this term" in dash2, dash2)
 
