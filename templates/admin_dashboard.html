@@ -1,385 +1,120 @@
-{% extends "base.html" %}
-{% from "partials/dash_icons.html" import dicon %}
-{% block title %}Dashboard · {{ school_name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-dashboard.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-mobile.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/msh-desktop.css') }}">
-<style>
-/* Source-integrated dashboards: mobile vs desktop */
-.msh-mobile-dashboard { display: none; }
-.msh-desktop-dashboard { display: none; }
-.ms-dashboard-desktop { display: none; }
-@media (max-width: 768px) {
-  .msh-mobile-dashboard { display: block; }
-  /* sidebar visibility handled globally */
-}
-@media (min-width: 769px) {
-  .msh-desktop-dashboard { display: block; }
-}
-</style>
-{% endblock %}
-
+{% extends "base.html" %}{% from "partials/ad_icons.html" import ico %}
+{% block title %}Dashboard — {{ school_name }}{% endblock %}
 {% block content %}
-{% include "partials/mobile_admin_dashboard.html" %}
-{% include "partials/desktop_admin_dashboard.html" %}
-<div class="ms-dashboard ms-dashboard-desktop">
+{% set st = ov.students %}{% set sf = ov.staff %}{% set cp = ov.compilation %}{% set ch = ov.chart %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin-dashboard.css') }}">
+<div class="ad">
 
-  {# ========== Welcome Banner ========== #}
-  <div class="ms-welcome">
-    <div class="ms-welcome-text">
-      <h1>Welcome, {{ session.get('name') or 'Admin' }}!</h1>
-      <p>Here is an overview of your school system.</p>
+  {# ---------------------------------------------------------------- welcome banner #}
+  <section class="ad-banner" style="--banner-img:url('{{ url_for('static', filename='img/dashboard-banner.jpg') }}')">
+    <div class="ad-banner-main">
+      <span class="ad-banner-logo">{{ ico('school', 64) }}</span>
+      <div><h1>Welcome, <span data-first-name>{{ session.get('name') }}</span>!</h1><p>Here is an overview of your school system.</p></div>
     </div>
-    <div class="ms-welcome-meta">
-      <span class="ms-welcome-chip">
-        <span aria-hidden="true">📅</span>
-        <span data-live-date>{{ time_greeting or '' }} · {% if term %}{{ term.session_name }} · {{ term.name }}{% else %}No active term{% endif %}</span>
-      </span>
-      <span class="ms-welcome-chip">
-        <span aria-hidden="true">🕐</span>
-        <span id="liveClock" data-tz="Africa/Lagos" data-now="{{ now_ts|default(0) }}"></span>
-      </span>
+    <div class="ad-banner-clock" data-school-ms="{{ school_local_ms }}">
+      <div>{{ ico('calendar', 26) }}<span data-clock-date>{{ now_local.strftime('%A, %d %B %Y') }}</span></div>
+      <div>{{ ico('clock', 26) }}<span data-clock-time>{{ now_local.strftime('%I:%M %p').lstrip('0') }}</span></div>
     </div>
-    {% if school_banner_url or school_logo_url %}
-    <img class="ms-welcome-img" src="{{ school_banner_url or school_logo_url }}" alt="" aria-hidden="true">
-    {% endif %}
-  </div>
+  </section>
 
-  {# ========== Metric Cards ========== #}
-  <div class="ms-metrics">
-    <div class="ms-metric ms-m-students">
-      <div class="ms-metric-icon" aria-hidden="true">👥</div>
-      <div class="ms-metric-label">Students</div>
-      <div class="ms-metric-value">{{ "{:,}".format(stats.students|default(0)) }}</div>
-      {% if gender_stats %}
-      <div class="ms-metric-sub">
-        <span>♂ {{ gender_stats.boys|default(0) }}</span>
-        <span>♀ {{ gender_stats.girls|default(0) }}</span>
-      </div>
-      {% endif %}
-      <a class="ms-metric-link" href="{{ url_for('admin_students') }}">View Students →</a>
-    </div>
+  <div class="ad-clockbar" data-school-ms="{{ school_local_ms }}"><span>{{ ico('calendar', 28) }}<b data-clock-date>{{ now_local.strftime('%A, %d %B %Y') }}</b></span><i class="sep"></i><span>{{ ico('clock', 28) }}<b data-clock-time>{{ now_local.strftime('%I:%M %p').lstrip('0') }}</b></span></div>
 
-    <div class="ms-metric ms-m-staff">
-      <div class="ms-metric-icon" aria-hidden="true">🧑‍🏫</div>
-      <div class="ms-metric-label">Staff</div>
-      <div class="ms-metric-value">{{ "{:,}".format(stats.teachers|default(0)) }}</div>
-      <a class="ms-metric-link" href="{{ url_for('admin_teachers') }}">View Staff →</a>
-    </div>
+  {# ---------------------------------------------------------------- stat cards #}
+  <section class="ad-kpis">
+    <article class="ad-kpi k-blue"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('people', 42) }}</span><div><span>Students</span><b>{{ '{:,}'.format(st.total) }}</b></div></div>
+      <div class="ad-kpi-gender"><div><span class="g-ico g-m">{{ ico('person', 26) }}</span><div><b>{{ '{:,}'.format(st.male) }}</b><small>({{ st.male_pct }}%)</small></div></div><div><span class="g-ico g-f">{{ ico('person', 26) }}</span><div><b>{{ '{:,}'.format(st.female) }}</b><small>({{ st.female_pct }}%)</small></div></div></div>
+      <a class="ad-kpi-link" href="{{ url_for('admin_students') }}">View Students {{ ico('arrow', 14) }}</a></article>
+    <article class="ad-kpi k-green"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('person-add', 42) }}</span><div><span>Staff</span><b>{{ '{:,}'.format(sf.total) }}</b></div></div>
+      <div class="ad-kpi-gender"><div><span class="g-ico g-m">{{ ico('person', 26) }}</span><div><b>{{ '{:,}'.format(sf.male) }}</b><small>({{ sf.male_pct }}%)</small></div></div><div><span class="g-ico g-f">{{ ico('person', 26) }}</span><div><b>{{ '{:,}'.format(sf.female) }}</b><small>({{ sf.female_pct }}%)</small></div></div></div>
+      <a class="ad-kpi-link" href="{{ url_for('admin_teachers') }}">View Staff {{ ico('arrow', 14) }}</a></article>
+    <article class="ad-kpi k-purple"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('class', 42) }}</span><div><span>Classes</span><b>{{ ov.classes }}</b></div></div>
+      <a class="ad-kpi-btn" href="{{ url_for('admin_classes') }}">View Classes {{ ico('arrow', 14) }}</a></article>
+    <article class="ad-kpi k-cyan"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('book', 42) }}</span><div><span>Subjects</span><b>{{ ov.subjects }}</b></div></div>
+      <a class="ad-kpi-btn" href="{{ url_for('admin_subjects') }}">View Subjects {{ ico('arrow', 14) }}</a></article>
+    <article class="ad-kpi k-orange"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('people', 42) }}</span><div><span>Parents</span><b>{{ '{:,}'.format(ov.parents) }}</b></div></div>
+      <a class="ad-kpi-btn" href="{{ url_for('admin_parents') }}">View Parents {{ ico('arrow', 14) }}</a></article>
+    <article class="ad-kpi k-fees"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('wallet', 42) }}</span><div><span>School Fees</span><b class="ad-money">₦{{ '{:,.0f}'.format(ov.fees.expected) }}</b></div></div>
+      <div class="ad-fees-collected">Collected: <b>₦{{ '{:,.0f}'.format(ov.fees.collected) }}</b> ({{ ov.fees.pct }}%)</div></article>
+  </section>
 
-    <div class="ms-metric ms-m-classes">
-      <div class="ms-metric-icon" aria-hidden="true">🏫</div>
-      <div class="ms-metric-label">Classes</div>
-      <div class="ms-metric-value">{{ "{:,}".format(stats.classes|default(0)) }}</div>
-      <a class="ms-metric-link" href="{{ url_for('admin_classes') }}">View Classes →</a>
-    </div>
+  {# ---------------------------------------------------------------- charts row #}
+  <section class="ad-row ad-row-charts">
+    <article class="ad-panel"><header>{{ ico('bars', 22) }}<h2>Gender Distribution<span class="ad-sub"> (Students)</span></h2></header>
+      <div class="ad-gender">
+        <svg viewBox="0 0 160 160" class="ad-donut" role="img" aria-label="Students: {{ st.male_pct }}% male, {{ st.female_pct }}% female">
+          <circle cx="80" cy="80" r="56" fill="none" stroke="#ff4fa3" stroke-width="22"/>
+          <circle cx="80" cy="80" r="56" fill="none" stroke="#1a6fe8" stroke-width="22" stroke-dasharray="{{ (st.male_pct * 351.86 / 100)|round(2) }} 351.86" transform="rotate(-90 80 80)"/>
+          <text x="80" y="78" text-anchor="middle" class="d-pct">{{ st.male_pct }}%</text><text x="80" y="100" text-anchor="middle" class="d-lbl">Male</text></svg>
+        <ul class="ad-legend"><li><i style="background:#1a6fe8"></i><div><b>Male</b><span>{{ '{:,}'.format(st.male) }} ({{ st.male_pct }}%)</span></div></li><li><i style="background:#ff4fa3"></i><div><b>Female</b><span>{{ '{:,}'.format(st.female) }} ({{ st.female_pct }}%)</span></div></li></ul>
+      </div></article>
 
-    <div class="ms-metric ms-m-subjects">
-      <div class="ms-metric-icon" aria-hidden="true">📘</div>
-      <div class="ms-metric-label">Subjects</div>
-      <div class="ms-metric-value">{{ "{:,}".format(stats.subjects|default(0)) }}</div>
-      <a class="ms-metric-link" href="{{ url_for('admin_subjects') }}">View Subjects →</a>
-    </div>
+    <article class="ad-panel"><header>{{ ico('trend', 22) }}<h2>Result Compilation<span class="ad-sub"> Progress</span></h2></header>
+      <div class="ad-progress">
+        <svg viewBox="0 0 160 160" class="ad-ring" role="img" aria-label="{{ cp.pct }}% of results compiled">
+          <circle cx="80" cy="80" r="62" fill="none" stroke="#dfe7ee" stroke-width="12"/>
+          <circle cx="80" cy="80" r="62" fill="none" stroke="#1db954" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ (cp.pct * 389.56 / 100)|round(2) }} 389.56" transform="rotate(-90 80 80)"/>
+          <text x="80" y="92" text-anchor="middle" class="r-pct">{{ cp.pct }}%</text></svg>
+        <div class="ad-progress-text"><b>{{ '{:,}'.format(cp.compiled) }} of {{ '{:,}'.format(cp.total) }}</b><b>results compiled</b>
+          <div class="ad-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ cp.pct }}"><i style="width:{{ cp.pct }}%"></i></div>
+          <small>{% if not term %}Set an active term to start.{% elif cp.total and cp.pct >= 100 %}All results compiled.{% elif cp.pct >= 70 %}On track to complete soon...{% else %}Results are still being entered...{% endif %}</small></div>
+      </div></article>
 
-    <div class="ms-metric ms-m-parents">
-      <div class="ms-metric-icon" aria-hidden="true">👨‍👩‍👧</div>
-      <div class="ms-metric-label">Parents</div>
-      <div class="ms-metric-value">{{ "{:,}".format(stats.parents|default(stats.students|default(0))) }}</div>
-      <a class="ms-metric-link" href="{{ url_for('admin_parents') }}">View Parents →</a>
-    </div>
+    <article class="ad-panel"><header>{{ ico('bars', 22) }}<h2>Enrollment Trend</h2></header>
+      <div class="ad-trend"><svg viewBox="0 0 {{ ch.W }} {{ ch.H }}" role="img" aria-label="Enrolment trend">
+        <g class="t-leg"><circle cx="{{ ch.W - 160 }}" cy="14" r="5" fill="#1a6fe8"/><text x="{{ ch.W - 150 }}" y="18">Students</text><circle cx="{{ ch.W - 80 }}" cy="14" r="5" fill="#1db954"/><text x="{{ ch.W - 70 }}" y="18">Staff</text></g>
+        {% for tk in ch.ticks %}<line x1="{{ ch.L }}" x2="{{ ch.W - ch.R }}" y1="{{ tk.y }}" y2="{{ tk.y }}" class="t-grid"/><text x="{{ ch.L - 8 }}" y="{{ tk.y + 4 }}" text-anchor="end" class="t-ax">{{ '{:,}'.format(tk.v) }}</text>{% endfor %}
+        <polygon points="{{ ch.area }}" fill="#1a6fe8" opacity=".10"/>
+        <polyline points="{{ ch.line_s }}" fill="none" stroke="#1a6fe8" stroke-width="3" stroke-linejoin="round"/><polyline points="{{ ch.line_f }}" fill="none" stroke="#1db954" stroke-width="3" stroke-linejoin="round"/>
+        {% for p in ch.students %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="5" fill="#1a6fe8"/><text x="{{ p.x }}" y="{{ p.y - 10 }}" text-anchor="middle" class="t-val">{{ '{:,}'.format(p.v) }}</text><text x="{{ p.x }}" y="{{ ch.H - 10 }}" text-anchor="middle" class="t-ax">{{ p.label }}</text>{% endfor %}
+        {% for p in ch.staff %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="5" fill="#1db954"/><text x="{{ p.x }}" y="{{ p.y - 10 }}" text-anchor="middle" class="t-val t-val-g">{{ '{:,}'.format(p.v) }}</text>{% endfor %}
+      </svg></div></article>
+  </section>
 
-    <div class="ms-metric ms-m-fees">
-      <div class="ms-metric-icon" aria-hidden="true">💰</div>
-      <div class="ms-metric-label">School Fees</div>
-      <div class="ms-metric-value">₦{{ "{:,}".format(stats.fees_total|default(0)) }}</div>
-      {% if stats.fees_collected is defined %}
-      <div class="ms-metric-sub">Collected: ₦{{ "{:,}".format(stats.fees_collected) }}</div>
-      {% endif %}
-      <a class="ms-metric-link" href="{{ url_for('school_billing_portal') }}">View Billing →</a>
-    </div>
-  </div>
+  {# ---------------------------------------------------------------- quick access / activities / announcements #}
+  <section class="ad-row ad-row-bottom">
+    <article class="ad-panel ad-qa"><input type="checkbox" id="ad-qa-toggle" class="ad-qa-toggle" aria-label="Show all quick access items"><header>{{ ico('bolt', 22) }}<h2>Quick Access</h2><label for="ad-qa-toggle" class="ad-qa-viewall"><span class="m-more">View All</span><span class="m-less">Show less</span> {{ ico('arrow', 14) }}</label></header>
+      <div class="ad-tiles">
+        {% macro tile(label, href, icon, tone, extra='', badge=0, m=99) %}<a class="ad-tile t-{{ tone }} {{ extra }}{{ ' m-hide' if m > 8 }}" style="--m:{{ m }}" href="{{ href }}"><span class="t-ico">{{ ico(icon, 34) }}</span><span class="t-lbl">{{ label }}</span>{% if badge %}<em class="t-badge" aria-label="{{ badge }} pending">{{ badge }}</em>{% endif %}</a>{% endmacro %}
+        {{ tile('My Profile', url_for('staff_profile', user_id=session.get('user_id')), 'person', 'blue', 'is-featured', m=1) }}
+        <span class="ad-tile t-purple ad-tile-soon m-only" style="--m:3" role="img" aria-label="CBT, coming soon"><span class="t-ico">{{ ico('class', 34) }}</span><span class="t-lbl">CBT</span></span>
+        {{ tile('Assign Subject', url_for('admin_class_subjects'), 'book', 'purple', m=4) }}
+        {{ tile('Result', url_for('classes_list'), 'assignment', 'green', m=5) }}
+        {{ tile('Broadsheet', url_for('classes_list'), 'doc', 'orange', m=6) }}
+        {{ tile('Score History', url_for('score_history_all'), 'bars', 'blue', m=7) }}
+        {{ tile('Session & Terms', url_for('admin_terms'), 'calendar', 'green', m=8) }}
+        {{ tile('Register New Student', url_for('admin_students'), 'person-add', 'purple', m=9) }}
+        {{ tile('Promote Students', url_for('admin_promote'), 'up', 'green', 'is-featured-green', m=2) }}
+        {{ tile('Staff Attendance', url_for('staff_attendance'), 'check', 'green', m=10) }}
+        {{ tile('Themes & Branding', url_for('admin_theme'), 'palette', 'pink', m=11) }}
+        {{ tile('Learning Materials', url_for('materials'), 'book', 'blue', m=12) }}
+        {{ tile('Timetable', url_for('timetable_hub'), 'calendar', 'green', m=13) }}
+        {{ tile('Result Approval', url_for('result_workflow'), 'factcheck', 'orange', '', pending_reviews, m=14) }}
+        {{ tile('Billings', url_for('school_billing_portal'), 'wallet', 'purple', m=15) }}
+      </div></article>
 
-  {# ========== Charts Row ========== #}
-  <div class="ms-charts">
+    <article class="ad-panel ad-act"><header>{{ ico('bolt', 22) }}<h2>Recent Activities</h2><a href="{{ url_for('view_all_activities') }}">View All {{ ico('arrow', 14) }}</a></header>
+      <ul class="ad-acts">{% for a in activities %}{% set d = (a.description or '')|lower %}
+        <li><span class="a-ico {{ 'a-green' if 'student' in d or 'admitted' in d else 'a-blue' if 'profile' in d or 'staff' in d else 'a-purple' if 'fee' in d or 'payment' in d else 'a-orange' }}">{{ ico('check' if 'student' in d or 'admitted' in d else 'people' if 'profile' in d or 'staff' in d else 'coin' if 'fee' in d or 'payment' in d else 'doc', 22) }}</span>
+          <div><b>{{ a.description }}</b><small>{{ a.actor }} - {{ a.ts }}</small></div></li>
+        {% else %}<li class="ad-empty">No activities recorded yet.</li>{% endfor %}</ul></article>
 
-    {# Gender Distribution #}
-    <div class="ms-card">
-      <div class="ms-card-header">
-        <span class="icon" aria-hidden="true">📊</span>
-        <h3>Gender Distribution (Students)</h3>
-      </div>
-      {% set boys = gender_stats.boys|default(0) if gender_stats else 0 %}
-      {% set girls = gender_stats.girls|default(0) if gender_stats else 0 %}
-      {% set total_g = boys + girls %}
-      {% set male_pct = ((boys / total_g * 100)|round(1) if total_g else 0) %}
-      <div class="ms-gender-wrap">
-        <div class="ms-donut" style="background: conic-gradient(#2563eb 0% {{ male_pct }}%, #ec4899 {{ male_pct }}% 100%);" role="img" aria-label="Gender distribution">
-          <div class="ms-donut-center">
-            <div class="pct">{{ male_pct }}%</div>
-            <div class="lbl">Male</div>
-          </div>
-        </div>
-        <div class="ms-gender-legend">
-          <div class="ms-legend-item">
-            <span class="ms-legend-dot male"></span>
-            <span>Male &nbsp;<strong>{{ boys }}</strong> ({{ male_pct }}%)</span>
-          </div>
-          <div class="ms-legend-item">
-            <span class="ms-legend-dot female"></span>
-            <span>Female &nbsp;<strong>{{ girls }}</strong> ({{ (100 - male_pct)|round(1) }}%)</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <article class="ad-panel ad-ann"><header>{{ ico('megaphone', 22) }}<h2>Announcements</h2><a href="{{ url_for('school_announcements') }}">View All {{ ico('arrow', 14) }}</a></header>
+      <div class="ad-ann-body">
+        {% for a in (announcement_banners or [])[:2] %}<div class="ad-ann-item"><span class="ann-i">{{ ico('info', 26) }}</span><div><b>{{ a.title }}</b><p>{{ a.message }}</p>{% if a.expires_at %}<small>{{ ico('calendar', 14) }} Until {{ a.expires_at[:10] }}</small>{% endif %}</div></div>{% else %}<div class="ad-ann-item ad-ann-none"><span class="ann-i">{{ ico('info', 26) }}</span><div><b>No announcements</b><p>Announcements you publish show here and on dashboards.</p></div></div>{% endfor %}
+        <div class="ad-tip"><span>{{ ico('bulb', 30) }}</span><div><b>Tip:</b> Use the Timetable menu to view class schedules.</div></div>
+      </div></article>
+  </section>
 
-    {# Result Compilation Progress #}
-    <div class="ms-card">
-      <div class="ms-card-header">
-        <span class="icon" aria-hidden="true">📈</span>
-        <h3>Result Compilation Progress</h3>
-      </div>
-      {% set compiled = stats.results_compiled|default(0) %}
-      {% set total_students = stats.students|default(1) %}
-      {% set progress_pct = ((compiled / total_students * 100)|round(0) if total_students else 0)|int %}
-      <div class="ms-progress-wrap">
-        <div class="ms-ring" style="background: conic-gradient(#16a34a 0% {{ progress_pct }}%, #e2e8f0 {{ progress_pct }}% 100%);" role="img" aria-label="{{ progress_pct }}% results compiled">
-          <div class="ms-ring-center">
-            <div class="pct">{{ progress_pct }}%</div>
-          </div>
-        </div>
-        <div class="ms-progress-info">
-          <div class="big">{{ "{:,}".format(compiled) }} of {{ "{:,}".format(total_students) }} results compiled</div>
-          <div class="sub">{% if progress_pct >= 90 %}Almost complete{% elif progress_pct >= 50 %}On track to complete soon…{% else %}Compilation in progress{% endif %}</div>
-          <div class="ms-bar"><span style="width: {{ progress_pct }}%"></span></div>
-        </div>
-      </div>
-    </div>
-
-    {# Enrollment Trend #}
-    <div class="ms-card">
-      <div class="ms-card-header">
-        <span class="icon" aria-hidden="true">📉</span>
-        <h3>Enrollment Trend</h3>
-      </div>
-      <div class="ms-trend-chart">
-        {% if enrolment or class_performance_chart %}
-        <canvas id="chartEnrolmentTrend" role="img" aria-label="Enrollment trend"></canvas>
-        {% else %}
-        <p class="muted" style="margin:1.5rem 0;text-align:center;color:#94a3b8;font-size:0.9rem">No enrollment data yet.</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  {# ========== Bottom Panels ========== #}
-  <div class="ms-bottom">
-
-    {# Quick Access #}
-    <div class="ms-card">
-      <div class="ms-section-head">
-        <h3><span aria-hidden="true">⚡</span> Quick Access</h3>
-      </div>
-      <div class="ms-qa-grid">
-        <a class="ms-qa-item" href="{{ url_for('staff_profile', user_id=session.get('user_id')) if session.get('user_id') else '#' }}">
-          <span class="ms-qa-icon">👤</span>
-          My Profile
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('admin_class_subjects') }}">
-          <span class="ms-qa-icon">📚</span>
-          Assign Subject
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('classes_list') }}">
-          <span class="ms-qa-icon">📝</span>
-          Result
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('classes_list') }}">
-          <span class="ms-qa-icon">🖨️</span>
-          Broadsheet
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('classes_list') }}">
-          <span class="ms-qa-icon">📊</span>
-          Score History
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('admin_terms') }}">
-          <span class="ms-qa-icon">📅</span>
-          Session &amp; Terms
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('admin_students') }}">
-          <span class="ms-qa-icon">➕</span>
-          Register New Student
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('admin_promote') }}">
-          <span class="ms-qa-icon">⬆️</span>
-          Promote Students
-          {% if pending_promotions %}<span class="badge">{{ pending_promotions }}</span>{% endif %}
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('staff_attendance') }}">
-          <span class="ms-qa-icon">✅</span>
-          Staff Attendance
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('settings_hub') }}">
-          <span class="ms-qa-icon">🎨</span>
-          Themes &amp; Branding
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('materials') }}">
-          <span class="ms-qa-icon">📖</span>
-          Learning Materials
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('timetable_hub') }}">
-          <span class="ms-qa-icon">🗓️</span>
-          Timetable
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('result_workflow') }}">
-          <span class="ms-qa-icon">✔️</span>
-          Result Approval
-        </a>
-        <a class="ms-qa-item" href="{{ url_for('school_billing_portal') }}">
-          <span class="ms-qa-icon">💳</span>
-          Billings
-        </a>
-      </div>
-    </div>
-
-    {# Recent Activities #}
-    <div class="ms-card">
-      <div class="ms-section-head">
-        <h3><span aria-hidden="true">🕒</span> Recent Activities</h3>
-        <a href="{{ url_for('notifications_inbox') }}">View All →</a>
-      </div>
-      <ul class="ms-activity-list">
-        {% if recent_activities %}
-          {% for act in recent_activities[:5] %}
-          <li class="ms-activity-item">
-            <span class="ms-activity-icon {{ act.color|default('') }}" aria-hidden="true">{{ act.icon|default('•') }}</span>
-            <div class="ms-activity-body">
-              <p class="title">{{ act.title }}</p>
-              <p class="meta">{{ act.meta }}</p>
-            </div>
-          </li>
-          {% endfor %}
-        {% else %}
-          <li class="ms-activity-item">
-            <span class="ms-activity-icon green" aria-hidden="true">✓</span>
-            <div class="ms-activity-body">
-              <p class="title">System ready</p>
-              <p class="meta">No recent activity recorded yet.</p>
-            </div>
-          </li>
-          <li class="ms-activity-item">
-            <span class="ms-activity-icon" aria-hidden="true">👤</span>
-            <div class="ms-activity-body">
-              <p class="title">Welcome to My School Hub</p>
-              <p class="meta">Complete school setup to get started.</p>
-            </div>
-          </li>
-        {% endif %}
-      </ul>
-    </div>
-
-    {# Announcements #}
-    <div class="ms-card">
-      <div class="ms-section-head">
-        <h3><span aria-hidden="true">📢</span> Announcements</h3>
-        <a href="{{ url_for('notifications_inbox') }}">View All →</a>
-      </div>
-      {% if announcements %}
-        {% for ann in announcements[:3] %}
-        <div class="ms-announce-item">
-          <p class="title">{{ ann.title }}</p>
-          <p class="body">{{ ann.body|truncate(90) }}</p>
-          <p class="date">{{ ann.date }}</p>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="ms-announce-item">
-          <p class="title">Result Release Soon</p>
-          <p class="body">The 1st Term Examination results will be published shortly. Please keep checking your dashboard.</p>
-          <p class="date">{{ term.name if term else 'Current term' }}</p>
-        </div>
-      {% endif %}
-      <div class="ms-tip">
-        <span aria-hidden="true">💡</span>
-        <span>Tip: Use the Timetable menu to view class schedules.</span>
-      </div>
-    </div>
-  </div>
-
+  <footer class="ad-foot"><span>© {{ now_local.year }} {{ school_name }}. All rights reserved.</span><a href="{{ url_for('logout') }}">Logout</a></footer>
 </div>
-
-{# Mobile bottom navigation #}
-<nav class="ms-bottom-nav" aria-label="Mobile navigation">
-  <div class="ms-bottom-nav-inner">
-    <a href="{{ url_for('dashboard') }}" class="active">
-      <span class="nav-icon" aria-hidden="true">🏠</span>
-      Home
-    </a>
-    <a href="{{ url_for('classes_list') }}">
-      <span class="nav-icon" aria-hidden="true">📊</span>
-      Reports
-    </a>
-    <a href="{{ url_for('notifications_inbox') }}" style="position:relative">
-      <span class="nav-icon" aria-hidden="true">🔔</span>
-      Notifications
-      {% if unread_notifications %}<span class="badge">{{ unread_notifications }}</span>{% endif %}
-    </a>
-    <a href="{{ url_for('settings_hub') }}">
-      <span class="nav-icon" aria-hidden="true">⋯</span>
-      More
-    </a>
-  </div>
-</nav>
-{% endblock %}
-
-{% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/dashboard-charts.js') }}" defer></script>
 <script>
-(function(){
-  // Simple enrollment trend (fallback if full chart data not available)
-  var canvas = document.getElementById('chartEnrolmentTrend');
-  if (!canvas || typeof Chart === 'undefined') return;
-  var labels = {{ (enrolment_labels or ['Term 1','Term 2','Term 3','Term 4'])|tojson }};
-  var students = {{ (enrolment_students or [980,995,1012, stats.students|default(1024)])|tojson }};
-  var staff = {{ (enrolment_staff or [46,47,48, stats.teachers|default(48)])|tojson }};
-  new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Students',
-          data: students,
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37,99,235,0.08)',
-          tension: 0.35,
-          fill: true,
-          pointRadius: 4,
-          pointBackgroundColor: '#2563eb'
-        },
-        {
-          label: 'Staff',
-          data: staff,
-          borderColor: '#16a34a',
-          backgroundColor: 'transparent',
-          tension: 0.35,
-          pointRadius: 3,
-          pointBackgroundColor: '#16a34a'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', align: 'end', labels: { boxWidth: 10, font: { size: 11 } } }
-      },
-      scales: {
-        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
-      }
-    }
-  });
+(function(){ /* live school clock (school's own time zone, no network needed) */
+  var els=document.querySelectorAll('[data-school-ms]'); if(!els.length) return;
+  var base=Number(els[0].getAttribute('data-school-ms')), t0=Date.now();
+  function tick(){var d=new Date(base+(Date.now()-t0));
+    var ds=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}),ts=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'UTC'});
+    els.forEach(function(el){var D=el.querySelector('[data-clock-date]'),T=el.querySelector('[data-clock-time]');if(D)D.textContent=ds;if(T)T.textContent=ts;});}
+  tick(); setInterval(tick,15000);
 })();
 </script>
 {% endblock %}

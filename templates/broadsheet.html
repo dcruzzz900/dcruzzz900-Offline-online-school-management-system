@@ -1,90 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Broadsheet · {{ class_row.name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Broadsheet{% endblock %}
 {% block content %}
-<div class="report-header" style="text-align:center;margin-bottom:1.25rem;">
-  {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo" style="max-height:56px;margin-bottom:0.4rem;"><br>{% endif %}
-  <h2 style="margin:0.15rem 0;color:#0f2744;">{{ school_name }}</h2>
-  <h1 style="margin:0.2rem 0;font-size:1.4rem;">Broadsheet</h1>
-  <p style="margin:0;color:#64748b;">{{ class_row.name }}{% if class_row.category %} ({{ class_row.category }}){% endif %} — {{ term.session_name }} — {{ term.name }}</p>
+<div class="report-header">
+    {% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}" class="report-logo"><br>{% endif %}
+    <h2 style="margin:0.2rem 0;">{{ school_name }}</h2>
+    <h1>Broadsheet</h1>
+    <p>{{ class_row.name }}{% if class_row.category %} ({{ class_row.category }}){% endif %} &mdash; {{ term.session_name }} &mdash; {{ term.name }}</p>
 </div>
 
-<div class="ms-card no-print" style="padding:1rem 1.25rem;margin-bottom:1.15rem;">
-  <div class="ms-toolbar" style="margin-bottom:0;">
-    <form method="GET" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-      <label style="font-size:0.85rem;font-weight:600;color:#334155;">Term</label>
-      <select name="term_id" onchange="this.form.submit()" style="padding:0.45rem 0.75rem;border-radius:9px;border:1px solid #e2e8f0;">
-        {% for t in all_terms %}
-        <option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
-        {% endfor %}
-      </select>
+<div class="no-print" style="margin-bottom:1rem;">
+    <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
+        <label style="display:inline; font-weight:normal;">Term:</label>
+        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+            {% for t in all_terms %}
+            <option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
+            {% endfor %}
+        </select>
     </form>
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-left:auto;">
-      {% if not pub_state or pub_state.published %}
-      <a class="ms-btn ms-btn-primary" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ PDF</a>
-      <a class="ms-btn ms-btn-secondary" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print</a>
-      {% else %}
-      <span class="ms-badge ms-badge-warning">{{ pub_state.label }} — preview only</span>
-      {% endif %}
-      {% if cumulative_enabled %}
-      <a class="ms-btn ms-btn-secondary" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id, session_id=term.session_id, term_id=term.id) }}">📊 Cumulative</a>
-      {% endif %}
-      {% if term.is_active %}
-      <form method="POST" action="{{ url_for('email_class_results', class_id=class_row.id) }}" class="inline"
-            onsubmit="return confirm('Email every student\'s result in this class to their parent email on file?');">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="ms-btn ms-btn-success" type="submit">✉ Email Parents</button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
+    {% if not pub_state or pub_state.published %}<a class="btn" href="{{ url_for('broadsheet_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download PDF</a>
+    <a class="btn btn-gold" href="{{ url_for('broadsheet_print', class_id=class_row.id, term_id=term.id, auto=1) }}" target="_blank" rel="noopener">🖨 Print Broadsheet</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only</span>{% endif %}
+    {% if cumulative_enabled %}
+    <a class="btn" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id, session_id=term.session_id, term_id=term.id) }}">📊 Annual / Cumulative Broadsheet</a>
+    {% endif %}
+    {% if term.is_active %}
+    <form method="POST" action="{{ url_for('email_class_results', class_id=class_row.id) }}" class="inline"
+          onsubmit="return confirm('Email every student\'s result in this class to their parent email on file?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn" type="submit">✉ Email All Results to Parents</button>
+    </form>
+    {% else %}
+    <span style="font-size:0.85rem; color:#999;">Viewing a past term — switch to the active term to email results.</span>
+    {% endif %}
 </div>
 
-<div class="ms-card" style="padding:0;overflow:hidden;">
-  <div style="overflow-x:auto;">
-    <table class="bs-table ms-table" style="font-size:0.82rem;">
-      <thead>
-        <tr>
-          <th rowspan="2">S/N</th>
-          <th rowspan="2">Student</th>
-          {% set _ca3 = ca3_on() %}
-          {% for subj in subjects %}
-          <th colspan="{{ 5 if _ca3 else 4 }}">{{ subj.name }}</th>
-          {% endfor %}
-          <th rowspan="2">Total</th>
-          <th rowspan="2">Average</th>
-          <th rowspan="2">Pos</th>
-        </tr>
-        <tr>
-          {% for subj in subjects %}
-          <th>CA1</th><th>CA2</th>{% if _ca3 %}<th>CA3</th>{% endif %}<th>Exam</th><th>Tot</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td style="white-space:nowrap;font-weight:600;">{{ student_full_name(r.student) }}</td>
-          {% for subj in subjects %}
-          {% set c = r.scores[subj.id] %}
-          <td>{{ c.ca1 }}</td>
-          <td>{{ c.ca2 }}</td>
-          {% if _ca3 %}<td>{{ c.ca3 }}</td>{% endif %}
-          <td>{{ c.exam }}</td>
-          <td><b>{{ c.total }}</b>{% if c.grade != '-' %} <span style="color:#64748b;">({{ c.grade }})</span>{% endif %}</td>
-          {% endfor %}
-          <td><strong>{{ r.total }}</strong></td>
-          <td>{{ r.average }}</td>
-          <td><strong>{{ r.position }}</strong></td>
-        </tr>
+<div style="overflow-x:auto;">
+<table class="bs-table">
+    <thead>
+    <tr><th rowspan="2">S/N</th><th rowspan="2">Student</th>{% set _ca3 = ca3_on() %}{% for subj in subjects %}<th colspan="{{ 5 if _ca3 else 4 }}">{{ subj.name }}</th>{% endfor %}<th rowspan="2">Total</th><th rowspan="2">Average</th><th rowspan="2">Position</th></tr>
+    <tr>{% for subj in subjects %}<th>1st CA</th><th>2nd CA</th>{% if _ca3 %}<th>3rd CA</th>{% endif %}<th>Exam</th><th>Total</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ student_full_name(r.student) }}</td>
+        {% for subj in subjects %}{% set c = r.scores[subj.id] %}
+        <td>{{ c.ca1 }}</td><td>{{ c.ca2 }}</td>{% if _ca3 %}<td>{{ c.ca3 }}</td>{% endif %}<td>{{ c.exam }}</td><td><b>{{ c.total }}</b>{% if c.grade != '-' %} ({{ c.grade }}){% endif %}</td>
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
+        <td>{{ r.total }}</td>
+        <td>{{ r.average }}</td>
+        <td>{{ r.position }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
 </div>
 {% endblock %}

@@ -1,52 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Subjects · {{ school_name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Subjects{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>Subjects</h1>
-    <p class="subtitle">Manage the list of subjects taught in the school</p>
-  </div>
-</div>
+<h1>Subjects</h1>
 
-<div class="ms-card" style="max-width:480px;">
-  <h3 class="ms-card-title">Add a Subject</h3>
-  <form method="POST">
+<div class="card">
+    <h3>Add a Subject</h3>
+    <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="ms-form-group">
-      <label>Subject name <span class="ms-req">*</span></label>
-      <input type="text" name="name" required placeholder="e.g. Mathematics">
-    </div>
-    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.75rem;">Add Subject</button>
-  </form>
+        <label>Subject name (e.g. Mathematics)</label>
+        <input type="text" name="name" required>
+        <button class="btn" type="submit">Add Subject</button>
+    </form>
 </div>
 
-<div class="ms-card">
-  <h3 class="ms-card-title">All Subjects</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead><tr><th>Subject</th><th>Actions</th></tr></thead>
-      <tbody>
+<div class="card">
+    <h3>All Subjects</h3>
+    <table><caption>Subject List</caption>
+        <tr><th>Subject</th><th>Actions</th></tr>
         {% for s in subjects %}
         <tr>
-          <td><strong>{{ s.name }}</strong></td>
-          <td>
-            <form method="POST" action="{{ url_for('delete_subject', subject_id=s.id) }}"
-                  onsubmit="return confirm('Delete subject {{ s.name }}? Only works if not assigned to any class.');">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Delete</button>
-            </form>
-          </td>
+            <td>{{ s.name }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_subject', subject_id=s.id) }}"
+                      onsubmit="return confirm('Delete subject {{ s.name }}? This only works if it is not assigned to any class.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </td>
         </tr>
-        {% else %}
-        <tr><td colspan="2"><div class="ms-empty"><div class="icon">📘</div><p>No subjects yet.</p></div></td></tr>
         {% endfor %}
-      </tbody>
     </table>
-  </div>
 </div>
 {% endblock %}
