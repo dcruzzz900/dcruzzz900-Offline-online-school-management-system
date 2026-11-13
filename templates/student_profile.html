@@ -1,151 +1,83 @@
 {% extends "base.html" %}
-{% block title %}{{ student_full_name(student) }} · Profile{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Student Profile{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>{{ student_full_name(student) }}</h1>
-    <p class="subtitle">{{ student.admission_no }} · {{ class_row.name }}</p>
-  </div>
-  <div class="ms-page-actions">
-    <a class="ms-btn ms-btn-primary" href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Profile</a>
-  </div>
-</div>
+<h1>Student Profile</h1>
 
-<div class="ms-card">
-  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
-    <div style="flex-shrink:0;">
-      {% if student.photo_filename %}
-      <img class="passport-img" src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport"
-           style="width:110px;height:130px;object-fit:cover;border-radius:12px;border:1px solid #e2e8f0;">
-      {% else %}
-      <div class="ms-avatar" style="width:110px;height:130px;border-radius:12px;font-size:2.5rem;">{{ (student.first_name or '?')[0]|upper }}</div>
-      {% endif %}
-    </div>
-    <div style="flex:1;min-width:220px;display:grid;grid-template-columns:1fr 1fr;gap:0.65rem 1.5rem;">
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Reg. No</div>
-        <div style="font-weight:650;">{{ student.admission_no }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Class</div>
-        <div style="font-weight:650;">{{ class_row.name }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Gender</div>
-        <div>{{ student.gender or '—' }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Date of Birth</div>
-        <div>{{ student.date_of_birth|dmy if student.date_of_birth else '—' }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Status</div>
+<div class="card">
+    <h3>{{ student_full_name(student) }}</h3>
+    <div class="grid-2">
         <div>
-          {% set st = (student.status or 'Active')|lower %}
-          {% if st == 'active' %}<span class="ms-badge ms-badge-success">● Active</span>
-          {% else %}<span class="ms-badge ms-badge-muted">● {{ student.status or 'Active' }}</span>{% endif %}
+            {% if student.photo_filename %}
+            <img class="passport-img" src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo"
+                >
+            {% endif %}
+            <p><b>Admission No. / Register No.:</b> {{ student.admission_no }}</p>
+            <p><b>Class / Arm:</b> {{ class_row.name }}</p>
+            <p><b>Gender:</b> {{ student.gender or '—' }}</p>
+            <p><b>Date of Birth:</b> {{ student.date_of_birth|dmy if student.date_of_birth else '—' }}</p>
+            <p><b>Religion:</b> {{ student.religion or '—' }}</p>
+            <p><b>Status:</b> {{ student.status or 'Active' }}</p>
+            <p><b>Student's Phone:</b> {{ student.phone or '—' }}</p>
+            <p><b>State / LGA:</b> {{ student.state or '—' }} / {{ student.lga or '—' }}</p>
+            <p><b>Tribe:</b> {{ student.tribe or '—' }}</p>
+            <p><b>Address:</b> {{ student.address or '—' }}</p>
+            <p><b>Date of Admission:</b> {{ student.date_of_admission|dmy if student.date_of_admission else '—' }}</p>
+            <p><a class="btn btn-small" href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Full Profile</a></p>
         </div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Phone</div>
-        <div>{{ student.phone or '—' }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Religion</div>
-        <div>{{ student.religion or '—' }}</div>
-      </div>
-      <div>
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">State / LGA</div>
-        <div>{{ student.state or '—' }} / {{ student.lga or '—' }}</div>
-      </div>
-      <div style="grid-column:1/-1;">
-        <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Address</div>
-        <div>{{ student.address or '—' }}</div>
-      </div>
+        <div>
+            <p><b>Parent/Guardian Name:</b> {{ student.parent_name or '—' }}</p>
+            <p><b>Relationship:</b> {{ student.parent_relationship or '—' }}</p>
+            <p><b>Parent/Guardian Address:</b> {{ student.parent_address or '—' }}</p>
+            <p><b>Parent/Guardian Email:</b> {{ student.parent_email or '—' }}</p>
+            <p><b>Parent/Guardian Phone:</b> {{ student.parent_phone or '—' }}</p>
+            {% if student.parent_phone or student.parent_email %}
+            <p><a href="{{ url_for('parent_profile', student_id=student.id) }}">View Parent Profile &rarr;</a></p>
+            {% endif %}
+            <p><b>Student Login:</b> {% if student.username %}{{ student.username }} (active){% else %}Not set up{% endif %}</p>
+        </div>
     </div>
-  </div>
 </div>
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Parent / Guardian</h3>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem 1.5rem;">
-    <div>
-      <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Name</div>
-      <div style="font-weight:650;">{{ student.parent_name or '—' }}</div>
-    </div>
-    <div>
-      <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Relationship</div>
-      <div>{{ student.parent_relationship or '—' }}</div>
-    </div>
-    <div>
-      <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Phone</div>
-      <div>{{ student.parent_phone or '—' }}</div>
-    </div>
-    <div>
-      <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Email</div>
-      <div>{{ student.parent_email or '—' }}</div>
-    </div>
-    <div style="grid-column:1/-1;">
-      <div style="font-size:0.72rem;color:#94a3b8;font-weight:600;text-transform:uppercase;">Address</div>
-      <div>{{ student.parent_address or '—' }}</div>
-    </div>
-  </div>
-  {% if student.parent_phone or student.parent_email %}
-  <div style="margin-top:0.85rem;">
-    <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('parent_profile', student_id=student.id) }}">View Parent Profile →</a>
-  </div>
-  {% endif %}
+<div class="card">
+    <h3>Passport Photo</h3>
+    <p style="font-size:0.9rem; color:#666;">One passport photograph is used everywhere (result sheets, dashboards, parent and teacher views). To upload, replace or remove it, use <a href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Profile &rarr; Photograph</a>.</p>
+    {% if student.photo_filename %}<img class="passport-img" src="{{ url_for('student_photo', student_id=student.id) }}" alt="Passport photo">{% else %}<p class="muted">No photograph uploaded yet.</p>{% endif %}
 </div>
 
 {% if enrollment_history %}
-<div class="ms-card">
-  <h3 class="ms-card-title">Academic History</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead><tr><th>Session</th><th>Class / Arm</th></tr></thead>
-      <tbody>
+<div class="card">
+    <h3>Academic History</h3>
+    <table>
+        <tr><th>Session</th><th>Class / Arm</th></tr>
         {% for e in enrollment_history %}
         <tr><td>{{ e.session_name }}</td><td>{{ e.class_name }}</td></tr>
         {% endfor %}
-      </tbody>
     </table>
-  </div>
 </div>
 {% endif %}
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Student Login</h3>
-  <p style="font-size:0.85rem;color:#64748b;margin:0 0 1rem;">
-    Let this student sign in to view their own published results.
-    {% if student.username %}<span class="ms-badge ms-badge-success" style="margin-left:0.35rem;">Active · {{ student.username }}</span>{% else %}<span class="ms-badge ms-badge-muted" style="margin-left:0.35rem;">Not set up</span>{% endif %}
-  </p>
-  <form method="POST" action="{{ url_for('set_student_login', student_id=student.id) }}">
+<div class="card">
+    <h3>Student Login</h3>
+    <details class="hlp"><summary class="hlp-t">How this works</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
+        Give this student their own login so they can view their published results
+        online. They can only ever see their own results, and only once a term has
+        been published (Setup → Terms).
+    </p></details>
+    <form method="POST" action="{{ url_for('set_student_login', student_id=student.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="ms-form-grid">
-      <div class="ms-form-group">
         <label>Username</label>
         <input type="text" name="username" value="{{ student.username or '' }}" required>
-      </div>
-      <div class="ms-form-group">
-        <label>Password {% if student.username %}<span style="font-weight:400;color:#94a3b8;">(leave blank to keep)</span>{% endif %}</label>
+        <label>Password {% if student.username %}(leave blank to keep the current one){% endif %}</label>
         <input type="password" name="password" {% if not student.username %}required{% endif %} minlength="6">
-      </div>
-    </div>
-    <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
-      <button class="ms-btn ms-btn-primary" type="submit">{% if student.username %}Update{% else %}Create{% endif %} Login</button>
-    </div>
-  </form>
-  {% if student.username %}
-  <form method="POST" action="{{ url_for('remove_student_login', student_id=student.id) }}" style="margin-top:0.75rem;"
-        onsubmit="return confirm('Remove this student\'s login?');">
+        <button class="btn" type="submit">{% if student.username %}Update{% else %}Create{% endif %} Student Login</button>
+    </form>
+    {% if student.username %}
+    <form method="POST" action="{{ url_for('remove_student_login', student_id=student.id) }}" style="margin-top:0.75rem;"
+          onsubmit="return confirm('Remove this student\'s login? They will no longer be able to sign in.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Remove Login</button>
-  </form>
-  {% endif %}
+        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove Login</button>
+    </form>
+    {% endif %}
 </div>
 {% endblock %}

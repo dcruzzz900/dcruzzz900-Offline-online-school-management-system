@@ -1,18 +1,9 @@
 {% extends "base.html" %}
-{% block title %}My Profile · {{ school_name }}{% endblock %}
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
+{% block title %}Staff Profile{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>{{ 'My Profile' if is_self else staff.name + "'s Profile" }}</h1>
-    <p class="subtitle">{{ position_labels.get(staff.position, staff.position or staff.role|title) }}</p>
-  </div>
-</div>
+<h1>{{ 'My Profile' if is_self else staff.name + "'s Profile" }}</h1>
 
-
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <div style="display:flex; gap:1.25rem; align-items:flex-start;">
         <div>
             {% if staff.photo_filename %}
@@ -35,7 +26,7 @@
     </div>
 </div>
 
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <h3>Role & Assignments</h3>
     <p><b>Subjects Taught:</b> {{ subjects_taught|map(attribute='name')|join(', ') if subjects_taught else '—' }}</p>
     <p><b>Classes Taught (subjects):</b> {{ classes_taught|map(attribute='name')|join(', ') if classes_taught else '—' }}</p>
@@ -43,16 +34,16 @@
 </div>
 
 {% if is_self or can_manage and session.get('role') == 'admin' %}
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <h3>{{ 'Edit My Profile' if is_self else 'Edit this Profile' }}</h3>
     <details class="hlp"><summary class="hlp-t">What you can edit</summary><p class="muted hlp-b">Add missing details and update your permitted personal information. Username, Staff ID, role, school and security settings are administrator-controlled.</p></details>
-    <a class="ms-btn ms-btn-primary btn" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
+    <a class="btn" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
     {% if is_self %}<a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a>{% endif %}
 </div>
 {% endif %}
 
 {% if is_self %}
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <h3>Digital Signature</h3>
     <details class="hlp"><summary class="hlp-t">How digital signatures work</summary>
     <p class="muted hlp-b" style="font-size:0.9rem;">
@@ -66,12 +57,12 @@
     <form method="POST" action="{{ url_for('toggle_my_signature') }}" class="inline" style="display:inline-block; margin-right:0.5rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="use_digital_signature" value="{{ 0 if staff.use_digital_signature else 1 }}">
-        <button class="ms-btn ms-btn-secondary ms-btn-sm btn btn-small" type="submit">{{ 'Turn Off' if staff.use_digital_signature else 'Turn On' }} Automatic Stamping</button>
+        <button class="btn btn-small" type="submit">{{ 'Turn Off' if staff.use_digital_signature else 'Turn On' }} Automatic Stamping</button>
     </form>
     <form method="POST" action="{{ url_for('remove_my_signature') }}" class="inline"
           onsubmit="return confirm('Remove your signature image?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="ms-btn ms-btn-secondary ms-btn-sm btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
+        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
     </form>
     <p style="font-size:0.85rem; margin-top:0.5rem;">
         Status: <b>{{ 'On — stamped automatically' if staff.use_digital_signature else 'Off — results show a blank line for manual signing' }}</b>
@@ -83,11 +74,11 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>{{ 'Replace Signature' if staff.signature_filename else 'Upload Signature' }} (PNG with a transparent background works best)</label>
         <input type="file" name="signature" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
-        <button class="ms-btn ms-btn-primary btn" type="submit" style="margin-top:0.5rem;">Upload</button>
+        <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
     </form>
 </div>
 
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <h3>Staff Documents</h3>
     <p class="muted">Upload permitted staff documents up to <strong>1 MB per file</strong>. Documents are protected by school and tenant access controls.</p>
     {% if is_self %}
@@ -95,7 +86,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="file" name="document" data-max-bytes="1048576" data-size-message="Staff document must not exceed 1 MB." accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
       <small>Accepted: PDF, Word, JPG, JPEG, PNG · Maximum 1 MB</small>
-      <button class="ms-btn ms-btn-primary btn" type="submit" style="margin-top:.5rem;">Upload Document</button>
+      <button class="btn" type="submit" style="margin-top:.5rem;">Upload Document</button>
     </form>
     {% endif %}
     {% if documents %}
@@ -106,7 +97,7 @@
 </div>
 {% endif %}
 
-<div class="ms-card card" style="max-width:640px;">
+<div class="card" style="max-width:640px;">
     <h3>Recent Attendance</h3>
     {% if recent_attendance %}
     <table>

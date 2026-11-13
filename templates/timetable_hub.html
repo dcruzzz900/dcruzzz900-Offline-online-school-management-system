@@ -1,112 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Timetable · {{ school_name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Timetable{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>Timetable</h1>
-    <p class="subtitle">Generate, validate, approve and publish class &amp; teacher schedules</p>
-  </div>
-  <div class="ms-page-actions">
-    {% if session.get('role') in ['admin','sub_admin'] %}
-    <a class="ms-btn ms-btn-secondary" href="{{ url_for('timetable_setup') }}">Setup</a>
-    <a class="ms-btn ms-btn-primary" href="{{ url_for('timetable_generate') }}">Generate</a>
-    {% endif %}
-    {% if latest %}
-    <a class="ms-btn ms-btn-success" href="{{ url_for('timetable_version', version_id=latest.id) }}">Open Current</a>
-    {% endif %}
-  </div>
+<div class="page-heading"><div><div class="eyebrow">ACADEMICS</div><h1>Automated Timetable</h1><p>Generate, validate, approve and publish tenant-scoped school timetables.</p></div></div>
+<div class="grid-4">
+  <div class="card"><b>Scheduled</b><h2>{{ counts.scheduled }}</h2></div>
+  <div class="card"><b>Blocking conflicts</b><h2>{{ counts.conflicts }}</h2></div>
+  <div class="card"><b>Current version</b><h2>{{ latest.version_number if latest else '—' }}</h2></div>
+  <div class="card"><b>Status</b><h2>{{ latest.status if latest else 'DRAFT' }}</h2></div>
 </div>
-
-<div class="ms-metrics" style="grid-template-columns: repeat(4, 1fr); margin-bottom:1.25rem;">
-  <div class="ms-metric ms-m-students" style="min-height:90px;">
-    <div class="ms-metric-label">Scheduled</div>
-    <div class="ms-metric-value">{{ counts.scheduled|default(0) }}</div>
-  </div>
-  <div class="ms-metric ms-m-parents" style="min-height:90px;">
-    <div class="ms-metric-label">Conflicts</div>
-    <div class="ms-metric-value">{{ counts.conflicts|default(0) }}</div>
-  </div>
-  <div class="ms-metric ms-m-classes" style="min-height:90px;">
-    <div class="ms-metric-label">Version</div>
-    <div class="ms-metric-value" style="font-size:1.35rem;">{{ latest.version_number if latest else '—' }}</div>
-  </div>
-  <div class="ms-metric ms-m-staff" style="min-height:90px;">
-    <div class="ms-metric-label">Status</div>
-    <div class="ms-metric-value" style="font-size:1.15rem;">{{ latest.status if latest else 'DRAFT' }}</div>
-  </div>
+<div class="card no-print">
+  {% if session.get('role') in ['admin','sub_admin'] %}
+  <a class="btn" href="{{ url_for('timetable_setup') }}">Timetable Setup</a>
+  <a class="btn" href="{{ url_for('timetable_generate') }}">Generate Timetable</a>
+  {% endif %}
+  {% if latest %}<a class="btn btn-gold" href="{{ url_for('timetable_version',version_id=latest.id) }}">Open Current Version</a>{% endif %}
 </div>
-
-<div class="ms-card">
-  <h3 class="ms-card-title">Versions &amp; Workflow</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead>
-        <tr><th>Version</th><th>Status</th><th>Validation</th><th>Created</th><th>Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for v in versions %}
-        <tr>
-          <td><strong>v{{ v.version_number }}</strong></td>
-          <td>
-            {% set st = (v.status or '')|upper %}
-            {% if st == 'PUBLISHED' %}<span class="ms-badge ms-badge-success">{{ v.status }}</span>
-            {% elif st == 'APPROVED' %}<span class="ms-badge ms-badge-info">{{ v.status }}</span>
-            {% else %}<span class="ms-badge ms-badge-muted">{{ v.status }}</span>{% endif %}
-          </td>
-          <td>{{ v.validation_status }}</td>
-          <td>{{ v.created_at }}</td>
-          <td><a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('timetable_version', version_id=v.id) }}">View</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5"><div class="ms-empty"><div class="icon">🗓️</div><p>No timetable versions yet.</p></div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-  <div class="ms-card">
-    <h3 class="ms-card-title">Class / Arm Timetables</h3>
-    <div class="ms-table-wrap">
-      <table class="ms-table">
-        <thead><tr><th>Class</th><th></th></tr></thead>
-        <tbody>
-          {% for c in classes %}
-          <tr>
-            <td>{{ c.name }}</td>
-            <td><a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('timetable_class', class_id=c.id) }}">View</a></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="2" style="color:#94a3b8;">No classes yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <div class="ms-card">
-    <h3 class="ms-card-title">Teacher Timetables</h3>
-    <div class="ms-table-wrap">
-      <table class="ms-table">
-        <thead><tr><th>Teacher</th><th>Role</th><th></th></tr></thead>
-        <tbody>
-          {% for t in teachers %}
-          <tr>
-            <td>{{ t.name }}</td>
-            <td>{{ t.rbac_role or t.position or 'Teacher' }}</td>
-            <td><a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('timetable_teacher', teacher_id=t.id) }}">View</a></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="3" style="color:#94a3b8;">No teachers yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+<div class="card"><h3>Versions & Workflow</h3><div class="table-wrap"><table><caption>Versions & Workflow</caption><tr><th>Version</th><th>Status</th><th>Validation</th><th>Created</th><th>Actions</th></tr>{% for v in versions %}<tr><td>v{{ v.version_number }}</td><td>{{ v.status }}</td><td>{{ v.validation_status }}</td><td>{{ v.created_at }}</td><td><a class="btn btn-small" href="{{ url_for('timetable_version',version_id=v.id) }}">View</a></td></tr>{% else %}<tr><td colspan="5">No timetable versions yet.</td></tr>{% endfor %}</table></div></div>
+<div class="card"><h3>Class / Arm Timetables</h3><div class="table-wrap"><table><tr><th>Class / Arm</th><th>View</th></tr>{% for c in classes %}<tr><td>{{ c.name }}</td><td><a class="btn btn-small" href="{{ url_for('timetable_class',class_id=c.id) }}">View</a></td></tr>{% endfor %}</table></div></div>
+<div class="card"><h3>Teacher Timetables</h3><div class="table-wrap"><table><tr><th>Teacher</th><th>Role</th><th>View</th></tr>{% for t in teachers %}<tr><td>{{ t.name }}</td><td>{{ t.rbac_role or t.position or 'Teacher' }}</td><td><a class="btn btn-small" href="{{ url_for('timetable_teacher',teacher_id=t.id) }}">View</a></td></tr>{% endfor %}</table></div></div>
 {% endblock %}

@@ -1,190 +1,39 @@
-{% extends "base.html" %}
-{% from "partials/dash_icons.html" import dicon %}
-{% block title %}Student Dashboard · {{ school_name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-dashboard.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
-{% block content %}
-<div class="ms-dashboard">
-
-  <div class="ms-welcome">
-    <div class="ms-welcome-text">
-      <h1>Welcome, {{ student_full_name(student) }}!</h1>
-      <p>{{ class_row.name }} · Admission No. {{ student.admission_no }}</p>
-    </div>
-    <div class="ms-welcome-meta">
-      <a class="ms-welcome-chip" href="{{ url_for('student_ai_tutor') }}" style="text-decoration:none;color:#fff;">✦ Ask AI Tutor</a>
-    </div>
-  </div>
-
-  <div class="ms-metrics" style="grid-template-columns:repeat(4,1fr);">
-    <div class="ms-metric ms-m-students">
-      <div class="ms-metric-icon">📄</div>
-      <div class="ms-metric-label">Published Results</div>
-      <div class="ms-metric-value">{{ published_terms|length }}</div>
-    </div>
-    <div class="ms-metric ms-m-classes">
-      <div class="ms-metric-icon">🏫</div>
-      <div class="ms-metric-label">Class</div>
-      <div class="ms-metric-value" style="font-size:1.05rem;">{{ class_row.name }}</div>
-    </div>
-    <div class="ms-metric ms-m-subjects">
-      <div class="ms-metric-icon">✦</div>
-      <div class="ms-metric-label">AI Tutor</div>
-      <div class="ms-metric-value" style="font-size:1.15rem;">Ready</div>
-    </div>
-    <div class="ms-metric ms-m-staff">
-      <div class="ms-metric-icon">●</div>
-      <div class="ms-metric-label">Status</div>
-      <div class="ms-metric-value" style="font-size:1.15rem;">Online</div>
-    </div>
-  </div>
-
-  {% include "partials/quick_actions.html" %}
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
-    <div class="ms-card">
-      <h3 class="ms-card-title">My Academic Profile</h3>
-      <p style="margin:0 0 0.35rem;"><strong>Class:</strong> {{ class_row.name }}</p>
-      <p style="margin:0 0 0.85rem;"><strong>Admission No.:</strong> {{ student.admission_no }}</p>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-        <a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('student_self_profile') }}">My Profile</a>
-        <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('student_materials') }}">Learning Materials</a>
-      </div>
-    </div>
-    <div class="ms-card">
-      <h3 class="ms-card-title">✦ AI Tutor</h3>
-      <p style="font-size:0.88rem;color:#64748b;margin:0 0 0.85rem;">Ask questions in Mathematics, English, Physics, Chemistry, Biology, Economics, Government or Literature.</p>
-      <a class="ms-btn ms-btn-primary" href="{{ url_for('student_ai_tutor') }}">Start Learning →</a>
-    </div>
-  </div>
-
-  <div class="ms-card" id="results">
-    <div class="ms-section-head"><h3>📄 Published Results</h3></div>
-    <p style="font-size:0.85rem;color:#64748b;margin:0 0 0.75rem;">Only results officially published by your school appear here.</p>
-    {% if published_terms %}
-    <div class="ms-table-wrap">
-      <table class="ms-table">
-        <thead><tr><th>Session</th><th>Term</th><th></th></tr></thead>
-        <tbody>
-          {% for t in published_terms %}
-          <tr>
-            <td>{{ t.session_name }}</td>
-            <td><strong>{{ t.name }}</strong></td>
-            <td><a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('student_result', term_id=t.id) }}">View Result</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="color:#94a3b8;">No results have been published yet.</p>
-    {% endif %}
-  </div>
-
-  <div class="ms-card">
-    <div class="ms-section-head"><h3>📈 Academic Performance</h3></div>
-    <p style="font-size:0.85rem;color:#64748b;margin:0 0 0.75rem;">Your average by published term, with class average for comparison.</p>
-    {% if performance and performance.trend %}
-    <div class="chart-scroll"><div class="chart-wrap" style="height:200px;"><canvas id="chartAcademicTrend" role="img" aria-label="Academic performance trend"></canvas></div></div>
-    {% if performance.trend|last and (performance.trend|last).subjects %}
-    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;color:#334155;">Subject scores — {{ (performance.trend|last).term.name }}</h4>
-    <div class="chart-scroll"><div class="chart-wrap chart-wrap-sm" style="height:160px;"><canvas id="chartSubjectScores" role="img" aria-label="Subject scores"></canvas></div></div>
-    {% endif %}
-    {% if performance.improving or performance.needs_attention %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
-      <div>
-        <h4 style="margin:0 0 0.4rem;font-size:0.88rem;">Improving</h4>
-        {% if performance.improving %}
-        <ul style="margin:0;padding-left:1.1rem;font-size:0.85rem;color:#166534;">
-          {% for s in performance.improving %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% (+{{ s.delta }})</li>{% endfor %}
-        </ul>
-        {% else %}<p style="color:#94a3b8;font-size:0.85rem;">None yet.</p>{% endif %}
-      </div>
-      <div>
-        <h4 style="margin:0 0 0.4rem;font-size:0.88rem;">Needs attention</h4>
-        {% if performance.needs_attention %}
-        <ul style="margin:0;padding-left:1.1rem;font-size:0.85rem;color:#9a3412;">
-          {% for s in performance.needs_attention %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% ({{ s.delta }})</li>{% endfor %}
-        </ul>
-        {% else %}<p style="color:#94a3b8;font-size:0.85rem;">None flagged.</p>{% endif %}
-      </div>
-    </div>
-    {% endif %}
-    {% else %}
-    <p style="color:#94a3b8;">Appears once your school publishes a term’s results.</p>
-    {% endif %}
-  </div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-    <div class="ms-card">
-      <div class="ms-section-head"><h3>✅ Attendance</h3></div>
-      {% if attendance and attendance.total %}
-      <div class="ms-metrics" style="grid-template-columns:repeat(2,1fr);margin:0;">
-        <div class="ms-metric ms-m-staff" style="min-height:75px;padding:0.75rem;">
-          <div class="ms-metric-label">Rate</div>
-          <div class="ms-metric-value" style="font-size:1.25rem;">{{ attendance.rate }}%</div>
-        </div>
-        <div class="ms-metric ms-m-students" style="min-height:75px;padding:0.75rem;">
-          <div class="ms-metric-label">Present</div>
-          <div class="ms-metric-value" style="font-size:1.25rem;">{{ attendance.counts.present }}</div>
-        </div>
-        <div class="ms-metric ms-m-parents" style="min-height:75px;padding:0.75rem;">
-          <div class="ms-metric-label">Late</div>
-          <div class="ms-metric-value" style="font-size:1.25rem;">{{ attendance.counts.late }}</div>
-        </div>
-        <div class="ms-metric" style="min-height:75px;padding:0.75rem;background:linear-gradient(145deg,#dc2626,#b91c1c);">
-          <div class="ms-metric-label">Absent</div>
-          <div class="ms-metric-value" style="font-size:1.25rem;">{{ attendance.counts.absent }}</div>
-        </div>
-      </div>
-      {% if attendance_trend %}
-      <div class="chart-wrap chart-wrap-sm" style="margin-top:1rem;height:140px;"><canvas id="chartAttendance" role="img" aria-label="Attendance trend"></canvas></div>
-      {% endif %}
-      {% else %}
-      <p style="color:#94a3b8;">No attendance recorded yet.</p>
-      {% endif %}
-    </div>
-    <div class="ms-card">
-      <div class="ms-section-head"><h3>🕒 Recent Activities</h3></div>
-      {% if activities %}
-      <ul class="ms-activity-list">
-        {% for a in activities[:8] %}
-        <li class="ms-activity-item">
-          <span class="ms-activity-icon">•</span>
-          <div class="ms-activity-body">
-            <p class="title">{{ a.description }}</p>
-            <p class="meta">{{ a.ts }}</p>
-          </div>
-        </li>
-        {% endfor %}
-      </ul>
-      {% else %}
-      <p style="color:#94a3b8;">Nothing recorded yet.</p>
-      {% endif %}
-    </div>
-  </div>
-
+{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% block title %}Student Dashboard{% endblock %}{% block content %}
+<div class="page-heading"><div><div class="eyebrow">STUDENT PORTAL</div><h1><span data-greeting>{{ time_greeting }}</span>, {{ student_full_name(student) }}</h1><p>{{ class_row.name }} · Admission No. {{ student.admission_no }}</p></div><a class="btn" href="{{ url_for('student_ai_tutor') }}">✦ Ask AI Tutor</a></div>
+{% include "partials/quick_actions.html" %}
+<div class="stat-grid"><div class="stat-box"><div class="num">{{ published_terms|length }}</div><div class="label">Published results</div></div><div class="stat-box"><div class="num">AI</div><div class="label">Tutor available</div></div><div class="stat-box"><div class="num">✓</div><div class="label">Learning portal</div></div><div class="stat-box"><div class="num">●</div><div class="label">Online</div></div></div>
+<div class="grid-2"><div class="card"><h3>My academic profile</h3><p><b>Class:</b> {{ class_row.name }}</p><p><b>Admission No.:</b> {{ student.admission_no }}</p><a class="btn" href="{{ url_for('student_self_profile') }}">My Profile</a> <a class="btn btn-secondary" href="{{ url_for('student_materials') }}">Open Learning Materials</a></div><div class="card"><h3>AI Tutor</h3><p class="muted">Ask questions in Mathematics, English, Physics, Chemistry, Biology, Economics, Government or Literature.</p><a class="btn" href="{{ url_for('student_ai_tutor') }}">Start Learning →</a></div></div>
+<div class="card" style="margin-top:18px" id="results"><div class="section-title"><div><h3>Published Results</h3><p class="muted">Only results officially published by your school appear here.</p></div></div>{% if published_terms %}<div style="overflow:auto;margin-top:14px"><table><tr><th>Session</th><th>Term</th><th>Action</th></tr>{% for t in published_terms %}<tr><td>{{ t.session_name }}</td><td>{{ t.name }}</td><td><a class="btn btn-small" href="{{ url_for('student_result',term_id=t.id) }}">View Result</a></td></tr>{% endfor %}</table></div>{% else %}<p class="muted">No results have been published yet.</p>{% endif %}</div>
+<div class="card" style="margin-top:18px"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('trend-up') }}</span>Academic Performance</h3><p class="muted">Your average score by published term, with your class's average for comparison.</p></div></div>
+{% if performance.trend %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartAcademicTrend" role="img" aria-label="Academic performance trend"></canvas></div></div>
+{% if performance.trend|last and (performance.trend|last).subjects %}<h4 style="margin:18px 0 6px;font-size:13px">Subject scores — {{ (performance.trend|last).term.name }}</h4><div class="chart-scroll"><div class="chart-wrap chart-wrap-sm"><canvas id="chartSubjectScores" role="img" aria-label="Subject scores this term"></canvas></div></div>{% endif %}
+{% if performance.improving or performance.needs_attention %}<div class="grid-2" style="margin-top:16px">
+<div><h4 style="margin:0 0 6px;font-size:13px">Improving subjects</h4>{% if performance.improving %}<ul style="margin:0;padding-left:18px;font-size:13px">{% for s in performance.improving %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% (+{{ s.delta }})</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:12px">None yet.</p>{% endif %}</div>
+<div><h4 style="margin:0 0 6px;font-size:13px">Subjects needing attention</h4>{% if performance.needs_attention %}<ul style="margin:0;padding-left:18px;font-size:13px">{% for s in performance.needs_attention %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% ({{ s.delta }})</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:12px">None flagged.</p>{% endif %}</div>
+</div>{% endif %}
+{% else %}<p class="muted">Nothing to show yet — this appears once your school publishes a term's results.</p>{% endif %}
+</div>
+<div class="grid-2" style="margin-top:18px">
+<div class="card"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance</h3><p class="muted">Across every recorded day.</p></div></div>
+{% if attendance.total %}<div class="stat-grid" style="margin-top:14px"><div class="stat-box"><div class="num">{{ attendance.rate }}%</div><div class="label">Attendance rate</div></div><div class="stat-box"><div class="num">{{ attendance.counts.present }}</div><div class="label">Present</div></div><div class="stat-box"><div class="num">{{ attendance.counts.late }}</div><div class="label">Late</div></div><div class="stat-box"><div class="num">{{ attendance.counts.absent }}</div><div class="label">Absent</div></div></div>{% if attendance_trend %}<h4 style="margin:18px 0 6px;font-size:13px">Last week</h4><div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance" role="img" aria-label="Attendance trend, last week"></canvas></div>{% endif %}{% else %}<p class="muted" style="margin-top:14px">No attendance recorded yet.</p>{% endif %}</div>
+<div class="card"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('clock') }}</span>Recent Activities</h3><p class="muted">Your own results, attendance and class updates.</p></div></div>
+{% if activities %}<div style="overflow:auto;margin-top:14px"><table><tr><th style="width:140px">When</th><th>What happened</th></tr>{% for a in activities %}<tr><td class="muted" style="font-size:12px">{{ a.ts }}</td><td>{{ a.description }}</td></tr>{% endfor %}</table></div>{% else %}<p class="muted" style="margin-top:14px">Nothing recorded yet.</p>{% endif %}</div>
 </div>
 {% endblock %}
-
 {% block extra_scripts %}
-{% if (performance and performance.trend) or attendance_trend %}
+{% if performance.trend or attendance_trend %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard-charts.js') }}"></script>
 <script>
 (function(){
   window.schoolHubDashboardCharts && window.schoolHubDashboardCharts({
-    academicLabels: {{ (performance.trend|map(attribute='term')|map(attribute='name')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    academicMine: {{ (performance.trend|map(attribute='average')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    academicClassAvg: {{ (performance.trend|map(attribute='class_average')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    subjectLabels: {{ ((performance.trend|last).subjects|map(attribute='subject')|list)|tojson if performance and performance.trend and (performance.trend|last).subjects else '[]'|safe }},
-    subjectScores: {{ ((performance.trend|last).subjects|map(attribute='total')|list)|tojson if performance and performance.trend and (performance.trend|last).subjects else '[]'|safe }},
-    attendanceLabels: {{ (attendance_trend|map(attribute='label')|list)|tojson if attendance_trend else '[]' }},
-    attendanceRate: {{ (attendance_trend|map(attribute='rate')|list)|tojson if attendance_trend else '[]' }},
+    academicLabels: {{ (performance.trend|map(attribute='term')|map(attribute='name')|list)|tojson if performance.trend else '[]'|safe }},
+    academicMine: {{ (performance.trend|map(attribute='average')|list)|tojson if performance.trend else '[]'|safe }},
+    academicClassAvg: {{ (performance.trend|map(attribute='class_average')|list)|tojson if performance.trend else '[]'|safe }},
+    subjectLabels: {{ ((performance.trend|last).subjects|map(attribute='subject')|list)|tojson if performance.trend and (performance.trend|last).subjects else '[]'|safe }},
+    subjectScores: {{ ((performance.trend|last).subjects|map(attribute='total')|list)|tojson if performance.trend and (performance.trend|last).subjects else '[]'|safe }},
+    attendanceLabels: {{ (attendance_trend|map(attribute='label')|list)|tojson }},
+    attendanceRate: {{ (attendance_trend|map(attribute='rate')|list)|tojson }},
   });
 })();
 </script>

@@ -1,97 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Result Approval · {{ school_name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Result approval workflow{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>Result Approval &amp; Publication</h1>
-    <p class="subtitle">Draft → Submitted → Under review → Approved → Published</p>
-  </div>
-</div>
-
-<div class="ms-card" style="padding:1rem 1.25rem;">
-  <form method="GET" class="ms-toolbar">
-    <div class="ms-filter">
-      <select name="term_id" onchange="this.form.submit()">
-        {% for t in terms %}
-        <option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-  </form>
-</div>
-
-<div class="ms-card">
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead>
-        <tr>
-          <th>Class</th>
-          <th>Students</th>
-          <th>Status</th>
-          <th>Actions</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-        <tr>
-          <td><strong>{{ r.cls.name }}</strong></td>
-          <td>{{ r.students }}</td>
-          <td>
-            {% set lab = (r.label or '')|lower %}
-            {% if 'published' in lab %}
-              <span class="ms-badge ms-badge-success">{{ r.label }}</span>
-            {% elif 'approved' in lab %}
-              <span class="ms-badge ms-badge-info">{{ r.label }}</span>
-            {% elif 'review' in lab or 'submitted' in lab %}
-              <span class="ms-badge ms-badge-warning">{{ r.label }}</span>
-            {% else %}
-              <span class="ms-badge ms-badge-muted">{{ r.label }}</span>
-            {% endif %}
-            {% if r.pub and r.pub.last_reason %}<div style="font-size:0.75rem;color:#64748b;margin-top:0.25rem;">{{ r.pub.last_reason }}</div>{% endif %}
-            {% if r.summary %}
-            <div style="font-size:0.72rem;color:#94a3b8;margin-top:0.25rem;">
-              {{ r.summary.with_attendance }}/{{ r.summary.students }} attendance ·
-              {{ r.summary.with_teacher_comment }} teacher ·
-              {{ r.summary.with_principal_comment }} principal comments
-            </div>
-            {% endif %}
-          </td>
-          <td>
-            <div style="display:flex;flex-wrap:wrap;gap:0.35rem;">
-              {% for a in r.actions %}
-              <form method="POST" action="{{ url_for('result_workflow_action', class_id=r.cls.id, term_id=term.id, action=a) }}" style="display:inline-flex;gap:0.3rem;align-items:center;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                {% if need_reason[a] %}
-                <input type="text" name="reason" placeholder="Reason" required style="width:9rem;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.8rem;">
-                {% endif %}
-                <button class="ms-btn ms-btn-primary ms-btn-sm" type="submit">{{ action_labels[a] }}</button>
-              </form>
-              {% endfor %}
-              {% if not r.actions %}<span style="color:#94a3b8;">—</span>{% endif %}
-            </div>
-          </td>
-          <td>
-            <div class="actions">
-              <a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('result_workflow_history', class_id=r.cls.id, term_id=term.id) }}">History</a>
-              <a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('class_results_list', class_id=r.cls.id, term_id=term.id) }}">Preview</a>
-            </div>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="5">
-            <div class="ms-empty"><div class="icon">📋</div><p>No classes available to you for this term.</p></div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<h1>Result approval &amp; publication</h1>
+<details class="hlp"><summary class="hlp-t">How the workflow works</summary><p class="muted hlp-b">Draft &rarr; Submitted &rarr; Under review &rarr; Approved &rarr; Published. Unpublished results can be viewed or previewed by authorised staff only; printing, download and PDF are blocked until a result is published.</p></details>
+<form method="GET" style="margin-bottom:1rem">
+  <label style="display:inline">Term:</label>
+  <select name="term_id" onchange="this.form.submit()" style="width:auto;display:inline-block">
+    {% for t in terms %}<option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}
+  </select>
+</form>
+<div class="card" style="overflow-x:auto">
+<table>
+  <tr><th>Class</th><th>Students</th><th>Status</th><th>Actions</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.cls.name }}</td>
+    <td>{{ r.students }}</td>
+    <td><strong>{{ r.label }}</strong>{% if r.pub and r.pub.last_reason %}<br><small class="muted">{{ r.pub.last_reason }}</small>{% endif %}
+      {% if r.summary %}<br><small class="muted">Review: {{ r.summary.with_attendance }}/{{ r.summary.students }} attendance · {{ r.summary.with_teacher_comment }} teacher comments · {{ r.summary.with_principal_comment }} principal comments · {{ r.summary.with_domains }} domain ratings</small>{% endif %}</td>
+    <td>
+      {% for a in r.actions %}
+      <form method="POST" action="{{ url_for('result_workflow_action', class_id=r.cls.id, term_id=term.id, action=a) }}" style="display:inline-flex;gap:.3rem;margin:.15rem 0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if need_reason[a] %}<input type="text" name="reason" placeholder="Reason (required)" required style="width:11rem">{% endif %}
+        <button class="btn btn-small" type="submit">{{ action_labels[a] }}</button>
+      </form>
+      {% endfor %}
+      {% if not r.actions %}<span class="muted">—</span>{% endif %}
+    </td>
+    <td><a class="btn btn-small btn-secondary" href="{{ url_for('result_workflow_history', class_id=r.cls.id, term_id=term.id) }}">History</a>
+        <a class="btn btn-small btn-secondary" href="{{ url_for('class_results_list', class_id=r.cls.id, term_id=term.id) }}">Preview</a></td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">No classes available to you.</td></tr>{% endfor %}
+</table>
 </div>
 {% endblock %}

@@ -1,187 +1,100 @@
 {% extends "base.html" %}
-{% block title %}Billing · {{ school.name }}{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
+{% block title %}Billing & Subscription — {{ school.name }}{% endblock %}
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>Billing &amp; Subscription</h1>
-    <p class="subtitle">Invoices, payments and plan status for {{ school.name }}</p>
-  </div>
+<div class="dashboard-header">
+  <div><h1>Billing & Subscription</h1><p>School billing records, subscription status and payment receipts.</p></div>
 </div>
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Current Subscription</h3>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;">
-    <div>
-      <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">School ID</div>
-      <div style="font-weight:650;margin-top:0.2rem;"><code>{{ school.school_code or '—' }}</code></div>
-    </div>
-    <div>
-      <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Plan</div>
-      <div style="font-weight:650;margin-top:0.2rem;">{{ plan.name if plan else (school.subscription_plan or 'Legacy') }}</div>
-    </div>
-    <div>
-      <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Status</div>
-      <div style="margin-top:0.25rem;">
-        {% set st = (state.status or state.label or '')|lower %}
-        {% if 'active' in st or 'trial' in st %}
-          <span class="ms-badge ms-badge-success">{{ state.label }}</span>
-        {% elif 'expir' in st or 'suspend' in st or 'cancel' in st %}
-          <span class="ms-badge ms-badge-danger">{{ state.label }}</span>
-        {% else %}
-          <span class="ms-badge ms-badge-info">{{ state.label }}</span>
-        {% endif %}
-      </div>
-    </div>
-    <div>
-      <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Days left</div>
-      <div style="font-weight:650;margin-top:0.2rem;">{{ state.days_left if state.days_left is not none else 'N/A' }}</div>
-    </div>
-    <div>
-      <div style="font-size:0.75rem;color:#64748b;font-weight:600;text-transform:uppercase;">Expiry</div>
-      <div style="font-weight:650;margin-top:0.2rem;">{{ school.trial_ends_at if state.status == 'trial' else (school.subscription_ends_at or 'N/A') }}</div>
-    </div>
+<div class="card">
+  <h2>Current subscription</h2>
+  <div class="dashboard-grid">
+    <div><strong>School ID</strong><br><code>{{ school.school_code or '—' }}</code></div>
+    <div><strong>Tenant ID</strong><br><code>{{ school.tenant_id or '—' }}</code></div>
+    <div><strong>Plan</strong><br>{{ plan.name if plan else (school.subscription_plan or 'Legacy / Existing') }}</div>
+    <div><strong>Status</strong><br>{{ state.label }}</div>
+    <div><strong>Days remaining</strong><br>{{ state.days_left if state.days_left is not none else 'Not applicable' }}</div>
+    <div><strong>Expiry</strong><br>{{ school.trial_ends_at if state.status == 'trial' else (school.subscription_ends_at or 'Not applicable') }}</div>
   </div>
   {% if state.status in ['expired', 'suspended', 'cancelled'] %}
-  <div style="margin-top:1rem;padding:0.75rem 1rem;background:#fef2f2;border-radius:10px;color:#b91c1c;font-size:0.9rem;">
-    Your school does not have active subscription access. Contact the platform administrator for renewal.
-  </div>
+  <p class="alert alert-error">Your school currently does not have active subscription access. Contact the platform administrator for renewal.</p>
   {% elif state.days_left is not none and state.days_left <= 14 %}
-  <div style="margin-top:1rem;padding:0.75rem 1rem;background:#fff7ed;border-radius:10px;color:#c2410c;font-size:0.9rem;">
-    Subscription/trial is approaching expiry. Please arrange renewal early.
-  </div>
+  <p class="alert alert-warning">Your subscription/trial is approaching expiry. Please arrange renewal early.</p>
   {% endif %}
 </div>
 
 {% if plan %}
-<div class="ms-card">
-  <h3 class="ms-card-title">Plan Usage</h3>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-    <div>
-      <div style="font-size:0.85rem;color:#64748b;">Students</div>
-      <div style="font-weight:700;font-size:1.2rem;">{{ limits.students.used }} / {{ limits.students.limit or '∞' }}</div>
-      {% if limits.students.limit %}
-      <div class="ms-bar" style="margin-top:0.4rem;"><span style="width:{{ limits.students.percent }}%"></span></div>
-      {% endif %}
-    </div>
-    <div>
-      <div style="font-size:0.85rem;color:#64748b;">Teachers</div>
-      <div style="font-weight:700;font-size:1.2rem;">{{ limits.teachers.used }} / {{ limits.teachers.limit or '∞' }}</div>
-      {% if limits.teachers.limit %}
-      <div class="ms-bar" style="margin-top:0.4rem;"><span style="width:{{ limits.teachers.percent }}%"></span></div>
-      {% endif %}
-    </div>
+<div class="card">
+  <h2>Plan usage</h2>
+  <div class="dashboard-grid">
+    <div><strong>Students</strong><br>{{ limits.students.used }} / {{ limits.students.limit or 'Unlimited' }}{% if limits.students.limit %} ({{ limits.students.percent }}%){% endif %}</div>
+    <div><strong>Teachers</strong><br>{{ limits.teachers.used }} / {{ limits.teachers.limit or 'Unlimited' }}{% if limits.teachers.limit %} ({{ limits.teachers.percent }}%){% endif %}</div>
   </div>
 </div>
 {% endif %}
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Invoices</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead>
-        <tr><th>Invoice</th><th>Plan</th><th>Amount</th><th>Status</th><th>Issued</th><th>Due</th><th>Reference</th></tr>
-      </thead>
-      <tbody>
-        {% for i in invoices %}
-        <tr>
-          <td><code>{{ i.invoice_number }}</code></td>
-          <td>{{ i.plan_code }}</td>
-          <td>₦{{ '%.2f'|format(i.amount_ngn) }}</td>
-          <td>
-            {% set ist = (i.status or '')|lower %}
-            {% if ist == 'paid' %}<span class="ms-badge ms-badge-success">{{ i.status }}</span>
-            {% elif ist == 'pending' %}<span class="ms-badge ms-badge-warning">{{ i.status }}</span>
-            {% else %}<span class="ms-badge ms-badge-muted">{{ i.status }}</span>{% endif %}
-          </td>
-          <td>{{ i.issued_at }}</td>
-          <td>{{ i.due_at or '—' }}</td>
-          <td>{{ i.payment_reference or '—' }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7"><div class="ms-empty"><div class="icon">📄</div><p>No invoices yet.</p></div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<div class="card">
+  <h2>Invoices</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th>Invoice</th><th>Plan</th><th>Amount</th><th>Status</th><th>Issued</th><th>Due</th><th>Payment reference</th></tr>
+    {% for i in invoices %}
+    <tr><td><code>{{ i.invoice_number }}</code></td><td>{{ i.plan_code }}</td><td>₦{{ '%.2f'|format(i.amount_ngn) }}</td><td>{{ i.status }}</td><td>{{ i.issued_at }}</td><td>{{ i.due_at or '—' }}</td><td>{{ i.payment_reference or '—' }}</td></tr>
+    {% else %}<tr><td colspan="7">No invoices have been issued yet.</td></tr>{% endfor %}
+  </table></div>
 </div>
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Payment Receipts</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead>
-        <tr><th>Receipt</th><th>Invoice</th><th>Amount</th><th>Provider</th><th>Reference</th><th>Issued</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for r in receipts %}
-        <tr>
-          <td><code>{{ r.receipt_number }}</code></td>
-          <td>{{ r.invoice_number or '—' }}</td>
-          <td>₦{{ '%.2f'|format(r.amount_ngn) }}</td>
-          <td>{{ r.provider }}</td>
-          <td>{{ r.payment_reference }}</td>
-          <td>{{ r.issued_at }}</td>
-          <td><a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('school_billing_receipt', receipt_id=r.id) }}">View / Print</a></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7"><div class="ms-empty"><div class="icon">🧾</div><p>No receipts yet.</p></div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<div class="card">
+  <h2>Payment status</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th>Reference</th><th>Invoice</th><th>Provider</th><th>Amount</th><th>Status</th><th>Paid</th><th>Confirmed</th></tr>
+    {% for p in payments %}
+    <tr><td><code>{{ p.payment_reference }}</code></td><td>{{ p.invoice_number or '—' }}</td><td>{{ p.provider }}</td><td>₦{{ '%.2f'|format(p.amount_ngn) }}</td><td>{{ p.status }}</td><td>{{ p.paid_at or '—' }}</td><td>{{ p.confirmed_at or '—' }}</td></tr>
+    {% else %}<tr><td colspan="7">No payment records yet.</td></tr>{% endfor %}
+  </table></div>
 </div>
 
-<div class="ms-card">
-  <h3 class="ms-card-title">Email Billing Notifications</h3>
+<div class="card">
+  <h2>Receipts</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th>Receipt</th><th>Invoice</th><th>Amount</th><th>Provider</th><th>Reference</th><th>Issued</th><th></th></tr>
+    {% for r in receipts %}
+    <tr><td><code>{{ r.receipt_number }}</code></td><td>{{ r.invoice_number or '—' }}</td><td>₦{{ '%.2f'|format(r.amount_ngn) }}</td><td>{{ r.provider }}</td><td>{{ r.payment_reference }}</td><td>{{ r.issued_at }}</td><td><a class="btn btn-small" href="{{ url_for('school_billing_receipt', receipt_id=r.id) }}">View / Print</a></td></tr>
+    {% else %}<tr><td colspan="7">No receipts available yet.</td></tr>{% endfor %}
+  </table></div>
+</div>
+
+<div class="card">
+  <h2>Email billing notifications</h2>
+  <details class="hlp"><summary class="hlp-t">How this works</summary><p class="muted hlp-b">Billing reminders are sent only to the school's registered administrator email when platform email delivery is enabled.</p></details>
   <form method="post" action="{{ url_for('billing_email_preferences') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer;">
-      <input type="checkbox" name="billing_email_notifications" value="1" {% if school.billing_email_notifications|default(1) %}checked{% endif %}>
-      Send billing reminders by email
-    </label>
-    <button class="ms-btn ms-btn-primary ms-btn-sm" type="submit" style="margin-top:0.75rem;">Save preference</button>
+    <label><input type="checkbox" name="billing_email_notifications" value="1" {% if school.billing_email_notifications|default(1) %}checked{% endif %}> Send billing reminders by email</label>
+    <button class="btn btn-small" type="submit">Save preference</button>
   </form>
-  <p style="font-size:0.8rem;color:#64748b;margin-top:0.75rem;">Registered email: {{ school.registered_email or 'Not configured' }}</p>
+  <p><small>Registered billing email: {{ school.registered_email or 'Not configured' }}</small></p>
 </div>
 
 {% if email_deliveries %}
-<div class="ms-card">
-  <h3 class="ms-card-title">Email Delivery History</h3>
-  <div class="ms-table-wrap">
-    <table class="ms-table">
-      <thead><tr><th>Type</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Sent</th></tr></thead>
-      <tbody>
-        {% for e in email_deliveries %}
-        <tr>
-          <td>{{ e.notification_type }}</td>
-          <td>{{ e.recipient }}</td>
-          <td>{{ e.status }}{% if e.last_error %}<br><small style="color:#dc2626;">{{ e.last_error }}</small>{% endif %}</td>
-          <td>{{ e.attempt_count }}</td>
-          <td>{{ e.sent_at or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+<div class="card">
+  <h2>Email delivery history</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th>Type</th><th>Recipient</th><th>Status</th><th>Attempts</th><th>Sent</th></tr>
+    {% for e in email_deliveries %}
+    <tr><td>{{ e.notification_type }}</td><td>{{ e.recipient }}</td><td>{{ e.status }}{% if e.last_error %}<br><small>{{ e.last_error }}</small>{% endif %}</td><td>{{ e.attempt_count }}</td><td>{{ e.sent_at or '—' }}</td></tr>
+    {% endfor %}
+  </table></div>
 </div>
 {% endif %}
 
-<div class="ms-card">
-  <details>
-    <summary style="cursor:pointer;font-weight:650;color:#1e293b;">Renewal instructions</summary>
-    <ol style="margin:0.75rem 0 0;padding-left:1.25rem;font-size:0.9rem;color:#475569;line-height:1.55;">
-      <li>Ask the platform administrator to issue a renewal invoice for your school.</li>
-      <li>Pay using the payment method supplied by the platform administrator.</li>
-      <li>Keep the payment reference / transaction ID.</li>
-      <li>The platform administrator or verified payment gateway confirms the payment.</li>
-      <li>After confirmation, subscription dates and plan status update automatically.</li>
-    </ol>
+<div class="card">
+  <details class="hlp"><summary class="hlp-t">Renewal instructions</summary>
+  <ol class="hlp-b">
+    <li>Ask the platform administrator to issue a renewal invoice for your school.</li>
+    <li>Pay using the payment method supplied by the platform administrator.</li>
+    <li>Keep the payment reference/transaction ID.</li>
+    <li>The platform administrator or verified payment gateway confirms the payment.</li>
+    <li>After confirmation, your subscription dates and plan status are updated automatically.</li>
+  </ol>
   </details>
-  <p style="font-size:0.82rem;color:#64748b;margin-top:0.85rem;"><strong>Security:</strong> Never send your school password, platform credentials, or payment gateway secret keys as proof of payment.</p>
+  <p><strong>Security:</strong> Never send your school password, platform credentials, Paystack secret key or Flutterwave secret hash as proof of payment.</p>
 </div>
 {% endblock %}

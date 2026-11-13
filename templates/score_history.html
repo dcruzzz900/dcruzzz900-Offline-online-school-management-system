@@ -1,85 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Score History{% endblock %}
-
-{% block extra_head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
-{% endblock %}
-
 {% block content %}
-<div class="ms-page-header">
-  <div>
-    <h1>Score History</h1>
-    <p class="subtitle">
-      {% if class_row and subject_row %}
-        {{ class_row.name }} · {{ subject_row.name }}{% if term %} · {{ term.session_name }} {{ term.name }}{% endif %}
-      {% else %}
-        Audit trail of score changes
-      {% endif %}
-    </p>
-  </div>
-  <div class="ms-page-actions">
-    <a class="ms-btn ms-btn-secondary" href="javascript:history.back()">← Back</a>
-  </div>
-</div>
-
-{% if all_terms is defined and class_row and subject_row %}
-<div class="ms-filter-bar">
-  <form method="GET" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;width:100%;">
-    <div class="ms-form-group" style="margin:0;">
-      <label>Term</label>
-      <select name="term_id" onchange="this.form.submit()">
-        {% for t in all_terms %}
-        <option value="{{ t.id }}" {% if term and t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-  </form>
-</div>
-{% endif %}
-
-<div class="ms-card">
-  {% if history %}
-  <div class="ms-perf-summary">
-    <div class="box">
-      <div class="lbl">Entries</div>
-      <div class="val">{{ history|length }}</div>
-    </div>
-    <div class="box">
-      <div class="lbl">Latest</div>
-      <div class="val" style="font-size:0.9rem;">{{ history[0].changed_at or history[0].server_timestamp or '—' }}</div>
-    </div>
-  </div>
-
-  <div class="ms-table-wrap" style="margin-top:1rem;">
-    <table class="ms-table">
-      <thead>
-        <tr>
-          <th>When</th>
-          <th>Student</th>
-          <th>Action</th>
-          <th>Old Total</th>
-          <th>New Total</th>
-          <th>By</th>
-          <th>Reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for h in history %}
-        <tr>
-          <td style="font-size:0.82rem;white-space:nowrap;">{{ h.changed_at or h.server_timestamp or '—' }}</td>
-          <td><strong>{{ h.student_name or h.admission_no or '—' }}</strong></td>
-          <td><span class="ms-badge ms-badge-info">{{ h.action or 'edited' }}</span></td>
-          <td>{{ h.old_total if h.old_total is not none else '—' }}</td>
-          <td><strong>{{ h.new_total if h.new_total is not none else '—' }}</strong></td>
-          <td>{{ h.changed_by_name or '—' }}</td>
-          <td>{{ h.reason or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="ms-empty"><div class="icon">📜</div><p>No score changes recorded for this class, subject and term yet.</p></div>
-  {% endif %}
-</div>
+<h1>Score Change History</h1>
+<p class="badge">{{ class_row.name }} · {{ subject_row.name }}{% if term %} · {{ term.name }}{% endif %}</p>
+<form method="GET" class="card no-print"><label>Term<select name="term_id" onchange="this.form.submit()">{% for t in all_terms %}<option value="{{ t.id }}" {{ 'selected' if term and t.id == term.id }}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}</select></label></form>
+<div class="card">{% if history %}{% include "_score_audit_table.html" %}{% else %}<p class="muted">No score changes recorded yet for this class/subject in this term.</p>{% endif %}</div>
 {% endblock %}
