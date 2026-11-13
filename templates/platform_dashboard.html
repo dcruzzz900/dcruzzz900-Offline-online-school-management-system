@@ -1,8 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Platform Dashboard{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-dashboard.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
 {% block content %}
-<div class="dashboard-header"><div><h1>Super Admin Dashboard</h1><p class="badge">Platform-wide management · schools remain isolated</p></div></div>
-<div class="stat-grid"><div class="stat-box"><div class="num">{{ stats.schools_total }}</div><div class="label">Total Schools</div></div><div class="stat-box"><div class="num">{{ stats.schools_active }}</div><div class="label">Active Schools</div></div><div class="stat-box"><div class="num">{{ stats.schools_suspended }}</div><div class="label">Suspended Schools</div></div><div class="stat-box"><div class="num">{{ stats.students }}</div><div class="label">Students</div></div><div class="stat-box"><div class="num">{{ stats.teachers }}</div><div class="label">Teachers</div></div><div class="stat-box"><div class="num">{{ stats.admins }}</div><div class="label">Admins / Sub-Admins</div></div><div class="stat-box"><div class="num">{{ stats.classes }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">{{ stats.published_terms }}</div><div class="label">Published Terms</div></div><div class="stat-box"><div class="num">{{ stats.schools_trial }}</div><div class="label">Trial Schools</div></div><div class="stat-box"><div class="num">{{ stats.parents }}</div><div class="label">Parents</div></div><div class="stat-box"><div class="num">{{ stats.results_generated }}</div><div class="label">Results Generated</div></div><div class="stat-box"><div class="num">{{ stats.results_published }}</div><div class="label">Results Published</div></div><div class="stat-box"><div class="num">{{ stats.pending_tasks }}</div><div class="label">Pending Tasks</div></div><div class="stat-box"><div class="num">{{ stats.notifications }}</div><div class="label">Notifications</div></div></div>
-<div class="card"><h3>Platform Actions</h3><div class="dashboard-actions"><a class="btn" href="{{ url_for('platform_schools') }}">Manage Schools</a><a class="btn" href="{{ url_for('platform_control_center') }}">Multi-School Control Center</a><a class="btn" href="{{ url_for('platform_plans') }}">Subscription Plans</a><a class="btn" href="{{ url_for('platform_subscriptions') }}">School Subscriptions</a><a class="btn" href="{{ url_for('platform_billing') }}">Billing & Payments</a><a class="btn" href="{{ url_for('platform_billing_operations') }}">Billing Operations</a><a class="btn" href="{{ url_for('platform_billing_analytics') }}">Billing Analytics</a><a class="btn" href="{{ url_for('platform_users') }}">Manage Users</a><a class="btn" href="{{ url_for('platform_audit') }}">Audit Log</a><a class="btn" href="{{ url_for('platform_security_audit') }}">Security Audit</a><a class="btn" href="{{ url_for('platform_backups') }}">Backups</a></div></div>
-<div class="card"><h3>Recent Activity</h3>{% if recent_audit %}<div style="overflow-x:auto"><table><tr><th>Action</th><th>When</th></tr>{% for log in recent_audit %}<tr><td>{{ log.action }} — {{ log.details or '' }}</td><td>{{ log.created_at|dmy }}</td></tr>{% endfor %}</table></div>{% else %}<p style="color:#999">No activity yet.</p>{% endif %}</div>
+<div class="ms-dashboard">
+
+  <div class="ms-welcome" style="background:linear-gradient(135deg,#0f2744 0%,#1e3a5f 50%,#2563eb 100%);">
+    <div class="ms-welcome-text">
+      <h1>Platform Control Center</h1>
+      <p>Multi-school overview · subscriptions · billing · security</p>
+    </div>
+  </div>
+
+  <div class="ms-metrics" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));">
+    <div class="ms-metric ms-m-students"><div class="ms-metric-label">Schools</div><div class="ms-metric-value">{{ stats.schools_total|default(0) }}</div>
+      <div class="ms-metric-sub">Active {{ stats.schools_active|default(0) }} · Trial {{ stats.schools_trial|default(0) }}</div></div>
+    <div class="ms-metric ms-m-staff"><div class="ms-metric-label">Students</div><div class="ms-metric-value">{{ stats.students|default(0) }}</div></div>
+    <div class="ms-metric ms-m-classes"><div class="ms-metric-label">Teachers</div><div class="ms-metric-value">{{ stats.teachers|default(0) }}</div></div>
+    <div class="ms-metric ms-m-subjects"><div class="ms-metric-label">Admins</div><div class="ms-metric-value">{{ stats.admins|default(0) }}</div></div>
+    <div class="ms-metric ms-m-parents"><div class="ms-metric-label">Parents</div><div class="ms-metric-value">{{ stats.parents|default(0) }}</div></div>
+    <div class="ms-metric ms-m-fees"><div class="ms-metric-label">Classes</div><div class="ms-metric-value">{{ stats.classes|default(0) }}</div></div>
+    <div class="ms-metric ms-m-students"><div class="ms-metric-label">Published Terms</div><div class="ms-metric-value">{{ stats.published_terms|default(0) }}</div></div>
+    <div class="ms-metric ms-m-staff"><div class="ms-metric-label">Results Published</div><div class="ms-metric-value">{{ stats.results_published|default(0) }}</div></div>
+    <div class="ms-metric ms-m-classes"><div class="ms-metric-label">Results Generated</div><div class="ms-metric-value">{{ stats.results_generated|default(0) }}</div></div>
+    <div class="ms-metric ms-m-parents"><div class="ms-metric-label">Pending Tasks</div><div class="ms-metric-value">{{ stats.pending_tasks|default(0) }}</div></div>
+    <div class="ms-metric ms-m-subjects"><div class="ms-metric-label">Notifications</div><div class="ms-metric-value">{{ stats.notifications|default(0) }}</div></div>
+    <div class="ms-metric" style="background:linear-gradient(145deg,#dc2626,#b91c1c);"><div class="ms-metric-label">Suspended</div><div class="ms-metric-value">{{ stats.schools_suspended|default(0) }}</div></div>
+  </div>
+
+  <div class="ms-card">
+    <h3 class="ms-card-title">Platform Actions</h3>
+    <div class="ms-qa-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));">
+      <a class="ms-qa-item" href="{{ url_for('platform_schools') }}"><span class="ms-qa-icon">🏫</span>Manage Schools</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_control_center') }}"><span class="ms-qa-icon">🎛️</span>Control Center</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_plans') }}"><span class="ms-qa-icon">📦</span>Plans</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_subscriptions') }}"><span class="ms-qa-icon">💳</span>Subscriptions</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_billing') }}"><span class="ms-qa-icon">💰</span>Billing</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_billing_operations') }}"><span class="ms-qa-icon">⚙️</span>Billing Ops</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_billing_analytics') }}"><span class="ms-qa-icon">📊</span>Analytics</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_users') }}"><span class="ms-qa-icon">👥</span>Users</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_audit') }}"><span class="ms-qa-icon">📜</span>Audit Log</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_security_audit') }}"><span class="ms-qa-icon">🔒</span>Security</a>
+      <a class="ms-qa-item" href="{{ url_for('platform_backups') }}"><span class="ms-qa-icon">💾</span>Backups</a>
+    </div>
+  </div>
+
+  <div class="ms-card">
+    <h3 class="ms-card-title">Recent Activity</h3>
+    {% if recent_audit %}
+    <div class="ms-table-wrap">
+      <table class="ms-table">
+        <thead><tr><th>Action</th><th>When</th></tr></thead>
+        <tbody>
+          {% for log in recent_audit %}
+          <tr>
+            <td>{{ log.action }}{% if log.details %} — {{ log.details }}{% endif %}</td>
+            <td style="white-space:nowrap;color:#64748b;">{{ log.created_at|dmy }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="color:#94a3b8;">No activity yet.</p>
+    {% endif %}
+  </div>
+
+</div>
 {% endblock %}

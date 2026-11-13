@@ -9,7 +9,7 @@
 <div class="ms-page-header">
   <div>
     <h1>Score History</h1>
-    <p class="subtitle">Audit trail of score changes for this class &amp; subject</p>
+    <p class="subtitle">Audit trail of score changes</p>
   </div>
   <div class="ms-page-actions">
     <a class="ms-btn ms-btn-secondary" href="javascript:history.back()">← Back</a>
@@ -18,7 +18,19 @@
 
 <div class="ms-card">
   {% if history %}
-  <div class="ms-table-wrap">
+  {# Mobile performance-style summary if single student context #}
+  <div class="ms-perf-summary">
+    <div class="box">
+      <div class="lbl">Entries</div>
+      <div class="val">{{ history|length }}</div>
+    </div>
+    <div class="box">
+      <div class="lbl">Latest</div>
+      <div class="val" style="font-size:0.95rem;">{{ history[0].created_at if history[0].created_at is defined else '—' }}</div>
+    </div>
+  </div>
+
+  <div class="ms-table-wrap" style="margin-top:1rem;">
     <table class="ms-table">
       <thead>
         <tr>

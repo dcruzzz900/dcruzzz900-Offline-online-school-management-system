@@ -9,10 +9,11 @@
 <div class="ms-page-header">
   <div>
     <h1>Staff Attendance</h1>
-    <p class="subtitle">Recording for today · {{ now_label }}</p>
+    <p class="subtitle">Mark daily attendance for staff members</p>
   </div>
   <div class="ms-page-actions">
     <a class="ms-btn ms-btn-secondary" href="{{ url_for('staff_attendance_history') }}">History &amp; Reports</a>
+    <button type="submit" form="staffAttendanceForm" class="ms-btn ms-btn-primary">Mark Attendance</button>
   </div>
 </div>
 
@@ -42,7 +43,7 @@
 </div>
 
 <div class="ms-card">
-  <form method="POST">
+  <form method="POST" id="staffAttendanceForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="q" value="{{ search or '' }}">
     <input type="hidden" name="filter_status" value="{{ filter_status or '' }}">
