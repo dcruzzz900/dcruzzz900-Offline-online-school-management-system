@@ -12,24 +12,84 @@
 </head>
 <body{% if session.get('user_id') %} data-auth-school-id="{{ session.get('school_id') }}"{% endif %}>
 {% if session.get('user_id') %}
-<div class="app-shell"><aside class="app-sidebar" id="appSidebar"><div class="brand"><div class="brand-mark">{% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}">{% else %}◆{% endif %}</div><div><b>My School Hub</b><small>{{ school_name }}</small></div></div><div class="school-switcher">🏫 <span>{{ session.get('school_code') or 'School Portal' }}</span></div><nav>
-{% if session.get('role') == 'student' %}<a href="{{ url_for('student_dashboard') }}">⌂ <span>Dashboard</span></a><a href="{{ url_for('student_self_profile') }}">☺ <span>My Profile</span></a>{% else %}<a href="{{ url_for('dashboard') }}">⌂ <span>Dashboard</span></a>{% if session.get('user_id') %}<a href="{{ url_for('staff_profile', user_id=session.get('user_id')) }}">⌂ <span>My Profile</span></a>{% endif %}{% endif %}
-<div class="nav-group">Academics</div>
-{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('admin_students') }}">◉ <span>Students</span></a><a href="{{ url_for('admin_classes') }}">▤ <span>Classes</span></a><a href="{{ url_for('admin_subjects') }}">▦ <span>Subjects</span></a><a href="{{ url_for('admin_class_subjects') }}">◈ <span>Assign Subjects</span></a><a href="{{ url_for('admin_terms') }}">◷ <span>Sessions &amp; Terms</span></a><a href="{{ url_for('admin_grading') }}">◫ <span>Grading</span></a><a href="{{ url_for('admin_promote') }}">↗ <span>Promote Students</span></a>{% else %}<a href="{{ url_for('my_class') }}">▣ <span>My Classes</span></a>{% endif %}
-<a href="{{ url_for('classes_list') }}">▣ <span>Results</span></a><a href="{{ url_for('result_workflow') }}">✔ <span>Result approval</span></a>{% if session.get('role') == 'admin' %}<a href="{{ url_for('result_permissions') }}">⚿ <span>Workflow permissions</span></a>{% endif %}{% if session.get('role') in ['admin','sub_admin'] or v63_is_registrar() %}<a href="{{ url_for('registrar_dashboard') }}">✎ <span>Registrar</span></a>{% endif %}
-<div class="nav-group">Attendance</div>
-{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('staff_attendance') }}">✓ <span>Staff Attendance</span></a>{% elif session.get('role') == 'teacher' %}<a href="{{ url_for('student_attendance_hub') }}">⌂ <span>Student Attendance</span></a>{% endif %}
-<div class="nav-group">Teaching</div>
-<a href="{{ url_for('timetable_hub') }}">▦ <span>Timetable</span></a>{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('timetable_generate') }}">⚙ <span>Generate Timetable</span></a>{% endif %}<a href="{{ url_for('materials') }}">▤ <span>Learning Materials</span></a>
-{% if session.get('role') in ['admin','sub_admin'] %}<div class="nav-group">People</div><a href="{{ url_for('admin_teachers') }}">♙ <span>Teachers</span></a><a href="{{ url_for('admin_parents') }}">👥 <span>Parents</span></a><a href="{{ url_for('admin_parent_links') }}">✓ <span>Parent Verification</span></a><a href="{{ url_for('signup_codes') }}">🔑 <span>Signup Codes</span></a>{% endif %}
-<div class="nav-group">Reports &amp; Insights</div>
-<a href="{{ url_for('reports_hub') }}">▤ <span>Reports &amp; Analytics</span></a><a class="ai-nav" href="{{ url_for('ai_command_center') }}">✦ <span>AI Assistant</span><em>AI</em></a>
-<div class="nav-group">Communication</div>
-{% if session.get('role') in ['admin','sub_admin','teacher'] %}<a href="{{ url_for('teacher_parent_messages') }}">💬 <span>Parent Messages</span></a>{% endif %}<a href="{{ url_for('notifications_inbox') }}">🔔 <span>Notifications</span>{% if unread_notifications %}<em class="notif-badge" style="background:#d32f2f;color:#fff;border-radius:999px;padding:0 .45rem;font-style:normal">{{ unread_notifications }}</em>{% endif %}</a>{% if session.get('role') in ['admin','sub_admin'] %}<a href="{{ url_for('school_announcements') }}">⌂ <span>Announcements</span></a>{% endif %}
-{% if session.get('role') in ['admin','sub_admin'] %}<div class="nav-group">School Administration</div><a href="{{ url_for('admin_setup_wizard') }}">⚙ <span>School Setup</span></a><a href="{{ url_for('admin_theme') }}">🎨 <span>Theme &amp; Branding</span></a><a href="{{ url_for('admin_result_fields') }}">☰ <span>Result Fields</span></a><a href="{{ url_for('admin_school_info') }}">☰ <span>School Information</span></a>{% if session.get('role') == 'admin' %}<a href="{{ url_for('admin_custom_fields') }}">☰ <span>Custom Fields</span></a><a href="{{ url_for('admin_audit_history') }}">📜 <span>Audit History</span></a>{% endif %}<a href="{{ url_for('school_billing_portal') }}">◈ <span>Billing</span></a>{% endif %}
-<a href="{{ url_for('settings_hub') }}">⚙ <span>Settings</span></a>
+<div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+<div class="app-shell"><aside class="app-sidebar" id="appSidebar"><div class="brand"><div class="brand-mark">{% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}">{% else %}◆{% endif %}</div><div><b>{{ school_name }}</b><small>{{ school_tagline or 'Knowledge and understanding' }}</small></div></div>
+<div class="school-switcher"><span class="school-code-pill">{{ session.get('school_code') or 'School Portal' }}</span></div>
+<nav class="sidebar-nav">
+{% if session.get('role') == 'student' %}
+<a href="{{ url_for('student_dashboard') }}"><span class="nav-ico">⌂</span><span>Dashboard</span></a>
+<a href="{{ url_for('student_self_profile') }}"><span class="nav-ico">☺</span><span>My Profile</span></a>
+{% else %}
+<a href="{{ url_for('dashboard') }}"><span class="nav-ico">⌂</span><span>Dashboard</span></a>
+{% if session.get('user_id') %}<a href="{{ url_for('staff_profile', user_id=session.get('user_id')) }}"><span class="nav-ico">○</span><span>My Profile</span></a>{% endif %}
+{% endif %}
+
+{% if session.get('role') in ['admin','sub_admin'] or session.get('role') == 'teacher' or v63_is_registrar() %}
+<div class="nav-group">Academic</div>
+{% if session.get('role') in ['admin','sub_admin'] %}
+<a href="{{ url_for('admin_students') }}"><span class="nav-ico">●</span><span>Students</span></a>
+<a href="{{ url_for('admin_teachers') }}"><span class="nav-ico">△</span><span>Teachers</span></a>
+<a href="{{ url_for('admin_classes') }}"><span class="nav-ico">☰</span><span>Classes</span></a>
+<a href="{{ url_for('admin_subjects') }}"><span class="nav-ico">▦</span><span>Subjects</span></a>
+{% if session.get('role') in ['admin','sub_admin'] or v63_is_registrar() %}
+<a href="{{ url_for('registrar_dashboard') }}"><span class="nav-ico">✎</span><span>Registrar</span></a>
+{% endif %}
+<a href="{{ url_for('result_workflow') }}"><span class="nav-ico">✓</span><span>Result approval</span></a>
+{% if session.get('role') == 'admin' %}
+<a href="{{ url_for('result_permissions') }}"><span class="nav-ico">⚿</span><span>Workflow permissions</span></a>
+{% endif %}
+<a href="{{ url_for('classes_list') }}"><span class="nav-ico">▣</span><span>Results</span></a>
+<a href="{{ url_for('admin_class_subjects') }}"><span class="nav-ico">◈</span><span>Assign Subjects</span></a>
+<a href="{{ url_for('staff_attendance') }}"><span class="nav-ico">✓</span><span>Staff Attendance</span></a>
+<a href="{{ url_for('timetable_hub') }}"><span class="nav-ico">▦</span><span>Timetable</span></a>
+<a href="{{ url_for('timetable_generate') }}"><span class="nav-ico">⚙</span><span>Generate Timetable</span></a>
+<a href="{{ url_for('materials') }}"><span class="nav-ico">▤</span><span>Learning Materials</span></a>
+<a href="{{ url_for('reports_hub') }}"><span class="nav-ico">📊</span><span>Reports &amp; Analytics</span></a>
+{% else %}
+{# teacher #}
+<a href="{{ url_for('my_class') }}"><span class="nav-ico">▣</span><span>My Classes</span></a>
+<a href="{{ url_for('classes_list') }}"><span class="nav-ico">▣</span><span>Results</span></a>
+<a href="{{ url_for('result_workflow') }}"><span class="nav-ico">✓</span><span>Result approval</span></a>
+<a href="{{ url_for('student_attendance_hub') }}"><span class="nav-ico">✓</span><span>Student Attendance</span></a>
+<a href="{{ url_for('timetable_hub') }}"><span class="nav-ico">▦</span><span>Timetable</span></a>
+<a href="{{ url_for('materials') }}"><span class="nav-ico">▤</span><span>Learning Materials</span></a>
+<a href="{{ url_for('reports_hub') }}"><span class="nav-ico">📊</span><span>Reports &amp; Analytics</span></a>
+{% endif %}
+{% endif %}
+
+{% if session.get('role') in ['admin','sub_admin'] %}
+<div class="nav-group">School Management</div>
+<a href="{{ url_for('admin_parents') }}"><span class="nav-ico">👥</span><span>Parents</span></a>
+<a href="{{ url_for('admin_parent_links') }}"><span class="nav-ico">✓</span><span>Parent Verification</span></a>
+<a href="{{ url_for('signup_codes') }}"><span class="nav-ico">🔑</span><span>Signup Codes</span></a>
+<a href="{{ url_for('admin_grading') }}"><span class="nav-ico">◫</span><span>Grading</span></a>
+<a href="{{ url_for('admin_terms') }}"><span class="nav-ico">◷</span><span>Sessions &amp; Terms</span></a>
+<a href="{{ url_for('admin_promote') }}"><span class="nav-ico">↗</span><span>Promote Students</span></a>
+{% endif %}
+
+<div class="nav-group">Intelligence</div>
+<a href="{{ url_for('ai_command_center') }}" class="nav-ai"><span class="nav-ico">✦</span><span>AI Assistant</span><em class="nav-dot-new" title="New"></em></a>
+{% if session.get('role') in ['admin','sub_admin','teacher'] %}
+<a href="{{ url_for('teacher_parent_messages') }}"><span class="nav-ico">💬</span><span>Parent Messages</span></a>
+{% endif %}
+<a href="{{ url_for('notifications_inbox') }}"><span class="nav-ico">🔔</span><span>Notifications</span>{% if unread_notifications %}<em class="notif-badge">{{ unread_notifications }}</em>{% endif %}</a>
+{% if session.get('role') in ['admin','sub_admin'] %}
+<a href="{{ url_for('school_announcements') }}"><span class="nav-ico">📢</span><span>Announcements</span></a>
+{% endif %}
+
+{% if session.get('role') in ['admin','sub_admin'] %}
+<div class="nav-group">Administration</div>
+<a href="{{ url_for('admin_theme') }}"><span class="nav-ico">🎨</span><span>Theme &amp; Branding</span></a>
+{% if session.get('role') == 'admin' %}
+<a href="{{ url_for('admin_custom_fields') }}"><span class="nav-ico">☰</span><span>Custom Fields</span></a>
+<a href="{{ url_for('admin_audit_history') }}"><span class="nav-ico">📜</span><span>Audit History</span></a>
+{% endif %}
+<a href="{{ url_for('admin_setup_wizard') }}"><span class="nav-ico">⚙</span><span>School Setup</span></a>
+<a href="{{ url_for('school_billing_portal') }}"><span class="nav-ico">◈</span><span>Billing</span></a>
+{% endif %}
+<a href="{{ url_for('settings_hub') }}"><span class="nav-ico">⚙</span><span>Settings</span></a>
 </nav><div class="sidebar-bottom"><div class="user-mini"><div class="avatar">{{ (session.get('name') or 'U')[0]|upper }}</div><div><b>{{ session.get('name') }}</b><small>{{ position_label or session.get('role') }}</small></div></div><a href="{{ url_for('logout') }}">↪ Logout</a></div></aside>
-<div class="app-main"><header class="topbar"><button class="sidebar-toggle" id="sidebarToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="appSidebar">☰</button><form class="top-search" role="search" action="{{ url_for('search_page') }}" method="GET" autocomplete="off"><input type="search" id="topSearchInput" name="q" placeholder="Search students, classes, or features..." aria-label="Search" maxlength="60" minlength="2"><div id="topSearchResults" class="top-search-results" hidden></div></form><div class="top-actions"><a href="{{ url_for('notifications_inbox') }}" aria-label="Notifications">🔔{% if unread_notifications %}<em class="notif-badge" style="background:#d32f2f;color:#fff;border-radius:999px;padding:0 .4rem;font-size:.7rem;font-style:normal;margin-left:.15rem">{{ unread_notifications }}</em>{% endif %}</a>{% if me_avatar %}<a class="top-avatar top-avatar-link" href="{{ me_avatar.profile_url }}" title="My Profile" aria-label="Open my profile">{% if me_avatar.photo_url %}<img src="{{ me_avatar.photo_url }}" alt="{{ me_avatar.name }}">{% else %}{{ me_avatar.initial }}{% endif %}</a>{% endif %}</div></header>
+<div class="app-main"><header class="topbar"><button class="sidebar-toggle desktop-sidebar-toggle" id="sidebarToggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="appSidebar">☰</button><form class="top-search" role="search" action="{{ url_for('search_page') }}" method="GET" autocomplete="off"><input type="search" id="topSearchInput" name="q" placeholder="Search students, classes, or features..." aria-label="Search" maxlength="60" minlength="2"><div id="topSearchResults" class="top-search-results" hidden></div></form><div class="top-actions"><a href="{{ url_for('notifications_inbox') }}" aria-label="Notifications">🔔{% if unread_notifications %}<em class="notif-badge" style="background:#d32f2f;color:#fff;border-radius:999px;padding:0 .4rem;font-size:.7rem;font-style:normal;margin-left:.15rem">{{ unread_notifications }}</em>{% endif %}</a>{% if me_avatar %}<a class="top-avatar top-avatar-link" href="{{ me_avatar.profile_url }}" title="My Profile" aria-label="Open my profile">{% if me_avatar.photo_url %}<img src="{{ me_avatar.photo_url }}" alt="{{ me_avatar.name }}">{% else %}{{ me_avatar.initial }}{% endif %}</a>{% endif %}</div></header>
 {% elif session.get('parent_id') %}<div class="parent-shell"><header class="parent-top"><div class="brand"><div class="brand-mark">{% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}">{% else %}◆{% endif %}</div><div><b>{{ school_name }}</b><small>Parent Portal</small></div></div><nav><a href="{{ url_for('parent_dashboard') }}">Dashboard</a><a href="{{ url_for('parent_children_page') }}">My Children</a><a href="{{ url_for('parent_link_child') }}">Link Child</a><a href="{{ url_for('parent_notifications') }}">Notifications{% if unread_notifications %} <em>{{ unread_notifications }}</em>{% endif %}</a><a href="{{ url_for('parent_logout') }}">Logout</a></nav></header>{% elif session.get('student_id') %}<div class="student-shell"><header class="student-top"><div class="brand"><div class="brand-mark">{% if school_logo_url %}<img src="{{ school_logo_url }}" alt="{{ school_name }}">{% else %}◆{% endif %}</div><div><b>My School Hub</b><small>{{ school_name }}</small></div></div><nav><a href="{{ url_for('student_dashboard') }}">Dashboard</a><a href="{{ url_for('student_dashboard') }}#results">Results</a><a href="{{ url_for('student_materials') }}">Learning Materials</a><a class="ai-nav" href="{{ url_for('student_ai_tutor') }}">AI Tutor</a><a href="{{ url_for('student_notifications') }}">Notifications</a>{% if me_avatar %}<a class="top-avatar top-avatar-link" href="{{ me_avatar.profile_url }}" title="My Profile" aria-label="Open my profile">{% if me_avatar.photo_url %}<img src="{{ me_avatar.photo_url }}" alt="{{ me_avatar.name }}">{% else %}{{ me_avatar.initial }}{% endif %}</a>{% endif %}<a href="{{ url_for('student_logout') }}">Logout</a></nav></header>{% elif session.get('platform_admin_id') %}{% set ep = request.endpoint or '' %}<div class="platform-shell"><header class="platform-top"><div class="brand"><div class="brand-mark">🏫</div><div><b>My School Hub</b><small>Super Admin</small></div></div><button type="button" class="platform-nav-toggle" aria-label="Show or hide the menu" aria-controls="platformNav" aria-expanded="true">✕ Close menu</button><nav id="platformNav" aria-label="Super Admin">
 <a href="{{ url_for('platform_dashboard') }}" class="{{ 'active' if ep == 'platform_dashboard' }}" {% if ep == 'platform_dashboard' %}aria-current="page"{% endif %}>🏠 Dashboard</a>
 <a href="{{ url_for('platform_schools') }}" class="{{ 'active' if ep in ('platform_schools','platform_control_center','platform_new_school','platform_school_verification','platform_school_provisioning') }}" {% if ep in ('platform_schools','platform_control_center','platform_new_school') %}aria-current="page"{% endif %}>🏫 Schools</a>
@@ -44,12 +104,12 @@
 {# ===== Mobile App Chrome (visible ≤768px) ===== #}
 {% if session.get('user_id') or session.get('student_id') or session.get('platform_admin_id') %}
 <header class="ms-mobile-topbar mobile-header no-print">
-  <button type="button" class="header-icon ms-back" onclick="document.getElementById('mshDrawer')&&document.getElementById('mshDrawer').classList.add('open')" aria-label="Open menu">☰</button>
+  <button type="button" class="header-icon sidebar-toggle" id="mobileSidebarToggle" aria-label="Open menu" aria-controls="appSidebar" aria-expanded="false">☰</button>
   <div class="ms-brand header-brand">
     {% if school_logo_url %}
     <img src="{{ school_logo_url }}" alt="" class="brand-logo school-crest">
     {% else %}
-    <span class="brand-logo school-crest" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#2563eb;border-radius:50%;width:36px;height:36px;font-size:1.1rem;">🎓</span>
+    <span class="brand-logo school-crest" style="display:flex;align-items:center;justify-content:center;background:#fff;color:#2563eb;border-radius:50%;width:36px;height:36px;">🎓</span>
     {% endif %}
     <div class="ms-brand-text">
       <strong>{{ school_name }}</strong>
@@ -60,53 +120,6 @@
     🔔{% if unread_notifications %}<em>{{ unread_notifications }}</em>{% endif %}
   </a>
 </header>
-{# Mobile drawer menu #}
-<div id="mshDrawer" class="msh-drawer-backdrop no-print" onclick="if(event.target===this)this.classList.remove('open')">
-  <aside class="msh-drawer" onclick="event.stopPropagation()">
-    <div class="drawer-top">
-      <div class="brand-logo" style="width:40px;height:40px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;">🎓</div>
-      <div><b>My School Hub</b><small>{{ school_name }}</small></div>
-      <button type="button" onclick="document.getElementById('mshDrawer').classList.remove('open')" aria-label="Close">✕</button>
-    </div>
-    <div class="drawer-profile">
-      <div class="profile-mini">{{ (session.get('name') or 'U')[0]|upper }}</div>
-      <div><b>{{ session.get('name') or 'User' }}</b><small>{{ position_label or session.get('role') }}</small></div>
-    </div>
-    <div class="drawer-links">
-      <a href="{{ url_for('dashboard') }}">🏠 Dashboard</a>
-      {% if session.get('role') in ['admin','sub_admin'] %}
-      <a href="{{ url_for('admin_class_subjects') }}">📘 Assign Subject</a>
-      <a href="{{ url_for('classes_list') }}">📄 Results</a>
-      <a href="{{ url_for('classes_list') }}">📊 Broadsheet</a>
-      <a href="{{ url_for('admin_terms') }}">📅 Session &amp; Terms</a>
-      <a href="{{ url_for('registrar_dashboard') }}">👤 Register Student</a>
-      <a href="{{ url_for('staff_attendance') }}">✓ Staff Attendance</a>
-      <a href="{{ url_for('admin_theme') }}">🎨 Themes &amp; Branding</a>
-      <a href="{{ url_for('materials') }}">📚 Learning Materials</a>
-      <a href="{{ url_for('timetable_hub') }}">🗓️ Timetable</a>
-      <a href="{{ url_for('result_workflow') }}">✔ Result Approval</a>
-      <a href="{{ url_for('school_billing_portal') }}">💳 Billings</a>
-      <a href="{{ url_for('admin_promote') }}">⬆️ Promote Students</a>
-      {% endif %}
-      <a href="{{ url_for('settings_hub') }}">⚙️ Settings</a>
-      <a href="{{ url_for('logout') }}" style="color:#fca5a5;">Logout</a>
-    </div>
-  </aside>
-</div>
-<style>
-.msh-drawer-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2000;}
-.msh-drawer-backdrop.open{display:block;}
-.msh-drawer{position:absolute;left:0;top:0;bottom:0;width:min(86vw,320px);background:#0b1f3a;color:#fff;padding:1rem;overflow-y:auto;box-shadow:8px 0 30px rgba(0,0,0,.25);}
-.drawer-top{display:flex;align-items:center;gap:.65rem;margin-bottom:1rem;}
-.drawer-top b{display:block;font-size:.95rem;}
-.drawer-top small{display:block;opacity:.75;font-size:.75rem;}
-.drawer-top button{margin-left:auto;background:transparent;border:0;color:#fff;font-size:1.2rem;cursor:pointer;}
-.drawer-profile{display:flex;gap:.65rem;align-items:center;padding:.75rem;background:rgba(255,255,255,.08);border-radius:12px;margin-bottom:1rem;}
-.profile-mini{width:40px;height:40px;border-radius:50%;background:#2563eb;display:flex;align-items:center;justify-content:center;font-weight:700;}
-.drawer-links a{display:block;padding:.7rem .5rem;color:#cbd5e1;text-decoration:none;border-radius:8px;font-size:.9rem;font-weight:550;}
-.drawer-links a:hover{background:rgba(255,255,255,.08);color:#fff;}
-@media(min-width:769px){.msh-drawer-backdrop,.ms-mobile-topbar{display:none!important;}}
-</style>
 {% endif %}
 {% block content %}{% endblock %}</main>
 {% if session.get('user_id') %}</div></div>{% elif session.get('parent_id') %}</div>{% elif session.get('student_id') %}</div>{% elif session.get('platform_admin_id') %}</div>{% endif %}
@@ -203,6 +216,40 @@
       }
     } catch(e) {}
   });
+})();
+</script>
+
+<script>
+(function(){
+  var sidebar = document.getElementById('appSidebar');
+  var backdrop = document.getElementById('sidebarBackdrop');
+  function openNav(){
+    if(!sidebar) return;
+    sidebar.classList.add('mobile-open');
+    if(backdrop){ backdrop.classList.add('show'); backdrop.setAttribute('aria-hidden','false'); }
+    document.querySelectorAll('.sidebar-toggle').forEach(function(btn){ btn.setAttribute('aria-expanded','true'); });
+  }
+  function closeNav(){
+    if(!sidebar) return;
+    sidebar.classList.remove('mobile-open');
+    if(backdrop){ backdrop.classList.remove('show'); backdrop.setAttribute('aria-hidden','true'); }
+    document.querySelectorAll('.sidebar-toggle').forEach(function(btn){ btn.setAttribute('aria-expanded','false'); });
+  }
+  document.querySelectorAll('.sidebar-toggle, #mobileSidebarToggle, #sidebarToggle').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      if(sidebar && sidebar.classList.contains('mobile-open')) closeNav(); else openNav();
+    });
+  });
+  if(backdrop) backdrop.addEventListener('click', closeNav);
+  // Close after nav click on mobile
+  if(sidebar){
+    sidebar.querySelectorAll('nav a').forEach(function(a){
+      a.addEventListener('click', function(){
+        if(window.matchMedia('(max-width: 768px)').matches) closeNav();
+      });
+    });
+  }
 })();
 </script>
 {% block extra_scripts %}{% endblock %}
