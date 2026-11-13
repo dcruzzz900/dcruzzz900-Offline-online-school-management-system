@@ -1,0 +1,171 @@
+{# Desktop dashboard layout ported from my-school-hub-desktop source
+   Uses live Flask context – not demo data.
+#}
+{% set boys = gender_stats.boys|default(0) if gender_stats is defined else 0 %}
+{% set girls = gender_stats.girls|default(0) if gender_stats is defined else 0 %}
+{% set total_g = boys + girls %}
+{% set male_pct = ((boys / total_g * 100)|round(1) if total_g else 0) %}
+{% set female_pct = ((girls / total_g * 100)|round(1) if total_g else 0) %}
+{% set compiled = stats.results_compiled|default(stats.results_published|default(0)) %}
+{% set total_students = stats.students|default(0) %}
+{% set progress_pct = ((compiled / total_students * 100)|round(0)|int if total_students else 0) %}
+
+<div class="msh-desktop-dashboard d-none d-md-block">
+  <div class="dashboard-hero">
+    <div class="hero-welcome">
+      <div class="hero-school-icon"><i class="bi bi-house-heart-fill"></i></div>
+      <div>
+        <h2>Welcome, {{ session.get('name') or 'Admin' }}!</h2>
+        <p>Here is an overview of your school system.</p>
+      </div>
+    </div>
+    <div class="hero-date">
+      <div><i class="bi bi-calendar3"></i><span>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}No active term{% endif %}</span></div>
+      <div><i class="bi bi-clock"></i><span id="mshDesktopClock" data-tz="Africa/Lagos"></span></div>
+    </div>
+  </div>
+
+  <div class="dashboard-stats">
+    <article class="dashboard-stat blue">
+      <div class="stat-main"><i class="bi bi-people-fill"></i><div><span>Students</span><strong>{{ "{:,}".format(stats.students|default(0)) }}</strong></div></div>
+      <div class="stat-detail">{% if gender_stats %}♂ {{ boys }} · ♀ {{ girls }}{% else %}Enrolled learners{% endif %}</div>
+      <a href="{{ url_for('admin_students') }}" class="stat-link">View Students <i class="bi bi-arrow-right"></i></a>
+    </article>
+    <article class="dashboard-stat green">
+      <div class="stat-main"><i class="bi bi-person-gear"></i><div><span>Staff</span><strong>{{ "{:,}".format(stats.teachers|default(0)) }}</strong></div></div>
+      <div class="stat-detail">Teachers &amp; administrators</div>
+      <a href="{{ url_for('admin_teachers') }}" class="stat-link">View Staff <i class="bi bi-arrow-right"></i></a>
+    </article>
+    <article class="dashboard-stat purple">
+      <div class="stat-main"><i class="bi bi-easel2-fill"></i><div><span>Classes</span><strong>{{ "{:,}".format(stats.classes|default(0)) }}</strong></div></div>
+      <div class="stat-detail">Active classes / arms</div>
+      <a href="{{ url_for('admin_classes') }}" class="stat-link">View Classes <i class="bi bi-arrow-right"></i></a>
+    </article>
+    <article class="dashboard-stat cyan">
+      <div class="stat-main"><i class="bi bi-book-half"></i><div><span>Subjects</span><strong>{{ "{:,}".format(stats.subjects|default(0)) }}</strong></div></div>
+      <div class="stat-detail">Subjects on the curriculum</div>
+      <a href="{{ url_for('admin_subjects') }}" class="stat-link">View Subjects <i class="bi bi-arrow-right"></i></a>
+    </article>
+    <article class="dashboard-stat orange">
+      <div class="stat-main"><i class="bi bi-people-fill"></i><div><span>Parents</span><strong>{{ "{:,}".format(stats.parents|default(0)) }}</strong></div></div>
+      <div class="stat-detail">Linked parent accounts</div>
+      <a href="{{ url_for('admin_parents') }}" class="stat-link">View Parents <i class="bi bi-arrow-right"></i></a>
+    </article>
+    <article class="dashboard-stat lime">
+      <div class="stat-main"><i class="bi bi-cash-coin"></i><div><span>School Fees</span><strong>₦{{ "{:,}".format(stats.fees_expected|default(stats.fees|default(0))) }}</strong></div></div>
+      <div class="stat-detail">{% if stats.fees_collected is defined %}Collected: ₦{{ "{:,}".format(stats.fees_collected) }}{% else %}Fee overview{% endif %}</div>
+      <a href="{{ url_for('school_billing_portal') }}" class="stat-link">View Billing <i class="bi bi-arrow-right"></i></a>
+    </article>
+  </div>
+
+  <div class="dashboard-analytics">
+    <section class="dashboard-panel gender-panel">
+      <header><i class="bi bi-bar-chart-fill"></i> Gender Distribution (Students)</header>
+      <div class="gender-content">
+        <div class="gender-donut" style="background:conic-gradient(#2563eb 0% {{ male_pct }}%, #ec4899 {{ male_pct }}% 100%);">
+          <div><strong>{{ male_pct }}%</strong><span>Male</span></div>
+        </div>
+        <div class="gender-legend">
+          <div><i class="legend-dot male"></i><span>Male<strong>{{ boys }} ({{ male_pct }}%)</strong></span></div>
+          <div><i class="legend-dot female"></i><span>Female<strong>{{ girls }} ({{ female_pct }}%)</strong></span></div>
+        </div>
+      </div>
+    </section>
+    <section class="dashboard-panel compilation-panel">
+      <header><i class="bi bi-graph-up-arrow"></i> Result Compilation Progress</header>
+      <div class="compilation-content">
+        <div class="progress-donut" style="background:conic-gradient(#16a34a 0% {{ progress_pct }}%, #e2e8f0 {{ progress_pct }}% 100%);"><strong>{{ progress_pct }}%</strong></div>
+        <div class="compilation-copy">
+          <strong>{{ compiled }} of {{ total_students }}</strong>
+          <b>results compiled</b>
+          <div class="progress"><div class="progress-bar bg-success" style="width:{{ progress_pct }}%"></div></div>
+          <small>{% if progress_pct >= 100 %}All results compiled{% else %}On track to complete soon…{% endif %}</small>
+        </div>
+      </div>
+    </section>
+    <section class="dashboard-panel trend-panel">
+      <header><i class="bi bi-graph-up-arrow"></i> School Snapshot</header>
+      <div class="trend-chart" style="padding:1rem;">
+        <div class="mini-kpi" style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+          <div style="background:#f0f9ff;border-radius:12px;padding:0.85rem;"><span style="font-size:0.75rem;color:#64748b;">Pending promotions</span><strong style="display:block;font-size:1.3rem;">{{ pending_promotions|default(0) }}</strong></div>
+          <div style="background:#f0fdf4;border-radius:12px;padding:0.85rem;"><span style="font-size:0.75rem;color:#64748b;">Unread alerts</span><strong style="display:block;font-size:1.3rem;">{{ unread_notifications|default(0) }}</strong></div>
+          <div style="background:#fefce8;border-radius:12px;padding:0.85rem;"><span style="font-size:0.75rem;color:#64748b;">Classes</span><strong style="display:block;font-size:1.3rem;">{{ stats.classes|default(0) }}</strong></div>
+          <div style="background:#fdf2f8;border-radius:12px;padding:0.85rem;"><span style="font-size:0.75rem;color:#64748b;">Subjects</span><strong style="display:block;font-size:1.3rem;">{{ stats.subjects|default(0) }}</strong></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="dashboard-lower">
+    <section class="dashboard-panel quick-panel">
+      <header><i class="bi bi-lightning-charge-fill"></i> Quick Access</header>
+      <div class="dashboard-quick-grid">
+        <a class="dashboard-quick-item quick-blue" href="{{ url_for('staff_profile', user_id=session['user_id']) if session.get('user_id') else url_for('settings_hub') }}"><i class="bi bi-person-fill"></i><span>My Profile</span></a>
+        <a class="dashboard-quick-item quick-purple" href="{{ url_for('admin_class_subjects') }}"><i class="bi bi-journal-bookmark-fill"></i><span>Assign Subject</span></a>
+        <a class="dashboard-quick-item quick-green" href="{{ url_for('classes_list') }}"><i class="bi bi-ui-checks-grid"></i><span>Result</span></a>
+        <a class="dashboard-quick-item quick-orange" href="{{ url_for('classes_list') }}"><i class="bi bi-file-earmark-text-fill"></i><span>Broadsheet</span></a>
+        <a class="dashboard-quick-item quick-sky" href="{{ url_for('reports_hub') }}"><i class="bi bi-bar-chart-line-fill"></i><span>Score History</span></a>
+        <a class="dashboard-quick-item quick-green" href="{{ url_for('admin_terms') }}"><i class="bi bi-calendar2-week-fill"></i><span>Session &amp; Terms</span></a>
+        <a class="dashboard-quick-item quick-purple" href="{{ url_for('registrar_dashboard') }}"><i class="bi bi-person-plus-fill"></i><span>Register Student</span></a>
+        <a class="dashboard-quick-item quick-green" href="{{ url_for('admin_promote') }}"><i class="bi bi-people-fill"></i><span>Promote Students</span></a>
+        <a class="dashboard-quick-item quick-orange" href="{{ url_for('staff_attendance') }}"><i class="bi bi-person-check-fill"></i><span>Staff Attendance</span></a>
+        <a class="dashboard-quick-item quick-sky" href="{{ url_for('timetable_hub') }}"><i class="bi bi-calendar3"></i><span>Timetable</span></a>
+        <a class="dashboard-quick-item quick-blue" href="{{ url_for('result_workflow') }}"><i class="bi bi-clipboard2-check-fill"></i><span>Result Approval</span></a>
+        <a class="dashboard-quick-item quick-purple" href="{{ url_for('school_billing_portal') }}"><i class="bi bi-receipt-cutoff"></i><span>Billings</span></a>
+      </div>
+    </section>
+
+    <section class="dashboard-panel">
+      <header><i class="bi bi-lightning-charge-fill"></i> Recent Activities</header>
+      <div style="padding:0.75rem 1rem;">
+        {% if recent_activities is defined and recent_activities %}
+          {% for act in recent_activities[:8] %}
+          <div class="activity-row">
+            <i class="bi bi-check-circle-fill"></i>
+            <div><b>{{ act.title or act.description or act }}</b><small>{{ act.meta or act.ts or act.time or '' }}</small></div>
+          </div>
+          {% endfor %}
+        {% elif activities is defined and activities %}
+          {% for act in activities[:8] %}
+          <div class="activity-row">
+            <i class="bi bi-check-circle-fill"></i>
+            <div><b>{{ act.description or act.title or act }}</b><small>{{ act.ts or act.time or '' }}</small></div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="activity-row"><i class="bi bi-info-circle-fill"></i><div><b>No recent activity</b><small>Activity will appear here as staff work</small></div></div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="dashboard-panel">
+      <header><i class="bi bi-megaphone-fill"></i> Announcement</header>
+      <div style="padding:0.85rem 1rem;">
+        {% if announcements is defined and announcements %}
+          {% set ann = announcements[0] %}
+          <div class="announcement-card">
+            <b>{{ ann.title }}</b>
+            <p>{{ ann.body or ann.message or '' }}</p>
+            <small>{{ ann.date or '' }}</small>
+          </div>
+        {% else %}
+          <div class="announcement-card">
+            <b>Welcome to My School Hub</b>
+            <p>Manage students, results, attendance and billing from this dashboard.</p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+(function(){
+  var el = document.getElementById('mshDesktopClock');
+  if(!el) return;
+  function tick(){
+    try { el.textContent = new Intl.DateTimeFormat('en-NG',{hour:'2-digit',minute:'2-digit'}).format(new Date()); }
+    catch(e){}
+  }
+  tick(); setInterval(tick, 30000);
+})();
+</script>

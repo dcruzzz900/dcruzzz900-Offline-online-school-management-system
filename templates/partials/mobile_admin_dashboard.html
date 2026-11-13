@@ -1,0 +1,206 @@
+{# Mobile dashboard layout ported from my-school-hub-mobile React source
+   Uses real Flask context variables – not demo data.
+#}
+<div class="msh-app msh-mobile-dashboard d-md-none">
+  <section class="hero-banner">
+    <div class="hero-icon"><i class="bi bi-house-heart"></i></div>
+    <div>
+      <h2>Welcome, {{ session.get('name') or 'Admin' }}!</h2>
+      <p>Here is an overview of your<br class="hero-mobile-break"> school system.</p>
+    </div>
+    <div class="hero-campus"><i class="bi bi-buildings-fill"></i></div>
+  </section>
+
+  <div class="date-strip">
+    <span><i class="bi bi-calendar3"></i>
+      <span data-live-date>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}No active term{% endif %}</span>
+    </span>
+    <span><i class="bi bi-clock"></i>
+      <span id="mshLiveClock" data-tz="Africa/Lagos" data-now="{{ now_ts|default(0) }}"></span>
+    </span>
+  </div>
+
+  <div class="stats-grid dashboard-stats">
+    <a class="stat blue" href="{{ url_for('admin_students') }}">
+      <span class="stat-main">
+        <i class="bi bi-people-fill"></i>
+        <span><small>Students</small><b>{{ "{:,}".format(stats.students|default(0)) }}</b></span>
+      </span>
+      <span class="stat-link">View Students <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="stat green" href="{{ url_for('admin_teachers') }}">
+      <span class="stat-main">
+        <i class="bi bi-person-gear"></i>
+        <span><small>Staff</small><b>{{ "{:,}".format(stats.teachers|default(0)) }}</b></span>
+      </span>
+      <span class="stat-link">View Staff <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="stat purple" href="{{ url_for('admin_classes') }}">
+      <span class="stat-main">
+        <i class="bi bi-easel2-fill"></i>
+        <span><small>Classes</small><b>{{ "{:,}".format(stats.classes|default(0)) }}</b></span>
+      </span>
+      <span class="stat-link">View Classes <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="stat cyan" href="{{ url_for('admin_subjects') }}">
+      <span class="stat-main">
+        <i class="bi bi-book-half"></i>
+        <span><small>Subjects</small><b>{{ "{:,}".format(stats.subjects|default(0)) }}</b></span>
+      </span>
+      <span class="stat-link">View Subjects <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="stat orange" href="{{ url_for('admin_parents') }}">
+      <span class="stat-main">
+        <i class="bi bi-people-fill"></i>
+        <span><small>Parents</small><b>{{ "{:,}".format(stats.parents|default(0)) }}</b></span>
+      </span>
+      <span class="stat-link">View Parents <i class="bi bi-arrow-right"></i></span>
+    </a>
+    <a class="stat lime" href="{{ url_for('school_billing_portal') }}">
+      <span class="stat-main">
+        <i class="bi bi-cash-coin"></i>
+        <span>
+          <small>School Fees</small>
+          <b>₦{{ "{:,}".format(stats.fees_expected|default(stats.fees|default(0))) }}</b>
+          {% if stats.fees_collected is defined %}
+          <small class="fee-sub">Collected: ₦{{ "{:,}".format(stats.fees_collected) }}</small>
+          {% endif %}
+        </span>
+      </span>
+      <span class="stat-link">View Billing <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+
+  {% set boys = gender_stats.boys|default(0) if gender_stats is defined else 0 %}
+  {% set girls = gender_stats.girls|default(0) if gender_stats is defined else 0 %}
+  {% set total_g = boys + girls %}
+  {% set male_pct = ((boys / total_g * 100)|round(1) if total_g else 0) %}
+  {% set female_pct = ((girls / total_g * 100)|round(1) if total_g else 0) %}
+  {% set compiled = stats.results_compiled|default(stats.results_published|default(0)) %}
+  {% set total_students = stats.students|default(0) %}
+  {% set progress_pct = ((compiled / total_students * 100)|round(0)|int if total_students else 0) %}
+
+  <div class="dashboard-insights">
+    <section class="panel">
+      <div class="panel-head"><b><i class="bi bi-bar-chart-fill panel-title-icon"></i> Gender Distribution</b></div>
+      <div class="panel-body">
+        <div class="gender-layout">
+          <div class="donut gender-donut" style="background: conic-gradient(#2563eb 0% {{ male_pct }}%, #ec4899 {{ male_pct }}% 100%);">
+            <div><b>{{ male_pct }}%</b><small>Male</small></div>
+          </div>
+          <div class="legend">
+            <span><i class="legend-dot male"></i><b>Male</b><small>{{ boys }} ({{ male_pct }}%)</small></span>
+            <span><i class="legend-dot female"></i><b>Female</b><small>{{ girls }} ({{ female_pct }}%)</small></span>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><b><i class="bi bi-graph-up-arrow panel-title-icon"></i> Result Compilation</b></div>
+      <div class="panel-body">
+        <div class="result-layout">
+          <div class="donut result-donut" style="background: conic-gradient(#16a34a 0% {{ progress_pct }}%, #e2e8f0 {{ progress_pct }}% 100%);">
+            <div><b>{{ progress_pct }}%</b></div>
+          </div>
+          <div class="result-copy">
+            <b>{{ compiled }} of {{ total_students }}</b>
+            <strong>results compiled</strong>
+            <div class="progress"><div class="progress-bar" style="width:{{ progress_pct }}%"></div></div>
+            <small>{% if progress_pct >= 100 %}All results compiled{% else %}On track to complete soon…{% endif %}</small>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <b><i class="bi bi-lightning-charge-fill panel-title-icon"></i> Quick Access</b>
+      <a class="view-all" href="{{ url_for('settings_hub') }}">View All <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="panel-body">
+      <div class="quick-grid dashboard-quick">
+        <a class="quick q-blue" href="{{ url_for('staff_profile', user_id=session['user_id']) if session.get('user_id') else url_for('settings_hub') }}"><i class="bi bi-person-fill"></i><span>My Profile</span></a>
+        <a class="quick q-green" href="{{ url_for('admin_promote') }}"><i class="bi bi-person-up"></i><span>Promote Students</span></a>
+        <a class="quick q-purple" href="{{ url_for('ai_command_center') }}"><i class="bi bi-laptop"></i><span>CBT</span></a>
+        <a class="quick q-pink" href="{{ url_for('admin_class_subjects') }}"><i class="bi bi-book-half"></i><span>Assign Subject</span></a>
+        <a class="quick q-green" href="{{ url_for('classes_list') }}"><i class="bi bi-journal-check"></i><span>Result</span></a>
+        <a class="quick q-orange" href="{{ url_for('classes_list') }}"><i class="bi bi-file-earmark-text"></i><span>Broadsheet</span></a>
+        <a class="quick q-blue" href="{{ url_for('reports_hub') }}"><i class="bi bi-graph-up-arrow"></i><span>Score History</span></a>
+        <a class="quick q-green" href="{{ url_for('admin_terms') }}"><i class="bi bi-calendar2-week"></i><span>Session &amp; Terms</span></a>
+      </div>
+    </div>
+  </section>
+
+  <div class="dashboard-lower">
+    <section class="panel">
+      <div class="panel-head">
+        <b><i class="bi bi-lightning-charge-fill panel-title-icon"></i> Recent Activities</b>
+      </div>
+      <div class="panel-body">
+        {% if recent_activities is defined and recent_activities %}
+          {% for act in recent_activities[:6] %}
+          <div class="activity-row">
+            <i class="bi bi-check-circle-fill"></i>
+            <div>
+              <b>{{ act.title or act.description or act }}</b>
+              <small>{{ act.meta or act.ts or act.time or '' }}</small>
+            </div>
+          </div>
+          {% endfor %}
+        {% elif activities is defined and activities %}
+          {% for act in activities[:6] %}
+          <div class="activity-row">
+            <i class="bi bi-check-circle-fill"></i>
+            <div>
+              <b>{{ act.description or act.title or act }}</b>
+              <small>{{ act.ts or act.time or '' }}</small>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="activity-row"><i class="bi bi-info-circle-fill"></i><div><b>No recent activity</b><small>Activity will appear here</small></div></div>
+        {% endif %}
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><b><i class="bi bi-megaphone-fill panel-title-icon"></i> Announcement</b></div>
+      <div class="panel-body">
+        {% if announcements is defined and announcements %}
+          {% set ann = announcements[0] %}
+          <div class="announcement">
+            <b>{{ ann.title }}</b>
+            <p>{{ ann.body or ann.message or '' }}</p>
+            <small>{{ ann.date or '' }}</small>
+          </div>
+        {% else %}
+          <div class="announcement">
+            <b>Welcome to My School Hub</b>
+            <p>Manage students, results, attendance and more from this dashboard.</p>
+          </div>
+        {% endif %}
+        <div class="tip-box">
+          <i class="bi bi-lightbulb-fill"></i>
+          <span>Tip: Use Timetable and Result Approval from Quick Access for day-to-day work.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="dashboard-footer">
+    <span>{{ school_name }}</span>
+    <span>{% if term %}{{ term.session_name }} · {{ term.name }}{% endif %}</span>
+  </div>
+</div>
+<script>
+(function(){
+  var el = document.getElementById('mshLiveClock');
+  if(!el) return;
+  function tick(){
+    try {
+      el.textContent = new Intl.DateTimeFormat('en-NG',{hour:'2-digit',minute:'2-digit'}).format(new Date());
+    } catch(e) {}
+  }
+  tick(); setInterval(tick, 30000);
+})();
+</script>
