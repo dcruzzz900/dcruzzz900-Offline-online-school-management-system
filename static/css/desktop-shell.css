@@ -344,3 +344,9 @@
   background: #2563eb !important;
   color: #fff !important;
 }
+
+/* msh-desktop bridge */
+@media (min-width: 769px) {
+  body { background: #f3f7ff; }
+  .app-sidebar .nav-group { color: #8ba3c7; }
+}
