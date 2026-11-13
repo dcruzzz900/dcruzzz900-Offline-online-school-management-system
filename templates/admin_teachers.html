@@ -1,74 +1,142 @@
 {% extends "base.html" %}
-{% block title %}Teachers{% endblock %}
-{% block content %}
-<h1>Teachers</h1>
+{% block title %}Staff · {{ school_name }}{% endblock %}
 
-<div class="card">
-    <h3>Add a Teacher</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Full Name</label>
-        <input type="text" name="name" required>
-        <label>Staff / Employee ID <span class="req">*</span></label>
-        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014">
-        <label>Username</label>
-        <input type="text" name="username" required>
-        <label>Email (optional)</label>
-        <input type="email" name="email">
-        <label>Phone Number (optional)</label>
-        <input type="text" name="phone">
-        <label>Password</label>
-        <input type="password" name="password" required minlength="6">
-        <label>RBAC Role</label><select name="rbac_role" required>{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
-        <button class="btn" type="submit">Add Teacher</button>
-    </form>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ms-page-header">
+  <div>
+    <h1>Staff Management</h1>
+    <p class="subtitle">{{ teachers|length if teachers else 0 }} staff member{{ 's' if (teachers|length != 1) else '' }} · Teachers, admins and roles</p>
+  </div>
+  <div class="ms-page-actions">
+    <button type="button" class="ms-btn ms-btn-primary" onclick="document.getElementById('addStaffCard').scrollIntoView({behavior:'smooth'})">+ Add Staff</button>
+  </div>
 </div>
 
-<div class="card">
-    <h3>All Teachers</h3>
-    <table><caption>Staff List</caption>
-        <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr>
+<div class="ms-card" style="padding:1rem 1.25rem;">
+  <form method="GET" class="ms-toolbar">
+    <div class="ms-search">
+      <input type="search" name="q" value="{{ request.args.get('q','') }}" placeholder="Search staff by name or staff ID…">
+    </div>
+    <button type="submit" class="ms-btn ms-btn-secondary ms-btn-sm">Search</button>
+  </form>
+</div>
+
+<div class="ms-card">
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
+        <tr>
+          <th>S/N</th>
+          <th>Name</th>
+          <th>Role</th>
+          <th>Phone</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for t in teachers %}
         <tr>
-            <td>{{ t|staff_name }}<br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
-            <td>{{ t.username }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
-                      style="display:flex; gap:0.3rem; flex-wrap:wrap; align-items:center;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;">
-                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;">
-                    <button class="btn btn-small" type="submit">Save</button>
-                </form>
-            </td>
-            <td>
-                <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
-                </form>
-            </td>
-            <td>
-                {% if t.is_active %}<span style="color:#1a7f37;">Active</span>{% else %}<span style="color:#b3261e;">Deactivated</span>{% endif %}
-            </td>
-            <td style="white-space:nowrap;">
-                <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
-                      {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and unable to sign in until you reactivate them.');"{% endif %}>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
-                </form>
-                <form method="POST" action="{{ url_for('admin_reset_teacher_password', teacher_id=t.id) }}" class="inline"
-                      onsubmit="return confirm('Reset the password for {{ t.name }}? A new temporary password will be shown here once.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">Reset Password</button>
-                </form>
-                <form method="POST" action="{{ url_for('delete_teacher', teacher_id=t.id) }}" class="inline"
-                      onsubmit="return confirm('Remove {{ t.name }}? Any classes/subjects they teach will become unassigned.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
-                </form>
-            </td>
+          <td>{{ loop.index }}</td>
+          <td>
+            <div class="ms-user-cell">
+              <span class="ms-avatar" aria-hidden="true">{{ (t.name or '?')[0]|upper }}</span>
+              <div>
+                <p class="name">{{ t|staff_name if t|staff_name is defined else t.name }}</p>
+                <p class="meta">{{ t.username }}{% if t.staff_id %} · {{ t.staff_id }}{% endif %}</p>
+              </div>
+            </div>
+          </td>
+          <td>{{ t.rbac_role or 'Teacher' }}</td>
+          <td>{{ t.phone or '—' }}</td>
+          <td>
+            {% if t.is_active %}
+              <span class="ms-badge ms-badge-success">● Active</span>
+            {% else %}
+              <span class="ms-badge ms-badge-danger">● Deactivated</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="actions">
+              <a class="ms-btn ms-btn-ghost ms-btn-sm" href="{{ url_for('staff_profile', user_id=t.id) }}">View</a>
+              <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
+                    {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}?');"{% endif %}>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="ms-btn ms-btn-ghost ms-btn-sm" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">
+            <div class="ms-empty"><div class="icon">🧑‍🏫</div><p>No staff members yet.</p></div>
+          </td>
         </tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
+
+  <div class="ms-mobile-list">
+    {% for t in teachers %}
+    <a class="ms-mobile-item" href="{{ url_for('staff_profile', user_id=t.id) }}">
+      <span class="ms-avatar" aria-hidden="true">{{ (t.name or '?')[0]|upper }}</span>
+      <div class="info">
+        <p class="name">{{ t.name }}</p>
+        <p class="meta">{{ t.rbac_role or 'Teacher' }} · {% if t.is_active %}<span style="color:#059669">Active</span>{% else %}Deactivated{% endif %}</p>
+      </div>
+      <span class="chevron">›</span>
+    </a>
+    {% else %}
+    <div class="ms-empty"><div class="icon">🧑‍🏫</div><p>No staff yet.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="ms-card" id="addStaffCard">
+  <h3 class="ms-card-title">➕ Add Staff Member</h3>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-grid">
+      <div class="ms-form-group">
+        <label>Full Name <span class="ms-req">*</span></label>
+        <input type="text" name="name" required>
+      </div>
+      <div class="ms-form-group">
+        <label>Staff / Employee ID <span class="ms-req">*</span></label>
+        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014">
+      </div>
+      <div class="ms-form-group">
+        <label>Username <span class="ms-req">*</span></label>
+        <input type="text" name="username" required>
+      </div>
+      <div class="ms-form-group">
+        <label>Email</label>
+        <input type="email" name="email">
+      </div>
+      <div class="ms-form-group">
+        <label>Phone Number</label>
+        <input type="text" name="phone">
+      </div>
+      <div class="ms-form-group">
+        <label>Password <span class="ms-req">*</span></label>
+        <input type="password" name="password" required minlength="6">
+      </div>
+      <div class="ms-form-group">
+        <label>Role <span class="ms-req">*</span></label>
+        <select name="rbac_role" required>
+          {% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:1.25rem;">
+      <button class="ms-btn ms-btn-primary" type="submit">Add Staff</button>
+    </div>
+  </form>
 </div>
 {% endblock %}

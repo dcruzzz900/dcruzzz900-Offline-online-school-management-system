@@ -1,58 +1,82 @@
 {% extends "base.html" %}
-{% block title %}Assign Subjects{% endblock %}
-{% block content %}
-<h1>Assign Subjects to Classes</h1>
+{% block title %}Assign Subjects · {{ school_name }}{% endblock %}
 
-<div class="card">
-    <h3>New Assignment</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Class</label>
-        <select name="class_id" required>
-            {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-        </select>
-        <label>Subject</label>
-        <select name="subject_id" required>
-            {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-        </select>
-        <label>Teacher</label>
-        <select name="teacher_id">
-            <option value="">-- unassigned --</option>
-            {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
-        </select>
-        <button class="btn" type="submit">Assign</button>
-    </form>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ms-page-header">
+  <div>
+    <h1>Assign Subjects</h1>
+    <p class="subtitle">Link subjects to classes and assign teachers</p>
+  </div>
 </div>
 
-<div class="card">
-    <h3>Current Assignments</h3>
-    <table><caption>Subject Assignments</caption>
+<div class="ms-card" style="max-width:520px;">
+  <h3 class="ms-card-title">New Assignment</h3>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-group">
+      <label>Class <span class="ms-req">*</span></label>
+      <select name="class_id" required>
+        {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ms-form-group">
+      <label>Subject <span class="ms-req">*</span></label>
+      <select name="subject_id" required>
+        {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ms-form-group">
+      <label>Teacher</label>
+      <select name="teacher_id">
+        <option value="">— unassigned —</option>
+        {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.85rem;">Assign</button>
+  </form>
+</div>
+
+<div class="ms-card">
+  <h3 class="ms-card-title">Current Assignments</h3>
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
         <tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Change Teacher</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
         {% for a in assignments %}
         <tr>
-            <td>{{ a.class_name }}</td>
-            <td>{{ a.subject_name }}</td>
-            <td>{{ a.teacher_name or '—' }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()">
-                        <option value="">-- unassigned --</option>
-                        {% for t in teachers %}
-                        <option value="{{ t.id }}" {% if t.id == a.teacher_id %}selected{% endif %}>{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td>
-                <form method="POST" action="{{ url_for('delete_class_subject', cs_id=a.id) }}"
-                      onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
-                </form>
-            </td>
+          <td>{{ a.class_name }}</td>
+          <td><strong>{{ a.subject_name }}</strong></td>
+          <td>{{ a.teacher_name or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="teacher_id" style="padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;" onchange="this.form.submit()">
+                <option value="">— unassigned —</option>
+                {% for t in teachers %}
+                <option value="{{ t.id }}" {% if t.id == a.teacher_id %}selected{% endif %}>{{ t.name }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('delete_class_subject', cs_id=a.id) }}"
+                  onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Remove</button>
+            </form>
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="ms-empty"><div class="icon">🔗</div><p>No assignments yet.</p></div></td></tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

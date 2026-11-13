@@ -1,64 +1,101 @@
 {% extends "base.html" %}
-{% block title %}Classes{% endblock %}
-{% block content %}
-<h1>Classes</h1>
+{% block title %}Classes · {{ school_name }}{% endblock %}
 
-<div class="card">
-    <h3>Add a Class</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Class name (e.g. JSS1A, SS1 Science A) — or just the level, e.g. JSS 1, if you fill in arms below</label>
-        <input type="text" name="name" required>
-        <label>Arms (optional) — e.g. <i>A, B, C</i> creates JSS 1 A, JSS 1 B and JSS 1 C in one go</label>
-        <input type="text" name="arms" placeholder="A, B, C">
-        <label>Category (optional — for SS Science/Arts/Commercial arms)</label>
-        <select name="category">
-            <option value="">-- none --</option>
-            {% for cat in categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
-        </select>
-        <button class="btn" type="submit">Add Class</button>
-    </form>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ms-page-header">
+  <div>
+    <h1>Classes</h1>
+    <p class="subtitle">Create classes/arms and assign form teachers</p>
+  </div>
+  <div class="ms-page-actions">
+    <button type="button" class="ms-btn ms-btn-primary" onclick="document.getElementById('addClass').scrollIntoView({behavior:'smooth'})">+ Add Class</button>
+  </div>
 </div>
 
-<div class="card">
-    <h3>All Classes</h3>
-    <table><caption>Class List</caption>
-        <tr><th>Class</th><th>Category</th><th>Class Teacher / Form Teacher</th><th>Set Class Teacher / Form Teacher</th><th>Actions</th></tr>
+<div class="ms-card" id="addClass">
+  <h3 class="ms-card-title">Add a Class</h3>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-grid">
+      <div class="ms-form-group">
+        <label>Class name <span class="ms-req">*</span></label>
+        <input type="text" name="name" required placeholder="e.g. JSS 1 or SS1 Science A">
+        <p class="hint">Or just the level if you fill arms below</p>
+      </div>
+      <div class="ms-form-group">
+        <label>Arms (optional)</label>
+        <input type="text" name="arms" placeholder="A, B, C">
+        <p class="hint">Creates multiple arms in one go</p>
+      </div>
+      <div class="ms-form-group">
+        <label>Category</label>
+        <select name="category">
+          <option value="">— none —</option>
+          {% for cat in categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:1rem;">Add Class</button>
+  </form>
+</div>
+
+<div class="ms-card">
+  <h3 class="ms-card-title">All Classes</h3>
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Category</th>
+          <th>Form Teacher</th>
+          <th>Set Teacher</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for c in classes %}
         <tr>
-            <td>{{ c.name }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('set_class_category', class_id=c.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="category" style="width:auto; display:inline-block;" onchange="this.form.submit()">
-                        <option value="">-- none --</option>
-                        {% for cat in categories %}
-                        <option value="{{ cat }}" {% if cat == c.category %}selected{% endif %}>{{ cat }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td>{{ c.teacher_name or '—' }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('set_form_teacher', class_id=c.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()">
-                        <option value="">-- none --</option>
-                        {% for t in teachers %}
-                        <option value="{{ t.id }}" {% if t.id == c.form_teacher_id %}selected{% endif %}>{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td>
-                <form method="POST" action="{{ url_for('delete_class', class_id=c.id) }}"
-                      onsubmit="return confirm('Delete class {{ c.name }}? This only works if it has no students in it.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
-                </form>
-            </td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td>
+            <form method="POST" action="{{ url_for('set_class_category', class_id=c.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="category" style="padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;" onchange="this.form.submit()">
+                <option value="">— none —</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}" {% if cat == c.category %}selected{% endif %}>{{ cat }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>{{ c.teacher_name or '—' }}</td>
+          <td>
+            <form method="POST" action="{{ url_for('set_form_teacher', class_id=c.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <select name="teacher_id" style="padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;" onchange="this.form.submit()">
+                <option value="">— none —</option>
+                {% for t in teachers %}
+                <option value="{{ t.id }}" {% if t.id == c.form_teacher_id %}selected{% endif %}>{{ t.name }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            <form method="POST" action="{{ url_for('delete_class', class_id=c.id) }}"
+                  onsubmit="return confirm('Delete class {{ c.name }}? Only works if it has no students.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Delete</button>
+            </form>
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="ms-empty"><div class="icon">🏫</div><p>No classes yet.</p></div></td></tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

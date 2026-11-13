@@ -1,23 +1,42 @@
 {% extends "base.html" %}
-{% block title %}Classes{% endblock %}
+{% block title %}Results · Classes{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
 {% block content %}
-<h1>Classes</h1>
-<div class="card">
-    <table>
-        <tr><th>Class</th><th>Actions</th></tr>
+<div class="ms-page-header">
+  <div>
+    <h1>Classes</h1>
+    <p class="subtitle">Open broadsheet or terminal results by class</p>
+  </div>
+</div>
+
+<div class="ms-card">
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead><tr><th>Class</th><th>Actions</th></tr></thead>
+      <tbody>
         {% for c in classes %}
         <tr>
-            <td>{{ c.name }}</td>
-            <td>
-                {% if accessible == 'all' or c.id in accessible %}
-                <a class="btn btn-small" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
-                <a class="btn btn-small" href="{{ url_for('class_results_list', class_id=c.id) }}">Terminal Results</a>
-                {% else %}
-                <span style="color:#999; font-size:0.85rem;">No result access for this class</span>
-                {% endif %}
-            </td>
+          <td><strong>{{ c.name }}</strong></td>
+          <td>
+            {% if accessible == 'all' or c.id in accessible %}
+            <div class="actions">
+              <a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
+              <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('class_results_list', class_id=c.id) }}">Terminal Results</a>
+            </div>
+            {% else %}
+            <span style="color:#94a3b8;font-size:0.85rem;">No result access</span>
+            {% endif %}
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="2"><div class="ms-empty"><div class="icon">🏫</div><p>No classes yet.</p></div></td></tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

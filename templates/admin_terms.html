@@ -1,93 +1,141 @@
 {% extends "base.html" %}
-{% block title %}Sessions & Terms{% endblock %}
+{% block title %}Sessions & Terms · {{ school_name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
 {% block content %}
-<h1>Sessions &amp; Terms</h1>
-
-<div class="card"><h3>Cumulative / Annual Result</h3><p class="muted">Moved: this setting now lives in <a href="{{ url_for('result_display_settings') }}">Result Display Settings</a> with the other result-sheet options.</p></div>
-
-<div class="grid-2">
-    <div class="card">
-        <h3>New Session</h3>
-        <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="new_session">
-            <label>Session name (e.g. 2026/2027)</label>
-            <input type="text" name="session_name" required>
-            <button class="btn" type="submit">Create Session</button>
-        </form>
-    </div>
-    <div class="card">
-        <h3>New Term</h3>
-        <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="new_term">
-            <label>Session</label>
-            <select name="session_id" required>
-                {% for s in sessions %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-            </select>
-            <label>Term</label>
-            <select name="term_name" required>
-                <option>1st Term</option>
-                <option>2nd Term</option>
-                <option>3rd Term</option>
-            </select>
-            <button class="btn" type="submit">Create Term</button>
-        </form>
-    </div>
+<div class="ms-page-header">
+  <div>
+    <h1>Sessions &amp; Terms</h1>
+    <p class="subtitle">Academic calendar — only one session and one term can be active</p>
+  </div>
 </div>
 
-<div class="card">
-    <h3>Sessions</h3>
-    <table>
-        <tr><th>Session</th><th>Status</th><th>Action</th></tr>
+<div class="ms-card">
+  <p style="margin:0;font-size:0.9rem;color:#64748b;">
+    Cumulative / Annual Result settings live in
+    <a href="{{ url_for('result_display_settings') }}" style="color:#2563eb;font-weight:600;">Result Display Settings</a>.
+  </p>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+  <div class="ms-card">
+    <h3 class="ms-card-title">New Session</h3>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="new_session">
+      <div class="ms-form-group">
+        <label>Session name <span class="ms-req">*</span></label>
+        <input type="text" name="session_name" required placeholder="e.g. 2026/2027">
+      </div>
+      <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.75rem;">Create Session</button>
+    </form>
+  </div>
+  <div class="ms-card">
+    <h3 class="ms-card-title">New Term</h3>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="new_term">
+      <div class="ms-form-group">
+        <label>Session <span class="ms-req">*</span></label>
+        <select name="session_id" required>
+          {% for s in sessions %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="ms-form-group">
+        <label>Term <span class="ms-req">*</span></label>
+        <select name="term_name" required>
+          <option>1st Term</option>
+          <option>2nd Term</option>
+          <option>3rd Term</option>
+        </select>
+      </div>
+      <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.75rem;">Create Term</button>
+    </form>
+  </div>
+</div>
+
+<div class="ms-card">
+  <h3 class="ms-card-title">Sessions</h3>
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead><tr><th>Session</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody>
         {% for s in sessions %}
         <tr>
-            <td>{{ s.name }}</td>
-            <td>{% if s.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
-            <td>
-                {% if not s.is_active %}
-                <form method="POST" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="activate_session">
-                    <input type="hidden" name="session_id" value="{{ s.id }}">
-                    <button class="btn btn-small" type="submit">Activate</button>
-                </form>
-                {% endif %}
-            </td>
+          <td><strong>{{ s.name }}</strong></td>
+          <td>{% if s.is_active %}<span class="ms-badge ms-badge-success">● Active</span>{% else %}—{% endif %}</td>
+          <td>
+            {% if not s.is_active %}
+            <form method="POST" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="activate_session">
+              <input type="hidden" name="session_id" value="{{ s.id }}">
+              <button class="ms-btn ms-btn-secondary ms-btn-sm" type="submit">Activate</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="3"><div class="ms-empty"><div class="icon">📅</div><p>No sessions yet.</p></div></td></tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 
-<div class="card">
-    <h3>Terms</h3>
-    <details class="hlp"><summary class="hlp-t">Why "Published" matters</summary>
-    <p class="muted hlp-b" style="font-size:0.85rem;">
-        A term must be <b>Published</b> before its results can be emailed to parents — this
-        keeps parents from being emailed mid-term while scores are still being entered.
-    </p></details>
-    <table>
-        <tr><th>Term</th><th>Session</th><th>Status</th><th>Resumption date</th><th>Published?</th><th>Action</th></tr>
+<div class="ms-card">
+  <h3 class="ms-card-title">Terms</h3>
+  <p style="font-size:0.85rem;color:#64748b;margin:0 0 0.85rem;">A term must be <strong>Published</strong> (via Result Approval) before results can be emailed to parents.</p>
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
+        <tr>
+          <th>Term</th>
+          <th>Session</th>
+          <th>Status</th>
+          <th>Resumption</th>
+          <th>Published</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
         {% for t in terms %}
         <tr>
-            <td>{{ t.name }}</td>
-            <td>{{ t.session_name }}</td>
-            <td>{% if t.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
-            <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}"><button class="btn btn-small" type="submit">Save</button></form></td>
-            <td>{% if t.is_published %}<span class="badge" style="background:#1d7a4c;">Published</span>{% else %}—{% endif %}</td>
-            <td style="white-space:nowrap;">
-                {% if not t.is_active %}
-                <form method="POST" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="action" value="activate_term">
-                    <input type="hidden" name="term_id" value="{{ t.id }}">
-                    <button class="btn btn-small" type="submit">Activate</button>
-                </form>
-                {% endif %}
-                <a class="btn btn-small btn-gold" href="{{ url_for('result_workflow', term_id=t.id) }}">Result approval</a>
-            </td>
+          <td><strong>{{ t.name }}</strong></td>
+          <td>{{ t.session_name }}</td>
+          <td>{% if t.is_active %}<span class="ms-badge ms-badge-success">● Active</span>{% else %}—{% endif %}</td>
+          <td>
+            <form method="POST" class="inline" style="display:flex;gap:0.35rem;align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="set_resumption">
+              <input type="hidden" name="term_id" value="{{ t.id }}">
+              <input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" style="padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #e2e8f0;font-size:0.85rem;">
+              <button class="ms-btn ms-btn-ghost ms-btn-sm" type="submit">Save</button>
+            </form>
+          </td>
+          <td>{% if t.is_published %}<span class="ms-badge ms-badge-success">Published</span>{% else %}—{% endif %}</td>
+          <td>
+            <div class="actions">
+              {% if not t.is_active %}
+              <form method="POST" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="activate_term">
+                <input type="hidden" name="term_id" value="{{ t.id }}">
+                <button class="ms-btn ms-btn-secondary ms-btn-sm" type="submit">Activate</button>
+              </form>
+              {% endif %}
+              <a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('result_workflow', term_id=t.id) }}">Result approval</a>
+            </div>
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="6"><div class="ms-empty"><div class="icon">📅</div><p>No terms yet.</p></div></td></tr>
         {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
 {% endblock %}

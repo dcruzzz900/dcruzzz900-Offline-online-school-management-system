@@ -1,93 +1,104 @@
 {% extends "base.html" %}
-{% block title %}Settings{% endblock %}
+{% block title %}Settings · {{ school_name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
 {% block content %}
-<h1>Settings</h1>
-
-<div class="card">
-    <h3>Your Account</h3>
-    <a class="btn" href="{{ url_for('change_password') }}">Change Password</a>
-
-    <details class="hlp"><summary class="hlp-t">Your username</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem; margin-top:1rem;">
-        Your current username is <b>{{ me.username }}</b>. Changing it takes effect
-        immediately — use the new username next time you log in.
-    </p></details>
-    <form method="POST" action="{{ url_for('update_my_username') }}" style="max-width:320px;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>New Username</label>
-        <input type="text" name="new_username" placeholder="{{ me.username }}" required>
-        <label>Current Password</label>
-        <input type="password" name="current_password" autocomplete="current-password" required>
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Change Username</button>
-    </form>
-
-    <details class="hlp"><summary class="hlp-t">Why add this</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem; margin-top:1rem;">
-        Add an email or phone number so you can also log in with either of them,
-        in addition to your username.
-    </p></details>
-    <form method="POST" action="{{ url_for('update_my_contact') }}" style="max-width:320px;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Email</label>
-        <input type="email" name="email" value="{{ me.email or '' }}">
-        <label>Phone Number</label>
-        <input type="text" name="phone" value="{{ me.phone or '' }}">
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Save Contact Info</button>
-    </form>
+<div class="ms-page-header">
+  <div>
+    <h1>Settings</h1>
+    <p class="subtitle">Account, school configuration and security</p>
+  </div>
 </div>
 
+<div class="ms-card" style="max-width:520px;">
+  <h3 class="ms-card-title">Your Account</h3>
+  <a class="ms-btn ms-btn-secondary" href="{{ url_for('change_password') }}" style="margin-bottom:1rem;">Change Password</a>
 
+  <p style="font-size:0.85rem;color:#64748b;margin:0 0 0.75rem;">Current username: <strong>{{ me.username }}</strong></p>
+  <form method="POST" action="{{ url_for('update_my_username') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-group">
+      <label>New Username</label>
+      <input type="text" name="new_username" placeholder="{{ me.username }}" required>
+    </div>
+    <div class="ms-form-group">
+      <label>Current Password</label>
+      <input type="password" name="current_password" autocomplete="current-password" required>
+    </div>
+    <button class="ms-btn ms-btn-primary ms-btn-sm" type="submit">Change Username</button>
+  </form>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:1.25rem 0;">
+
+  <form method="POST" action="{{ url_for('update_my_contact') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-group">
+      <label>Email</label>
+      <input type="email" name="email" value="{{ me.email or '' }}">
+    </div>
+    <div class="ms-form-group">
+      <label>Phone Number</label>
+      <input type="text" name="phone" value="{{ me.phone or '' }}">
+    </div>
+    <button class="ms-btn ms-btn-primary ms-btn-sm" type="submit">Save Contact Info</button>
+  </form>
+</div>
 
 {% if session.get('role') in ['admin', 'sub_admin'] %}
-<div class="card">
-    <h3>School Settings</h3>
-    <a class="btn" href="{{ url_for('admin_school') }}">School Profile (name, logo, alignment, signup code)</a>
-    <a class="btn" href="{{ url_for('admin_email') }}">Email Settings (SMTP for parent notifications)</a>
-    <a class="btn" href="{{ url_for('admin_promote') }}">Promote Students</a>
+<div class="ms-card">
+  <h3 class="ms-card-title">School Settings</h3>
+  <div class="ms-qa-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));">
+    <a class="ms-qa-item" href="{{ url_for('admin_school') }}"><span class="ms-qa-icon">🏫</span>School Profile</a>
+    <a class="ms-qa-item" href="{{ url_for('admin_email') }}"><span class="ms-qa-icon">✉️</span>Email / SMTP</a>
+    <a class="ms-qa-item" href="{{ url_for('admin_promote') }}"><span class="ms-qa-icon">⬆️</span>Promote Students</a>
+    <a class="ms-qa-item" href="{{ url_for('admin_theme') }}"><span class="ms-qa-icon">🎨</span>Theme &amp; Branding</a>
+  </div>
 </div>
 
-<div class="card" style="border-left: 4px solid var(--gold);">
-    <h3>Clear Demo Data</h3>
-    <details class="hlp"><summary class="hlp-t">What this does</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem;">
-        A lighter option than Delete Account below — this wipes just the sample
-        classes, subjects, students, and teachers so you can start loading your
-        real school's data on a clean slate. Your login, sessions/terms, grading
-        setup, and skill traits are all kept.
-    </p></details>
-    <form method="POST" action="{{ url_for('reset_demo_data') }}"
-          onsubmit="return confirm('This permanently deletes all classes, subjects, students, teachers and their scores. Continue?');">
+<div class="ms-card" style="border-left:4px solid #f59e0b;">
+  <h3 class="ms-card-title">Clear Demo Data</h3>
+  <p style="font-size:0.88rem;color:#64748b;margin:0 0 0.85rem;">Wipes sample classes, subjects, students and teachers. Keeps your login, terms and grading.</p>
+  <form method="POST" action="{{ url_for('reset_demo_data') }}"
+        onsubmit="return confirm('Permanently delete all classes, subjects, students, teachers and scores?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Type RESET to confirm</label>
-        <input type="text" name="confirm_text" placeholder="RESET" required style="max-width:200px;">
-        <button class="btn btn-gold" style="margin-top:0.75rem;" type="submit">Clear Demo Data</button>
-    </form>
+    <div class="ms-form-group" style="max-width:200px;">
+      <label>Type RESET to confirm</label>
+      <input type="text" name="confirm_text" placeholder="RESET" required>
+    </div>
+    <button class="ms-btn ms-btn-secondary" type="submit" style="margin-top:0.5rem;">Clear Demo Data</button>
+  </form>
 </div>
 {% endif %}
 
 {% if session.get('role') == 'admin' %}
-<div class="card">
-    <h3>Sub-Admins</h3>
-    <a class="btn" href="{{ url_for('admin_subadmins') }}">Manage Sub-Admins</a>
+<div class="ms-card">
+  <h3 class="ms-card-title">Sub-Admins</h3>
+  <a class="ms-btn ms-btn-secondary" href="{{ url_for('admin_subadmins') }}">Manage Sub-Admins</a>
 </div>
 
-<div class="card" style="border-left: 4px solid #b3261e;">
-    <h3>Delete Account</h3>
-    <p style="font-size:0.9rem; color:#666;">
-        This permanently deletes your school's entire account — every class, subject,
-        student, score, and staff login. <b>This cannot be undone.</b> There is no way
-        to recover this data afterward.
-    </p>
-    <form method="POST" action="{{ url_for('delete_account') }}"
-          onsubmit="return confirm('This will PERMANENTLY delete your entire school account and all its data. This cannot be undone. Are you absolutely sure?');">
+<div class="ms-card" style="border-left:4px solid #dc2626;">
+  <h3 class="ms-card-title">Delete Account</h3>
+  <p style="font-size:0.88rem;color:#64748b;margin:0 0 0.85rem;">
+    Permanently deletes this school’s entire account — classes, students, scores and staff. <strong>Cannot be undone.</strong>
+  </p>
+  <form method="POST" action="{{ url_for('delete_account') }}"
+        onsubmit="return confirm('PERMANENTLY delete this school account and all data? This cannot be undone.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="ms-form-grid">
+      <div class="ms-form-group">
         <label>Your Password</label>
         <input type="password" name="password" required>
+      </div>
+      <div class="ms-form-group">
         <label>Type DELETE to confirm</label>
-        <input type="text" name="confirm_text" placeholder="DELETE" required style="max-width:200px;">
-        <button class="btn" style="background:#b3261e; margin-top:0.75rem;" type="submit">Permanently Delete My Account</button>
-    </form>
+        <input type="text" name="confirm_text" placeholder="DELETE" required>
+      </div>
+    </div>
+    <button class="ms-btn ms-btn-danger" type="submit" style="margin-top:0.75rem;">Permanently Delete Account</button>
+  </form>
 </div>
 {% endif %}
-
 {% endblock %}

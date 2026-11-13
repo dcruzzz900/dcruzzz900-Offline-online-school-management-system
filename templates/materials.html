@@ -1,107 +1,105 @@
 {% extends "base.html" %}
-{% block title %}Learning Materials{% endblock %}
-{% block content %}
-<h1>Learning Materials</h1>
+{% block title %}Learning Materials · {{ school_name }}{% endblock %}
 
-{% if not accessible_classes %}
-<div class="card"><p style="color:#999;">You don't have any classes assigned yet.</p></div>
-{% else %}
-<div class="card">
-    <form method="GET" style="display:flex; flex-wrap:wrap; gap:0.75rem; align-items:flex-end;">
-        <div>
-            <label>Session</label>
-            <select name="session_id" onchange="this.form.submit()">
-                {% for s in all_sessions %}
-                <option value="{{ s.id }}" {% if s.id == session_id %}selected{% endif %}>{{ s.name }}{% if s.is_active %} (active){% endif %}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label>Class</label>
-            <select name="class_id" onchange="this.form.submit()">
-                {% for c in accessible_classes %}
-                <option value="{{ c.id }}" {% if c.id == class_id %}selected{% endif %}>{{ c.name }}{% if c.category %} ({{ c.category }}){% endif %}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div>
-            <label>Subject</label>
-            <select name="subject_id" onchange="this.form.submit()">
-                <option value="">-- all subjects --</option>
-                {% for s in subjects %}
-                <option value="{{ s.id }}" {% if s.id == selected_subject_id %}selected{% endif %}>{{ s.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-    </form>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ms-page-header">
+  <div>
+    <h1>Learning Materials</h1>
+    <p class="subtitle">Notes, worksheets and links for each class &amp; subject</p>
+  </div>
 </div>
 
+{% if not class_id %}
+<div class="ms-card">
+  <h3 class="ms-card-title">Select a Class</h3>
+  <div class="ms-qa-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));">
+    {% for c in accessible_classes %}
+    <a class="ms-qa-item" href="{{ url_for('materials', class_id=c.id) }}">
+      <span class="ms-qa-icon">🏫</span>
+      {{ c.name }}
+    </a>
+    {% else %}
+    <p style="color:#94a3b8;">No classes available.</p>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+
 {% if can_upload %}
-<div class="card">
-    <h3>Upload Material</h3>
-    <form method="POST" enctype="multipart/form-data">
+<div class="ms-card" style="max-width:560px;">
+  <h3 class="ms-card-title">Upload Material</h3>
+  <form method="POST" enctype="multipart/form-data" action="{{ url_for('materials', class_id=class_id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="session_id" value="{{ session_id }}">
-        <label>Class</label>
-        <select name="class_id" required>
-            {% for c in accessible_classes %}
-            <option value="{{ c.id }}" {% if c.id == class_id %}selected{% endif %}>{{ c.name }}{% if c.category %} ({{ c.category }}){% endif %}</option>
-            {% endfor %}
-        </select>
-        <label>Subject</label>
-        <select name="subject_id" required>
-            {% for s in subjects %}
-            <option value="{{ s.id }}">{{ s.name }}</option>
-            {% endfor %}
-        </select>
-        <label>Title</label>
-        <input type="text" name="title" required placeholder="e.g. Week 3 Notes — Algebra">
-        <label>Type</label>
-        <select name="kind">
-            {% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
-        </select>
-        <label>File (PDF, DOC/DOCX, PPT/PPTX or image) — maximum 1 MB</label>
-        <input type="file" name="file" data-max-bytes="1048576" data-size-message="Learning material must not exceed 1 MB." accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif">
-        <label>...or a link (e.g. a YouTube video) instead of a file</label>
-        <input type="url" name="external_url" placeholder="https://...">
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
-    </form>
-    <details class="hlp"><summary class="hlp-t">Upload limits</summary>
-    <p class="muted hlp-b" style="font-size:0.8rem; margin-top:0.5rem;">
-        Learning material uploads are limited to <b>1 MB</b>. Accepted: PDF, Word, PowerPoint and common image formats. For videos, paste a link instead.
-    </p></details>
+    <div class="ms-form-group">
+      <label>Subject</label>
+      <select name="subject_id">
+        {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ms-form-group">
+      <label>Title <span class="ms-req">*</span></label>
+      <input type="text" name="title" required placeholder="e.g. Week 3 Notes — Algebra">
+    </div>
+    <div class="ms-form-group">
+      <label>Type</label>
+      <select name="kind">
+        {% for k in kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="ms-form-group">
+      <label>File (PDF, DOC, PPT or image — max 1 MB)</label>
+      <input type="file" name="file" data-max-bytes="1048576" accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.gif">
+    </div>
+    <div class="ms-form-group">
+      <label>…or a link instead of a file</label>
+      <input type="url" name="external_url" placeholder="https://…">
+    </div>
+    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:0.75rem;">Upload</button>
+  </form>
 </div>
 {% endif %}
 
-<div class="card">
-    <h3>Materials{% if class_id %} — {{ accessible_classes|selectattr('id','equalto',class_id)|map(attribute='name')|first }}{% endif %}</h3>
-    {% if not items %}
-    <p style="color:#999;">No materials here yet.</p>
-    {% else %}
-    <table>
+<div class="ms-card">
+  <h3 class="ms-card-title">Materials{% if class_id %} — {{ accessible_classes|selectattr('id','equalto',class_id)|map(attribute='name')|first }}{% endif %}</h3>
+  {% if not items %}
+  <div class="ms-empty"><div class="icon">📖</div><p>No materials here yet.</p></div>
+  {% else %}
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
         <tr><th>Title</th><th>Subject</th><th>Type</th><th>Uploaded</th><th></th></tr>
+      </thead>
+      <tbody>
         {% for m in items %}
         <tr>
-            <td>{{ m.title }}</td>
-            <td>{{ m.subject_name }}</td>
-            <td>{{ m.kind }}</td>
-            <td>{{ m.uploaded_at|dmy }}{% if m.uploaded_by_name %} by {{ m.uploaded_by_name }}{% endif %}</td>
-            <td>
-                <a class="btn btn-small" href="{{ url_for('download_material', material_id=m.id) }}">
-                    {% if m.external_url %}Open Link{% else %}Download{% endif %}
-                </a>
-                {% if can_upload %}
-                <form method="POST" action="{{ url_for('delete_material', material_id=m.id) }}" class="inline"
-                      onsubmit="return confirm('Remove this material?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
-                </form>
-                {% endif %}
-            </td>
+          <td><strong>{{ m.title }}</strong></td>
+          <td>{{ m.subject_name }}</td>
+          <td><span class="ms-badge ms-badge-info">{{ m.kind }}</span></td>
+          <td style="font-size:0.85rem;color:#64748b;">{{ m.uploaded_at|dmy }}{% if m.uploaded_by_name %} · {{ m.uploaded_by_name }}{% endif %}</td>
+          <td>
+            <div class="actions">
+              <a class="ms-btn ms-btn-secondary ms-btn-sm" href="{{ url_for('download_material', material_id=m.id) }}">
+                {% if m.external_url %}Open Link{% else %}Download{% endif %}
+              </a>
+              {% if can_upload %}
+              <form method="POST" action="{{ url_for('delete_material', material_id=m.id) }}" class="inline"
+                    onsubmit="return confirm('Remove this material?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="ms-btn ms-btn-danger ms-btn-sm" type="submit">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
         </tr>
         {% endfor %}
+      </tbody>
     </table>
-    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}

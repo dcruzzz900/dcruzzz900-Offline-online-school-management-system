@@ -1,75 +1,99 @@
 {% extends "base.html" %}
-{% block title %}Promote Students{% endblock %}
-{% block content %}
-<h1>Promote Students</h1>
-<details class="hlp"><summary class="hlp-t">How promotion works</summary>
-<p class="muted hlp-b" style="font-size:0.9rem;">
-    Move students from one class/arm to the next at the end of an academic session
-    (e.g. JSS1 → JSS2, SS1 Science 1 → SS2 Science 1). Their Admission No. / Register No.
-    and all past scores/results are kept — only their current class changes.
-</p></details>
-<details class="hlp"><summary class="hlp-t">Tip</summary>
-<p class="hlp-b" style="background:#fbe9e7; border:1px solid #f3c1bc; padding:0.6rem 0.9rem; border-radius:6px; font-size:0.88rem; color:#7a2a20;">
-    <b>Tip:</b> finish printing/emailing this session's results before promoting — once a
-    student moves to a new class, their old class's broadsheet will reflect the new class
-    going forward, since a student always belongs to one current class.
-</p></details>
+{% block title %}Promote Students · {{ school_name }}{% endblock %}
 
-<div class="card">
-    <h3>Step 1: Choose Source Class</h3>
-    <form method="GET">
-        <label>From Class / Arm</label>
-        <select name="from_class_id" onchange="this.form.submit()">
-            <option value="">-- choose a class --</option>
-            {% for c in classes %}
-            <option value="{{ c.id }}" {% if from_class_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-            {% endfor %}
-        </select>
-    </form>
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="ms-page-header">
+  <div>
+    <h1>Promote Students</h1>
+    <p class="subtitle">Move students to the next class/arm at session end. Past scores are kept.</p>
+  </div>
+</div>
+
+<div class="ms-card" style="background:#fff7ed;border-color:#fed7aa;">
+  <p style="margin:0;font-size:0.9rem;color:#9a3412;">
+    <strong>Tip:</strong> Finish printing/emailing this session’s results before promoting. A student always belongs to one current class.
+  </p>
+</div>
+
+<div class="ms-card">
+  <h3 class="ms-card-title">Step 1 · Choose Source Class</h3>
+  <form method="GET">
+    <div class="ms-form-group" style="max-width:360px;">
+      <label>From Class / Arm</label>
+      <select name="from_class_id" onchange="this.form.submit()">
+        <option value="">— choose a class —</option>
+        {% for c in classes %}
+        <option value="{{ c.id }}" {% if from_class_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
 </div>
 
 {% if from_class_id and students %}
-<div class="card">
-    <h3>Step 2: Choose Destination &amp; Students</h3>
-    <form method="POST">
+<div class="ms-card">
+  <h3 class="ms-card-title">Step 2 · Destination &amp; Students</h3>
+  <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="from_class_id" value="{{ from_class_id }}">
+    <input type="hidden" name="from_class_id" value="{{ from_class_id }}">
+    <div class="ms-form-grid">
+      <div class="ms-form-group">
         <label>To Existing Class / Arm</label>
         <select name="to_class_id">
-            <option value="">-- or type a new class name below --</option>
-            {% for c in classes %}
-            {% if c.id != from_class_id %}
-            <option value="{{ c.id }}">{{ c.name }}</option>
-            {% endif %}
-            {% endfor %}
+          <option value="">— or type a new class name below —</option>
+          {% for c in classes %}
+          {% if c.id != from_class_id %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endif %}
+          {% endfor %}
         </select>
+      </div>
+      <div class="ms-form-group">
         <label>Or Create a New Class / Arm</label>
         <input type="text" name="to_class_name" placeholder="e.g. SS2 Science 1">
+      </div>
+    </div>
 
-        <h4>Students to Promote</h4>
-        <p><label style="font-weight:normal;"><input type="checkbox" id="selectAll" checked style="width:auto;"> Select/Deselect All</label></p>
-        <table>
-            <tr><th></th><th>Admission No. / Register No.</th><th>Name</th></tr>
-            {% for s in students %}
-            <tr>
-                <td><input type="checkbox" name="student_ids" value="{{ s.id }}" class="student-check" checked></td>
-                <td>{{ s.admission_no }}</td>
-                <td>{{ student_full_name(s) }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-        <button class="btn" type="submit" style="margin-top:1rem;"
-                onclick="return confirm('Promote the selected students? This changes their current class.');">
-            Promote Selected Students
-        </button>
-    </form>
+    <h4 style="margin:1.25rem 0 0.65rem;font-size:0.95rem;color:#0f172a;">Students to Promote</h4>
+    <p style="margin:0 0 0.75rem;">
+      <label style="font-weight:500;font-size:0.88rem;cursor:pointer;">
+        <input type="checkbox" id="selectAll" checked style="width:auto;margin-right:0.35rem;"> Select / Deselect All
+      </label>
+    </p>
+    <div class="ms-table-wrap">
+      <table class="ms-table">
+        <thead>
+          <tr><th style="width:40px;"></th><th>Reg. No</th><th>Name</th></tr>
+        </thead>
+        <tbody>
+          {% for s in students %}
+          <tr>
+            <td><input type="checkbox" name="student_ids" value="{{ s.id }}" class="student-check" checked></td>
+            <td><strong>{{ s.admission_no }}</strong></td>
+            <td>{{ student_full_name(s) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button class="ms-btn ms-btn-primary" type="submit" style="margin-top:1.15rem;"
+            onclick="return confirm('Promote the selected students? This changes their current class.');">
+      Promote Selected Students
+    </button>
+  </form>
 </div>
 <script>
 document.getElementById('selectAll').addEventListener('change', function() {
-    document.querySelectorAll('.student-check').forEach(cb => cb.checked = this.checked);
+  document.querySelectorAll('.student-check').forEach(cb => cb.checked = this.checked);
 });
 </script>
 {% elif from_class_id %}
-<div class="card"><p style="color:#999;">No active students in that class.</p></div>
+<div class="ms-card">
+  <div class="ms-empty"><div class="icon">👥</div><p>No active students in that class.</p></div>
+</div>
 {% endif %}
 {% endblock %}

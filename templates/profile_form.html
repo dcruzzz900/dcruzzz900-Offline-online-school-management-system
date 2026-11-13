@@ -61,7 +61,11 @@
   {% if r.error %}<div class="pf-err" role="alert">{{ r.error }}</div>{% endif %}
 </div>
 {% endmacro %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
 {% block content %}
+
 <style>
 .pf-wrap{max-width:860px}.pf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px 18px}
 .pf-field label{display:block;font-weight:600;margin-bottom:4px}.pf-field input[type=text],.pf-field input[type=email],.pf-field input[type=tel],.pf-field input[type=date],.pf-field select,.pf-field textarea{width:100%;box-sizing:border-box}
@@ -80,13 +84,13 @@
 </div>{% endif %}
 <form method="POST" action="{{ action }}" enctype="multipart/form-data" id="profileForm" novalidate>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <div class="card"><h3>Account information</h3>
+  <div class="ms-card card"><h3>Account information</h3>
     {% for label, value in readonly %}<p><b>{{ label }}:</b> {{ value }}</p>{% endfor %}
     <small class="muted">These details are controlled by the school and cannot be changed here.</small></div>
-  <div class="card"><h3>Profile details</h3><p class="muted"><span class="req">*</span> marks a required field. Every other field is optional.</p>
+  <div class="ms-card card"><h3>Profile details</h3><p class="muted"><span class="req">*</span> marks a required field. Every other field is optional.</p>
     <div class="pf-grid">{% for r in rows %}{{ sysfield(r) }}{% endfor %}</div></div>
   <datalist id="dl_states">{% for s in states %}<option value="{{ s }}">{% endfor %}</datalist>
-  <div class="card"><h3>Photograph</h3>
+  <div class="ms-card card"><h3>Photograph</h3>
     <div class="pf-media">
       <div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
         {% if photo_url %}<img class="passport-img" src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}
@@ -100,8 +104,8 @@
         <small class="muted">PNG, JPG or GIF · maximum 500 KB</small>
         {% if signature_error %}<div class="pf-err" role="alert">{{ signature_error }}</div>{% endif %}</div>{% endif %}
     </div></div>
-  {% if custom %}<div class="card"><h3>Additional information</h3><div class="pf-grid">{% for r in custom %}{{ cfield(r) }}{% endfor %}</div></div>{% endif %}
-  <div style="margin:14px 0"><button type="submit" class="btn" id="saveBtn" data-label="{{ 'Save Profile' }}">Save Profile</button>
+  {% if custom %}<div class="ms-card card"><h3>Additional information</h3><div class="pf-grid">{% for r in custom %}{{ cfield(r) }}{% endfor %}</div></div>{% endif %}
+  <div style="margin:14px 0"><button type="submit" class="ms-btn ms-btn-primary btn" id="saveBtn" data-label="{{ 'Save Profile' }}">Save Profile</button>
     <a class="btn btn-secondary" href="{{ cancel }}">Cancel</a></div>
 </form></div>
 <script>

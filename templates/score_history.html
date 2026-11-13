@@ -1,8 +1,53 @@
 {% extends "base.html" %}
 {% block title %}Score History{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+{% endblock %}
+
 {% block content %}
-<h1>Score Change History</h1>
-<p class="badge">{{ class_row.name }} · {{ subject_row.name }}{% if term %} · {{ term.name }}{% endif %}</p>
-<form method="GET" class="card no-print"><label>Term<select name="term_id" onchange="this.form.submit()">{% for t in all_terms %}<option value="{{ t.id }}" {{ 'selected' if term and t.id == term.id }}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}</select></label></form>
-<div class="card">{% if history %}{% include "_score_audit_table.html" %}{% else %}<p class="muted">No score changes recorded yet for this class/subject in this term.</p>{% endif %}</div>
+<div class="ms-page-header">
+  <div>
+    <h1>Score History</h1>
+    <p class="subtitle">Audit trail of score changes for this class &amp; subject</p>
+  </div>
+  <div class="ms-page-actions">
+    <a class="ms-btn ms-btn-secondary" href="javascript:history.back()">← Back</a>
+  </div>
+</div>
+
+<div class="ms-card">
+  {% if history %}
+  <div class="ms-table-wrap">
+    <table class="ms-table">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Student</th>
+          <th>Field</th>
+          <th>Old</th>
+          <th>New</th>
+          <th>By</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        <tr>
+          <td>{{ h.created_at }}</td>
+          <td>{{ h.student_name or h.admission_no or '—' }}</td>
+          <td>{{ h.field or h.score_field or '—' }}</td>
+          <td>{{ h.old_value }}</td>
+          <td><strong>{{ h.new_value }}</strong></td>
+          <td>{{ h.changed_by or h.user_name or '—' }}</td>
+          <td>{{ h.reason or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="ms-empty"><div class="icon">📜</div><p>No score changes recorded yet.</p></div>
+  {% endif %}
+</div>
 {% endblock %}
