@@ -350,3 +350,152 @@
   body { background: #f3f7ff; }
   .app-sidebar .nav-group { color: #8ba3c7; }
 }
+
+/* ===== Force desktop sidebar visible (fix integration issues) ===== */
+@media (min-width: 769px) {
+  .app-shell {
+    display: flex !important;
+  }
+  .app-sidebar {
+    display: flex !important;
+    visibility: visible !important;
+    transform: none !important;
+    position: sticky !important;
+    width: 260px !important;
+    min-width: 260px !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+  }
+  .app-main {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+  .desktop-sidebar-toggle {
+    display: none !important;
+  }
+  .ms-mobile-topbar {
+    display: none !important;
+  }
+  .school-code-pill {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    color: #dbeafe;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.4rem 0.75rem;
+    border-radius: 10px;
+  }
+  .app-sidebar .school-switcher {
+    display: block !important;
+    padding: 0.35rem 0.85rem 0.85rem;
+  }
+  .app-sidebar .nav-ico {
+    width: 1.25rem;
+    display: inline-flex;
+    justify-content: center;
+    opacity: 0.9;
+  }
+  .app-sidebar .nav-dot-new {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #facc15;
+    margin-left: auto;
+    display: inline-block;
+  }
+  .app-sidebar .notif-badge {
+    margin-left: auto;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.65rem;
+    font-style: normal;
+    border-radius: 999px;
+    padding: 0.1rem 0.4rem;
+    font-weight: 700;
+  }
+  .app-sidebar nav a {
+    display: flex !important;
+    align-items: center;
+    gap: 0.55rem;
+  }
+}
+
+/* Mobile: single hamburger opens the real sidebar as drawer */
+@media (max-width: 768px) {
+  .app-sidebar {
+    display: flex !important;
+    position: fixed !important;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(86vw, 300px) !important;
+    z-index: 2100 !important;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: 8px 0 30px rgba(0,0,0,0.3);
+  }
+  .app-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.45);
+    z-index: 2090;
+  }
+  .sidebar-backdrop.show {
+    display: block;
+  }
+  .desktop-sidebar-toggle {
+    display: none !important;
+  }
+  .ms-mobile-topbar {
+    display: flex !important;
+  }
+  .ms-mobile-topbar .sidebar-toggle {
+    display: inline-flex !important;
+    background: transparent;
+    border: 0;
+    color: #fff;
+    font-size: 1.35rem;
+    cursor: pointer;
+    padding: 0.25rem;
+  }
+}
+
+/* Override msh-desktop.css rules that hide sidebar under 991px */
+@media (min-width: 769px) {
+  .app-sidebar,
+  .sidebar {
+    transform: none !important;
+    display: flex !important;
+    visibility: visible !important;
+    left: 0 !important;
+  }
+  .app-main {
+    margin-left: 0 !important; /* flex layout handles spacing */
+  }
+  /* When original style.css uses fixed sidebar + margin */
+  body .app-shell {
+    display: flex !important;
+  }
+  body .app-sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    inset: auto !important;
+    height: 100vh !important;
+  }
+}
+
+@media (max-width: 768px) {
+  body .app-main {
+    margin-left: 0 !important;
+  }
+  /* Hide any leftover second toggle in the desktop topbar */
+  .topbar .sidebar-toggle,
+  .topbar .desktop-sidebar-toggle {
+    display: none !important;
+  }
+}

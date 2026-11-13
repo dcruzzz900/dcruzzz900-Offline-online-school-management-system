@@ -13,9 +13,13 @@
   .app-shell {
     display: block !important;
   }
+  .app-shell > .app-sidebar.mobile-open {
+    display: flex !important;
+  }
 
+  /* Sidebar becomes drawer — controlled by desktop-shell.css */
   .app-sidebar {
-    display: none !important;
+    /* do not force display:none — mobile drawer needs it */
   }
 
   .app-main,
