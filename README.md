@@ -132,19 +132,3 @@ scope, and role changes are written to a dedicated audit table.
 ## v52 Production Candidate
 
 See `FINAL_RELEASE_CHECKLIST.md` and `RELEASE_NOTES_V52.md` before deploying to Railway.
-
-## V105 — AI Module v0.2.0 (integrated with My School Hub)
-
-The AI module is integrated into the existing Flask application and reuses its
-school accounts, roles, tenant IDs, consent controls, audit log and SQLite
-migration framework. It adds the Teacher Assistant, CBT Question Generator,
-Attendance Intelligence and Management Assistant, while retaining the existing
-Student Tutor, Academic Performance Analyst, Result Comment Generator and
-Learning Material Assistant. See `AI_V020_INTEGRATION.md` and
-`V105_AI_V020_IMPLEMENTATION_NOTES.md` for module mapping, configuration,
-privacy boundaries and verification limits.
-
-The CBT generator stores reviewable drafts only. It does not publish live CBT
-exams or transfer questions into a live test bank. Do not deploy this release
-to production until the full v104 regression suite and the new AI integration
-tests pass in an environment with the requirements installed.
