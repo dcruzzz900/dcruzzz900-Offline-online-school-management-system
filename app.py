@@ -10911,10 +10911,10 @@ def ai_command_center():
 def ai_settings_page():
     conn=get_db(); sid=current_school_id(); settings=_ai_settings(conn,sid)
     if request.method=="POST":
-        names=["result_analysis","teacher_comments","principal_comments","performance_alerts","ai_tutor","learning_materials","result_assistant","teacher_assistant","cbt_generator","attendance_intelligence","management_assistant"]; vals=[1 if request.form.get(n) else 0 for n in names]
+        names=["result_analysis","teacher_comments","principal_comments","performance_alerts","ai_tutor","learning_materials","result_assistant"]; vals=[1 if request.form.get(n) else 0 for n in names]
         try: retention=max(30,min(int(request.form.get("retention_days") or 365),3650))
         except ValueError: retention=365
-        conn.execute("UPDATE school_ai_settings SET enabled=?,process_student_data=?,result_analysis=?,teacher_comments=?,principal_comments=?,performance_alerts=?,ai_tutor=?,learning_materials=?,result_assistant=?,teacher_assistant=?,cbt_generator=?,attendance_intelligence=?,management_assistant=?,retention_days=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE school_id=?",(1 if request.form.get("enabled") else 0,1 if request.form.get("process_student_data") else 0,*vals,retention,session["user_id"],sid)); _ai_log(conn,"privacy","settings_updated",scope="school"); conn.close(); flash("AI privacy settings saved.","success"); return redirect(url_for("ai_settings_page"))
+        conn.execute("UPDATE school_ai_settings SET enabled=?,process_student_data=?,result_analysis=?,teacher_comments=?,principal_comments=?,performance_alerts=?,ai_tutor=?,learning_materials=?,result_assistant=?,retention_days=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE school_id=?",(1 if request.form.get("enabled") else 0,1 if request.form.get("process_student_data") else 0,*vals,retention,session["user_id"],sid)); _ai_log(conn,"privacy","settings_updated",scope="school"); conn.close(); flash("AI privacy settings saved.","success"); return redirect(url_for("ai_settings_page"))
     cons=conn.execute("SELECT status,COUNT(*) c FROM student_ai_consent WHERE school_id=? GROUP BY status",(sid,)).fetchall(); audit=conn.execute("SELECT * FROM ai_audit_log WHERE school_id=? ORDER BY id DESC LIMIT 25",(sid,)).fetchall(); conn.close(); return render_template("ai_privacy.html",ai_settings=settings,consent_counts={r["status"]:r["c"] for r in cons},audit=audit,provider_configured=ai_provider_configured())
 
 CONSENT_RELATIONSHIPS = ["Parent", "Guardian", "Student (adult)", "School representative"]
@@ -11194,13 +11194,8 @@ def ai_learning_materials():
 
 @app.route("/student/ai-tutor",methods=["GET","POST"])
 def student_ai_tutor():
-    if "student_id" not in session or session.get("role") != "student": return redirect(url_for("student_login"))
-    conn=get_db()
-    student=conn.execute("SELECT id,school_id,tenant_id,is_active FROM students WHERE id=? AND school_id=? AND tenant_id=?",(session.get("student_id"),session.get("school_id"),session.get("tenant_id"))).fetchone()
-    school=conn.execute("SELECT id,tenant_id,activation_status,is_suspended,is_archived FROM schools WHERE id=?",(session.get("school_id"),)).fetchone()
-    if not student or not student["is_active"] or not school or school["tenant_id"] != session.get("tenant_id") or school["activation_status"] != "active" or school["is_suspended"] or school["is_archived"]:
-        conn.close(); session.clear(); flash("Your student session is no longer valid. Please sign in again.","error"); return redirect(url_for("student_login"))
-    settings=_ai_settings(conn,student["school_id"]); answer=None; question=""; subject="Mathematics"
+    if "student_id" not in session: return redirect(url_for("student_login"))
+    conn=get_db(); settings=_ai_settings(conn,session.get("school_id")); answer=None; question=""; subject="Mathematics"
     if request.method=="POST":
         question=request.form.get("question","").strip(); subject=request.form.get("subject","Mathematics").strip()
         if not(settings["enabled"] and settings["ai_tutor"]): flash("AI Tutor is disabled by your school administrator.","error")
@@ -11208,223 +11203,6 @@ def student_ai_tutor():
             answer,_=ai_provider_generate("You are a safe educational tutor. Never expose student records.",f"Subject: {subject}\nQuestion: {question}",max_tokens=600)
             if not answer: answer=local_tutor_answer(subject,question)
     conn.close(); return render_template("ai_tutor.html",answer=answer,question=question,subject=subject,enabled=bool(settings["enabled"] and settings["ai_tutor"]))
-
-# ---------- AI v0.2.0: Teacher Assistant, CBT, Attendance & Management ----------
-def _ai_feature_on(settings, feature):
-    return bool(settings and settings["enabled"] and settings[feature])
-
-
-def _ai_json_questions(raw, expected_count):
-    """Parse model output defensively; never accept executable or HTML content."""
-    import json as _json
-    text = (raw or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.lower().startswith("json"):
-            text = text[4:].strip()
-    start, end = text.find("["), text.rfind("]")
-    if start < 0 or end <= start:
-        return []
-    try:
-        data = _json.loads(text[start:end + 1])
-    except (ValueError, TypeError):
-        return []
-    cleaned = []
-    for item in data if isinstance(data, list) else []:
-        if not isinstance(item, dict):
-            continue
-        question = re.sub(r"\s+", " ", str(item.get("question", ""))).strip()[:1200]
-        options = item.get("options", [])
-        if isinstance(options, dict):
-            options = [f"{k}. {v}" for k, v in options.items()]
-        if not isinstance(options, list):
-            options = []
-        options = [re.sub(r"\s+", " ", str(x)).strip()[:350] for x in options[:5] if str(x).strip()]
-        answer = re.sub(r"\s+", " ", str(item.get("answer", ""))).strip()[:350]
-        explanation = re.sub(r"\s+", " ", str(item.get("explanation", ""))).strip()[:1000]
-        if question and len(options) >= 2 and answer:
-            cleaned.append({"question": question, "options": options, "answer": answer, "explanation": explanation,
-                            "type": "multiple_choice"})
-        if len(cleaned) >= expected_count:
-            break
-    return cleaned
-
-
-def _ai_fallback_questions(subject, topic, count, difficulty):
-    questions = []
-    for i in range(count):
-        a, b = i + 2, i + 5
-        correct = a + b
-        questions.append({"question": f"In {subject}, which statement best describes {topic}? (Question {i + 1})",
-                          "options": [f"A. A correct explanation of {topic}", f"B. An unrelated concept", f"C. The opposite of {topic}", f"D. None of the above"],
-                          "answer": f"A. A correct explanation of {topic}",
-                          "explanation": f"Review the definition and core principles of {topic} in {subject}; select the option that accurately explains it.",
-                          "type": "multiple_choice", "needs_teacher_validation": True})
-    return questions
-
-
-@app.route("/ai/teacher-assistant", methods=["GET", "POST"])
-@login_required("admin", "sub_admin", "teacher")
-def ai_teacher_assistant():
-    conn = get_db(); sid = current_school_id(); settings = _ai_settings(conn, sid)
-    answer = None; task = "lesson_plan"; prompt_text = ""
-    if request.method == "POST":
-        task = request.form.get("task", "lesson_plan")
-        if task not in ("lesson_plan", "explain_concept", "class_activity", "differentiation", "assessment"):
-            task = "lesson_plan"
-        prompt_text = re.sub(r"\s+", " ", request.form.get("prompt", "")).strip()[:3000]
-        if not _ai_feature_on(settings, "teacher_assistant"):
-            flash("Teacher Assistant is disabled by your School Admin.", "error")
-        elif not prompt_text:
-            flash("Enter a subject, topic or teaching challenge first.", "error")
-        else:
-            system = ("You are a practical Nigerian secondary-school teacher assistant. Use clear, age-appropriate language. "
-                      "Respect the Nigerian curriculum where possible. Never invent official curriculum citations. "
-                      "Return an editable draft; do not claim it has been approved or sent to students.")
-            payload = {"task": task, "teacher_request": prompt_text, "format": "structured headings, objectives, steps, examples and assessment where relevant"}
-            answer, err = ai_provider_generate(system, json.dumps(payload), max_tokens=1100)
-            if not answer:
-                answer = ("TEACHER ASSISTANT — LOCAL DRAFT\n\nTopic: " + prompt_text +
-                          "\n\n1. Learning objectives\n- Explain the key idea in learners' own words.\n- Apply the concept to a familiar example.\n\n"
-                          "2. Suggested teaching sequence\n- Introduce prior knowledge.\n- Model one worked example.\n- Guide learners through a practice activity.\n- Check understanding with short questions.\n\n"
-                          "3. Assessment\n- Ask learners to explain the main concept.\n- Set one independent practice task.\n\n"
-                          "Local draft only. Configure an approved provider for a topic-specific response.")
-            _ai_log(conn, "teacher_assistant", "generated", scope="minimal", request_summary=f"task={task}", output_summary=answer[:900])
-    enabled = _ai_feature_on(settings, "teacher_assistant"); conn.close()
-    return render_template("ai_teacher_assistant.html", answer=answer, task=task, prompt=prompt_text, enabled=enabled)
-
-
-@app.route("/ai/cbt-generator", methods=["GET", "POST"])
-@login_required("admin", "sub_admin", "teacher")
-def ai_cbt_generator():
-    conn = get_db(); sid = current_school_id(); tenant = current_tenant_id(); settings = _ai_settings(conn, sid)
-    generated = None; subjects = conn.execute("SELECT id,name FROM subjects WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    classes = conn.execute("SELECT id,name FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    if session.get("role") == "teacher" and not can_view_all_results(session.get("role"), session.get("position")):
-        accessible = get_accessible_class_ids(conn, session.get("role"), session.get("position"), session["user_id"])
-        accessible = [] if accessible == "all" else accessible
-        classes = [c for c in classes if c["id"] in accessible]
-    if request.method == "POST":
-        subject_id = request.form.get("subject_id", type=int); class_id = request.form.get("class_id", type=int)
-        subject = conn.execute("SELECT id,name FROM subjects WHERE id=? AND school_id=?", (subject_id, sid)).fetchone()
-        klass = conn.execute("SELECT id,name FROM classes WHERE id=? AND school_id=?", (class_id, sid)).fetchone()
-        topic = re.sub(r"\s+", " ", request.form.get("topic", "")).strip()[:180]
-        difficulty = request.form.get("difficulty", "mixed")
-        difficulty = difficulty if difficulty in ("easy", "moderate", "challenging", "mixed") else "mixed"
-        count = max(1, min(request.form.get("question_count", type=int) or 10, 40))
-        if not _ai_feature_on(settings, "cbt_generator"):
-            flash("CBT Question Generator is disabled by your School Admin.", "error")
-        elif not subject or not klass or not topic:
-            flash("Select a valid school subject and class, and enter a topic.", "error")
-        elif session.get("role") == "teacher" and klass["id"] not in [c["id"] for c in classes]:
-            flash("You are not assigned to that class.", "error")
-        else:
-            system = ("You create original Nigerian secondary-school CBT practice questions. Return ONLY a JSON array. "
-                      "Each item must have question, options (four strings), answer (exact option text), explanation. "
-                      "Ensure one unambiguous correct answer, curriculum-appropriate difficulty, no trick wording, no repeated questions.")
-            payload = {"subject": subject["name"], "class": klass["name"], "topic": topic, "difficulty": difficulty,
-                       "count": count, "question_type": "four-option multiple choice"}
-            raw, err = ai_provider_generate(system, json.dumps(payload), max_tokens=min(3500, 160 * count))
-            questions = _ai_json_questions(raw, count)
-            if len(questions) < count:
-                questions = questions + _ai_fallback_questions(subject["name"], topic, count - len(questions), difficulty)
-            title = f"{subject['name']} — {topic}"
-            cur = conn.execute("INSERT INTO ai_cbt_sets(tenant_id,school_id,title,subject,class_name,topic,question_count,difficulty,status,questions_json,generated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                               (tenant, sid, title, subject["name"], klass["name"], topic, len(questions), difficulty, "draft", json.dumps(questions, ensure_ascii=False), session["user_id"]))
-            _ai_log(conn, "cbt_generator", "draft_generated", scope="school", request_summary=f"{subject['name']} / {klass['name']} / {topic} / {len(questions)} questions", output_summary=f"Draft set {cur.lastrowid}")
-            conn.commit(); generated = {"id": cur.lastrowid, "title": title, "questions": questions}
-            flash("Question set saved as a draft. A teacher must review every question and answer before CBT use.", "success")
-    recent = conn.execute("SELECT id,title,subject,class_name,question_count,status,created_at FROM ai_cbt_sets WHERE school_id=? AND tenant_id=? ORDER BY id DESC LIMIT 10", (sid, tenant)).fetchall()
-    enabled = _ai_feature_on(settings, "cbt_generator"); conn.close()
-    return render_template("ai_cbt_generator.html", subjects=subjects, classes=classes, generated=generated, recent=recent, enabled=enabled)
-
-
-@app.route("/ai/cbt/<int:set_id>")
-@login_required("admin", "sub_admin", "teacher")
-def ai_cbt_detail(set_id):
-    conn = get_db(); row = conn.execute("SELECT * FROM ai_cbt_sets WHERE id=? AND school_id=? AND tenant_id=?", (set_id, current_school_id(), current_tenant_id())).fetchone()
-    if not row:
-        conn.close(); abort(404)
-    if session.get("role") == "teacher":
-        accessible = get_accessible_class_ids(conn, session.get("role"), session.get("position"), session["user_id"])
-        if accessible != "all":
-            klass = conn.execute("SELECT id FROM classes WHERE school_id=? AND name=?", (current_school_id(), row["class_name"])).fetchone()
-            if not klass or klass["id"] not in accessible:
-                conn.close(); abort(403)
-    questions = json.loads(row["questions_json"] or "[]")
-    conn.close(); return render_template("ai_cbt_detail.html", question_set=row, questions=questions)
-
-
-@app.route("/ai/cbt/<int:set_id>/review", methods=["POST"])
-@login_required("admin", "sub_admin", "teacher")
-def ai_cbt_review(set_id):
-    conn = get_db(); row = conn.execute("SELECT * FROM ai_cbt_sets WHERE id=? AND school_id=? AND tenant_id=?", (set_id, current_school_id(), current_tenant_id())).fetchone()
-    if not row:
-        conn.close(); abort(404)
-    if session.get("role") == "teacher":
-        accessible = get_accessible_class_ids(conn, session.get("role"), session.get("position"), session["user_id"])
-        klass = conn.execute("SELECT id FROM classes WHERE school_id=? AND name=?", (current_school_id(), row["class_name"])).fetchone()
-        if accessible != "all" and (not klass or klass["id"] not in accessible):
-            conn.close(); abort(403)
-    action = request.form.get("action", "reviewed")
-    if action not in ("reviewed", "approved", "rejected"):
-        action = "reviewed"
-    # This is an AI draft store only. Approval does not publish an exam or move questions into a live CBT bank.
-    conn.execute("UPDATE ai_cbt_sets SET status=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND school_id=? AND tenant_id=?",
-                 (action, session["user_id"], set_id, current_school_id(), current_tenant_id()))
-    _ai_log(conn, "cbt_generator", f"draft_{action}", scope="school", request_summary=f"Question set {set_id}")
-    conn.commit(); conn.close(); flash("CBT draft review status updated. This does not publish the test.", "success")
-    return redirect(url_for("ai_cbt_detail", set_id=set_id))
-
-
-@app.route("/ai/attendance-intelligence")
-@login_required("admin", "sub_admin", "teacher")
-def ai_attendance_intelligence():
-    conn = get_db(); sid = current_school_id(); settings = _ai_settings(conn, sid); term = current_term(conn)
-    classes = conn.execute("SELECT id,name FROM classes WHERE school_id=? ORDER BY name", (sid,)).fetchall()
-    accessible_ids = None
-    if session.get("role") == "teacher" and not can_view_all_results(session.get("role"), session.get("position")):
-        accessible_ids = get_accessible_class_ids(conn, session.get("role"), session.get("position"), session["user_id"])
-        accessible_ids = [] if accessible_ids == "all" else accessible_ids
-        classes = [c for c in classes if c["id"] in accessible_ids]
-    summaries = []; totals = {"students": 0, "records": 0, "present": 0, "absent": 0, "late": 0}
-    if term and _ai_feature_on(settings, "attendance_intelligence"):
-        for klass in classes:
-            r = conn.execute("SELECT COUNT(DISTINCT st.id) students,COUNT(ar.id) records,SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) present,SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END) absent,SUM(CASE WHEN ar.detail_status='late' THEN 1 ELSE 0 END) late FROM students st LEFT JOIN attendance_records ar ON ar.student_id=st.id AND ar.term_id=? WHERE st.class_id=? AND st.is_active=1", (term["id"], klass["id"])).fetchone()
-            present = r["present"] or 0; absent = r["absent"] or 0; records = r["records"] or 0
-            summaries.append({"class_name": klass["name"], "students": r["students"] or 0, "records": records,
-                              "present": present, "absent": absent, "late": r["late"] or 0,
-                              "rate": round(100 * present / records, 1) if records else None})
-            for key in totals: totals[key] += r[key] or 0
-    conn.close(); rate = round(100 * totals["present"] / totals["records"], 1) if totals["records"] else None
-    return render_template("ai_attendance_intelligence.html", summaries=summaries, totals=totals, rate=rate, term=term,
-                           enabled=_ai_feature_on(settings, "attendance_intelligence"))
-
-
-@app.route("/ai/management-assistant")
-@login_required("admin", "sub_admin")
-def ai_management_assistant():
-    conn = get_db(); sid = current_school_id(); settings = _ai_settings(conn, sid); term = current_term(conn)
-    metrics = {
-        "active_students": conn.execute("SELECT COUNT(*) c FROM students st JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND st.is_active=1", (sid,)).fetchone()["c"],
-        "classes": conn.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (sid,)).fetchone()["c"],
-        "staff": conn.execute("SELECT COUNT(*) c FROM users WHERE school_id=? AND is_active=1", (sid,)).fetchone()["c"],
-        "subjects": conn.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?", (sid,)).fetchone()["c"],
-    }
-    if term:
-        metrics["scores_recorded"] = conn.execute("SELECT COUNT(*) c FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id WHERE c.school_id=? AND sc.term_id=?", (sid, term["id"])).fetchone()["c"]
-        metrics["attendance_records"] = conn.execute("SELECT COUNT(*) c FROM attendance_records ar JOIN classes c ON c.id=ar.class_id WHERE c.school_id=? AND ar.term_id=?", (sid, term["id"])).fetchone()["c"]
-    else:
-        metrics["scores_recorded"] = 0; metrics["attendance_records"] = 0
-    conn.close()
-    enabled = _ai_feature_on(settings, "management_assistant")
-    recommendations = []
-    if not term: recommendations.append("Activate the current academic session and term before relying on term-level reports.")
-    if metrics["active_students"] and not metrics["scores_recorded"]: recommendations.append("No scores are recorded for the current term yet; review subject score entry progress.")
-    if metrics["active_students"] and not metrics["attendance_records"]: recommendations.append("No attendance records are available for the current term; check daily roll-call completion.")
-    if not recommendations: recommendations.append("Review the current term's class performance and attendance reports regularly; this dashboard is descriptive, not a decision engine.")
-    return render_template("ai_management_assistant.html", metrics=metrics, recommendations=recommendations, term=term, enabled=enabled)
-
 
 @app.route("/admin/theme",methods=["GET","POST"])
 @login_required("admin","sub_admin")
