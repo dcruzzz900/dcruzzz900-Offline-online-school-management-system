@@ -1,0 +1,713 @@
+/* ============================================================
+   My School Hub – Modern Dashboard (matches design mockups)
+   ============================================================ */
+
+:root {
+  --ms-primary: #1a3a6b;
+  --ms-primary-dark: #0f2744;
+  --ms-sidebar: #0d2137;
+  --ms-blue: #2563eb;
+  --ms-green: #16a34a;
+  --ms-purple: #7c3aed;
+  --ms-cyan: #0891b2;
+  --ms-orange: #ea580c;
+  --ms-emerald: #059669;
+  --ms-card-radius: 16px;
+  --ms-shadow: 0 4px 20px rgba(15, 39, 68, 0.08);
+  --ms-shadow-hover: 0 8px 28px rgba(15, 39, 68, 0.12);
+}
+
+/* ---------- Welcome banner ---------- */
+.ms-welcome {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1a3a6b 0%, #2563eb 55%, #3b82f6 100%);
+  color: #fff;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 120px;
+  box-shadow: var(--ms-shadow);
+}
+
+.ms-welcome::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ms-welcome-text {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-welcome-text h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.ms-welcome-text p {
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.92;
+  line-height: 1.4;
+}
+
+.ms-welcome-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.ms-welcome-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255,255,255,0.18);
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.ms-welcome-img {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  max-width: 380px;
+  object-fit: cover;
+  opacity: 0.35;
+  mask-image: linear-gradient(to left, black 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to left, black 40%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ---------- Metric cards ---------- */
+.ms-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1200px) {
+  .ms-metrics { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  .ms-metrics { grid-template-columns: repeat(2, 1fr); }
+}
+
+.ms-metric {
+  border-radius: var(--ms-card-radius);
+  padding: 1.1rem 1rem 0.95rem;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--ms-shadow);
+  display: flex;
+  flex-direction: column;
+  min-height: 118px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ms-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ms-shadow-hover);
+}
+
+.ms-metric::after {
+  content: "";
+  position: absolute;
+  right: -12px;
+  bottom: -12px;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+}
+
+.ms-metric-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.55rem;
+  font-size: 1.15rem;
+}
+
+.ms-metric-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  opacity: 0.9;
+  margin-bottom: 0.15rem;
+  letter-spacing: 0.01em;
+}
+
+.ms-metric-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.ms-metric-sub {
+  margin-top: auto;
+  padding-top: 0.45rem;
+  font-size: 0.72rem;
+  opacity: 0.88;
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ms-metric-link {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.95);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.ms-metric-link:hover { text-decoration: underline; }
+
+.ms-m-students { background: linear-gradient(145deg, #2563eb, #1d4ed8); }
+.ms-m-staff    { background: linear-gradient(145deg, #16a34a, #15803d); }
+.ms-m-classes  { background: linear-gradient(145deg, #7c3aed, #6d28d9); }
+.ms-m-subjects { background: linear-gradient(145deg, #0891b2, #0e7490); }
+.ms-m-parents  { background: linear-gradient(145deg, #ea580c, #c2410c); }
+.ms-m-fees     { background: linear-gradient(145deg, #059669, #047857); }
+
+/* ---------- Charts row ---------- */
+.ms-charts {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr 1.25fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 1100px) {
+  .ms-charts { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .ms-charts { grid-template-columns: 1fr; }
+}
+
+.ms-card {
+  background: #fff;
+  border-radius: var(--ms-card-radius);
+  box-shadow: var(--ms-shadow);
+  padding: 1.15rem 1.25rem;
+  border: 1px solid rgba(15, 39, 68, 0.06);
+}
+
+.ms-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.ms-card-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ms-primary-dark);
+  letter-spacing: -0.01em;
+}
+
+.ms-card-header .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  background: #eff6ff;
+  color: var(--ms-blue);
+}
+
+/* Gender donut */
+.ms-gender-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ms-donut {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: conic-gradient(#2563eb 0% 52%, #ec4899 52% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ms-donut::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.ms-donut-center {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.ms-donut-center .pct {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ms-primary-dark);
+}
+
+.ms-donut-center .lbl {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.ms-gender-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.ms-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.ms-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ms-legend-dot.male { background: #2563eb; }
+.ms-legend-dot.female { background: #ec4899; }
+
+/* Result compilation progress */
+.ms-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ms-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: conic-gradient(#16a34a 0% 78%, #e2e8f0 78% 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ms-ring::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.ms-ring-center {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.ms-ring-center .pct {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ms-primary-dark);
+}
+
+.ms-progress-info {
+  flex: 1;
+  min-width: 140px;
+}
+
+.ms-progress-info .big {
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--ms-primary-dark);
+  margin-bottom: 0.35rem;
+}
+
+.ms-progress-info .sub {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin-bottom: 0.65rem;
+}
+
+.ms-bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ms-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #16a34a, #4ade80);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* Enrollment trend */
+.ms-trend-chart {
+  height: 160px;
+  position: relative;
+}
+
+.ms-trend-chart canvas {
+  width: 100% !important;
+  height: 160px !important;
+}
+
+/* ---------- Bottom panels ---------- */
+.ms-bottom {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.9fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 1100px) {
+  .ms-bottom { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .ms-bottom { grid-template-columns: 1fr; }
+}
+
+/* Quick Access grid */
+.ms-qa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 0.65rem;
+}
+
+.ms-qa-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.85rem 0.5rem;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  text-decoration: none;
+  color: #1e293b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  transition: all 0.15s ease;
+  min-height: 88px;
+  position: relative;
+}
+
+.ms-qa-item:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: var(--ms-blue);
+  transform: translateY(-1px);
+}
+
+.ms-qa-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.ms-qa-item .badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* Recent activities */
+.ms-activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.ms-activity-item {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+}
+
+.ms-activity-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  background: #eff6ff;
+  color: var(--ms-blue);
+}
+
+.ms-activity-icon.green { background: #ecfdf5; color: #059669; }
+.ms-activity-icon.purple { background: #f5f3ff; color: #7c3aed; }
+.ms-activity-icon.orange { background: #fff7ed; color: #ea580c; }
+
+.ms-activity-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ms-activity-body .title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 0.1rem;
+}
+
+.ms-activity-body .meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Announcements */
+.ms-announce-item {
+  background: #f0f9ff;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.65rem;
+  border-left: 3px solid var(--ms-blue);
+}
+
+.ms-announce-item .title {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: #1e293b;
+  margin: 0 0 0.25rem;
+}
+
+.ms-announce-item .body {
+  font-size: 0.8rem;
+  color: #475569;
+  margin: 0 0 0.35rem;
+  line-height: 1.4;
+}
+
+.ms-announce-item .date {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.ms-tip {
+  background: #f0fdf4;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  color: #166534;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  border: 1px solid #bbf7d0;
+}
+
+/* Section title with "View All" */
+.ms-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.ms-section-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ms-primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ms-section-head a {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ms-blue);
+  text-decoration: none;
+}
+.ms-section-head a:hover { text-decoration: underline; }
+
+/* ---------- Mobile bottom nav (for app-like feel) ---------- */
+.ms-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+  z-index: 900;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.06);
+}
+
+.ms-bottom-nav-inner {
+  display: flex;
+  justify-content: space-around;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.ms-bottom-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  text-decoration: none;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.35rem 0.6rem;
+  border-radius: 10px;
+  min-width: 60px;
+}
+
+.ms-bottom-nav a.active,
+.ms-bottom-nav a:hover {
+  color: var(--ms-blue);
+  background: #eff6ff;
+}
+
+.ms-bottom-nav .nav-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.ms-bottom-nav .badge {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.6rem;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .ms-bottom-nav { display: block; }
+  body { padding-bottom: 70px; }
+  .ms-welcome { padding: 1.15rem 1.2rem; min-height: 100px; }
+  .ms-welcome-text h1 { font-size: 1.25rem; }
+  .ms-welcome-meta { display: none; }
+  .ms-welcome-img { width: 50%; opacity: 0.25; }
+}
+
+/* ---------- Sidebar polish to better match design ---------- */
+.app-sidebar {
+  background: var(--ms-sidebar) !important;
+}
+
+.app-sidebar .brand b {
+  color: #fff;
+}
+
+.app-sidebar .brand small {
+  color: rgba(255,255,255,0.65);
+}
+
+.app-sidebar nav a {
+  color: rgba(255,255,255,0.78) !important;
+}
+
+.app-sidebar nav a:hover,
+.app-sidebar nav a.active {
+  background: rgba(255,255,255,0.1) !important;
+  color: #fff !important;
+}
+
+.app-sidebar .nav-group {
+  color: rgba(255,255,255,0.4) !important;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 0.9rem;
+  margin-bottom: 0.25rem;
+  padding-left: 0.9rem;
+}
+
+/* Hide old page-heading on modern dashboard */
+.ms-dashboard .page-heading { display: none; }
+.ms-dashboard .stat-grid { display: none; }
+.ms-dashboard .gender-stat-card { display: none; }
+.ms-dashboard .chart-card { display: none; }
+.ms-dashboard .ai-dashboard-banner { display: none; }
+.ms-dashboard .quick-actions { display: none; }
+.ms-dashboard .grid-2 { display: none; }

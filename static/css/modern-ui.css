@@ -1,0 +1,532 @@
+/* ============================================================
+   My School Hub – Modern UI Design System
+   Shared components for list pages, tables, forms, badges
+   ============================================================ */
+
+:root {
+  --ms-primary: #1a3a6b;
+  --ms-primary-dark: #0f2744;
+  --ms-blue: #2563eb;
+  --ms-green: #16a34a;
+  --ms-purple: #7c3aed;
+  --ms-orange: #ea580c;
+  --ms-red: #dc2626;
+  --ms-slate: #64748b;
+  --ms-card-radius: 14px;
+  --ms-shadow: 0 4px 18px rgba(15, 39, 68, 0.07);
+  --ms-border: #e2e8f0;
+}
+
+/* ---------- Page header ---------- */
+.ms-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.ms-page-header h1 {
+  margin: 0 0 0.2rem;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ms-primary-dark);
+  letter-spacing: -0.02em;
+}
+
+.ms-page-header .subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ms-slate);
+}
+
+.ms-page-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ---------- Buttons ---------- */
+.ms-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.05rem;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.ms-btn-primary {
+  background: var(--ms-blue);
+  color: #fff;
+}
+.ms-btn-primary:hover { background: #1d4ed8; color: #fff; }
+
+.ms-btn-secondary {
+  background: #fff;
+  color: var(--ms-primary-dark);
+  border: 1px solid var(--ms-border);
+}
+.ms-btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
+
+.ms-btn-success { background: var(--ms-green); color: #fff; }
+.ms-btn-success:hover { background: #15803d; color: #fff; }
+
+.ms-btn-danger { background: var(--ms-red); color: #fff; }
+.ms-btn-danger:hover { background: #b91c1c; color: #fff; }
+
+.ms-btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.ms-btn-ghost {
+  background: transparent;
+  color: var(--ms-blue);
+  border: none;
+  padding: 0.35rem 0.6rem;
+}
+.ms-btn-ghost:hover { background: #eff6ff; }
+
+/* ---------- Cards ---------- */
+.ms-card {
+  background: #fff;
+  border-radius: var(--ms-card-radius);
+  box-shadow: var(--ms-shadow);
+  border: 1px solid rgba(15, 39, 68, 0.05);
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1.15rem;
+}
+
+.ms-card-title {
+  margin: 0 0 1rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--ms-primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* ---------- Toolbar (search + filters) ---------- */
+.ms-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.ms-search {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+}
+
+.ms-search input {
+  width: 100%;
+  padding: 0.55rem 0.9rem 0.55rem 2.4rem;
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  background: #f8fafc;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ms-search input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  background: #fff;
+}
+
+.ms-search::before {
+  content: "🔍";
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.ms-filter select {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  background: #fff;
+  min-width: 140px;
+}
+
+/* ---------- Modern tables ---------- */
+.ms-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--ms-border);
+}
+
+.ms-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ms-table thead th {
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 650;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--ms-border);
+  white-space: nowrap;
+}
+
+.ms-table tbody td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.ms-table tbody tr:last-child td { border-bottom: none; }
+.ms-table tbody tr:hover { background: #f8fafc; }
+
+.ms-table .actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+/* Avatar / initials */
+.ms-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.ms-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.ms-user-cell .name {
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.ms-user-cell .meta {
+  font-size: 0.78rem;
+  color: var(--ms-slate);
+  margin: 0;
+}
+
+/* Status badges */
+.ms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.ms-badge-success { background: #ecfdf5; color: #059669; }
+.ms-badge-warning { background: #fff7ed; color: #c2410c; }
+.ms-badge-danger  { background: #fef2f2; color: #dc2626; }
+.ms-badge-info    { background: #eff6ff; color: #2563eb; }
+.ms-badge-muted   { background: #f1f5f9; color: #64748b; }
+
+/* ---------- Form styles ---------- */
+.ms-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem 1.25rem;
+}
+
+@media (max-width: 700px) {
+  .ms-form-grid { grid-template-columns: 1fr; }
+}
+
+.ms-form-group label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.3rem;
+}
+
+.ms-form-group input,
+.ms-form-group select,
+.ms-form-group textarea {
+  width: 100%;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--ms-border);
+  border-radius: 9px;
+  font-size: 0.9rem;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ms-form-group input:focus,
+.ms-form-group select:focus,
+.ms-form-group textarea:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.ms-form-group .hint {
+  font-size: 0.75rem;
+  color: var(--ms-slate);
+  margin-top: 0.25rem;
+}
+
+.ms-req { color: var(--ms-red); }
+
+/* ---------- Empty state ---------- */
+.ms-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--ms-slate);
+}
+
+.ms-empty .icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.5;
+}
+
+/* ---------- Pagination ---------- */
+.ms-pagination {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.ms-pagination a,
+.ms-pagination span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 0.5rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: #334155;
+  background: #f1f5f9;
+}
+
+.ms-pagination a:hover { background: #e2e8f0; }
+.ms-pagination .active {
+  background: var(--ms-blue);
+  color: #fff;
+}
+
+/* ---------- Attendance specific ---------- */
+.ms-att-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 0.75rem;
+}
+
+.ms-att-row:last-child { border-bottom: none; }
+
+.ms-att-status {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ms-att-btn {
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.ms-att-btn.present {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #86efac;
+}
+
+.ms-att-btn.absent {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.ms-att-btn.late {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fdba74;
+}
+
+/* ---------- Mobile list cards (instead of table) ---------- */
+.ms-mobile-list { display: none; }
+
+@media (max-width: 768px) {
+  .ms-table-wrap { display: none; }
+  .ms-mobile-list { display: block; }
+
+  .ms-mobile-item {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .ms-mobile-item:last-child { border-bottom: none; }
+
+  .ms-mobile-item .info { flex: 1; min-width: 0; }
+  .ms-mobile-item .name { font-weight: 600; margin: 0 0 0.15rem; }
+  .ms-mobile-item .meta { font-size: 0.8rem; color: var(--ms-slate); margin: 0; }
+  .ms-mobile-item .chevron { color: #94a3b8; font-size: 1.1rem; }
+}
+
+/* ---------- Login polish ---------- */
+.ms-login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #0f2744 0%, #1a3a6b 45%, #2563eb 100%);
+  padding: 1.5rem;
+}
+
+.ms-login-card {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: 100%;
+  max-width: 420px;
+  overflow: hidden;
+}
+
+.ms-login-header {
+  background: linear-gradient(135deg, #1a3a6b, #2563eb);
+  color: #fff;
+  padding: 1.75rem 1.5rem 1.5rem;
+  text-align: center;
+}
+
+.ms-login-header img {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #fff;
+  padding: 4px;
+  object-fit: contain;
+  margin-bottom: 0.75rem;
+}
+
+.ms-login-header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.ms-login-header p {
+  margin: 0;
+  opacity: 0.85;
+  font-size: 0.9rem;
+}
+
+.ms-login-body {
+  padding: 1.5rem;
+}
+
+.ms-login-body label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 0.3rem;
+  margin-top: 0.9rem;
+}
+
+.ms-login-body input {
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--ms-border);
+  border-radius: 10px;
+  font-size: 0.95rem;
+}
+
+.ms-login-body input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.ms-login-submit {
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.75rem;
+  background: var(--ms-blue);
+  color: #fff;
+  border: none;
+  border-radius: 11px;
+  font-size: 1rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ms-login-submit:hover { background: #1d4ed8; }
+
+.ms-login-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+
+.ms-login-links a {
+  color: var(--ms-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+.ms-login-links a:hover { text-decoration: underline; }
