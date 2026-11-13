@@ -9,16 +9,36 @@
 <div class="ms-page-header">
   <div>
     <h1>Score History</h1>
-    <p class="subtitle">Audit trail of score changes</p>
+    <p class="subtitle">
+      {% if class_row and subject_row %}
+        {{ class_row.name }} · {{ subject_row.name }}{% if term %} · {{ term.session_name }} {{ term.name }}{% endif %}
+      {% else %}
+        Audit trail of score changes
+      {% endif %}
+    </p>
   </div>
   <div class="ms-page-actions">
     <a class="ms-btn ms-btn-secondary" href="javascript:history.back()">← Back</a>
   </div>
 </div>
 
+{% if all_terms is defined and class_row and subject_row %}
+<div class="ms-filter-bar">
+  <form method="GET" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;width:100%;">
+    <div class="ms-form-group" style="margin:0;">
+      <label>Term</label>
+      <select name="term_id" onchange="this.form.submit()">
+        {% for t in all_terms %}
+        <option value="{{ t.id }}" {% if term and t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+{% endif %}
+
 <div class="ms-card">
   {% if history %}
-  {# Mobile performance-style summary if single student context #}
   <div class="ms-perf-summary">
     <div class="box">
       <div class="lbl">Entries</div>
@@ -26,7 +46,7 @@
     </div>
     <div class="box">
       <div class="lbl">Latest</div>
-      <div class="val" style="font-size:0.95rem;">{{ history[0].created_at if history[0].created_at is defined else '—' }}</div>
+      <div class="val" style="font-size:0.9rem;">{{ history[0].changed_at or history[0].server_timestamp or '—' }}</div>
     </div>
   </div>
 
@@ -36,9 +56,9 @@
         <tr>
           <th>When</th>
           <th>Student</th>
-          <th>Field</th>
-          <th>Old</th>
-          <th>New</th>
+          <th>Action</th>
+          <th>Old Total</th>
+          <th>New Total</th>
           <th>By</th>
           <th>Reason</th>
         </tr>
@@ -46,12 +66,12 @@
       <tbody>
         {% for h in history %}
         <tr>
-          <td>{{ h.created_at }}</td>
-          <td>{{ h.student_name or h.admission_no or '—' }}</td>
-          <td>{{ h.field or h.score_field or '—' }}</td>
-          <td>{{ h.old_value }}</td>
-          <td><strong>{{ h.new_value }}</strong></td>
-          <td>{{ h.changed_by or h.user_name or '—' }}</td>
+          <td style="font-size:0.82rem;white-space:nowrap;">{{ h.changed_at or h.server_timestamp or '—' }}</td>
+          <td><strong>{{ h.student_name or h.admission_no or '—' }}</strong></td>
+          <td><span class="ms-badge ms-badge-info">{{ h.action or 'edited' }}</span></td>
+          <td>{{ h.old_total if h.old_total is not none else '—' }}</td>
+          <td><strong>{{ h.new_total if h.new_total is not none else '—' }}</strong></td>
+          <td>{{ h.changed_by_name or '—' }}</td>
           <td>{{ h.reason or '—' }}</td>
         </tr>
         {% endfor %}
@@ -59,7 +79,7 @@
     </table>
   </div>
   {% else %}
-  <div class="ms-empty"><div class="icon">📜</div><p>No score changes recorded yet.</p></div>
+  <div class="ms-empty"><div class="icon">📜</div><p>No score changes recorded for this class, subject and term yet.</p></div>
   {% endif %}
 </div>
 {% endblock %}

@@ -103,9 +103,9 @@
           <tbody>
             {% for a in assignments %}
             <tr>
-              <td>{{ a.class_name }}</td>
-              <td><strong>{{ a.subject_name }}</strong></td>
-              <td><a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('score_entry', class_id=a.class_id, subject_id=a.subject_id) if a.class_id is defined else url_for('classes_list') }}">Enter Scores</a></td>
+              <td>{{ a['class_name'] if a['class_name'] is defined else a.class_name }}</td>
+              <td><strong>{{ a['subject_name'] if a['subject_name'] is defined else a.subject_name }}</strong></td>
+              <td><a class="ms-btn ms-btn-primary ms-btn-sm" href="{{ url_for('score_entry', class_id=a['class_id'], subject_id=a['subject_id']) }}">Enter Scores</a></td>
             </tr>
             {% endfor %}
           </tbody>
@@ -166,7 +166,7 @@
   <div class="ms-card">
     <div class="ms-section-head">
       <h3>🕒 Recent Activities</h3>
-      {% if url_for is defined %}<a href="{{ url_for('view_all_activities') if false else '#' }}">View All →</a>{% endif %}
+      {% if url_for is defined %}<a href="{{ url_for('view_all_activities') }}">View All →</a>{% endif %}
     </div>
     {% if activities %}
     <ul class="ms-activity-list">
