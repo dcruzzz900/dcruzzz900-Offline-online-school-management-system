@@ -4251,6 +4251,22 @@ def migration_082_v104_result_custom_fields(conn):
 STEPS.append(("result_custom_fields_v104", migration_082_v104_result_custom_fields))
 
 
+def migration_083_v105_fee_summary(conn):
+    """V105: the School Fees card on the admin dashboard reads the school's fee totals from here (expected vs collected).
+    There is no fees screen yet; until figures exist the card shows 0. Nothing links to it for now."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_fee_summary (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        label TEXT,
+        expected_amount REAL NOT NULL DEFAULT 0,
+        collected_amount REAL NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_school_fee_summary_school ON school_fee_summary(school_id, id)")
+
+
+STEPS.append(("fee_summary_v105", migration_083_v105_fee_summary))
+
+
 def term_sequence_next(conn, term):
     """The term that immediately follows `term`: the next term in the same session
     (by id, i.e. creation order — the same convention `_prev_term` in app.py relies

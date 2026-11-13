@@ -1276,6 +1276,7 @@ def inject_school_settings():
                 dashboard_sidebar_style=school["dashboard_sidebar_style"] or "dark",
                 dashboard_header_style=school["dashboard_header_style"] or "solid",
                 school_tagline=school["school_tagline"] or "Better Data. Brighter Futures.",
+                school_address=(school["school_address"] or ""),
             )
     return dict(school_name="School Result System", school_logo_url=None, school_logo_align="center",
                 school_name_align="center",
@@ -1285,7 +1286,7 @@ def inject_school_settings():
                 theme_preset="default", dashboard_primary_color="#1f6feb",
                 dashboard_secondary_color="#0b3b75", dashboard_accent_color="#7c4dff",
                 dashboard_sidebar_style="dark", dashboard_header_style="solid",
-                school_tagline="Better Data. Brighter Futures.")
+                school_tagline="Better Data. Brighter Futures.", school_address="")
 
 
 @app.context_processor
@@ -2477,6 +2478,164 @@ def top_performing_students(conn, school_id, term_id, limit=5, class_ids=None):
     return rows[:limit]
 
 
+@app.route("/admin/analytics")
+@login_required("admin", "sub_admin")
+def admin_analytics():
+    """V105: the analytics that used to sit on the admin dashboard (result performance trend, high/low performing classes,
+    attendance trend, enrolment by class, top students, plan usage) now live here, so nothing was lost when the dashboard
+    was rebuilt to the approved design."""
+    conn = get_db()
+    term = current_term(conn)
+    school_id = current_school_id()
+    stats = {
+        "students": conn.execute(
+            "SELECT COUNT(*) c FROM students s JOIN classes c ON c.id=s.class_id "
+            "WHERE c.school_id=? AND s.is_active=1", (school_id,)
+        ).fetchone()["c"],
+        "classes": conn.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school_id,)).fetchone()["c"],
+        "teachers": conn.execute(
+            "SELECT COUNT(*) c FROM users WHERE role='teacher' AND school_id=?", (school_id,)
+        ).fetchone()["c"],
+        "subjects": conn.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?", (school_id,)).fetchone()["c"],
+    }
+    gender_stats = student_gender_stats(conn, "c.school_id=?", (school_id,))
+    performance_trend = school_performance_trend(conn, school_id, term["session_id"], term["id"]) if term else []
+    ranked_classes = ranked_class_performance(conn, school_id, term["id"]) if term else []
+    school_avg_this_term = school_term_result_stats(conn, school_id, term["id"])["avg_score"] if term else None
+    # High-Performing: at/above the school's own average this term (capped at 3, best first).
+    # Classes Needing Improvement: only a class that trips a real, named threshold -- below
+    # the school average, a sub-50% pass rate, or a declining trend from last term -- never
+    # just "whatever's left over", so a school with only one or two classes is never forced
+    # to have something flagged. Capped at 3, worst first.
+    high_classes = [
+        r for r in ranked_classes
+        if school_avg_this_term is not None and r["avg_score"] is not None and r["avg_score"] >= school_avg_this_term
+    ][:3]
+    _high_ids = {r["class"]["id"] for r in high_classes}
+    low_classes = []
+    for r in ranked_classes:
+        if r["class"]["id"] in _high_ids:
+            continue
+        reasons = []
+        if r["avg_score"] is not None and school_avg_this_term is not None and r["avg_score"] < school_avg_this_term:
+            reasons.append("Average score below the school average")
+        if r["pass_rate"] is not None and r["pass_rate"] < 50:
+            reasons.append("Pass rate below 50%")
+        if r["trend"] == "down":
+            reasons.append("Declining from the previous term")
+        if reasons:
+            low_classes.append({**r, "reasons": reasons})
+    low_classes.sort(key=lambda r: (r["avg_score"], r["pass_rate"] or 0))
+    low_classes = low_classes[:3]
+    activities = recent_activities(conn, school_id, limit=8)
+    alerts = plan_usage_alerts(conn, school_id)
+    school = get_school(conn, school_id)
+    plan = subscription_plan_for_school(conn, school)
+    # Dashboard analytics charts (Chart.js, rendered client-side from this JSON): class
+    # performance bars, gender donut, weekly attendance line, enrolment bars, and a Top
+    # Performing Students table -- all school-wide, matching Admin's full visibility.
+    enrolment = enrolment_by_class(conn, school_id)
+    attendance_trend = school_attendance_trend(conn, school_id)
+    top_students = top_performing_students(conn, school_id, term["id"]) if term else []
+    class_performance_chart = all_classes_performance(conn, school_id, term["id"]) if term else []
+    conn.close()
+    return render_template(
+        "admin_analytics.html", term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
+        performance_trend=performance_trend, high_classes=high_classes, low_classes=low_classes,
+        activities=activities, ranked_classes=ranked_classes, enrolment=enrolment,
+        attendance_trend=attendance_trend, top_students=top_students,
+        class_performance_chart=class_performance_chart, student_full_name=student_full_name,
+    )
+
+
+def _trend_chart_geometry(trend):
+    """SVG geometry for the Enrolment Trend line chart (students + staff over the last terms). No JS / CDN needed."""
+    W, H, L, R, T, B = 520, 230, 48, 18, 34, 34
+    vals = [max(t["students"], t["staff"]) for t in trend] or [0]
+    vmax = max(vals) or 1
+    step = next((st for st in (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000) if vmax / st <= 5), 10000)
+    ymax = -(-vmax // step) * step
+    ymax = max(ymax, step)
+    ph, pw = H - T - B, W - L - R
+    def y(v): return round(T + (1 - v / ymax) * ph, 1)
+    n = len(trend)
+    def x(i): return round(L + pw / 2, 1) if n == 1 else round(L + 40 + i * (pw - 80) / (n - 1), 1)
+    pts_s = [{"x": x(i), "y": y(t["students"]), "v": t["students"], "label": t["label"]} for i, t in enumerate(trend)]
+    pts_f = [{"x": x(i), "y": y(t["staff"]), "v": t["staff"]} for i, t in enumerate(trend)]
+    ticks = [{"y": y(v), "v": v} for v in range(0, ymax + 1, step)]
+    line = lambda pts: " ".join(f"{p['x']},{p['y']}" for p in pts)
+    area = f"{pts_s[0]['x']},{H - B} " + line(pts_s) + f" {pts_s[-1]['x']},{H - B}"
+    return {"W": W, "H": H, "L": L, "R": R, "T": T, "B": B, "ticks": ticks, "students": pts_s, "staff": pts_f,
+            "line_s": line(pts_s), "line_f": line(pts_f), "area": area}
+
+
+def admin_dashboard_overview(conn, school_id, term):
+    """V105: every number on the School Administration dashboard (all scoped to ONE school). Pure reads."""
+    def pct(n, d):
+        return round(n * 100.0 / d, 1) if d else 0.0
+    gs = student_gender_stats(conn, "c.school_id=?", (school_id,)) or {}
+    st_total = gs.get("total", 0) or 0
+    st_m, st_f = gs.get("boys", 0) or 0, gs.get("girls", 0) or 0
+    # staff (everyone who can sign in as staff) and their gender when recorded on the profile
+    staff_rows = conn.execute("SELECT * FROM users WHERE school_id=? AND COALESCE(is_active,1)=1", (school_id,)).fetchall()
+    sf_total = len(staff_rows)
+    def _g(r):
+        try:
+            return (r["gender"] or "").strip().lower()
+        except (IndexError, KeyError):
+            return ""
+    sf_m = sum(1 for r in staff_rows if _g(r) in ("m", "male"))
+    sf_f = sum(1 for r in staff_rows if _g(r) in ("f", "female"))
+    classes = conn.execute("SELECT COUNT(*) FROM classes WHERE school_id=?", (school_id,)).fetchone()[0]
+    subjects = conn.execute("SELECT COUNT(*) FROM subjects WHERE school_id=?", (school_id,)).fetchone()[0]
+    try:
+        parents = conn.execute("SELECT COUNT(*) FROM parent_accounts WHERE school_id=?", (school_id,)).fetchone()[0]
+    except Exception:
+        parents = 0
+    # school fees: latest summary row (no fees screen yet -> zeros until figures exist)
+    fee = conn.execute("SELECT expected_amount, collected_amount FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
+    expected, collected = (fee["expected_amount"], fee["collected_amount"]) if fee else (0.0, 0.0)
+    # result compilation: a student's result is compiled when EVERY subject assigned to their class has a score this term
+    compiled = 0
+    if term:
+        rows = conn.execute(
+            "SELECT s.id, "
+            "(SELECT COUNT(*) FROM class_subjects cs WHERE cs.class_id=s.class_id) AS need, "
+            "(SELECT COUNT(*) FROM scores sc JOIN class_subjects cs2 ON cs2.subject_id=sc.subject_id AND cs2.class_id=s.class_id "
+            " WHERE sc.student_id=s.id AND sc.term_id=?) AS have "
+            "FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1", (term["id"], school_id)).fetchall()
+        compiled = sum(1 for r in rows if r["need"] and r["have"] >= r["need"])
+    comp_pct = round(compiled * 100.0 / st_total) if st_total else 0
+    # enrolment trend: last four terms (students enrolled in that term's session; staff who existed by then)
+    trend = []
+    try:
+        terms_all = sorted(only_activated_terms(conn, [t for t in all_terms_for_school(conn)], term["id"] if term else None), key=lambda t: (t["session_id"], t["id"]))
+        for t in terms_all[-4:]:
+            sess_students = conn.execute("SELECT COUNT(*) FROM enrollments e JOIN classes c ON c.id=e.class_id WHERE e.session_id=? AND c.school_id=?",
+                                         (t["session_id"], school_id)).fetchone()[0]
+            if term and t["id"] == term["id"] and not sess_students:
+                sess_students = st_total
+            stamp = None
+            try:
+                stamp = conn.execute("SELECT activated_at FROM terms WHERE id=?", (t["id"],)).fetchone()[0]
+            except Exception:
+                pass
+            staff_then = conn.execute("SELECT COUNT(*) FROM users WHERE school_id=? AND COALESCE(is_active,1)=1 AND (created_at IS NULL OR created_at<=COALESCE(?, '9999'))", (school_id, stamp)).fetchone()[0]
+            trend.append({"label": t["name"], "students": sess_students, "staff": staff_then})
+    except Exception:
+        trend = []
+    if not trend:
+        trend = [{"label": (term["name"] if term else "Now"), "students": st_total, "staff": sf_total}]
+    return {
+        "students": {"total": st_total, "male": st_m, "female": st_f, "male_pct": pct(st_m, st_total), "female_pct": pct(st_f, st_total)},
+        "staff": {"total": sf_total, "male": sf_m, "female": sf_f, "male_pct": pct(sf_m, sf_total), "female_pct": pct(sf_f, sf_total)},
+        "classes": classes, "subjects": subjects, "parents": parents,
+        "fees": {"expected": expected, "collected": collected, "pct": pct(collected, expected)},
+        "compilation": {"compiled": compiled, "total": st_total, "pct": comp_pct},
+        "trend": trend, "chart": _trend_chart_geometry(trend),
+    }
+
+
 @app.route("/dashboard")
 @login_required()
 def dashboard():
@@ -2488,64 +2647,24 @@ def dashboard():
     term = current_term(conn)
     school_id = current_school_id()
     if session["role"] in ("admin", "sub_admin"):
-        stats = {
-            "students": conn.execute(
-                "SELECT COUNT(*) c FROM students s JOIN classes c ON c.id=s.class_id "
-                "WHERE c.school_id=? AND s.is_active=1", (school_id,)
-            ).fetchone()["c"],
-            "classes": conn.execute("SELECT COUNT(*) c FROM classes WHERE school_id=?", (school_id,)).fetchone()["c"],
-            "teachers": conn.execute(
-                "SELECT COUNT(*) c FROM users WHERE role='teacher' AND school_id=?", (school_id,)
-            ).fetchone()["c"],
-            "subjects": conn.execute("SELECT COUNT(*) c FROM subjects WHERE school_id=?", (school_id,)).fetchone()["c"],
-        }
-        gender_stats = student_gender_stats(conn, "c.school_id=?", (school_id,))
-        performance_trend = school_performance_trend(conn, school_id, term["session_id"], term["id"]) if term else []
-        ranked_classes = ranked_class_performance(conn, school_id, term["id"]) if term else []
-        school_avg_this_term = school_term_result_stats(conn, school_id, term["id"])["avg_score"] if term else None
-        # High-Performing: at/above the school's own average this term (capped at 3, best first).
-        # Classes Needing Improvement: only a class that trips a real, named threshold -- below
-        # the school average, a sub-50% pass rate, or a declining trend from last term -- never
-        # just "whatever's left over", so a school with only one or two classes is never forced
-        # to have something flagged. Capped at 3, worst first.
-        high_classes = [
-            r for r in ranked_classes
-            if school_avg_this_term is not None and r["avg_score"] is not None and r["avg_score"] >= school_avg_this_term
-        ][:3]
-        _high_ids = {r["class"]["id"] for r in high_classes}
-        low_classes = []
-        for r in ranked_classes:
-            if r["class"]["id"] in _high_ids:
-                continue
-            reasons = []
-            if r["avg_score"] is not None and school_avg_this_term is not None and r["avg_score"] < school_avg_this_term:
-                reasons.append("Average score below the school average")
-            if r["pass_rate"] is not None and r["pass_rate"] < 50:
-                reasons.append("Pass rate below 50%")
-            if r["trend"] == "down":
-                reasons.append("Declining from the previous term")
-            if reasons:
-                low_classes.append({**r, "reasons": reasons})
-        low_classes.sort(key=lambda r: (r["avg_score"], r["pass_rate"] or 0))
-        low_classes = low_classes[:3]
-        activities = recent_activities(conn, school_id, limit=8)
-        alerts = plan_usage_alerts(conn, school_id)
+        # V105: the School Administration dashboard follows the approved design (stat cards, gender distribution, result
+        # compilation progress, enrolment trend, quick access, recent activities, announcements). The old Academic workspace /
+        # School operations / Quick actions blocks and the chart-heavy analytics were removed from this page.
+        import v63_core as _core
+        ov = admin_dashboard_overview(conn, school_id, term)
+        activities = recent_activities(conn, school_id, limit=4)
         school = get_school(conn, school_id)
-        plan = subscription_plan_for_school(conn, school)
-        # Dashboard analytics charts (Chart.js, rendered client-side from this JSON): class
-        # performance bars, gender donut, weekly attendance line, enrolment bars, and a Top
-        # Performing Students table -- all school-wide, matching Admin's full visibility.
-        enrolment = enrolment_by_class(conn, school_id)
-        attendance_trend = school_attendance_trend(conn, school_id)
-        top_students = top_performing_students(conn, school_id, term["id"]) if term else []
-        class_performance_chart = all_classes_performance(conn, school_id, term["id"]) if term else []
+        pending_reviews = conn.execute("SELECT COUNT(*) FROM result_publication WHERE school_id=? AND status IN ('submitted','under_review')", (school_id,)).fetchone()[0]
+        try:
+            now_local = _core.school_now(conn, school_id)
+        except Exception:
+            now_local = datetime.datetime.now()
+        alerts = plan_usage_alerts(conn, school_id)
         conn.close()
         return render_template(
-            "admin_dashboard.html", term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
-            performance_trend=performance_trend, high_classes=high_classes, low_classes=low_classes,
-            activities=activities, ranked_classes=ranked_classes, enrolment=enrolment,
-            attendance_trend=attendance_trend, top_students=top_students,
-            class_performance_chart=class_performance_chart, student_full_name=student_full_name,
+            "admin_dashboard.html", term=term, ov=ov, activities=activities, school=school, pending_reviews=pending_reviews,
+            now_local=now_local, plan_alerts=alerts, hide_banners=True,
+            school_local_ms=int(now_local.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if now_local else 0,
         )
     else:
         assignments = conn.execute(
