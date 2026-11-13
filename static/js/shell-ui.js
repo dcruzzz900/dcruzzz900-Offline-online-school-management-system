@@ -31,6 +31,7 @@
     var closeBtn=document.createElement('button');closeBtn.type='button';closeBtn.className='sidebar-close';closeBtn.setAttribute('aria-label','Close menu');closeBtn.innerHTML='\u2715 <span>Close menu</span>';
     side.insertBefore(closeBtn,side.firstChild);closeBtn.addEventListener('click',function(){set(false);btn.focus();});
     btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();set(!side.classList.contains('open'));});
+    var more=document.getElementById('tabsMore');if(more)more.addEventListener('click',function(e){e.preventDefault();set(!side.classList.contains('open'));});
     back.addEventListener('click',function(){set(false);});
     document.addEventListener('keydown',function(e){if(e.key==='Escape')set(false);});
     side.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a');if(a&&small.matches)set(false);});
