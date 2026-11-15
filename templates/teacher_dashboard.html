@@ -1,11 +1,12 @@
-{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_donut.html" import gender_donut_from_stats %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gender-donut.css') }}">
 <div class="page-heading"><div><div class="eyebrow">TEACHER PORTAL</div><h1><span data-greeting>{{ time_greeting }}</span>, {{ session.get('name') }}</h1><p>{% if position_label %}{{ position_label }} · {% endif %}{% if term %}{{ term.session_name }} · {{ term.name }}{% endif %}</p></div><a class="btn" href="{{ url_for('ai_command_center') }}">✦ AI Assistant</a></div>
 {% if my_roles %}<div class="card" style="padding:.6rem 1rem"><b>My roles:</b> {% for r in my_roles %}<span class="badge" style="margin:0 .25rem">{{ r }}</span>{% endfor %}</div>{% endif %}
 {% include "partials/quick_actions.html" %}
 <div class="stat-grid"><div class="stat-box"><div class="num">{{ assignments|length }}</div><div class="label">Subject assignments</div></div><div class="stat-box"><div class="num">{{ result_classes|length }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">AI</div><div class="label">Teaching support</div></div><div class="stat-box"><div class="num">●</div><div class="label">Online</div></div></div>
 
 {% if class_performance_chart %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('bar') }}</span>Class Performance</h3><p class="muted">Average score and pass rate per class you can see, {% if term %}{{ term.name }}{% else %}current term{% endif %}.</p><div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf" role="img" aria-label="Class performance"></canvas></div></div></div>{% endif %}
-{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('users') }}</span>Gender Distribution</h3><p class="muted">Across the classes you can see.</p><div class="chart-donut-wrap"><canvas id="chartGender" role="img" aria-label="Gender distribution"></canvas></div></div>{% endif %}
+{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('users') }}</span>Gender Distribution</h3><p class="muted">Across the classes you can see.</p>{{ gender_donut_from_stats(gender_stats) }}</div>{% endif %}
 {% if attendance_trend %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance Trend (Last Week)</h3><p class="muted">Daily attendance rate across your classes.</p><div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance" role="img" aria-label="Attendance trend, last week"></canvas></div></div>{% endif %}
 {% if enrolment %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('building') }}</span>Enrolment by Class</h3><p class="muted">Active students per class you can see.</p><div class="chart-scroll"><div class="chart-wrap"><canvas id="chartEnrolment" role="img" aria-label="Enrolment by class"></canvas></div></div></div>{% endif %}
 
@@ -31,8 +32,6 @@
     classLabels: {{ (class_performance_chart|map(attribute='class_name')|list)|tojson }},
     classAvg: {{ (class_performance_chart|map(attribute='avg_score')|list)|tojson }},
     classPass: {{ (class_performance_chart|map(attribute='pass_rate')|list)|tojson }},
-    genderBoys: {{ (gender_stats.boys if gender_stats else 0)|tojson }},
-    genderGirls: {{ (gender_stats.girls if gender_stats else 0)|tojson }},
     attendanceLabels: {{ (attendance_trend|map(attribute='label')|list)|tojson }},
     attendanceRate: {{ (attendance_trend|map(attribute='rate')|list)|tojson }},
     enrolmentLabels: {{ (enrolment|map(attribute='class_name')|list)|tojson }},
