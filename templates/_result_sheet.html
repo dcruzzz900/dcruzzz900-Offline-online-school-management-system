@@ -23,6 +23,7 @@
 {% set b_id %}<section class="rs-id">
   <div><span>Name</span><b>{{ student_full_name(student) }}</b></div>
   {% if rs.show_admission_no %}<div><span>Admission / Register No.</span><b>{{ student.admission_no }}</b></div>{% endif %}
+  {% if rs.show_gender %}<div><span>Gender</span><b>{{ {'M':'Male','F':'Female'}.get(student.gender, '-') }}</b></div>{% endif %}
   {% if rs.show_class %}<div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>{% endif %}
   {% if rs.show_session %}<div><span>Academic Session</span><b>{{ term.session_name }}</b></div>{% endif %}
   {% if rs.show_term %}<div><span>Term</span><b>{{ term.name }}</b></div>{% endif %}

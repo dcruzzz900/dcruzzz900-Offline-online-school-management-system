@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "partials/ad_icons.html" import ico %}
+{% extends "base.html" %}{% from "partials/ad_icons.html" import ico %}{% from "partials/gender_donut.html" import gender_donut %}
 {% block title %}Dashboard — {{ school_name }}{% endblock %}
 {% block content %}
 {% set st = ov.students %}{% set sf = ov.staff %}{% set cp = ov.compilation %}{% set ch = ov.chart %}
@@ -40,13 +40,8 @@
   {# ---------------------------------------------------------------- charts row #}
   <section class="ad-row ad-row-charts">
     <article class="ad-panel"><header>{{ ico('bars', 22) }}<h2>Gender Distribution<span class="ad-sub"> (Students)</span></h2></header>
-      <div class="ad-gender">
-        <svg viewBox="0 0 160 160" class="ad-donut" role="img" aria-label="Students: {{ st.male_pct }}% male, {{ st.female_pct }}% female">
-          <circle cx="80" cy="80" r="56" fill="none" stroke="#ff4fa3" stroke-width="22"/>
-          <circle cx="80" cy="80" r="56" fill="none" stroke="#1a6fe8" stroke-width="22" stroke-dasharray="{{ (st.male_pct * 351.86 / 100)|round(2) }} 351.86" transform="rotate(-90 80 80)"/>
-          <text x="80" y="78" text-anchor="middle" class="d-pct">{{ st.male_pct }}%</text><text x="80" y="100" text-anchor="middle" class="d-lbl">Male</text></svg>
-        <ul class="ad-legend"><li><i style="background:#1a6fe8"></i><div><b>Male</b><span>{{ '{:,}'.format(st.male) }} ({{ st.male_pct }}%)</span></div></li><li><i style="background:#ff4fa3"></i><div><b>Female</b><span>{{ '{:,}'.format(st.female) }} ({{ st.female_pct }}%)</span></div></li></ul>
-      </div></article>
+      {{ gender_donut(st.male, st.female, st.male_pct, st.female_pct) }}
+      </article>
 
     <article class="ad-panel"><header>{{ ico('trend', 22) }}<h2>Result Compilation<span class="ad-sub"> Progress</span></h2></header>
       <div class="ad-progress">

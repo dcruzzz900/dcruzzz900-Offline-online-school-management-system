@@ -16,6 +16,7 @@
 <section class="rs-id">
   <div><span>Name</span><b>{{ student_full_name(student) }}</b></div>
   <div><span>Admission / Register No.</span><b>{{ student.admission_no }}</b></div>
+  {% if rs.show_gender %}<div><span>Gender</span><b>{{ {'M':'Male','F':'Female'}.get(student.gender, '-') }}</b></div>{% endif %}
   <div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>
   {% if class_row.category %}<div><span>Category</span><b>{{ class_row.category }}</b></div>{% endif %}
   <div><span>Cumulative Average</span><b>{{ average }}</b></div>

@@ -1,4 +1,5 @@
-{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% block title %}School Analytics - {{ school_name }}{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_donut.html" import gender_donut_from_stats %}{% block title %}School Analytics - {{ school_name }}{% endblock %}{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/gender-donut.css') }}">
 <div class="page-heading"><div><div class="eyebrow">SCHOOL ADMINISTRATION</div><h1>School Analytics</h1><p>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}Set an active academic term to get started.{% endif %}</p><div class="tenant-chip">School ID <strong>{{ school_code or session.get('school_code') or '—' }}</strong><span>•</span> Tenant <strong>{{ session.get('tenant_id') or '—' }}</strong></div></div><a class="btn" href="{{ url_for('admin_setup_wizard') }}">Complete School Setup →</a></div>
 <div class="stat-grid"><div class="stat-box"><div class="num">{{ stats.students }}</div><div class="label">Students</div></div><div class="stat-box"><div class="num">{{ stats.teachers }}</div><div class="label">Staff</div></div><div class="stat-box"><div class="num">{{ stats.classes }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">{{ stats.subjects }}</div><div class="label">Subjects</div></div></div>
 {% if gender_stats %}<div class="gender-stat-card"><span class="gender-stat-title">Students by gender</span><div class="gender-stat"><span class="gender-icon boys" aria-hidden="true">♂</span><div><div class="gender-num">{{ gender_stats.boys }}</div><div class="gender-label">Boys</div></div></div><div class="gender-stat"><span class="gender-icon girls" aria-hidden="true">♀</span><div><div class="gender-num">{{ gender_stats.girls }}</div><div class="gender-label">Girls</div></div></div>{% if gender_stats.unspecified %}<div class="gender-stat"><span class="gender-icon" style="background:#eee;color:#666" aria-hidden="true">?</span><div><div class="gender-num">{{ gender_stats.unspecified }}</div><div class="gender-label">Unspecified</div></div></div>{% endif %}</div>{% endif %}
@@ -7,7 +8,7 @@
 {% if class_performance_chart %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf" role="img" aria-label="Student performance by class"></canvas></div></div>{% else %}<p class="muted" style="margin-top:14px">No classes to chart yet.</p>{% endif %}</div>
 
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('users') }}</span>Gender Distribution</h3><p class="muted">Active students, boys vs. girls.</p>
-{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}<div class="chart-donut-wrap"><canvas id="chartGender" role="img" aria-label="Gender distribution"></canvas></div>{% else %}<p class="muted" style="margin-top:14px">No gender data recorded yet.</p>{% endif %}</div>
+{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}{{ gender_donut_from_stats(gender_stats) }}{% else %}<p class="muted" style="margin-top:14px">No gender data recorded yet.</p>{% endif %}</div>
 
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance Trend (Last Week)</h3><p class="muted">School-wide daily attendance rate.</p>
 {% if attendance_trend %}<div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance" role="img" aria-label="Attendance trend, last week"></canvas></div>{% else %}<p class="muted" style="margin-top:14px">No attendance recorded yet.</p>{% endif %}</div>
@@ -44,15 +45,12 @@
   var CLASS_LABELS = {{ (class_performance_chart|map(attribute='class_name')|list)|tojson }};
   var CLASS_AVG = {{ (class_performance_chart|map(attribute='avg_score')|list)|tojson }};
   var CLASS_PASS = {{ (class_performance_chart|map(attribute='pass_rate')|list)|tojson }};
-  var GENDER_BOYS = {{ (gender_stats.boys if gender_stats else 0)|tojson }};
-  var GENDER_GIRLS = {{ (gender_stats.girls if gender_stats else 0)|tojson }};
   var ATT_LABELS = {{ (attendance_trend|map(attribute='label')|list)|tojson }};
   var ATT_RATE = {{ (attendance_trend|map(attribute='rate')|list)|tojson }};
   var ENR_LABELS = {{ (enrolment|map(attribute='class_name')|list)|tojson }};
   var ENR_COUNT = {{ (enrolment|map(attribute='count')|list)|tojson }};
   window.schoolHubDashboardCharts && window.schoolHubDashboardCharts({
     classLabels: CLASS_LABELS, classAvg: CLASS_AVG, classPass: CLASS_PASS,
-    genderBoys: GENDER_BOYS, genderGirls: GENDER_GIRLS,
     attendanceLabels: ATT_LABELS, attendanceRate: ATT_RATE,
     enrolmentLabels: ENR_LABELS, enrolmentCount: ENR_COUNT,
   });
