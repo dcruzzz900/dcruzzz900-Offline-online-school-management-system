@@ -18,7 +18,7 @@ SIGNATURE_LAYOUTS = [("split", "Teacher left, Principal right"), ("stacked", "St
 SECTIONS = [
     ("Identity & header", ["show_logo", "show_passport", "show_watermark"]),
     ("School information", ["show_address", "show_email", "show_phone", "show_motto", "show_custom_info"]),
-    ("Student details", ["show_admission_no", "show_gender", "show_class", "show_session", "show_term", "show_next_term_resumes"]),
+    ("Student details", ["show_admission_no", "show_class", "show_gender", "show_session", "show_term", "show_next_term_resumes"]),
     ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_additional_fields", "show_grading_key", "show_promotion"]),
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent", "show_days_late"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
@@ -78,7 +78,7 @@ def register_v62_routes(app, h):
         from db import SAMPLE_AFFECTIVE_TRAITS, SAMPLE_PSYCHOMOTOR_TRAITS   # V100: the preview shows every sample item
         domain_groups = [{"label": "Affective Domain", "items": [(n, (5, 4, 4, 3, 3, 3, 4, 5)[i % 8]) for i, n in enumerate(SAMPLE_AFFECTIVE_TRAITS)]},
                          {"label": "Psychomotor Domain", "items": [(n, (2, 3, 3, 3, 4, 3, 4)[i % 7]) for i, n in enumerate(SAMPLE_PSYCHOMOTOR_TRAITS)]}]
-        student = {"first_name": "Sample", "last_name": "Student", "other_names": "", "admission_no": "ADM/001", "status": "Active", "gender": "M"}
+        student = {"first_name": "Sample", "last_name": "Student", "other_names": "", "admission_no": "ADM/001", "status": "Active", "gender": "F"}
         term = {"name": "First Term", "session_name": "2025/2026"}
         rs = dict(cfg_rs)
         rs["passport"] = None
@@ -241,7 +241,68 @@ def register_v62_routes(app, h):
                                    page_orientations=PAGE_ORIENTATIONS, font_scales=FONT_SCALE_CHOICES,
                                    paper_sizes=PAPER_SIZE_CHOICES, custom_mm_min=CUSTOM_MM_MIN, custom_mm_max=CUSTOM_MM_MAX,
                                    preview=preview, terms=terms,
+                                   paper_dims={name: list(h["paper_dims_mm"]({"paper_size": name, "custom_width_mm": cfg.get("custom_width_mm"), "custom_height_mm": cfg.get("custom_height_mm")})) for name, _l in PAPER_SIZE_CHOICES},
                                    resumption_dates={t["id"]: conn.execute("SELECT resumption_date FROM terms WHERE id=?", (t["id"],)).fetchone()[0] for t in terms}), (422 if errors else 200)
+        finally:
+            conn.close()
+
+    @app.route("/api/result-display-settings/preview", methods=["POST"])
+    @login_required("admin", "sub_admin")
+    def result_display_settings_preview():
+        """V106: the React live preview posts the CURRENT (unsaved) form values here and gets the sample sheet back, rendered by the
+        very same _result_sheet.html used for print and PDF. Nothing is saved. Values are validated like the real save; anything
+        invalid falls back to the saved value (and is reported in `invalid`), so a half-typed colour never breaks the preview."""
+        body = request.get_json(silent=True) or {}
+        v = body.get("values") or {}
+        conn = get_db()
+        try:
+            saved = get_result_display(conn, sid())
+            school = conn.execute("SELECT * FROM schools WHERE id=?", (sid(),)).fetchone()
+            over, invalid = {}, []
+            for k, _l, _d in RESULT_BOOL_SETTINGS:
+                if k in v:
+                    over[k] = 1 if v.get(k) in (1, "1", True, "on", "true") else 0
+            for k in ("accent_color", "secondary_color"):
+                if k in v:
+                    val = (v.get(k) or "").strip()
+                    if not val or COLOR_RE.match(val):
+                        over[k] = val or None
+                    else:
+                        invalid.append(k)
+            enums = {"header_layout": HEADER_LAYOUTS, "signature_layout": SIGNATURE_LAYOUTS, "text_align": TEXT_ALIGNS,
+                     "page_orientation": PAGE_ORIENTATIONS, "font_scale": FONT_SCALE_CHOICES, "paper_size": PAPER_SIZE_CHOICES,
+                     "template": RESULT_TEMPLATES}
+            for k, opts in enums.items():
+                if k in v:
+                    if v.get(k) in {o[0] for o in opts}:
+                        over[k] = v[k]
+                    else:
+                        invalid.append(k)
+            for k, mx in (("title", 80), ("watermark_text", 40), ("footer_text", 300)):
+                if k in v:
+                    txt = pc.clean(v.get(k))[:mx] if k != "footer_text" else pc.clean_multiline(v.get(k))[:mx]
+                    if any(c in txt for c in "<>"):
+                        invalid.append(k)
+                    else:
+                        over[k] = txt or None
+            if over.get("paper_size") == "Custom":
+                try:
+                    w, hh = float(v.get("custom_width_mm")), float(v.get("custom_height_mm"))
+                    if not (CUSTOM_MM_MIN <= w <= CUSTOM_MM_MAX and CUSTOM_MM_MIN <= hh <= CUSTOM_MM_MAX):
+                        raise ValueError
+                    over["custom_width_mm"], over["custom_height_mm"] = min(w, hh), max(w, hh)
+                except (TypeError, ValueError):
+                    invalid.append("paper_size"); over["paper_size"] = saved.get("paper_size") if hasattr(saved, "get") else saved["paper_size"]
+            rs = result_sheet_settings(conn, sid(), cfg_override=over)
+            if v.get("pdf_font") in PDF_FONT_CHOICES:
+                rs["pdf_font"] = v["pdf_font"]
+            cum = v.get("cumulative_enabled") in (1, "1", True, "on", "true") if "cumulative_enabled" in v else bool(school["cumulative_enabled"])
+            pv = sample_result(conn, rs, cumulative_enabled=cum)
+            html = render_template("partials/result_preview_fragment.html", pv=pv)
+            return {"ok": True, "html": html, "invalid": invalid,
+                    "paper": {"w_mm": (max if rs["page_orientation"] == "landscape" else min)(rs["page_w_mm"], rs["page_h_mm"]),
+                      "h_mm": (min if rs["page_orientation"] == "landscape" else max)(rs["page_w_mm"], rs["page_h_mm"]),
+                      "orientation": rs["page_orientation"], "size": rs["paper_size"]}}
         finally:
             conn.close()
 

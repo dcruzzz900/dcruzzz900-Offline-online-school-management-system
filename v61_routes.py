@@ -850,6 +850,9 @@ def register_v61_routes(app, h):
             gender = q("SELECT COALESCE(NULLIF(st.gender,''),'Not set') g, COUNT(*) n FROM students st JOIN classes c ON c.id=st.class_id "
                        "WHERE c.school_id=:sid AND st.is_active=1" + cf + " GROUP BY 1")
             gmap = {"M": "Male", "F": "Female"}
+            _gm = {r["g"]: r["n"] for r in gender}
+            gender_stats = {"boys": _gm.get("M", 0), "girls": _gm.get("F", 0), "total": sum(_gm.values()),
+                            "unspecified": sum(n for k, n in _gm.items() if k not in ("M", "F"))}
             enrol = q("SELECT c.name, COUNT(st.id) n FROM classes c LEFT JOIN students st ON st.class_id=c.id AND st.is_active=1 WHERE c.school_id=:sid" + cf + " GROUP BY c.id ORDER BY c.level, c.name, c.arm")
             subj_perf = q(f"SELECT sub.name, AVG({TOTAL}) a FROM scores sc JOIN students st ON st.id=sc.student_id JOIN classes c ON c.id=st.class_id JOIN subjects sub ON sub.id=sc.subject_id "
                           f"WHERE sc.term_id=:tid AND c.school_id=:sid AND sub.school_id=:sid{cf}{sf} GROUP BY sub.id ORDER BY sub.name")
@@ -913,7 +916,7 @@ def register_v61_routes(app, h):
                     ("Average score", avg_all, delta), ("Pass rate", f"{pass_rate}%" if pass_rate is not None else "—", None),
                     ("Attendance", f"{att_rate}%" if att_rate is not None else "—", None)]
             return render_template("reports_analytics.html", term=term, terms=terms, classes=classes, subjects=subjects, class_id=class_id, subject_id=subject_id,
-                                   charts=charts, kpis=kpis, top_classes=top_classes, grade_counts=grade_counts, class_perf=class_perf, subj_perf=subj_perf,
+                                   charts=charts, gender_stats=gender_stats, kpis=kpis, top_classes=top_classes, grade_counts=grade_counts, class_perf=class_perf, subj_perf=subj_perf,
                                    completion=completion, has_scores=bool(totals))
         finally:
             conn.close()

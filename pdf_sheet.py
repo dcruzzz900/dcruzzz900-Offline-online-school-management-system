@@ -821,11 +821,13 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
     ids = [("Name", name, False)]
     if rs.get("show_admission_no", True):
         ids.append(("Admission / Register No.", student["admission_no"], False))
-    if rs.get("show_gender", True):
-        _g = student["gender"] if "gender" in student.keys() else None
-        ids.append(("Gender", {"M": "Male", "F": "Female"}.get(_g, "-"), False))
     if rs.get("show_class", True):
         ids.append(("Class / Arm", class_row["name"], False))
+    if rs.get("show_gender", True):
+        _g = (student["gender"] if "gender" in (student.keys() if hasattr(student, "keys") else student) else "") or ""
+        _gl = {"M": "Male", "F": "Female", "male": "Male", "female": "Female", "Male": "Male", "Female": "Female"}.get(_g, "")
+        if _gl:
+            ids.append(("Gender", _gl, False))
     if rs.get("show_session", True):
         ids.append(("Academic Session", term["session_name"], False))
     if rs.get("show_term", True):
@@ -960,11 +962,12 @@ def cumulative_page_elements(data, session, school_name, logo_path, student_full
     name = student_full_name(student) if student_full_name else f"{student['last_name']} {student['first_name']}"
     sess_name = session["name"] if session is not None else ""
     els = header(None, None, rs, S, school_name, logo_path, title_override="Annual / Cumulative Result", session_line=sess_name)
-    ids = [("Name", name, False), ("Admission / Register No.", student["admission_no"], False)]
+    ids = [("Name", name, False), ("Admission / Register No.", student["admission_no"], False), ("Class / Arm", class_row["name"], False)]
     if rs.get("show_gender", True):
-        _g = student["gender"] if "gender" in student.keys() else None
-        ids.append(("Gender", {"M": "Male", "F": "Female"}.get(_g, "-"), False))
-    ids.append(("Class / Arm", class_row["name"], False))
+        _g = (student["gender"] if "gender" in (student.keys() if hasattr(student, "keys") else student) else "") or ""
+        _gl = {"M": "Male", "F": "Female", "male": "Male", "female": "Female", "Male": "Male", "Female": "Female"}.get(_g, "")
+        if _gl:
+            ids.append(("Gender", _gl, False))
     ids += [("Cumulative Average", data.get("average", "-"), False), ("Grade", f"{data.get('grade', '-')} ({data.get('remark', '')})", False)]
     pos = data.get("position")
     ids.append(("Overall Position", f"{pos}" + (f" of {data['class_size']}" if data.get("class_size") else ""), True))
