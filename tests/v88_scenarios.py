@@ -102,17 +102,24 @@ c0.close()
 # 1 girl (Amaka). Form teacher is aokafor.
 class1 = one("SELECT class_id FROM students WHERE id=1")["class_id"]
 
+
+def gp(h):
+    """V106: boys / girls from the shared Gender Distribution panel (partials/gender_panel.html) that replaced the old stat card."""
+    m = re.search(r'data-gender-panel data-total="(\d+)" data-male="(\d+)" data-female="(\d+)"', h)
+    return tuple(int(x) for x in m.groups())[1:] if m else None
+
+
 ADMIN = staff("admin")
 TEACHER = staff("aokafor")
 
 print("=== 1) Admin Dashboard: one combined Boys & Girls card, correct starting counts ===")
 
 dash = html(ADMIN.get("/admin/analytics"))
-check("admin dashboard has exactly one gender-stat-card", dash.count('class="gender-stat-card"') == 1, dash.count('class="gender-stat-card"'))
-check("admin dashboard shows 2 boys", re.search(r'gender-num">\s*2\s*<', dash) is not None, dash)
-check("admin dashboard shows 1 girl", re.search(r'gender-num">\s*1\s*<', dash) is not None, dash)
-check("Boys label present", "Boys" in dash)
-check("Girls label present", "Girls" in dash)
+check("admin dashboard has exactly one shared gender panel", dash.count('data-gender-panel') == 1, dash.count('data-gender-panel'))
+check("admin dashboard shows 2 boys", (gp(dash) or (None,))[0] == 2, gp(dash))
+check("admin dashboard shows 1 girl", (gp(dash) or (None, None))[1] == 1, gp(dash))
+check("Male label present", ">Male<" in dash)
+check("Female label present", ">Female<" in dash)
 
 print("=== 2) Figures are tenant-scoped -- a second school's admin sees only its own ===")
 
@@ -140,12 +147,12 @@ c.close()
 
 ADMIN2 = staff("admin2")
 dash2 = html(ADMIN2.get("/admin/analytics"))
-check("second school's admin sees 0 boys (not school 1's 2)", re.search(r'gender-num">\s*0\s*<', dash2) is not None, dash2)
-check("second school's admin sees 1 girl (only their own)", re.search(r'gender-num">\s*1\s*<', dash2) is not None, dash2)
+check("second school's admin sees 0 boys (not school 1's 2)", gp(dash2) == (0, 1), gp(dash2))
+check("second school's admin sees 1 girl (only their own)", gp(dash2) == (0, 1), gp(dash2))
 
 dash1_again = html(ADMIN.get("/admin/analytics"))
 check("first school's admin is unaffected by school 2's data (still 2 boys, 1 girl)",
-      re.search(r'gender-num">\s*2\s*<', dash1_again) is not None and re.search(r'gender-num">\s*1\s*<', dash1_again) is not None)
+      gp(dash1_again) == (2, 1), gp(dash1_again))
 
 print("=== 3) Teacher Dashboard: per-class Total/Boys/Girls, reconciling with an unspecified-gender student ===")
 
@@ -167,13 +174,13 @@ check("boys/girls counts for the class are unchanged (unspecified excluded from 
 
 adash_after = html(ADMIN.get("/admin/analytics"))
 check("admin card's boys/girls totals also unaffected by the unspecified-gender student",
-      re.search(r'gender-num">\s*2\s*<', adash_after) is not None and re.search(r'gender-num">\s*1\s*<', adash_after) is not None)
+      gp(adash_after) == (2, 1), gp(adash_after))
 
 print("=== 4) Transferring (deactivating) a student updates the counts immediately ===")
 
 run("UPDATE students SET is_active=0 WHERE id=3")  # Tunde (M) marked inactive/transferred
 dash_after_transfer = html(ADMIN.get("/admin/analytics"))
-check("after transferring a boy out, admin boys count drops to 1", re.search(r'gender-num">\s*1\s*<', dash_after_transfer) is not None, dash_after_transfer)
+check("after transferring a boy out, admin boys count drops to 1", (gp(dash_after_transfer) or (None,))[0] == 1, gp(dash_after_transfer))
 check("deactivated student no longer counted in his class's total on the teacher dashboard",
       re.search(r"<td>3</td>", html(TEACHER.get("/dashboard"))) is not None)
 run("UPDATE students SET is_active=1 WHERE id=3")

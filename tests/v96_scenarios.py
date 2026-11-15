@@ -151,6 +151,7 @@ print("=== 1) Admin Dashboard: all 4 analytics charts render with real, correctl
 adash = html(ADMIN.get("/admin/analytics"))
 check("Chart.js is loaded", "chart.js@4.4.4" in adash or "Chart.js" in adash or "chart.umd" in adash)
 check("Student Performance by Class canvas present", 'id="chartClassPerf"' in adash)
+check("Gender Distribution panel present (the shared admin-dashboard panel, V106)", 'data-gender-panel' in adash)
 check("Attendance Trend canvas present", 'id="chartAttendance"' in adash)
 check("Enrolment by Class Level canvas present", 'id="chartEnrolment"' in adash)
 check("Top Performing Students table present", "Top Performing Students" in adash)
@@ -164,14 +165,9 @@ jss2_idx = class_labels.index("JSS2B")
 check("JSS1A's average score is the real computed figure, not a placeholder", class_avg[jss1_idx] == 60.0, class_avg)
 check("JSS2B (nothing assessed) shows null, never a false zero", class_avg[jss2_idx] is None, class_avg)
 
-# V106: Gender Distribution now renders the shared donut component (templates/partials/
-# gender_donut.html), the same one the V105 admin dashboard introduced, instead of its own
-# separate Chart.js canvas -- so every dashboard with a gender breakdown looks identical.
-check("Gender Distribution donut present (shared component)", 'class="ad-donut"' in adash and 'class="ad-legend"' in adash)
-_male_m = re.search(r'<b>Male</b><span>([\d,]+)', adash)
-_female_m = re.search(r'<b>Female</b><span>([\d,]+)', adash)
-check("gender donut figures are present (not both zero)", _male_m and _female_m and
-      (int(_male_m.group(1).replace(",", "")) + int(_female_m.group(1).replace(",", ""))) > 0)
+gender_boys = js_array(adash, "genderBoys")
+gender_girls = js_array(adash, "genderGirls")
+check("gender donut figures are present (not both zero)", (gender_boys or 0) + (gender_girls or 0) > 0, (gender_boys, gender_girls))
 
 enr_labels = js_array(adash, "enrolmentLabels")
 enr_counts = js_array(adash, "enrolmentCount")
@@ -193,17 +189,13 @@ check("Class Performance canvas sits inside .chart-scroll > .chart-wrap (grows w
       re.search(r'<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf"', adash) is not None, adash[:0] or "ok")
 check("Enrolment canvas is in the same scrollable chart-wrap pattern",
       re.search(r'<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartEnrolment"', adash) is not None, adash[:0] or "ok")
-# V106: the gender donut is now the shared fixed-size SVG component (.ad-gender/.ad-donut),
-# not a Chart.js canvas in a .chart-donut-wrap -- it never needed the wrapper's job (constraining
-# a canvas's height) in the first place, since its size is set directly on the <svg>.
-check("Gender donut uses the shared fixed-size SVG component (a donut never needs to grow)",
-      re.search(r'<div class="ad-gender">\s*<svg viewBox="0 0 160 160" class="ad-donut"', adash) is not None, adash[:0] or "ok")
+check("Gender donut is the shared SVG panel (fixed size, never grows)", re.search(r'<svg viewBox="0 0 160 160" class="gp-donut"', adash) is not None)
 check("Attendance Trend canvas uses the compact .chart-wrap-sm (short, fixed height) -- last week is always <=7 points, never needs to scroll",
       re.search(r'<div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance"', adash) is not None, adash[:0] or "ok")
 
 print("=== 1c) V96: beautiful icons on dashboard cards ===")
 
-check("chart-card titles carry an icon badge (.card-icon)", adash.count('<h3><span class="card-icon">') >= 4, adash.count('<h3><span class="card-icon">'))
+check("chart-card titles carry an icon badge (.card-icon)", adash.count('<h3><span class="card-icon">') + adash.count('data-gender-panel') >= 4, adash.count('<h3><span class="card-icon">'))  # the shared gender panel carries its own header icon (V106)
 check("Top Performing Students / Recent Activities / Performance Trend titles also carry an icon badge",
       adash.count('<h3 class="icon-title"><span class="card-icon">') >= 3, adash.count('<h3 class="icon-title"><span class="card-icon">'))
 

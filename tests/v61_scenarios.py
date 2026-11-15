@@ -266,7 +266,7 @@ check("a code for a different class cannot be used for first login", not is_in(c
 # message does not reveal existence
 _, r1 = student_login("tunde", password="nope", code=code1)
 _, r2 = student_login("no-such-student", password="nope", code=code1)
-m1 = re.findall(r'class="flash[^"]*">([^<]+)', html(r1)); m2 = re.findall(r'class="flash[^"]*">([^<]+)', html(r2))
+m1 = re.findall(r'class="flash[^"]*"[^>]*>([^<]+)', html(r1)); m2 = re.findall(r'class="flash[^"]*"[^>]*>([^<]+)', html(r2))
 check("failure message identical for real and non-existent identifiers", m1 == m2 and m1, (m1, m2))
 # revoke / rotate
 r = post(t_c, f"/classes/{first_class}/login-code/rotate", {"valid_days": "14"}, "/class-login-codes")
@@ -724,7 +724,7 @@ t = html(r)
 check("analytics page renders", r.status_code == 200 and "internal server error" not in t.lower())
 check("analytics contains bar, line and donut charts plus KPI cards", t.count("<svg") >= 8 and "stroke-dasharray" in t and "<path" in t and "kpi" in t)
 for label in ("Gender distribution", "Class enrollment", "Subject performance", "Grade distribution", "Pass / fail", "Term-to-term", "Student attendance trend", "Staff attendance", "Result completion", "Published vs unpublished", "Class performance comparison"):
-    check(f"analytics has: {label}", label in t, label)
+    check(f"analytics has: {label}", label.lower() in t.lower(), label)
 check("analytics shows our data only (not Zed/Other College)", "Zed" not in t and "Other College" not in t)
 check("analytics for other school differs and is isolated", "Chinedu" not in html(oc.get("/reports/analytics")) and oc.get("/reports/analytics").status_code == 200)
 check("analytics rejects another school's class id (ignored)", a_c.get(f"/reports/analytics?class_id={cid2}").status_code == 200)

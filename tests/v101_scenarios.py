@@ -55,7 +55,7 @@ c = get_db(); tids = [r[0] for r in c.execute("SELECT id FROM skill_traits WHERE
 
 # ---- A) rating table with ticks instead of dropdowns, blank clears
 r = ADMIN.get(pg(T3)); s = html(r)
-check("domain ratings use a tick-box table (no dropdown)", 'class="rt"' in s and 'type="radio"' in s and '<select name="trait_' not in s)
+check("domain ratings use a tick-box table (no dropdown)", re.search(r'class="[^"]*\brt\b', s) and 'type="radio"' in s and '<select name="trait_' not in s)
 check("every domain item has five tick boxes (1-5)", s.count('class="rt-box"') == 15 * 5, s.count('class="rt-box"'))
 check("the legend and 'leave blank' wording is kept", "1 = Poor" in s and "leave blank for no rating" in s)
 form = {"term_id": T3}; form.update({f"trait_{t}": "4" for t in tids})
@@ -68,7 +68,7 @@ check("the saved ticks come back ticked on the page", html(ADMIN.get(pg(T3))).co
 post(ADMIN, ex(), {"term_id": T3, "principal_comment": "Excellent.", **{f"trait_{t}": "3" for t in tids}}, pg(T3))
 
 # ---- B) form teacher saves ratings while the Principal's comment is shown
-check("the form teacher sees the rating table", 'class="rt"' in html(FT.get(pg(T3))))
+check("the form teacher sees the rating table", bool(re.search(r'class="[^"]*\brt\b', html(FT.get(pg(T3))))))
 c = get_db(); c.execute("INSERT INTO result_publication(school_id,tenant_id,class_id,term_id,status) SELECT 1,tenant_id,1,?,'draft' FROM schools WHERE id=1", (T4,)); c.commit(); c.close()
 c = get_db(); c.execute("INSERT INTO student_term_info(student_id,term_id,principal_comment) VALUES(1,?,?)", (T4, "Principal wrote this.")); c.commit(); c.close()
 form = {"term_id": T4, "teacher_comment": "Teacher note.", "principal_comment": "tampered\r\ntext"}; form.update({f"trait_{t}": "5" for t in tids})

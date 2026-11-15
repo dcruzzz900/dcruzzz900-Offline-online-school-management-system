@@ -331,7 +331,7 @@ post(ADMIN, "/result/1/extra", {"term_id": "1", f"trait_{tid_}": "4", "attendanc
 check("a valid rating is saved", one("SELECT rating FROM student_skill_ratings WHERE student_id=1 AND trait_id=?", (tid_,)) == 4)
 # V101: ratings are entered in a tick-box table (1-5 columns headed with their meanings), not a dropdown
 _pg = html(ADMIN.get("/result/1?term_id=1"))
-check("the rating table shows numbers with meanings", 'class="rt"' in _pg and "Very Good" in _pg and "Excellent" in _pg and '<select name="trait_' not in _pg)
+check("the rating table shows numbers with meanings", re.search(r'class="[^"]*\brt\b', _pg) and "Very Good" in _pg and "Excellent" in _pg and '<select name="trait_' not in _pg)
 W.publish(A, 1)
 s6 = sheet(); check("the sheet shows the rating with its meaning and a key", "4" in s6 and "Very Good" in s6 and "1 = Poor" in s6 and "5 = Excellent" in s6)
 check("the PDF shows the same meanings", "Very Good" in text_of(ADMIN.get("/result/1/pdf?term_id=1").data))

@@ -34,7 +34,7 @@ def sql(q, *a):
     c = get_db(); c.execute(q, a); c.commit(); c.close()
 def pdftext(b): return " ".join(p.extract_text() for p in PdfReader(io.BytesIO(b)).pages)
 def csvfile(text, name="f.csv"): return {"csv_file": (io.BytesIO(text.encode()), name)}
-def flashes(r): return " ".join(re.findall(r'class="flash flash-\w+">([^<]*)<', html(r)))
+def flashes(r): return " ".join(re.findall(r'class="flash flash-\w+[^"]*"[^>]*>([^<]*)<', html(r)))
 
 # ---------------------------------------------------------------- fixtures
 c0 = get_db(); h = generate_password_hash("Pass1234")
@@ -111,7 +111,7 @@ check("the reports hub hides Staff Attendance from teachers", "Staff Attendance 
 
 # ======================================================= 3) terms + locked published design + fonts + signature
 ADMIN.get("/admin/result-display-settings")
-tbl = lambda h_: (re.search(r'<table class="cbs">.*?</table>', h_, re.S) or [h_])[0] if re.search(r'<table class="cbs">', h_) else h_
+tbl = lambda h_: (re.search(r'<table class="[^"]*\bcbs\b[^"]*">.*?</table>', h_, re.S) or [h_])[0]
 cb = tbl(html(ADMIN.get(f"/cumulative/1?term_id={T1}")))
 check("only the activated First Term appears on the cumulative broadsheet", "1st Term" in cb and "2nd Term" not in cb and "3rd Term" not in cb, re.findall(r"(\d)(?:st|nd|rd) Term", cb))
 sql("UPDATE terms SET activated_at=CURRENT_TIMESTAMP, is_active=1 WHERE id=?", T2); sql("UPDATE terms SET is_active=0 WHERE id=?", T1)

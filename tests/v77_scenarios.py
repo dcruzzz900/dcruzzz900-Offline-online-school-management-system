@@ -135,7 +135,7 @@ W.publish(A, 1)
 # ============================================================ 1) broadsheet mobile header alignment
 css = open(os.path.join(ROOT, "static", "css", "responsive-ui.css"), encoding="utf-8").read()
 check("broadsheet.html's table is marked .bs-table so it can be exempted from the generic mobile rule",
-      'class="bs-table"' in open(os.path.join(ROOT, "templates", "broadsheet.html"), encoding="utf-8").read())
+      bool(re.search(r'class="[^"]*\bbs-table\b', open(os.path.join(ROOT, "templates", "broadsheet.html"), encoding="utf-8").read())))
 check(".bs-table is given back display:table at the same breakpoint the generic rule collapses tables at",
       re.search(r"@media\(max-width:700px\)\{\.bs-table\{display:table", css) is not None, css[-400:])
 

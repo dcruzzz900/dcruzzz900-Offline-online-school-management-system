@@ -41,6 +41,8 @@ def test_reports_analytics_has_required_chart_types_and_filters():
     charts_src = (ROOT / 'charts.py').read_text()
     page = (ROOT / 'templates' / 'reports_analytics.html').read_text()
     assert 'def bar_chart' in charts_src and 'def line_chart' in charts_src and 'def donut_chart' in charts_src
-    for needle in ('charts.gender', 'charts.enrol', 'charts.subject', 'charts.class', 'charts.grades', 'charts.passfail',
+    # V106: the gender split is the shared admin-dashboard panel (partials/gender_panel.html), no longer a charts.py donut
+    assert 'gender_panel(gender_stats' in page
+    for needle in ('charts.enrol', 'charts.subject', 'charts.class', 'charts.grades', 'charts.passfail',
                    'charts.trend', 'charts.attendance', 'charts.staff_att', 'charts.completion', 'charts.published', 'name="term_id"', 'name="class_id"', 'name="subject_id"'):
         assert needle in page, needle
