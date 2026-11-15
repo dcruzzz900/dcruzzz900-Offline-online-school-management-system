@@ -3566,8 +3566,8 @@ RESULT_BOOL_SETTINGS = [
     ("show_grade", "Show Grade", 1),
     ("show_remarks", "Show Remarks", 1),
     ("show_admission_no", "Show Student Admission No. / Register No.", 1),
-    ("show_gender", "Show Student Gender", 1),
     ("show_class", "Show Class / Arm", 1),
+    ("show_gender", "Show Student Gender", 1),
     ("show_session", "Show Academic Session", 1),
     ("show_term", "Show Term", 1),
     ("show_teacher_name", "Show Class Teacher's name under the signature", 1),
@@ -4309,3 +4309,12 @@ def next_term_resumes_info(conn, term):
 
 # The five-point scale used everywhere educational-domain ratings appear (forms, sheets, keys, PDFs).
 DOMAIN_RATING_LABELS = {1: "Poor", 2: "Fair", 3: "Good", 4: "Very Good", 5: "Excellent"}
+
+
+def migration_084_v106_show_gender(conn):
+    """V106: the student's gender (Male / Female) on the result sheet, with its own switch in Result Display Settings.
+    Purely additive and ON by default; existing schools simply start showing it and can switch it off."""
+    ensure_column(conn, "result_display_settings", "show_gender", "INTEGER NOT NULL DEFAULT 1")
+
+
+STEPS.append(("result_sheet_gender_v106", migration_084_v106_show_gender))

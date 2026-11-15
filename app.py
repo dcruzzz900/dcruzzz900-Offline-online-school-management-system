@@ -1250,6 +1250,33 @@ def inject_me_avatar():
     return {}
 
 
+def _hex_tuple(value, default="#1f6feb"):
+    v = (value or "").strip().lstrip("#")
+    if len(v) == 3:
+        v = "".join(ch * 2 for ch in v)
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", v):
+        v = default.lstrip("#")
+    return tuple(int(v[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def hex_rgb(value):
+    """V106: '#1f6feb' -> '31,111,235' so Bootstrap's rgba(var(--bs-primary-rgb), .x) follows the school's brand colour."""
+    return ",".join(str(n) for n in _hex_tuple(value))
+
+
+def contrast_ink(value):
+    """V106: readable text colour (white or near-black) for any brand colour, by WCAG relative luminance."""
+    def lin(c):
+        c = c / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(n) for n in _hex_tuple(value))
+    return "#ffffff" if (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.4 else "#111827"
+
+
+app.jinja_env.filters["hex_rgb"] = hex_rgb
+app.jinja_env.filters["contrast_ink"] = contrast_ink
+
+
 @app.context_processor
 def inject_school_settings():
     if "school_id" in session:
@@ -1985,6 +2012,33 @@ def student_gender_stats(conn, where_sql, params):
     return {"total": total, "boys": boys, "girls": girls, "unspecified": total - boys - girls}
 
 
+def gender_panel_data(stats):
+    """V106: ONE normaliser behind the shared Gender Distribution panel (templates/partials/gender_panel.html) that the School
+    Administration dashboard introduced and every other dashboard now inherits. Accepts the dict student_gender_stats() returns
+    (boys / girls / unspecified / total) or one that already uses male / female. Percentages are of the TOTAL so
+    male% + female% + unspecified% always reconciles to 100. `arcs` are the donut segments (stroke-dasharray values)."""
+    import math
+    stats = stats or {}
+    male = int(stats.get("male", stats.get("boys", 0)) or 0)
+    female = int(stats.get("female", stats.get("girls", 0)) or 0)
+    other = int(stats.get("unspecified", 0) or 0)
+    total = int(stats.get("total", 0) or 0) or (male + female + other)
+    other = max(other, total - male - female)
+    pct = lambda n: round(n * 100.0 / total, 1) if total else 0.0
+    circ = round(2 * math.pi * 56, 2)
+    arcs, start = [], 0.0
+    for key, n in (("male", male), ("female", female), ("other", other)):
+        length = (n / total * circ) if total else 0.0
+        if n:
+            arcs.append({"key": key, "len": round(length, 2), "gap": round(circ - length, 2), "offset": round(-start, 2)})
+        start += length
+    return {"total": total, "male": male, "female": female, "unspecified": other, "male_pct": pct(male), "female_pct": pct(female),
+            "unspecified_pct": pct(other), "has_data": bool(male or female), "arcs": arcs, "circ": circ}
+
+
+app.jinja_env.globals["gender_panel_data"] = gender_panel_data
+
+
 def _fail_grade(conn, school_id):
     """The grade code for the lowest-scoring band in this school's grade scale (the band that
     covers 0) -- whatever a school calls it, this is its "did not pass" grade, so dashboard
@@ -2540,7 +2594,7 @@ def admin_analytics():
     class_performance_chart = all_classes_performance(conn, school_id, term["id"]) if term else []
     conn.close()
     return render_template(
-        "admin_analytics.html", term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
+        "admin_analytics.html", filter_cfg=dashboard_filter_cfg(term), term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
         performance_trend=performance_trend, high_classes=high_classes, low_classes=low_classes,
         activities=activities, ranked_classes=ranked_classes, enrolment=enrolment,
         attendance_trend=attendance_trend, top_students=top_students,
@@ -2719,7 +2773,7 @@ def dashboard():
         gender_stats = student_gender_stats(conn, "c.id IN ({})".format(",".join("?" * len(_class_ids)) or "NULL"), tuple(_class_ids)) if _class_ids else {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}
         conn.close()
         return render_template(
-            "teacher_dashboard.html", term=term, assignments=assignments,
+            "teacher_dashboard.html", filter_cfg=dashboard_filter_cfg(term), term=term, assignments=assignments,
             position_label=POSITION_LABELS.get(session.get("position")),
             result_classes=result_classes, is_form_teacher=is_form_teacher,
             class_gender=class_gender, class_performance=class_performance, class_trend=class_trend,
@@ -2727,6 +2781,93 @@ def dashboard():
             top_students=top_students, class_performance_chart=class_performance_chart,
             gender_stats=gender_stats, student_full_name=student_full_name,
         )
+
+
+app.jinja_env.globals.setdefault("student_full_name", student_full_name)
+
+
+def _dashboard_visible_classes(conn, school_id):
+    """The classes this signed-in staff member may see on a dashboard (admins: all; others: their accessible classes)."""
+    if session.get("role") in ("admin", "sub_admin"):
+        return conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    accessible = get_accessible_class_ids(conn, session.get("role"), session.get("position"), session["user_id"])
+    if accessible == "all":
+        return conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    if not accessible:
+        return []
+    ph = ",".join("?" * len(accessible))
+    return conn.execute(f"SELECT * FROM classes WHERE id IN ({ph}) AND school_id=? ORDER BY name", tuple(accessible) + (school_id,)).fetchall()
+
+
+def dashboard_filter_cfg(selected_term):
+    """V106: what the React term / class filter needs to draw its two selects (this school's terms, this user's visible classes)."""
+    conn = get_db()
+    school_id = current_school_id()
+    terms = only_activated_terms(conn, all_terms_for_school(conn), keep_term_id=selected_term["id"] if selected_term else None)
+    classes = _dashboard_visible_classes(conn, school_id)
+    cfg = {
+        "url": url_for("api_dashboard_analytics"),
+        "terms": [{"id": t["id"], "label": f"{t['session_name']} - {t['name']}"} for t in terms],
+        "classes": [{"id": c["id"], "name": c["name"]} for c in classes],
+        "term_id": selected_term["id"] if selected_term else None,
+        "all_label": "All classes" if session.get("role") in ("admin", "sub_admin") else "All my classes",
+    }
+    conn.close()
+    return cfg
+
+
+@app.route("/api/dashboard/analytics")
+@login_required()
+def api_dashboard_analytics():
+    """V106: JSON behind the React term / class filter on the Chart.js dashboards. Same helpers and the same scoping as the
+    server-rendered dashboards (school from the session; a class outside this user's visible classes is refused), so a filter
+    can never show anything the dashboard itself would not. The gender panel and the top-students table come back as the
+    SAME server-rendered markup the page uses, so they cannot drift."""
+    conn = get_db()
+    school_id = current_school_id()
+    visible = _dashboard_visible_classes(conn, school_id)
+    visible_ids = [c["id"] for c in visible]
+    class_arg = (request.args.get("class_id") or "").strip()
+    if class_arg in ("", "all"):
+        class_ids, scope = visible_ids, "All classes" if session.get("role") in ("admin", "sub_admin") else "Your classes"
+    else:
+        if not class_arg.isdigit() or int(class_arg) not in visible_ids:
+            conn.close()
+            return jsonify({"ok": False, "error": "That class is not available to you."}), 403
+        class_ids = [int(class_arg)]
+        scope = next(c["name"] for c in visible if c["id"] == int(class_arg))
+    term_arg = (request.args.get("term_id") or "").strip()
+    if term_arg.isdigit():
+        term = next((t for t in all_terms_for_school(conn) if t["id"] == int(term_arg)), None)   # only THIS school's terms
+        if not term:
+            conn.close()
+            return jsonify({"ok": False, "error": "That term was not found."}), 404
+    else:
+        _ct = current_term(conn)
+        term = next((t for t in all_terms_for_school(conn) if _ct and t["id"] == _ct["id"]), None)
+    if class_ids:
+        ph = ",".join("?" * len(class_ids))
+        gender = student_gender_stats(conn, f"c.id IN ({ph})", tuple(class_ids))
+        enrolment = enrolment_by_class(conn, school_id, class_ids=class_ids)
+        attendance = school_attendance_trend(conn, school_id, class_ids=class_ids)
+        top = top_performing_students(conn, school_id, term["id"], class_ids=class_ids) if term else []
+        perf = all_classes_performance(conn, school_id, term["id"], class_ids=class_ids) if term else []
+    else:
+        gender, enrolment, attendance, top, perf = {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}, [], [], [], []
+    conn.close()
+    from partials_bridge import render_dashboard_slots
+    return jsonify({
+        "ok": True,
+        "term": {"id": term["id"], "label": f"{term['session_name']} - {term['name']}"} if term else None,
+        "scope": scope,
+        "charts": {
+            "classLabels": [r["class_name"] for r in perf], "classAvg": [r["avg_score"] for r in perf], "classPass": [r["pass_rate"] for r in perf],
+            "genderBoys": (gender or {}).get("boys", 0), "genderGirls": (gender or {}).get("girls", 0),
+            "attendanceLabels": [r["label"] for r in attendance], "attendanceRate": [r["rate"] for r in attendance],
+            "enrolmentLabels": [r["class_name"] for r in enrolment], "enrolmentCount": [r["count"] for r in enrolment],
+        },
+        **render_dashboard_slots(gender, top, scope),
+    })
 
 
 @app.route("/activities")
@@ -6216,6 +6357,24 @@ def my_class_edit_student(class_id, student_id):
 
 # ---------- score entry (teacher) ----------
 
+def _score_boot(class_row, subject_row, config, students, existing, grade_bands, lock):
+    """V106: everything the React score grid needs, as plain JSON (fields + their maximums, grade bands, lock, students + saved scores)."""
+    fields = [{"key": "ca1", "label": "CA1", "max": config["ca1_max"]}, {"key": "ca2", "label": "CA2", "max": config["ca2_max"]}]
+    if ca3_enabled(config):
+        fields.append({"key": "ca3", "label": "CA3", "max": config["ca3_max"]})
+    fields.append({"key": "exam", "label": "Exam", "max": config["exam_max"]})
+    rows = []
+    for st in students:
+        ex = existing.get(st["id"])
+        rec = {"id": st["id"], "adm": st["admission_no"], "name": student_full_name(st), "has_row": ex is not None}
+        for f in fields:
+            rec[f["key"]] = (ex[f["key"]] if ex is not None else None)
+        rows.append(rec)
+    return {"fields": fields, "bands": [{"grade": b["grade"], "remark": b["remark"], "min_score": b["min_score"], "max_score": b["max_score"]} for b in grade_bands],
+            "lock": lock, "students": rows, "csrf": get_csrf_token(),
+            "save_url": url_for("api_score_row", class_id=class_row["id"], subject_id=subject_row["id"])}
+
+
 @app.route("/scores/<int:class_id>/<int:subject_id>", methods=["GET", "POST"])
 @login_required()
 def score_entry(class_id, subject_id):
@@ -6302,11 +6461,77 @@ def score_entry(class_id, subject_id):
             "(SELECT id FROM students WHERE class_id=?)", (subject_id, term["id"], class_id)
         ).fetchall()
     }
+    grade_bands = [dict(r) for r in conn.execute(
+        "SELECT grade, remark, min_score, max_score FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (current_school_id(),)).fetchall()]
+    _state = v63_core.publication_status(conn, current_school_id(), class_id, term["id"])
+    lock = {"locked": _state in v63_core.LOCKED_STATES, "label": v63_core.STATE_LABELS.get(_state, _state), "published": bool(term["is_published"]) if "is_published" in term.keys() else False}
     conn.close()
     return render_template(
         "score_entry.html", students=students, existing=existing, config=config,
         class_row=class_row, subject_row=subject_row, term=term, student_full_name=student_full_name,
+        grade_bands=grade_bands, lock=lock, use_ca3=ca3_enabled(config),
+        score_boot=_score_boot(class_row, subject_row, config, students, existing, grade_bands, lock),
     )
+
+
+@app.route("/api/scores/<int:class_id>/<int:subject_id>/row", methods=["POST"])
+@login_required()
+def api_score_row(class_id, subject_id):
+    """V106: save ONE student's score row from the React score-entry grid (JSON in, JSON out). It applies exactly the rules of the
+    form POST above - same permission scope, same assigned-teacher check, same result lock, same range validation, same
+    save_score() (so the audit trail and the 'reason required once published' rule are identical) - then returns the
+    authoritative total / grade / remark computed by the server."""
+    import math
+    body = request.get_json(silent=True) or {}
+    conn = get_db()
+    term = current_term(conn)
+    if not term:
+        conn.close(); return jsonify({"ok": False, "error": "No active term set."}), 409
+    class_row, subject_row = class_in_school(conn, class_id), subject_in_school(conn, subject_id)
+    if not class_row or not subject_row:
+        conn.close(); return jsonify({"ok": False, "error": "Class or subject not found."}), 404
+    level = class_row["level"] if "level" in class_row.keys() else None
+    if not can_access_scope(session.get("user_id"), current_school_id(), "edit", school_level=level, class_id=class_id, subject_id=subject_id):
+        conn.close(); return jsonify({"ok": False, "error": "You do not have permission for this class and subject."}), 403
+    cs = conn.execute("SELECT * FROM class_subjects WHERE class_id=? AND subject_id=?", (class_id, subject_id)).fetchone()
+    if not cs:
+        conn.close(); return jsonify({"ok": False, "error": "This subject is not assigned to this class."}), 404
+    if session["role"] == "teacher" and cs["teacher_id"] != session["user_id"]:
+        conn.close(); return jsonify({"ok": False, "error": "You are not assigned to teach this subject/class."}), 403
+    _lock = v63_core.publication_status(conn, current_school_id(), class_id, term["id"])
+    if _lock in v63_core.LOCKED_STATES:
+        conn.close()
+        return jsonify({"ok": False, "locked": True, "error": f"Scores are locked - this class's result is '{v63_core.STATE_LABELS[_lock]}'."}), 423
+    sid = body.get("student_id")
+    allowed = {r["id"] for r in conn.execute("SELECT id FROM students WHERE class_id=?", (class_id,)).fetchall()}
+    if not isinstance(sid, int) or sid not in allowed:
+        conn.close(); return jsonify({"ok": False, "error": "That student is not in this class."}), 404
+    config = get_grading_config(conn)
+    use_ca3 = ca3_enabled(config)
+    vals = {}
+    for key in ("ca1", "ca2", "ca3", "exam"):
+        raw = body.get(key)
+        try:
+            v = 0.0 if raw in (None, "") else float(raw)
+        except (TypeError, ValueError):
+            conn.close(); return jsonify({"ok": False, "errors": {key: "Enter a number."}, "error": f"{key.upper()} must be a number."}), 400
+        if not math.isfinite(v):
+            conn.close(); return jsonify({"ok": False, "errors": {key: "Enter a number."}, "error": f"{key.upper()} must be a number."}), 400
+        vals[key] = v if (key != "ca3" or use_ca3) else 0.0
+    errs = score_range_errors(config, vals["ca1"], vals["ca2"], vals["ca3"], vals["exam"])
+    if errs:
+        conn.close(); return jsonify({"ok": False, "error": "; ".join(errs)}), 400
+    try:
+        save_score(conn, sid, subject_id, term["id"], vals["ca1"], vals["ca2"], vals["ca3"], vals["exam"], session["user_id"],
+                   reason=(body.get("reason") or None))
+    except ScoreChangeError as exc:
+        conn.close(); return jsonify({"ok": False, "needs_reason": True, "error": str(exc)}), 422
+    conn.commit()
+    total = compute_total(vals["ca1"], vals["ca2"], vals["exam"], vals["ca3"])
+    grade, remark = grade_for(total, conn, current_school_id())
+    conn.close()
+    return jsonify({"ok": True, "student_id": sid, "total": total, "grade": grade, "remark": remark,
+                    "saved_at": datetime.datetime.now().strftime("%H:%M:%S")})
 
 
 @app.route("/scores/<int:class_id>/<int:subject_id>/csv_template")
@@ -7007,13 +7232,15 @@ def ordinal_text(n):
 app.jinja_env.globals["ordinal_text"] = ordinal_text
 
 
-def result_sheet_settings(conn, school_id):
-    """What a result sheet may show. Built ONLY from the central Result Display Settings (one row per school), plus
+def result_sheet_settings(conn, school_id, cfg_override=None):
+    """What a result sheet may show. (V106: `cfg_override` lets the live preview render UNSAVED values through this same function.) Built ONLY from the central Result Display Settings (one row per school), plus
     the school's own identity (name, uploaded logo, address/contact). Used identically by preview, print and PDF."""
     sc = get_school(conn, school_id)
     k = sc.keys() if sc else []
     g = lambda name, default=None: (sc[name] if sc is not None and name in k and sc[name] is not None else default)
     cfg = get_result_display(conn, school_id)
+    if cfg_override:
+        cfg = {**dict(cfg), **cfg_override}
     logo, logo_path = None, None
     if cfg["show_logo"] and sc is not None and g("logo_filename"):
         logo_path = os.path.join(INSTANCE_DIR, sc["logo_filename"])
@@ -11429,7 +11656,7 @@ register_v62_routes(app, dict(
     PAPER_SIZE_CHOICES=PAPER_SIZE_CHOICES, CUSTOM_MM_MIN=CUSTOM_MM_MIN, CUSTOM_MM_MAX=CUSTOM_MM_MAX,
     ordinal_text=ordinal_text, all_terms_for_school=all_terms_for_school, require_class_result_access=require_class_result_access,
     resolve_term=resolve_term, build_broadsheet_data=build_broadsheet_data, parent_login_required=parent_login_required,
-    get_grading_config=get_grading_config,
+    get_grading_config=get_grading_config, paper_dims_mm=paper_dims_mm,
 ))
 
 # ---------- V63: functional-spec integration ----------
