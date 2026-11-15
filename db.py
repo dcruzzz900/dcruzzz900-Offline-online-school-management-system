@@ -3566,6 +3566,7 @@ RESULT_BOOL_SETTINGS = [
     ("show_grade", "Show Grade", 1),
     ("show_remarks", "Show Remarks", 1),
     ("show_admission_no", "Show Student Admission No. / Register No.", 1),
+    ("show_gender", "Show Student Gender", 1),
     ("show_class", "Show Class / Arm", 1),
     ("show_session", "Show Academic Session", 1),
     ("show_term", "Show Term", 1),
