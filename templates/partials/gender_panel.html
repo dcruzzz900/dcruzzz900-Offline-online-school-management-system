@@ -1,0 +1,21 @@
+{# V106: the ONE Gender Distribution panel. Designed for the School Administration dashboard (V105) and inherited, unchanged, by every
+   other dashboard that shows a gender split (teacher dashboard, School Analytics, Reports & Analytics). The React dashboard filters
+   re-render this same macro on the server and swap the markup in, so the panel can never drift between screens.
+   Usage:  {% from "partials/gender_panel.html" import gender_panel %}{{ gender_panel(stats, 'Your classes') }}
+   `stats` = student_gender_stats() output (boys/girls/unspecified/total) or a dict with male/female. #}
+{% from "partials/ad_icons.html" import ico %}
+{% macro gender_panel(stats, scope='Students', title='Gender Distribution') %}{% set g = gender_panel_data(stats) %}
+<article class="gp" data-gender-panel data-total="{{ g.total }}" data-male="{{ g.male }}" data-female="{{ g.female }}">
+  <header>{{ ico('bars', 22) }}<h2>{{ title }}<span class="gp-sub"> ({{ scope }})</span></h2></header>
+  {% if g.has_data %}<div class="gp-body">
+    <svg viewBox="0 0 160 160" class="gp-donut" role="img" aria-label="{{ scope }}: {{ g.male_pct }}% male, {{ g.female_pct }}% female{% if g.unspecified %}, {{ g.unspecified_pct }}% not specified{% endif %}">
+      <circle class="gp-track" cx="80" cy="80" r="56" fill="none" stroke-width="22"/>
+      {% for a in g.arcs %}<circle class="gp-arc gp-{{ a.key }}" cx="80" cy="80" r="56" fill="none" stroke-width="22" stroke-dasharray="{{ a.len }} {{ a.gap }}" stroke-dashoffset="{{ a.offset }}" transform="rotate(-90 80 80)"/>{% endfor %}
+      <text x="80" y="78" text-anchor="middle" class="gp-pct">{{ g.male_pct }}%</text><text x="80" y="100" text-anchor="middle" class="gp-lbl">Male</text></svg>
+    <ul class="gp-legend">
+      <li><i class="gp-dot gp-male"></i><div><b>Male</b><span>{{ '{:,}'.format(g.male) }} ({{ g.male_pct }}%)</span></div></li>
+      <li><i class="gp-dot gp-female"></i><div><b>Female</b><span>{{ '{:,}'.format(g.female) }} ({{ g.female_pct }}%)</span></div></li>
+      {% if g.unspecified %}<li><i class="gp-dot gp-other"></i><div><b>Not specified</b><span>{{ '{:,}'.format(g.unspecified) }} ({{ g.unspecified_pct }}%)</span></div></li>{% endif %}
+    </ul>
+  </div>{% else %}<p class="gp-empty">No gender data recorded yet.</p>{% endif %}
+</article>{% endmacro %}
