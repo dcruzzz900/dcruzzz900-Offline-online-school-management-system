@@ -8,25 +8,25 @@
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Full Name</label>
-        <input type="text" name="name" required>
+        <input type="text" name="name" required class="form-control">
         <label>Staff / Employee ID <span class="req">*</span></label>
-        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014">
+        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014" class="form-control">
         <label>Username</label>
-        <input type="text" name="username" required>
+        <input type="text" name="username" required class="form-control">
         <label>Email (optional)</label>
-        <input type="email" name="email">
+        <input type="email" name="email" class="form-control">
         <label>Phone Number (optional)</label>
-        <input type="text" name="phone">
+        <input type="text" name="phone" class="form-control">
         <label>Password</label>
-        <input type="password" name="password" required minlength="6">
-        <label>RBAC Role</label><select name="rbac_role" required>{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
-        <button class="btn" type="submit">Add Teacher</button>
+        <input type="password" name="password" required minlength="6" class="form-control">
+        <label>RBAC Role</label><select name="rbac_role" required class="form-select">{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
+        <button class="btn btn-primary" type="submit">Add Teacher</button>
     </form>
 </div>
 
 <div class="card">
     <h3>All Teachers</h3>
-    <table><caption>Staff List</caption>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Staff List</caption>
         <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr>
         {% for t in teachers %}
         <tr>
@@ -36,15 +36,15 @@
                 <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
                       style="display:flex; gap:0.3rem; flex-wrap:wrap; align-items:center;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;">
-                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;">
-                    <button class="btn btn-small" type="submit">Save</button>
+                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;" class="form-control">
+                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;" class="form-control">
+                    <button class="btn btn-primary btn-sm" type="submit">Save</button>
                 </form>
             </td>
             <td>
                 <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
+                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
                 </form>
             </td>
             <td>
@@ -54,21 +54,21 @@
                 <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
                       {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and unable to sign in until you reactivate them.');"{% endif %}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
+                    <button class="btn btn-primary btn-sm" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
                 </form>
                 <form method="POST" action="{{ url_for('admin_reset_teacher_password', teacher_id=t.id) }}" class="inline"
                       onsubmit="return confirm('Reset the password for {{ t.name }}? A new temporary password will be shown here once.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">Reset Password</button>
+                    <button class="btn btn-primary btn-sm" type="submit">Reset Password</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_teacher', teacher_id=t.id) }}" class="inline"
                       onsubmit="return confirm('Remove {{ t.name }}? Any classes/subjects they teach will become unassigned.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Delete</button>
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
 </div>
 {% endblock %}

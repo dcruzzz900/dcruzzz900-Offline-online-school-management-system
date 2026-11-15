@@ -36,7 +36,7 @@
         </div>
         {% if item.done %}<span class="badge">Complete</span>{% else %}<span class="badge">Pending</span>{% endif %}
       </div>
-      <div style="margin-top:12px;"><a class="btn" href="{{ item.url }}">Open setup</a></div>
+      <div style="margin-top:12px;"><a class="btn btn-primary" href="{{ item.url }}">Open setup</a></div>
     </div>
     {% endfor %}
   </div>
@@ -50,11 +50,11 @@
   {% elif ready %}
     <p>All required checks are complete. The School Admin can now mark this school <strong>READY FOR LIVE DATA</strong>.</p>
     <form method="post" onsubmit="return confirm('Mark this school READY FOR LIVE DATA?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn" type="submit">Mark READY FOR LIVE DATA</button>
+      <button class="btn btn-primary" type="submit">Mark READY FOR LIVE DATA</button>
     </form>
   {% else %}
     <p><span class="badge">NOT READY</span> Complete all required checks above.</p>
-    <button class="btn" type="button" disabled>Mark READY FOR LIVE DATA</button>
+    <button class="btn btn-primary" type="button" disabled>Mark READY FOR LIVE DATA</button>
   {% endif %}
 </div>
 

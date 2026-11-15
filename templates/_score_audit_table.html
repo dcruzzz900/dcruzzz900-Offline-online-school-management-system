@@ -1,4 +1,4 @@
-<div class="table-wrap"><table class="score-audit-table">
+<div class="table-wrap"><table class="score-audit-table table table-hover align-middle">
 <thead><tr><th>Date / Time</th><th>Student</th><th>Subject</th><th>Class</th><th>Session · Term</th><th>Previous</th><th>New</th><th>Diff.</th><th>Action</th><th>Changed By</th><th>Role(s)</th><th>Status</th><th>Reason</th></tr></thead>
 <tbody>{% for h in history %}<tr>
 <td>{{ h.changed_at }}</td><td>{{ h.student_name }}<br><small class="muted">{{ h.admission_no }}</small></td><td>{{ h.subject_name }}</td><td>{{ h.class_name }}</td><td>{{ h.session_name }} · {{ h.term_name }}</td>

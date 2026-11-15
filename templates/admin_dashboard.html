@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "partials/ad_icons.html" import ico %}{% from "partials/gender_donut.html" import gender_donut %}
+{% extends "base.html" %}{% from "partials/ad_icons.html" import ico %}{% from "partials/gender_panel.html" import gender_panel %}
 {% block title %}Dashboard — {{ school_name }}{% endblock %}
 {% block content %}
 {% set st = ov.students %}{% set sf = ov.staff %}{% set cp = ov.compilation %}{% set ch = ov.chart %}
@@ -39,14 +39,12 @@
 
   {# ---------------------------------------------------------------- charts row #}
   <section class="ad-row ad-row-charts">
-    <article class="ad-panel"><header>{{ ico('bars', 22) }}<h2>Gender Distribution<span class="ad-sub"> (Students)</span></h2></header>
-      {{ gender_donut(st.male, st.female, st.male_pct, st.female_pct) }}
-      </article>
+    {{ gender_panel({'male': st.male, 'female': st.female, 'total': st.total}, 'Students') }}
 
     <article class="ad-panel"><header>{{ ico('trend', 22) }}<h2>Result Compilation<span class="ad-sub"> Progress</span></h2></header>
       <div class="ad-progress">
         <svg viewBox="0 0 160 160" class="ad-ring" role="img" aria-label="{{ cp.pct }}% of results compiled">
-          <circle cx="80" cy="80" r="62" fill="none" stroke="#dfe7ee" stroke-width="12"/>
+          <circle cx="80" cy="80" r="62" fill="none" stroke="#dfe7ee" class="ad-track" stroke-width="12"/>
           <circle cx="80" cy="80" r="62" fill="none" stroke="#1db954" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ (cp.pct * 389.56 / 100)|round(2) }} 389.56" transform="rotate(-90 80 80)"/>
           <text x="80" y="92" text-anchor="middle" class="r-pct">{{ cp.pct }}%</text></svg>
         <div class="ad-progress-text"><b>{{ '{:,}'.format(cp.compiled) }} of {{ '{:,}'.format(cp.total) }}</b><b>results compiled</b>
@@ -67,7 +65,7 @@
 
   {# ---------------------------------------------------------------- quick access / activities / announcements #}
   <section class="ad-row ad-row-bottom">
-    <article class="ad-panel ad-qa"><input type="checkbox" id="ad-qa-toggle" class="ad-qa-toggle" aria-label="Show all quick access items"><header>{{ ico('bolt', 22) }}<h2>Quick Access</h2><label for="ad-qa-toggle" class="ad-qa-viewall"><span class="m-more">View All</span><span class="m-less">Show less</span> {{ ico('arrow', 14) }}</label></header>
+    <article class="ad-panel ad-qa"><input type="checkbox" id="ad-qa-toggle" class="ad-qa-toggle form-check-input" aria-label="Show all quick access items"><header>{{ ico('bolt', 22) }}<h2>Quick Access</h2><label for="ad-qa-toggle" class="ad-qa-viewall"><span class="m-more">View All</span><span class="m-less">Show less</span> {{ ico('arrow', 14) }}</label></header>
       <div class="ad-tiles">
         {% macro tile(label, href, icon, tone, extra='', badge=0, m=99) %}<a class="ad-tile t-{{ tone }} {{ extra }}{{ ' m-hide' if m > 8 }}" style="--m:{{ m }}" href="{{ href }}"><span class="t-ico">{{ ico(icon, 34) }}</span><span class="t-lbl">{{ label }}</span>{% if badge %}<em class="t-badge" aria-label="{{ badge }} pending">{{ badge }}</em>{% endif %}</a>{% endmacro %}
         {{ tile('My Profile', url_for('staff_profile', user_id=session.get('user_id')), 'person', 'blue', 'is-featured', m=1) }}

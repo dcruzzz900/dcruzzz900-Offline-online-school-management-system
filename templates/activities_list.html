@@ -5,12 +5,12 @@
 {% for t in types %}<a class="btn btn-small {{ 'btn-secondary' if type_filter != t else '' }}" href="{{ url_for('view_all_activities', type=t) }}">{{ t|capitalize }}</a>{% endfor %}
 </form></div>
 <div class="card">
-{% if activities %}<table><tr><th style="width:160px">When</th><th style="width:160px">Who</th><th style="width:110px">Type</th><th>What happened</th></tr>
+{% if activities %}<div class="table-responsive"><table class="table table-hover align-middle"><tr><th style="width:160px">When</th><th style="width:160px">Who</th><th style="width:110px">Type</th><th>What happened</th></tr>
 {% for a in activities %}<tr><td class="muted" style="font-size:12px">{{ a.ts }}</td><td>{{ a.actor }}</td><td><span class="badge">{{ a.type }}</span></td><td>{{ a.description }}</td></tr>{% endfor %}
-</table>
+</table></div>
 <div style="display:flex;justify-content:space-between;margin-top:14px">
-{% if has_prev %}<a class="btn btn-small btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page-1) }}">← Newer</a>{% else %}<span></span>{% endif %}
-{% if has_next %}<a class="btn btn-small btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page+1) }}">Older →</a>{% endif %}
+{% if has_prev %}<a class="btn btn-sm btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page-1) }}">← Newer</a>{% else %}<span></span>{% endif %}
+{% if has_next %}<a class="btn btn-sm btn-secondary" href="{{ url_for('view_all_activities', type=type_filter, page=page+1) }}">Older →</a>{% endif %}
 </div>
 {% else %}<p class="muted">No activities recorded yet{% if type_filter %} for this filter{% endif %}.</p>{% endif %}
 </div>

@@ -4,7 +4,7 @@
 <h1>Notifications</h1>
 {% if session.get('role') in ['admin', 'sub_admin'] %}
 <div class="no-print" style="margin-bottom:1rem;">
-    <a class="btn" href="{{ url_for('notifications_compose') }}">Compose Notification</a>
+    <a class="btn btn-primary" href="{{ url_for('notifications_compose') }}">Compose Notification</a>
 </div>
 {% endif %}
 

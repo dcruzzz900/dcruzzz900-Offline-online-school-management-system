@@ -19,29 +19,29 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="save">
         <label>SMTP Host</label>
-        <input type="text" name="smtp_host" value="{{ settings.smtp_host or '' }}" placeholder="e.g. smtp.sendgrid.net">
+        <input type="text" name="smtp_host" value="{{ settings.smtp_host or '' }}" placeholder="e.g. smtp.sendgrid.net" class="form-control">
 
         <label>SMTP Port</label>
-        <input type="number" name="smtp_port" value="{{ settings.smtp_port or '' }}" placeholder="587 or 465">
+        <input type="number" name="smtp_port" value="{{ settings.smtp_port or '' }}" placeholder="587 or 465" class="form-control">
 
         <label>SMTP Username</label>
-        <input type="text" name="smtp_username" value="{{ settings.smtp_username or '' }}">
+        <input type="text" name="smtp_username" value="{{ settings.smtp_username or '' }}" class="form-control">
 
         <label>SMTP Password</label>
-        <input type="password" name="smtp_password" value="{{ settings.smtp_password or '' }}">
+        <input type="password" name="smtp_password" value="{{ settings.smtp_password or '' }}" class="form-control">
 
         <label style="font-weight:normal; display:flex; align-items:center; gap:0.5rem; margin-top:0.75rem;">
-            <input type="checkbox" name="smtp_use_tls" style="width:auto;" {% if settings.smtp_use_tls %}checked{% endif %}>
+            <input type="checkbox" name="smtp_use_tls" style="width:auto;" {% if settings.smtp_use_tls %}checked{% endif %} class="form-check-input">
             Use STARTTLS (recommended for port 587)
         </label>
 
         <label>"From" Email Address</label>
-        <input type="email" name="smtp_from_email" value="{{ settings.smtp_from_email or '' }}" placeholder="results@yourschool.com">
+        <input type="email" name="smtp_from_email" value="{{ settings.smtp_from_email or '' }}" placeholder="results@yourschool.com" class="form-control">
 
         <label>"From" Name</label>
-        <input type="text" name="smtp_from_name" value="{{ settings.smtp_from_name or '' }}" placeholder="e.g. Greenwood Secondary School">
+        <input type="text" name="smtp_from_name" value="{{ settings.smtp_from_name or '' }}" placeholder="e.g. Greenwood Secondary School" class="form-control">
 
-        <button class="btn" type="submit">Save Settings</button>
+        <button class="btn btn-primary" type="submit">Save Settings</button>
     </form>
 </div>
 
@@ -53,7 +53,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="action" value="test">
         <label>Send test email to</label>
-        <input type="email" name="test_email" required placeholder="you@example.com">
+        <input type="email" name="test_email" required placeholder="you@example.com" class="form-control">
         <button class="btn btn-gold" type="submit">Send Test</button>
     </form>
 </div>

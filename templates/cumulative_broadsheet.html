@@ -14,19 +14,19 @@
 <div class="no-print" style="margin-bottom:1rem;">
     <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
         <label style="display:inline; font-weight:normal;">Session:</label>
-        <select name="session_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+        <select name="session_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
             {% for s in all_sessions %}
             <option value="{{ s.id }}" {% if s.id == academic_session.id %}selected{% endif %}>{{ s.name }}{% if s.is_active %} (active){% endif %}</option>
             {% endfor %}
         </select>
         <label style="display:inline; font-weight:normal; margin-left:0.75rem;">Through term:</label>
-        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+        <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
             {% for t in session_terms %}
             <option value="{{ t.id }}" {% if selected_term and t.id == selected_term.id %}selected{% endif %}>{{ t.name }}</option>
             {% endfor %}
         </select>
     </form>
-    <a class="btn" href="{{ url_for('broadsheet', class_id=class_row.id) }}">&larr; Back to Term Broadsheet</a>
+    <a class="btn btn-primary" href="{{ url_for('broadsheet', class_id=class_row.id) }}">&larr; Back to Term Broadsheet</a>
     <button class="btn btn-gold" onclick="window.print()">🖨 Print</button>
 </div>
 
@@ -46,7 +46,7 @@
 @media print{@page{size:A4 landscape;margin:8mm}.cbs{font-size:6.5pt}.cbs th,.cbs td{padding:1px 2px}.cbs-wrap{overflow:visible}}
 </style>
 <div class="cbs-wrap">
-<table class="cbs">
+<div class="table-responsive"><table class="cbs table table-hover align-middle">
     <thead>
     <tr>
         <th rowspan="3">S/N</th>
@@ -80,7 +80,7 @@
     </tr>
     {% endfor %}
     </tbody>
-</table>
+</table></div>
 </div>
 {% if rs and rs.footer %}<p style="margin-top:1rem; color:#555; font-size:0.8rem; border-top:1px solid #aaa; padding-top:0.4rem;">{{ rs.footer }}</p>{% endif %}
 {% endblock %}

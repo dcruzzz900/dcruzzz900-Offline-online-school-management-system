@@ -12,8 +12,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="new_session">
             <label>Session name (e.g. 2026/2027)</label>
-            <input type="text" name="session_name" required>
-            <button class="btn" type="submit">Create Session</button>
+            <input type="text" name="session_name" required class="form-control">
+            <button class="btn btn-primary" type="submit">Create Session</button>
         </form>
     </div>
     <div class="card">
@@ -22,23 +22,23 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="new_term">
             <label>Session</label>
-            <select name="session_id" required>
+            <select name="session_id" required class="form-select">
                 {% for s in sessions %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
             </select>
             <label>Term</label>
-            <select name="term_name" required>
+            <select name="term_name" required class="form-select">
                 <option>1st Term</option>
                 <option>2nd Term</option>
                 <option>3rd Term</option>
             </select>
-            <button class="btn" type="submit">Create Term</button>
+            <button class="btn btn-primary" type="submit">Create Term</button>
         </form>
     </div>
 </div>
 
 <div class="card">
     <h3>Sessions</h3>
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Session</th><th>Status</th><th>Action</th></tr>
         {% for s in sessions %}
         <tr>
@@ -50,13 +50,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="activate_session">
                     <input type="hidden" name="session_id" value="{{ s.id }}">
-                    <button class="btn btn-small" type="submit">Activate</button>
+                    <button class="btn btn-primary btn-sm" type="submit">Activate</button>
                 </form>
                 {% endif %}
             </td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
 </div>
 
 <div class="card">
@@ -66,14 +66,14 @@
         A term must be <b>Published</b> before its results can be emailed to parents — this
         keeps parents from being emailed mid-term while scores are still being entered.
     </p></details>
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Term</th><th>Session</th><th>Status</th><th>Resumption date</th><th>Published?</th><th>Action</th></tr>
         {% for t in terms %}
         <tr>
             <td>{{ t.name }}</td>
             <td>{{ t.session_name }}</td>
             <td>{% if t.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
-            <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}"><button class="btn btn-small" type="submit">Save</button></form></td>
+            <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}" class="form-control"><button class="btn btn-primary btn-sm" type="submit">Save</button></form></td>
             <td>{% if t.is_published %}<span class="badge" style="background:#1d7a4c;">Published</span>{% else %}—{% endif %}</td>
             <td style="white-space:nowrap;">
                 {% if not t.is_active %}
@@ -81,13 +81,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="action" value="activate_term">
                     <input type="hidden" name="term_id" value="{{ t.id }}">
-                    <button class="btn btn-small" type="submit">Activate</button>
+                    <button class="btn btn-primary btn-sm" type="submit">Activate</button>
                 </form>
                 {% endif %}
-                <a class="btn btn-small btn-gold" href="{{ url_for('result_workflow', term_id=t.id) }}">Result approval</a>
+                <a class="btn btn-sm btn-gold" href="{{ url_for('result_workflow', term_id=t.id) }}">Result approval</a>
             </td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
 </div>
 {% endblock %}

@@ -16,8 +16,9 @@
 <section class="rs-id">
   <div><span>Name</span><b>{{ student_full_name(student) }}</b></div>
   <div><span>Admission / Register No.</span><b>{{ student.admission_no }}</b></div>
-  {% if rs.show_gender %}<div><span>Gender</span><b>{{ {'M':'Male','F':'Female'}.get(student.gender, '-') }}</b></div>{% endif %}
   <div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>
+  {% set _g = (student.gender if student.gender is defined else '') %}{% set _gender_label = {'M':'Male','F':'Female','male':'Male','female':'Female','Male':'Male','Female':'Female'}.get(_g, '') %}
+  {% if (rs is not defined or rs.show_gender is not defined or rs.show_gender) and _gender_label %}<div class="rs-gender" data-rs-flag="show_gender"><span>Gender</span><b>{{ _gender_label }}</b></div>{% endif %}
   {% if class_row.category %}<div><span>Category</span><b>{{ class_row.category }}</b></div>{% endif %}
   <div><span>Cumulative Average</span><b>{{ average }}</b></div>
   <div><span>Grade</span><b>{{ grade }} ({{ remark }})</b></div>

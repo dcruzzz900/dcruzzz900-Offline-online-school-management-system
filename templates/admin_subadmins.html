@@ -15,19 +15,19 @@
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Full Name</label>
-        <input type="text" name="name" required>
+        <input type="text" name="name" required class="form-control">
         <label>Username</label>
-        <input type="text" name="username" required>
+        <input type="text" name="username" required class="form-control">
         <label>Password</label>
-        <input type="password" name="password" required minlength="6">
-        <button class="btn" type="submit">Add Sub-Admin</button>
+        <input type="password" name="password" required minlength="6" class="form-control">
+        <button class="btn btn-primary" type="submit">Add Sub-Admin</button>
     </form>
 </div>
 
 <div class="card">
     <h3>Current Sub-Admins</h3>
     {% if subadmins %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Name</th><th>Username</th><th>Actions</th></tr>
         {% for s in subadmins %}
         <tr>
@@ -37,17 +37,17 @@
                 <form method="POST" action="{{ url_for('reset_subadmin_password', user_id=s.id) }}" class="inline"
                       onsubmit="return confirm('Reset the password for {{ s.name }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">Reset Password</button>
+                    <button class="btn btn-primary btn-sm" type="submit">Reset Password</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_subadmin', user_id=s.id) }}" class="inline"
                       onsubmit="return confirm('Remove Sub-Admin {{ s.name }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Remove</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% else %}
     <p style="color:#999;">No Sub-Admins yet.</p>
     {% endif %}

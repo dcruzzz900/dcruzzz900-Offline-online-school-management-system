@@ -19,7 +19,7 @@
     <h3>Step 1: Choose Source Class</h3>
     <form method="GET">
         <label>From Class / Arm</label>
-        <select name="from_class_id" onchange="this.form.submit()">
+        <select name="from_class_id" onchange="this.form.submit()" class="form-select">
             <option value="">-- choose a class --</option>
             {% for c in classes %}
             <option value="{{ c.id }}" {% if from_class_id == c.id %}selected{% endif %}>{{ c.name }}</option>
@@ -35,7 +35,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="from_class_id" value="{{ from_class_id }}">
         <label>To Existing Class / Arm</label>
-        <select name="to_class_id">
+        <select name="to_class_id" class="form-select">
             <option value="">-- or type a new class name below --</option>
             {% for c in classes %}
             {% if c.id != from_class_id %}
@@ -44,21 +44,21 @@
             {% endfor %}
         </select>
         <label>Or Create a New Class / Arm</label>
-        <input type="text" name="to_class_name" placeholder="e.g. SS2 Science 1">
+        <input type="text" name="to_class_name" placeholder="e.g. SS2 Science 1" class="form-control">
 
         <h4>Students to Promote</h4>
-        <p><label style="font-weight:normal;"><input type="checkbox" id="selectAll" checked style="width:auto;"> Select/Deselect All</label></p>
-        <table>
+        <p><label style="font-weight:normal;"><input type="checkbox" id="selectAll" checked style="width:auto;" class="form-check-input"> Select/Deselect All</label></p>
+        <div class="table-responsive"><table class="table table-hover align-middle">
             <tr><th></th><th>Admission No. / Register No.</th><th>Name</th></tr>
             {% for s in students %}
             <tr>
-                <td><input type="checkbox" name="student_ids" value="{{ s.id }}" class="student-check" checked></td>
+                <td><input type="checkbox" name="student_ids" value="{{ s.id }}" class="student-check form-check-input" checked></td>
                 <td>{{ s.admission_no }}</td>
                 <td>{{ student_full_name(s) }}</td>
             </tr>
             {% endfor %}
-        </table>
-        <button class="btn" type="submit" style="margin-top:1rem;"
+        </table></div>
+        <button class="btn btn-primary" type="submit" style="margin-top:1rem;"
                 onclick="return confirm('Promote the selected students? This changes their current class.');">
             Promote Selected Students
         </button>
