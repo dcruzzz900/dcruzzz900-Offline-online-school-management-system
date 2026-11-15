@@ -1,0 +1,27 @@
+{# V106: shared Gender Distribution donut + legend -- the exact component the V105 admin
+   dashboard introduced, now reused by every other dashboard/page that shows a gender
+   breakdown so they all inherit the same look instead of keeping a separate implementation
+   (teacher_dashboard.html and admin_analytics.html used to render their own Chart.js donut;
+   both now call this macro instead). Takes plain counts so it works from either
+   admin_dashboard_overview()'s "students"/"staff" dicts (male/female/male_pct/female_pct) or
+   student_gender_stats()'s dict (boys/girls/unspecified) -- see gender_donut_from_stats(). #}
+{% macro gender_donut(male, female, male_pct, female_pct, male_label='Male', female_label='Female', aria_subject='Students') %}
+<div class="ad-gender">
+  <svg viewBox="0 0 160 160" class="ad-donut" role="img" aria-label="{{ aria_subject }}: {{ male_pct }}% {{ male_label|lower }}, {{ female_pct }}% {{ female_label|lower }}">
+    <circle cx="80" cy="80" r="56" fill="none" stroke="#ff4fa3" stroke-width="22"/>
+    <circle cx="80" cy="80" r="56" fill="none" stroke="#1a6fe8" stroke-width="22" stroke-dasharray="{{ (male_pct * 351.86 / 100)|round(2) }} 351.86" transform="rotate(-90 80 80)"/>
+    <text x="80" y="78" text-anchor="middle" class="d-pct">{{ male_pct }}%</text><text x="80" y="100" text-anchor="middle" class="d-lbl">{{ male_label }}</text>
+  </svg>
+  <ul class="ad-legend">
+    <li><i style="background:#1a6fe8"></i><div><b>{{ male_label }}</b><span>{{ '{:,}'.format(male) }} ({{ male_pct }}%)</span></div></li>
+    <li><i style="background:#ff4fa3"></i><div><b>{{ female_label }}</b><span>{{ '{:,}'.format(female) }} ({{ female_pct }}%)</span></div></li>
+  </ul>
+</div>
+{% endmacro %}
+
+{# Convenience wrapper for the other, older stats shape (student_gender_stats(): boys/girls/
+   unspecified, no pre-computed percentages) -- so callers don't each re-derive male_pct/female_pct. #}
+{% macro gender_donut_from_stats(stats, aria_subject='Students') %}
+{% set total = (stats.boys or 0) + (stats.girls or 0) %}
+{{ gender_donut(stats.boys or 0, stats.girls or 0, ((stats.boys or 0) * 100 / total)|round if total else 0, ((stats.girls or 0) * 100 / total)|round if total else 0, aria_subject=aria_subject) }}
+{% endmacro %}
