@@ -1,0 +1,127 @@
+/* V106: one theme layer for every screen. Loaded after Bootstrap and the app stylesheets.
+   1) the school's brand colours (Theme & Branding) drive Bootstrap's variables and the legacy tokens;
+   2) light/dark surfaces are tokens, so a screen only needs var(--surface) / var(--text) to follow the mode;
+   3) the sidebar / header styles chosen in Theme & Branding are honoured (data-sidebar / data-header on <body>);
+   4) dark-mode rules for the app's literal colours live in theme-dark.generated.css (tools/build_dark_css.py). */
+
+/* ---- brand -> tokens ---- */
+:root{
+  --brand:var(--theme-primary,#1f6feb);--brand-2:var(--theme-secondary,#0b3b75);--brand-accent:var(--theme-accent,#7c4dff);
+  --navy:var(--theme-secondary,#1f3a5f);--navy-dark:color-mix(in srgb,var(--theme-secondary,#16283f) 72%,#000);--blue:var(--theme-primary,#1f6feb);
+  --brand-link:var(--theme-primary,#1f6feb);
+  --brand-ink:var(--theme-secondary,#0b3b75);
+  color-scheme:light;
+}
+html[data-bs-theme]{
+  --bs-primary:var(--theme-primary,#1f6feb);--bs-primary-rgb:var(--theme-primary-rgb,31,111,235);
+  --bs-secondary:var(--theme-secondary,#0b3b75);--bs-secondary-rgb:var(--theme-secondary-rgb,11,59,117);
+  --bs-info:var(--theme-accent,#7c4dff);--bs-info-rgb:var(--theme-accent-rgb,124,77,255);
+  --bs-link-color:var(--brand-link);--bs-link-hover-color:color-mix(in srgb,var(--brand-link) 80%,#000);
+  --bs-link-color-rgb:var(--theme-primary-rgb,31,111,235);
+  --bs-border-radius:.6rem;--bs-border-radius-lg:.9rem;--bs-font-sans-serif:var(--app-font,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif);
+  --bs-body-font-family:var(--app-font,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif);
+  --bs-focus-ring-color:rgba(var(--theme-primary-rgb,31,111,235),.28);
+}
+
+/* ---- light surfaces ---- */
+html[data-bs-theme="light"]{
+  --bg:#f5f8fc;--surface:#fff;--surface-soft:#f8fafc;--surface-2:#f8fafc;--text:#172033;--ink:#172033;--muted:#5b6b82;--mut:#5b6b82;
+  --border:#dfe6ef;--line:#e6eaf0;--ai-bg:#f5f8fc;--ai-border:#dce6f1;
+  --ux-surface:#fff;--ux-muted:#5b6b82;--ux-border:#e5e7eb;--enh-text:#172033;--enh-muted:#475569;--enh-border:#cbd5e1;--enh-surface:#fff;
+  --bs-body-bg:var(--bg);--bs-body-color:var(--text);
+}
+/* ---- dark surfaces ---- */
+html[data-bs-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0f172a;--surface:#182234;--surface-soft:#1c2740;--surface-2:#1c2740;--text:#e5ebf5;--ink:#e5ebf5;--muted:#9fb0c8;--mut:#9fb0c8;
+  --border:#2c3a52;--line:#2c3a52;--ai-bg:#0f172a;--ai-border:#2c3a52;
+  --ux-surface:#182234;--ux-muted:#9fb0c8;--ux-border:#2c3a52;--enh-text:#e5ebf5;--enh-muted:#b4c2d6;--enh-border:#34445f;--enh-surface:#182234;
+  --success:#4ade80;--error:#f87171;
+  --bs-body-bg:var(--bg);--bs-body-color:var(--text);--bs-secondary-bg:var(--surface-2);--bs-tertiary-bg:var(--surface-2);--bs-border-color:var(--border);
+  /* a very dark brand colour would vanish on a dark surface: lift it for links and text, keep it for solid fills */
+  --brand-link:color-mix(in srgb,var(--theme-primary,#1f6feb) 55%,#fff);
+  --navy:color-mix(in srgb,var(--theme-secondary,#0b3b75) 40%,#fff);
+  --brand-ink:color-mix(in srgb,var(--theme-secondary,#0b3b75) 30%,#fff);
+}
+html[data-bs-theme="dark"] body,html[data-bs-theme="dark"] .app-main,html[data-bs-theme="dark"] .parent-shell{background:var(--bg);color:var(--text)}
+html[data-bs-theme="dark"] h1,html[data-bs-theme="dark"] h2,html[data-bs-theme="dark"] h3,html[data-bs-theme="dark"] h4,html[data-bs-theme="dark"] h5{color:var(--text)}
+html[data-bs-theme="dark"] .topbar{background:rgba(24,34,52,.9);border-color:var(--border)}
+html[data-bs-theme="dark"] input,html[data-bs-theme="dark"] select,html[data-bs-theme="dark"] textarea{background-color:var(--surface-2);color:var(--text);border-color:var(--border)}
+html[data-bs-theme="dark"] ::placeholder{color:#7f90ab}
+html[data-bs-theme="dark"] table{color:var(--text)}
+html[data-bs-theme="dark"] th{background:var(--surface-2);color:var(--text)}
+html[data-bs-theme="dark"] tr:hover td{background:rgba(255,255,255,.03)}
+html[data-bs-theme="dark"] hr{border-color:var(--border)}
+html[data-bs-theme="dark"] .muted,html[data-bs-theme="dark"] small{color:var(--muted)}
+
+/* ---- Bootstrap components bridged to the brand ---- */
+.btn{--bs-btn-border-radius:.6rem;font-weight:600}
+.btn-primary,.btn:not([class*="btn-"]){--bs-btn-bg:var(--theme-primary,#1f6feb);--bs-btn-border-color:var(--theme-primary,#1f6feb);--bs-btn-color:var(--theme-primary-ink,#fff);
+  --bs-btn-hover-bg:color-mix(in srgb,var(--theme-primary,#1f6feb) 86%,#000);--bs-btn-hover-border-color:color-mix(in srgb,var(--theme-primary,#1f6feb) 80%,#000);--bs-btn-hover-color:var(--theme-primary-ink,#fff);
+  --bs-btn-active-bg:color-mix(in srgb,var(--theme-primary,#1f6feb) 78%,#000);--bs-btn-active-border-color:color-mix(in srgb,var(--theme-primary,#1f6feb) 72%,#000);--bs-btn-active-color:var(--theme-primary-ink,#fff);
+  --bs-btn-disabled-bg:var(--theme-primary,#1f6feb);--bs-btn-disabled-border-color:var(--theme-primary,#1f6feb);--bs-btn-disabled-color:var(--theme-primary-ink,#fff);
+  --bs-btn-focus-shadow-rgb:var(--theme-primary-rgb,31,111,235)}
+.btn:not([class*="btn-"]){background:var(--bs-btn-bg);color:var(--bs-btn-color);border:1px solid var(--bs-btn-border-color)}
+.btn-secondary{--bs-btn-bg:var(--surface-2,#eef2f7);--bs-btn-color:var(--text,#172033);--bs-btn-border-color:var(--border,#d5dde8);
+  --bs-btn-hover-bg:color-mix(in srgb,var(--surface-2,#eef2f7) 82%,var(--theme-primary,#1f6feb));--bs-btn-hover-color:var(--text,#172033);--bs-btn-hover-border-color:var(--theme-primary,#1f6feb);
+  --bs-btn-active-bg:color-mix(in srgb,var(--surface-2,#eef2f7) 70%,var(--theme-primary,#1f6feb));--bs-btn-active-color:var(--text,#172033);--bs-btn-active-border-color:var(--theme-primary,#1f6feb)}
+.btn-gold,.btn-accent{--bs-btn-bg:var(--theme-accent,#c99a2e);--bs-btn-border-color:var(--theme-accent,#c99a2e);--bs-btn-color:var(--theme-accent-ink,#111827);--bs-btn-hover-bg:color-mix(in srgb,var(--theme-accent,#c99a2e) 85%,#000);--bs-btn-hover-color:var(--theme-accent-ink,#111827)}
+.btn-small{--bs-btn-padding-y:.25rem;--bs-btn-padding-x:.5rem;--bs-btn-font-size:.8125rem}
+.btn-outline-primary{--bs-btn-color:var(--brand-link);--bs-btn-border-color:var(--theme-primary,#1f6feb);--bs-btn-hover-bg:var(--theme-primary,#1f6feb);--bs-btn-hover-color:var(--theme-primary-ink,#fff);--bs-btn-hover-border-color:var(--theme-primary,#1f6feb)}
+.form-control:focus,.form-select:focus,.form-check-input:focus{border-color:var(--theme-primary,#1f6feb);box-shadow:0 0 0 .22rem rgba(var(--theme-primary-rgb,31,111,235),.22)}
+.form-check-input:checked{background-color:var(--theme-primary,#1f6feb);border-color:var(--theme-primary,#1f6feb)}
+.form-control,.form-select{background-color:var(--surface,#fff);color:var(--text,#172033);border-color:var(--border,#cbd5e1)}
+.table{--bs-table-bg:transparent;--bs-table-color:var(--text);--bs-table-border-color:var(--border);--bs-table-hover-bg:rgba(var(--theme-primary-rgb,31,111,235),.06);--bs-table-hover-color:var(--text)}
+.table>:not(caption)>*>*{padding:.6rem .7rem}
+.table thead th{background:var(--surface-2);font-weight:700;white-space:nowrap}
+/* the auto-inserted table captions (base.html) stay screen-reader only, as before */
+table>caption{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;padding:0!important}
+.card{--bs-card-bg:var(--surface,#fff);--bs-card-border-color:var(--border,#e2e8f0);--bs-card-color:var(--text);background:var(--surface,#fff);color:var(--text)}
+.alert{--bs-alert-border-radius:.75rem}
+.badge{font-weight:600}
+.page-link{color:var(--brand-link)}.page-item.active .page-link{background:var(--theme-primary,#1f6feb);border-color:var(--theme-primary,#1f6feb);color:var(--theme-primary-ink,#fff)}
+.modal-content,.dropdown-menu,.offcanvas{background:var(--surface);color:var(--text);border-color:var(--border)}
+.nav-pills .nav-link.active{background:var(--theme-primary,#1f6feb);color:var(--theme-primary-ink,#fff)}
+a:not([class]){color:var(--brand-link)}
+
+/* ---- Theme & Branding: sidebar / header styles are honoured ---- */
+body[data-sidebar="dark"] .app-sidebar{background:linear-gradient(180deg,color-mix(in srgb,var(--theme-secondary,#0b3b75) 92%,#000),color-mix(in srgb,var(--theme-secondary,#0b3b75) 62%,#000));color:var(--theme-secondary-ink,#fff)}
+body[data-sidebar="light"] .app-sidebar{background:var(--surface);color:var(--text);border-right:1px solid var(--border)}
+body[data-sidebar="light"] .app-sidebar a,body[data-sidebar="light"] .app-sidebar .brand,body[data-sidebar="light"] .app-sidebar b,body[data-sidebar="light"] .app-sidebar small,body[data-sidebar="light"] .app-sidebar .nav-group{color:var(--text)!important}
+body[data-sidebar="light"] .app-sidebar a.active,body[data-sidebar="light"] .app-sidebar a:hover{background:rgba(var(--theme-primary-rgb,31,111,235),.12)}
+body[data-header="solid"] .topbar{border-bottom:3px solid var(--theme-primary,#1f6feb)}
+body[data-header="gradient"] .topbar{background:linear-gradient(90deg,var(--theme-secondary,#0b3b75),var(--theme-primary,#1f6feb));color:var(--theme-primary-ink,#fff)}
+body[data-header="gradient"] .topbar .top-school b,body[data-header="gradient"] .topbar .top-school small,body[data-header="gradient"] .topbar .top-role,body[data-header="gradient"] .topbar .top-bell,body[data-header="gradient"] .topbar .sidebar-toggle{color:var(--theme-primary-ink,#fff)}
+.parent-top{background:linear-gradient(90deg,var(--theme-secondary,#0b3b75),var(--theme-primary,#1f6feb))}
+
+/* ---- light / dark switch ---- */
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border-radius:50%;
+  border:1px solid var(--border,#d5dde8);background:var(--surface,#fff);color:var(--text,#172033);line-height:1;cursor:pointer}
+.theme-toggle:hover{border-color:var(--theme-primary,#1f6feb)}
+.theme-toggle .tt-ico::before{content:"\263E";font-size:1.15rem}               /* crescent: tap for dark */
+html[data-bs-theme="dark"] .theme-toggle .tt-ico::before{content:"\2600";font-size:1.25rem} /* sun: tap for light */
+.top-actions .theme-toggle{margin-right:10px;flex:none}
+.theme-fab{position:fixed;top:12px;right:12px;z-index:1040}
+.theme-fab .theme-toggle{box-shadow:0 4px 14px rgba(0,0,0,.18)}
+
+/* ---- literal inline colours that templates set (dark-mode safety net) ---- */
+html[data-bs-theme="dark"] [style*="color:#666"],html[data-bs-theme="dark"] [style*="color:#777"],html[data-bs-theme="dark"] [style*="color:#888"],
+html[data-bs-theme="dark"] [style*="color:#999"],html[data-bs-theme="dark"] [style*="color: #666"],html[data-bs-theme="dark"] [style*="color:#555"],html[data-bs-theme="dark"] [style*="color:#444"]{color:var(--muted)!important}
+html[data-bs-theme="dark"] [style*="color:#333"],html[data-bs-theme="dark"] [style*="color:#222"],html[data-bs-theme="dark"] [style*="color:#000"]{color:var(--text)!important}
+html[data-bs-theme="dark"] [style*="background:#fff"],html[data-bs-theme="dark"] [style*="background: #fff"],html[data-bs-theme="dark"] [style*="background:white"],html[data-bs-theme="dark"] [style*="background:#ffffff"]{background:var(--surface)!important}
+html[data-bs-theme="dark"] [style*="background:#f"]{background-color:var(--surface-2)!important}
+html[data-bs-theme="dark"] [style*="border:1px solid #"],html[data-bs-theme="dark"] [style*="border-bottom:1px solid #"]{border-color:var(--border)!important}
+
+/* ---- printed paper is always light, whatever the screen mode ---- */
+html[data-bs-theme="dark"] .rs-sheet,html[data-bs-theme="dark"] .rs-sheet *,html[data-bs-theme="dark"] .result-sheet,html[data-bs-theme="dark"] .rs-preview-paper{color-scheme:light}
+html[data-bs-theme="dark"] .rs-sheet{background:#fff;color:#111}
+@media print{html[data-bs-theme="dark"] body{background:#fff!important;color:#000!important}.theme-toggle,.theme-fab{display:none!important}}
+
+/* inline-SVG chart parts that carry literal colours */
+html[data-bs-theme="dark"] .ad-track{stroke:#334155}
+html[data-bs-theme="dark"] svg line[stroke],html[data-bs-theme="dark"] svg [stroke="#e5ecf3"]{stroke-opacity:.35}
+html[data-bs-theme="dark"] svg text{fill:var(--muted)}
+
+/* position:sticky needs an ancestor that is NOT a scroll container; `overflow-x:hidden` on <body> made it one, so use clip (same
+   "never scroll sideways" effect, no scroll container). Needed by the sticky live preview and sticky save bars. */
+html,body{overflow-x:clip!important;overflow-y:visible!important}

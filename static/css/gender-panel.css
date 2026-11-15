@@ -1,0 +1,22 @@
+/* V106: shared Gender Distribution panel (partials/gender_panel.html). Looks identical on every dashboard and follows the school's
+   theme: the header uses the school's secondary colour; text and surface come from the light/dark theme tokens. */
+.gp{--gp-male:#1a6fe8;--gp-female:#ff4fa3;--gp-other:#94a3b8;background:var(--surface,#fff);color:var(--text,#12234a);border-radius:12px;
+  box-shadow:0 4px 14px rgba(20,40,90,.14);overflow:hidden;min-width:0;border:1px solid var(--border,transparent)}
+.gp>header{display:flex;align-items:center;gap:10px;padding:10px 16px;color:#fff;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--theme-secondary,#0b3b75) 86%,#fff),var(--theme-secondary,#0b3b75))}
+.gp>header h2{margin:0;font-size:1.02rem;font-weight:700;flex:1;color:#fff}
+.gp svg.ico{display:block;flex:none}
+.gp-body{display:flex;align-items:center;gap:18px;padding:16px 18px;flex-wrap:wrap}
+.gp-donut{width:150px;height:150px;flex:none}
+.gp-track{stroke:var(--gp-track,#dfe7ee)}
+.gp-arc.gp-male{stroke:var(--gp-male)}.gp-arc.gp-female{stroke:var(--gp-female)}.gp-arc.gp-other{stroke:var(--gp-other)}
+.gp-pct{font:800 24px Inter,Arial,sans-serif;fill:var(--text,#12234a)}.gp-lbl{font:700 16px Inter,Arial,sans-serif;fill:var(--text,#12234a)}
+.gp-legend{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.gp-legend li{display:flex;gap:10px;align-items:flex-start}
+.gp-dot{width:13px;height:13px;border-radius:50%;margin-top:5px;flex:none;display:inline-block}
+.gp-dot.gp-male{background:var(--gp-male)}.gp-dot.gp-female{background:var(--gp-female)}.gp-dot.gp-other{background:var(--gp-other)}
+.gp-legend b{display:block;font-size:1.05rem}.gp-legend span{color:var(--muted,#243457);font-size:1rem}
+.gp-empty{margin:0;padding:18px;color:var(--muted,#64748b)}
+.gp-loading{opacity:.55;transition:opacity .15s}
+@media(max-width:700px){.gp-sub{display:none}.gp-body{padding:8px 10px 12px;gap:8px;flex-direction:column;align-items:flex-start}.gp-donut{width:104px;height:104px}.gp-pct{font-size:22px}.gp-legend{gap:6px}.gp-legend b,.gp-legend span{font-size:.85rem}}
+[data-bs-theme="dark"] .gp{--gp-male:#5b9dff;--gp-female:#ff7bbd;--gp-track:#334155;box-shadow:none}
