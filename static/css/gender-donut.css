@@ -1,0 +1,28 @@
+/* V106: shared Gender Distribution donut + legend component. Originally built only for the
+   V105 admin dashboard (templates/admin_dashboard.html); pulled out here so every other
+   dashboard that shows a gender breakdown (Teacher Dashboard, School Analytics) renders the
+   exact same donut/legend look instead of each keeping its own separate implementation --
+   markup comes from templates/partials/gender_donut.html's gender_donut() macro. */
+.g-ico{display:grid;place-items:center}.g-m{color:#1a6fe8}.g-f{color:#ff4fa3}
+.ad-gender{display:flex;align-items:center;gap:18px;padding:16px 18px;flex-wrap:wrap}
+.ad-donut{width:150px;height:150px;flex:none}
+.d-pct{font:800 24px Inter,Arial,sans-serif;fill:#0a2a6b}
+.d-lbl{font:700 16px Inter,Arial,sans-serif;fill:#0a2a6b}
+.ad-legend{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.ad-legend li{display:flex;gap:10px;align-items:flex-start}
+.ad-legend i{width:13px;height:13px;border-radius:50%;margin-top:5px;flex:none}
+.ad-legend b{display:block;font-size:1.05rem}
+.ad-legend span{color:#243457;font-size:1rem}
+@media(max-width:700px){
+  .ad-gender{padding:8px 10px 12px;gap:8px;flex-direction:column;align-items:flex-start}
+  .ad-donut{width:104px;height:104px}.d-pct{font-size:22px}
+  .ad-legend{gap:6px}.ad-legend b,.ad-legend span{font-size:.85rem}
+}
+@media(max-width:480px){.ad-donut{width:88px;height:88px}.d-pct{font-size:20px}.ad-gender{padding:6px 8px 10px}}
+
+/* Dark mode (V106): these are drawn on a light card background with hardcoded dark text/fills
+   (SVG text uses fill, not currentColor), so in dark mode give the donut's own small card a
+   light "well" instead of trying to recolor every fill -- keeps the numbers legible without
+   touching the shared donut SVG markup used in light mode too. */
+:root[data-theme="dark"] .ad-gender{background:#1b2436;border-radius:12px}
+:root[data-theme="dark"] .ad-legend span{color:#aab4c8}

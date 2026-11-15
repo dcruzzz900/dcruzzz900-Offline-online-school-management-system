@@ -18,7 +18,10 @@
 .k-cyan{background:linear-gradient(160deg,#1ec3f7,#0594d6)}.k-orange{background:linear-gradient(160deg,#ffae1a,#f57a00)}.k-fees{background:linear-gradient(160deg,#3ed45e,#14a43f)}
 .ad-kpi-gender{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#fff;color:var(--ink);padding:9px 12px}
 .ad-kpi-gender>div{display:flex;align-items:center;gap:6px;min-width:0}.ad-kpi-gender b{display:block;font-size:1.05rem}.ad-kpi-gender small{display:block;color:var(--mut);font-size:.72rem;white-space:nowrap}
-.g-ico{display:grid;place-items:center}.g-m{color:#1a6fe8}.g-f{color:#ff4fa3}
+/* V106: .g-ico/.g-m/.g-f, the Gender Distribution donut (.ad-gender/.ad-donut/.d-pct/.d-lbl/
+   .ad-legend) now live in the shared static/css/gender-donut.css (imported below) so every
+   other dashboard that shows gender distribution inherits this exact look. */
+@import url("gender-donut.css");
 .ad-kpi-link{display:flex;align-items:center;justify-content:center;gap:6px;background:#fff;color:#0a56d6;font-weight:700;font-size:.92rem;padding:7px 10px 10px;text-decoration:none;margin-top:auto}
 .k-green .ad-kpi-link{color:#0e8a38}
 .ad-kpi-btn{display:flex;align-items:center;justify-content:center;gap:6px;margin:auto 14px 14px;padding:9px 10px;border-radius:9px;background:rgba(255,255,255,.88);font-weight:700;font-size:.92rem;text-decoration:none}
@@ -30,10 +33,6 @@
 .ad-panel{background:#fff;border-radius:12px;box-shadow:0 4px 14px rgba(20,40,90,.14);overflow:hidden;min-width:0}
 .ad-panel>header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(180deg,#0e3a8f,#0a2a6b);color:#fff}
 .ad-panel>header h2{margin:0;font-size:1.02rem;font-weight:700;flex:1}.ad-panel>header a{display:inline-flex;align-items:center;gap:5px;color:#fff;font-size:.82rem;font-weight:600;text-decoration:none}
-.ad-gender{display:flex;align-items:center;gap:18px;padding:16px 18px;flex-wrap:wrap}.ad-donut{width:150px;height:150px;flex:none}
-.d-pct{font:800 24px Inter,Arial,sans-serif;fill:#0a2a6b}.d-lbl{font:700 16px Inter,Arial,sans-serif;fill:#0a2a6b}
-.ad-legend{list-style:none;margin:0;padding:0;display:grid;gap:12px}.ad-legend li{display:flex;gap:10px;align-items:flex-start}.ad-legend i{width:13px;height:13px;border-radius:50%;margin-top:5px;flex:none}
-.ad-legend b{display:block;font-size:1.05rem}.ad-legend span{color:#243457;font-size:1rem}
 .ad-progress{display:flex;align-items:center;gap:18px;padding:16px 18px;flex-wrap:wrap}.ad-ring{width:150px;height:150px;flex:none}.r-pct{font:800 32px Inter,Arial,sans-serif;fill:#0a2a6b}
 .ad-progress-text{display:grid;gap:6px;min-width:150px;flex:1}.ad-progress-text b{font-size:1.1rem}.ad-progress-text small{font-weight:700;color:#0a2a6b;font-size:.78rem}
 .ad-bar{height:11px;border-radius:99px;background:#dfe7ee;overflow:hidden;margin:6px 0}.ad-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#19b24a,#3ddc6b)}
@@ -76,8 +75,8 @@
   .ad .ad-money{font-size:1.05rem!important}.ad-fees-collected{margin:2px 8px 10px;font-size:.78rem}
   .ad-row-charts{grid-template-columns:1fr 1fr}.ad-row-charts>:last-child{display:none}
   .ad-row-charts .ad-panel>header{background:none;color:#0a2a6b;padding:10px 12px 0}.ad .ad-row-charts .ad-panel>header h2{color:#0a2a6b;font-size:.95rem}
-  .ad-gender,.ad-progress{padding:8px 10px 12px;gap:8px;flex-direction:column;align-items:flex-start}.ad-donut,.ad-ring{width:104px;height:104px}.d-pct{font-size:22px}.r-pct{font-size:28px}
-  .ad-legend{gap:6px}.ad-legend b,.ad-legend span{font-size:.85rem}.ad-progress-text{min-width:0;width:100%}.ad-progress-text b{font-size:.95rem}
+  .ad-progress{padding:8px 10px 12px;gap:8px;flex-direction:column;align-items:flex-start}.ad-ring{width:104px;height:104px}.r-pct{font-size:28px}
+  .ad-progress-text{min-width:0;width:100%}.ad-progress-text b{font-size:.95rem}
   .ad-tiles{grid-template-columns:repeat(4,1fr);gap:6px;padding:8px}.ad-tile{order:var(--m);min-height:84px;padding:6px 2px}.t-lbl{font-size:.72rem}.t-ico svg{width:30px;height:30px}
   .ad-tile.m-hide{display:none}.ad-qa-toggle:checked~.ad-tiles .ad-tile.m-hide{display:flex}.ad-tile.m-only{display:flex}
   .ad-qa-viewall{display:inline-flex;align-items:center;gap:6px;color:#fff;font-size:.85rem;font-weight:600;cursor:pointer}.ad-qa-viewall .m-less{display:none}.ad-qa-toggle:checked~header .m-more{display:none}.ad-qa-toggle:checked~header .m-less{display:inline}
@@ -86,7 +85,7 @@
 }
 @media(max-width:560px){.ad-kpis{grid-template-columns:1fr 1fr}.ad-row-bottom{grid-template-columns:1fr}.ad-tiles{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:359px){.ad-row-charts{grid-template-columns:1fr}.ad-tiles{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:480px){.ad-donut,.ad-ring{width:88px;height:88px}.d-pct{font-size:20px}.r-pct{font-size:24px}.ad-gender,.ad-progress{padding:6px 8px 10px}}
+@media(max-width:480px){.ad-ring{width:88px;height:88px}.r-pct{font-size:24px}.ad-progress{padding:6px 8px 10px}}
 /* heading colours must beat the global h1/h2 rules */
 .ad .ad-banner h1,.ad .ad-banner p{color:#fff}.ad .ad-panel>header h2{color:#fff;margin:0}.ad .ad-ann-item b{color:#0a2a6b}
 .ad .ad-money{font-size:clamp(1.15rem,1.75vw,1.65rem)!important;white-space:nowrap}

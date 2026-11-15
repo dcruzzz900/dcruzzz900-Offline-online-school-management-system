@@ -1,0 +1,113 @@
+/* ============================================================================================
+   V106 — Light / Dark mode
+   ============================================================================================
+   Loaded LAST in base.html's <head> (after style.css, ai-ui.css, ux-complete.css, shell-modern.css)
+   so these rules beat that older, overlapping stylesheet stack on specificity + source order
+   without having to touch or risk breaking any of it. Scope is the shared app shell that every
+   screen is built from -- sidebar/topbar, .card and its variants, tables, forms, buttons, chips,
+   banners -- which is what makes this apply sitewide rather than one page at a time. Printable
+   result sheets / broadsheets are deliberately NOT touched here: those are themed by the
+   school's own branding colours (Result Display Settings) and are meant to print/PDF the same
+   regardless of which mode the person who clicked "Download" happens to be browsing in.
+   Switch is <html data-theme="dark"|"light">, see base.html head script + static/js/theme-toggle.js. */
+
+/* ---- toggle button (shown on every screen, top bar) ---------------------------------------- */
+.theme-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;border:1px solid var(--line,#e2e8f0);background:transparent;color:#475569;cursor:pointer;padding:0}
+.theme-toggle-btn:hover{background:rgba(100,116,139,.12)}
+.theme-toggle-btn .tt-moon{display:none}
+:root[data-theme="dark"] .theme-toggle-btn .tt-sun{display:none}
+:root[data-theme="dark"] .theme-toggle-btn .tt-moon{display:block}
+:root[data-theme="dark"] .theme-toggle-btn{color:#e2e8f0;border-color:#334155}
+
+/* ---- base surfaces -------------------------------------------------------------------------- */
+:root[data-theme="dark"]{
+  --bg:#0f1420; --text:#dbe2ee; --border:#2a3344; --line:#2a3344;
+  --surface:#171e2c; --surface-2:#1b2436; --surface-soft:#1b2436; --ink:#e6ebf4; --muted:#95a1b8;
+  --ai-bg:#0f1420; --ai-border:#2a3344; --ux-surface:#171e2c; --ux-muted:#95a1b8; --ux-border:#2a3344;
+  --enh-text:#e6ebf4; --enh-muted:#95a1b8; --enh-border:#2a3344; --enh-surface:#171e2c;
+}
+:root[data-theme="dark"] body{background:var(--bg);color:var(--text)}
+:root[data-theme="dark"] .app-main{background:var(--bg)}
+:root[data-theme="dark"] .container{color:var(--text)}
+/* generic h1/h2/h3{color:var(--navy)} in style.css predates the theme-variable system and was
+   never swapped for var(--ink) -- --navy is a fixed light-mode blue, so headings everywhere
+   (not just inside .card/.page-heading, which ARE already covered above) need a direct override. */
+:root[data-theme="dark"] .container h1,:root[data-theme="dark"] .container h2,:root[data-theme="dark"] .container h3{color:var(--ink)}
+
+/* ---- top bar --------------------------------------------------------------------------------*/
+:root[data-theme="dark"] .topbar{background:#141b29!important;border-bottom:1px solid var(--line)!important;backdrop-filter:none!important}
+:root[data-theme="dark"] .top-school b{color:var(--ink)}
+:root[data-theme="dark"] .top-school small,:root[data-theme="dark"] .top-actions a{color:var(--muted)}
+:root[data-theme="dark"] .top-search{background:#1b2436;border-color:var(--line);color:var(--muted)}
+:root[data-theme="dark"] .top-search input{background:transparent;color:var(--ink)}
+:root[data-theme="dark"] .sync-pill{background:#112a1d!important;border-color:#1c4a30!important;color:#6fe3a0!important}
+:root[data-theme="dark"] .tenant-chip{background:#1b2436;color:#aab4c8;border-color:var(--line)}
+
+/* ---- sidebar: already a dark gradient in both modes, just tune the hairline/hover ----------- */
+:root[data-theme="dark"] .app-sidebar{box-shadow:1px 0 0 rgba(255,255,255,.04)}
+:root[data-theme="dark"] .sidebar-bottom{border-top-color:rgba(255,255,255,.08)}
+
+/* ---- cards, panels, stat boxes ---------------------------------------------------------------*/
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .stat-box,
+:root[data-theme="dark"] .stat-card,
+:root[data-theme="dark"] .child-card,
+:root[data-theme="dark"] .ad-panel,
+:root[data-theme="dark"] .chart-card{background:var(--surface)!important;border-color:var(--line)!important;color:var(--text);box-shadow:0 10px 26px rgba(0,0,0,.35)}
+:root[data-theme="dark"] .card h1,:root[data-theme="dark"] .card h2,:root[data-theme="dark"] .card h3,
+:root[data-theme="dark"] .section-title h3,:root[data-theme="dark"] .page-heading h1,
+:root[data-theme="dark"] .stat-box .num,:root[data-theme="dark"] .stat-card strong{color:var(--ink)}
+:root[data-theme="dark"] .muted,:root[data-theme="dark"] .card p,:root[data-theme="dark"] .panel p,
+:root[data-theme="dark"] .page-heading p,:root[data-theme="dark"] .stat-box .label,:root[data-theme="dark"] .stat-card span{color:var(--muted)!important}
+:root[data-theme="dark"] .feature-toggle,:root[data-theme="dark"] .preview-cards i{background:#1b2436}
+
+/* ---- tables ------------------------------------------------------------------------------- */
+/* style.css's base `table{background:white}` is a flat opaque white box regardless of what
+   it's sitting inside -- override it to transparent so the table shows whatever dark surface
+   (.card, etc.) it's actually inside, instead of punching a bright white rectangle through it. */
+:root[data-theme="dark"] table{color:var(--text);background:transparent}
+:root[data-theme="dark"] th{background:#1b2436;color:var(--ink)}
+:root[data-theme="dark"] td,:root[data-theme="dark"] th{border-color:var(--line);background:transparent}
+:root[data-theme="dark"] tr:nth-child(even){background:rgba(255,255,255,.03)}
+:root[data-theme="dark"] tr:nth-child(odd){background:transparent}
+:root[data-theme="dark"] table caption{background:#1b2436;color:var(--ink);border-color:var(--line)}
+
+/* ---- forms -------------------------------------------------------------------------------- */
+:root[data-theme="dark"] input,:root[data-theme="dark"] select,:root[data-theme="dark"] textarea{
+  background:#111826!important;color:var(--ink)!important;border-color:#3a4458!important}
+:root[data-theme="dark"] input::placeholder,:root[data-theme="dark"] textarea::placeholder{color:#66718a}
+:root[data-theme="dark"] label{color:var(--text)}
+
+/* ---- buttons & chips ------------------------------------------------------------------------*/
+:root[data-theme="dark"] .btn-secondary{background:#1b2436;color:#cbd5e1}
+:root[data-theme="dark"] .status-pill{background:#1b2436;color:#cbd5e1}
+:root[data-theme="dark"] .notice{background:#102235;border-color:#1d3a57}
+:root[data-theme="dark"] .alert-chip{background:#2a1515;color:#ff9f97}
+:root[data-theme="dark"] .ai-status{background:#1b2436;color:#cbd5e1}
+:root[data-theme="dark"] .badge{background:#1b2436;color:#cbd5e1}
+
+/* ---- auth / public pages (login, registration) ----------------------------------------------*/
+:root[data-theme="dark"] .auth-card{background:var(--surface);border-color:var(--line);color:var(--text)}
+:root[data-theme="dark"] .auth-card input,:root[data-theme="dark"] .auth-card select{background:#111826;border-color:#3a4458;color:var(--ink)}
+:root[data-theme="dark"] .parent-top,:root[data-theme="dark"] .student-top,:root[data-theme="dark"] .platform-top{background:var(--surface);border-color:var(--line)}
+:root[data-theme="dark"] .parent-top nav a,:root[data-theme="dark"] .student-top nav a,:root[data-theme="dark"] .platform-top nav a{color:var(--text)}
+
+/* ---- unified login/registration shell (.hub-*: login.html, register*.html) -----------------*/
+:root[data-theme="dark"] .hub-welcome-card{background:var(--surface);border-color:var(--line);box-shadow:0 24px 70px rgba(0,0,0,.5)}
+:root[data-theme="dark"] .unified-login-form label,
+:root[data-theme="dark"] .hub-content label{color:var(--text)}
+:root[data-theme="dark"] .unified-login-form input,
+:root[data-theme="dark"] .hub-content input{background:#111826;color:var(--ink);border-color:#3a4458}
+:root[data-theme="dark"] .hub-register-panel{background:#152235;border-color:var(--line)}
+:root[data-theme="dark"] .hub-register-panel>div:first-child strong{color:var(--ink)}
+:root[data-theme="dark"] .hub-register-panel>div:first-child span{color:var(--muted)}
+:root[data-theme="dark"] .hub-register-grid a{background:#111826}
+:root[data-theme="dark"] .hub-footer{color:var(--muted)}
+:root[data-theme="dark"] .hub-footer span{background:var(--line)}
+:root[data-theme="dark"] .unified-note,:root[data-theme="dark"] .unified-links a{color:var(--muted)}
+:root[data-theme="dark"] .hlp-b{color:var(--text)}
+
+/* ---- links & misc small text ------------------------------------------------------------------*/
+:root[data-theme="dark"] a{color:#8ab4ff}
+:root[data-theme="dark"] .secondary-action{color:#95a1b8}
