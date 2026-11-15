@@ -7,7 +7,7 @@
     <strong>{{ report.status }}</strong> — Critical: {{ report.critical_count }} · High: {{ report.high_count }}
   </div>
   <div class="table-responsive">
-    <table class="table table-sm">
+    <table class="table table-sm table-hover align-middle">
       <thead><tr><th>Severity</th><th>Check</th><th>Finding</th><th>Count</th></tr></thead>
       <tbody>
       {% for f in report.findings %}

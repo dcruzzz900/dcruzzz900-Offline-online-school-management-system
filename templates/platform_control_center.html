@@ -25,7 +25,7 @@
   <h2>School health overview</h2>
   <p style="color:#666">Only platform-level status and aggregate setup information is shown here. Student records, passwords and private result data are not displayed.</p>
   <div style="overflow-x:auto">
-    <table>
+    <table class="table table-hover align-middle">
       <tr><th>School</th><th>School ID</th><th>Tenant ID</th><th>Registered</th><th>Subscription</th><th>Activation</th><th>Readiness</th><th>Tenant Integrity</th><th>Setup</th><th>Attention</th><th>Action</th></tr>
       {% for r in rows %}
       <tr>
@@ -37,7 +37,7 @@
         <td>{% if r.identity_ok %}<span style="color:#1d7a4c;font-weight:600">✓ Verified</span>{% else %}<span style="color:#b3261e;font-weight:600">✗ Issue</span>{% endif %}</td>
         <td>{{ r.readiness_percent }}%</td>
         <td>{% if r.attention %}<span style="color:#b3261e;font-weight:600">{{ r.failed_readiness + (0 if r.identity_ok else 1) }} issue(s)</span>{% else %}<span style="color:#1d7a4c">None</span>{% endif %}</td>
-        <td style="white-space:nowrap"><a class="btn btn-small" href="{{ url_for('platform_school_verification', school_id=r.school.id) }}">Inspect</a></td>
+        <td style="white-space:nowrap"><a class="btn btn-primary btn-sm" href="{{ url_for('platform_school_verification', school_id=r.school.id) }}">Inspect</a></td>
       </tr>
       {% else %}<tr><td colspan="9" style="color:#999">No schools have been onboarded yet.</td></tr>{% endfor %}
     </table>
@@ -51,6 +51,6 @@
     <li>Account status problems: pending activation, suspension or archive status.</li>
   </ul>
   </details>
-  <a class="btn btn-small" href="{{ url_for('platform_schools') }}">← Manage Schools</a>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('platform_schools') }}">← Manage Schools</a>
 </div>
 {% endblock %}

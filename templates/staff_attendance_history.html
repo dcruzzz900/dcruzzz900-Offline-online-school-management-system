@@ -7,22 +7,22 @@
     <form method="GET" style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
         <div>
             <label>From</label>
-            <input type="date" name="start" value="{{ start }}">
+            <input type="date" name="start" value="{{ start }}" class="form-control">
         </div>
         <div>
             <label>To</label>
-            <input type="date" name="end" value="{{ end }}">
+            <input type="date" name="end" value="{{ end }}" class="form-control">
         </div>
-        <button class="btn" type="submit">Update</button>
+        <button class="btn btn-primary" type="submit">Update</button>
     </form>
     <p style="color:#666; font-size:0.85rem; margin-top:0.5rem;">
         Showing {{ start|dmy }} to {{ end|dmy }}.
     </p>
     <div style="margin-top:0.5rem;">
-        <a class="btn btn-small" href="{{ url_for('report_staff_attendance', format='csv', start=start, end=end) }}">⬇ CSV</a>
-        <a class="btn btn-small" href="{{ url_for('report_staff_attendance', format='xlsx', start=start, end=end) }}">⬇ Excel</a>
-        <a class="btn btn-small" href="{{ url_for('report_staff_attendance', format='pdf', start=start, end=end) }}">⬇ PDF</a>
-        <a class="btn btn-small" href="{{ url_for('staff_attendance') }}">&larr; Back to Today's Staff Attendance</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('report_staff_attendance', format='csv', start=start, end=end) }}">⬇ CSV</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('report_staff_attendance', format='xlsx', start=start, end=end) }}">⬇ Excel</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('report_staff_attendance', format='pdf', start=start, end=end) }}">⬇ PDF</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('staff_attendance') }}">&larr; Back to Today's Staff Attendance</a>
     </div>
 </div>
 
@@ -31,7 +31,7 @@
     {% if not summaries %}
     <p style="color:#999;">No staff members found.</p>
     {% else %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Name</th><th>Role</th><th>Present</th><th>Absent</th><th>Late</th><th>Leave</th><th>Days Recorded</th></tr>
         {% for row in summaries %}
         <tr>
@@ -44,7 +44,7 @@
             <td>{{ row.total }}</td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
 </div>
 
@@ -53,7 +53,7 @@
     {% if not days %}
     <p style="color:#999;">No attendance has been recorded in this range yet.</p>
     {% else %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Date</th><th>Present</th><th>Absent</th><th>Late</th><th>Leave</th><th></th></tr>
         {% for d in days %}
         <tr>
@@ -62,10 +62,10 @@
             <td>{{ d.absent }}</td>
             <td>{{ d.late }}</td>
             <td>{{ d.leave_count }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('staff_attendance', date=d.date) }}">Review / Edit</a></td>
+            <td><a class="btn btn-primary btn-sm" href="{{ url_for('staff_attendance', date=d.date) }}">Review / Edit</a></td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
 </div>
 {% endblock %}

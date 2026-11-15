@@ -9,18 +9,18 @@
     <p style="font-size:0.9rem; color:#666;">Every student's scores for a class, in one exportable table.</p>
     <form method="GET" action="{{ url_for('report_broadsheet') }}" class="report-form">
         <label>Class</label>
-        <select name="class_id" required>
+        <select name="class_id" required class="form-select">
             {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
         </select>
         <label>Term</label>
-        <select name="term_id">
+        <select name="term_id" class="form-select">
             {% for t in all_terms %}
             <option value="{{ t.id }}" {% if t.is_active %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
             {% endfor %}
         </select>
         <div style="margin-top:0.75rem;">
-            <button class="btn btn-small" type="submit" formaction="{{ url_for('report_broadsheet', format='csv') }}">Download CSV</button>
-            <button class="btn btn-small btn-gold" type="submit" formaction="{{ url_for('report_broadsheet', format='xlsx') }}">Download Excel</button>
+            <button class="btn btn-primary btn-sm" type="submit" formaction="{{ url_for('report_broadsheet', format='csv') }}">Download CSV</button>
+            <button class="btn btn-sm btn-gold" type="submit" formaction="{{ url_for('report_broadsheet', format='xlsx') }}">Download Excel</button>
         </div>
     </form>
 </div>
@@ -30,14 +30,14 @@
     <p style="font-size:0.9rem; color:#666;">Average, highest, and lowest score per subject, per class, across the whole school for a term.</p>
     <form method="GET" action="{{ url_for('report_subject_performance') }}" class="report-form">
         <label>Term</label>
-        <select name="term_id">
+        <select name="term_id" class="form-select">
             {% for t in all_terms %}
             <option value="{{ t.id }}" {% if t.is_active %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
             {% endfor %}
         </select>
         <div style="margin-top:0.75rem;">
-            <button class="btn btn-small" type="submit" formaction="{{ url_for('report_subject_performance', format='csv') }}">Download CSV</button>
-            <button class="btn btn-small btn-gold" type="submit" formaction="{{ url_for('report_subject_performance', format='xlsx') }}">Download Excel</button>
+            <button class="btn btn-primary btn-sm" type="submit" formaction="{{ url_for('report_subject_performance', format='csv') }}">Download CSV</button>
+            <button class="btn btn-sm btn-gold" type="submit" formaction="{{ url_for('report_subject_performance', format='xlsx') }}">Download Excel</button>
         </div>
     </form>
 </div>
@@ -47,19 +47,19 @@
     <p style="font-size:0.9rem; color:#666;">Days present/absent and attendance % per student for a term, optionally filtered to one class.</p>
     <form method="GET" action="{{ url_for('report_attendance') }}" class="report-form">
         <label>Term</label>
-        <select name="term_id">
+        <select name="term_id" class="form-select">
             {% for t in all_terms %}
             <option value="{{ t.id }}" {% if t.is_active %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
             {% endfor %}
         </select>
         <label>Class (optional — leave blank for the whole school)</label>
-        <select name="class_id">
+        <select name="class_id" class="form-select">
             <option value="">-- all classes --</option>
             {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
         </select>
         <div style="margin-top:0.75rem;">
-            <button class="btn btn-small" type="submit" formaction="{{ url_for('report_attendance', format='csv') }}">Download CSV</button>
-            <button class="btn btn-small btn-gold" type="submit" formaction="{{ url_for('report_attendance', format='xlsx') }}">Download Excel</button>
+            <button class="btn btn-primary btn-sm" type="submit" formaction="{{ url_for('report_attendance', format='csv') }}">Download CSV</button>
+            <button class="btn btn-sm btn-gold" type="submit" formaction="{{ url_for('report_attendance', format='xlsx') }}">Download Excel</button>
         </div>
     </form>
 </div>
@@ -67,7 +67,7 @@
 {% if session.get('role') != 'teacher' %}<div class="card">
     <h3>Staff Attendance</h3>
     <p style="font-size:0.9rem; color:#666;">Present/Absent/Late/Leave totals per staff member for a date range, with CSV, Excel and PDF export.</p>
-    <a class="btn btn-small" href="{{ url_for('staff_attendance_history') }}">Go to Staff Attendance History &amp; Reports</a>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('staff_attendance_history') }}">Go to Staff Attendance History &amp; Reports</a>
 </div>{% endif %}
 
 <div class="card">
@@ -75,12 +75,12 @@
     <p style="font-size:0.9rem; color:#666;">Every subject score for one student, across every session/term they've been enrolled in.</p>
     <form method="GET" action="{{ url_for('report_student_history') }}" class="report-form">
         <label>Student</label>
-        <select name="student_id" required>
+        <select name="student_id" required class="form-select">
             {% for s in students %}<option value="{{ s.id }}">{{ student_full_name(s) }} — {{ s.class_name }}</option>{% endfor %}
         </select>
         <div style="margin-top:0.75rem;">
-            <button class="btn btn-small" type="submit" formaction="{{ url_for('report_student_history', format='csv') }}">Download CSV</button>
-            <button class="btn btn-small btn-gold" type="submit" formaction="{{ url_for('report_student_history', format='xlsx') }}">Download Excel</button>
+            <button class="btn btn-primary btn-sm" type="submit" formaction="{{ url_for('report_student_history', format='csv') }}">Download CSV</button>
+            <button class="btn btn-sm btn-gold" type="submit" formaction="{{ url_for('report_student_history', format='xlsx') }}">Download Excel</button>
         </div>
     </form>
 </div>

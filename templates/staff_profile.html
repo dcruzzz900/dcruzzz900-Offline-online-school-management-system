@@ -37,7 +37,7 @@
 <div class="card" style="max-width:640px;">
     <h3>{{ 'Edit My Profile' if is_self else 'Edit this Profile' }}</h3>
     <details class="hlp"><summary class="hlp-t">What you can edit</summary><p class="muted hlp-b">Add missing details and update your permitted personal information. Username, Staff ID, role, school and security settings are administrator-controlled.</p></details>
-    <a class="btn" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
+    <a class="btn btn-primary" href="{{ url_for('staff_profile_edit', user_id=staff.id) }}">Edit Profile</a>
     {% if is_self %}<a class="btn btn-secondary" href="{{ url_for('change_password') }}">Change Password</a>{% endif %}
 </div>
 {% endif %}
@@ -57,12 +57,12 @@
     <form method="POST" action="{{ url_for('toggle_my_signature') }}" class="inline" style="display:inline-block; margin-right:0.5rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="use_digital_signature" value="{{ 0 if staff.use_digital_signature else 1 }}">
-        <button class="btn btn-small" type="submit">{{ 'Turn Off' if staff.use_digital_signature else 'Turn On' }} Automatic Stamping</button>
+        <button class="btn btn-primary btn-sm" type="submit">{{ 'Turn Off' if staff.use_digital_signature else 'Turn On' }} Automatic Stamping</button>
     </form>
     <form method="POST" action="{{ url_for('remove_my_signature') }}" class="inline"
           onsubmit="return confirm('Remove your signature image?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove</button>
+        <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Remove</button>
     </form>
     <p style="font-size:0.85rem; margin-top:0.5rem;">
         Status: <b>{{ 'On — stamped automatically' if staff.use_digital_signature else 'Off — results show a blank line for manual signing' }}</b>
@@ -73,8 +73,8 @@
     <form method="POST" action="{{ url_for('upload_my_signature') }}" enctype="multipart/form-data" style="margin-top:0.75rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>{{ 'Replace Signature' if staff.signature_filename else 'Upload Signature' }} (PNG with a transparent background works best)</label>
-        <input type="file" name="signature" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
-        <button class="btn" type="submit" style="margin-top:0.5rem;">Upload</button>
+        <input type="file" name="signature" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." accept=".png,.jpg,.jpeg,.gif" class="form-control"><small>Accepted: PNG, JPG, JPEG, GIF · Maximum 500 KB</small>
+        <button class="btn btn-primary" type="submit" style="margin-top:0.5rem;">Upload</button>
     </form>
 </div>
 
@@ -84,15 +84,15 @@
     {% if is_self %}
     <form method="POST" action="{{ url_for('upload_staff_document') }}" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="file" name="document" data-max-bytes="1048576" data-size-message="Staff document must not exceed 1 MB." accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required>
+      <input type="file" name="document" data-max-bytes="1048576" data-size-message="Staff document must not exceed 1 MB." accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required class="form-control">
       <small>Accepted: PDF, Word, JPG, JPEG, PNG · Maximum 1 MB</small>
-      <button class="btn" type="submit" style="margin-top:.5rem;">Upload Document</button>
+      <button class="btn btn-primary" type="submit" style="margin-top:.5rem;">Upload Document</button>
     </form>
     {% endif %}
     {% if documents %}
-    <table><caption>Staff Documents</caption><thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
-    {% for d in documents %}<tr><td><a href="{{ url_for('staff_document', document_id=d.id) }}" target="_blank" rel="noopener">{{ d.original_filename }}</a></td><td>{{ (d.size_bytes / 1024)|round(1) }} KB</td><td>{{ d.uploaded_at }}</td><td><form method="POST" action="{{ url_for('delete_staff_document', document_id=d.id) }}" style="display:inline" onsubmit="return confirm('Remove this document?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-small btn-secondary">Remove</button></form></td></tr>{% endfor %}
-    </tbody></table>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Staff Documents</caption><thead><tr><th>Document</th><th>Size</th><th>Uploaded</th><th>Action</th></tr></thead><tbody>
+    {% for d in documents %}<tr><td><a href="{{ url_for('staff_document', document_id=d.id) }}" target="_blank" rel="noopener">{{ d.original_filename }}</a></td><td>{{ (d.size_bytes / 1024)|round(1) }} KB</td><td>{{ d.uploaded_at }}</td><td><form method="POST" action="{{ url_for('delete_staff_document', document_id=d.id) }}" style="display:inline" onsubmit="return confirm('Remove this document?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-secondary">Remove</button></form></td></tr>{% endfor %}
+    </tbody></table></div>
     {% else %}<p class="muted">No staff documents uploaded yet.</p>{% endif %}
 </div>
 {% endif %}
@@ -100,7 +100,7 @@
 <div class="card" style="max-width:640px;">
     <h3>Recent Attendance</h3>
     {% if recent_attendance %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Date</th><th>Status</th><th>Recorded</th></tr>
         {% for a in recent_attendance %}
         <tr>
@@ -109,7 +109,7 @@
             <td>{{ a.source|title if a.source else 'Online' }}{% if a.synced_at %} (synced {{ a.synced_at }}){% endif %}</td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% else %}
     <p style="color:#999;">No attendance records yet.</p>
     {% endif %}

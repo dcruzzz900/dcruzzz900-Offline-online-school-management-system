@@ -21,17 +21,17 @@
 <div class="card" style="max-width:640px;">
     <h3>Linked Children ({{ siblings|length }})</h3>
     {% if siblings %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Name</th><th>Class</th><th>Status</th><th></th></tr>
         {% for s in siblings %}
         <tr>
             <td>{{ student_full_name(s) }}</td>
             <td>{{ s.class_name }}</td>
             <td>{{ s.status or 'Active' }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('student_profile', student_id=s.id) }}">View Profile</a></td>
+            <td><a class="btn btn-primary btn-sm" href="{{ url_for('student_profile', student_id=s.id) }}">View Profile</a></td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% else %}
     <p>No linked children found.</p>
     {% endif %}

@@ -14,8 +14,8 @@
 <div class="card">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
         <span class="badge">Today: {{ today|dmy }}</span>
-        <a class="btn btn-small" href="{{ url_for('class_register', class_id=class_row.id) }}">Class register</a>
-        <a class="btn btn-small" style="margin-left:auto;" href="{{ url_for('roll_call_history', class_id=class_row.id) }}">View Attendance History</a>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('class_register', class_id=class_row.id) }}">Class register</a>
+        <a class="btn btn-primary btn-sm" style="margin-left:auto;" href="{{ url_for('roll_call_history', class_id=class_row.id) }}">View Attendance History</a>
     </div>
 
     {% if not students %}
@@ -27,7 +27,7 @@
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if recorded %}<input type="hidden" name="mode" value="correct">{% endif %}
-        <table>
+        <div class="table-responsive"><table class="table table-hover align-middle">
             <tr><th>Admission No.</th><th>Student</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>
             {% for s in students %}
             {% set current = existing.get(s.id, 'present') %}
@@ -35,16 +35,16 @@
                 <td>{{ s.admission_no }}</td>
                 <td>{{ student_full_name(s) }}</td>
                 {% for st in statuses %}
-                <td><input type="radio" name="status_{{ s.id }}" value="{{ st }}" {% if current == st %}checked{% endif %}></td>
+                <td><input type="radio" name="status_{{ s.id }}" value="{{ st }}" {% if current == st %}checked{% endif %} class="form-check-input"></td>
                 {% endfor %}
             </tr>
             {% endfor %}
-        </table>
+        </table></div>
         {% if recorded %}
-        <label style="margin-top:1rem">Reason for correction (required)<input type="text" name="correction_reason" maxlength="300" required></label>
-        <button class="btn" type="submit" style="margin-top:1rem;">Save correction for {{ today|dmy }}</button>
+        <label style="margin-top:1rem">Reason for correction (required)<input type="text" name="correction_reason" maxlength="300" required class="form-control"></label>
+        <button class="btn btn-primary" type="submit" style="margin-top:1rem;">Save correction for {{ today|dmy }}</button>
         {% else %}
-        <button class="btn" type="submit" style="margin-top:1rem;">Save Roll Call for {{ today|dmy }}</button>
+        <button class="btn btn-primary" type="submit" style="margin-top:1rem;">Save Roll Call for {{ today|dmy }}</button>
         {% endif %}
     </form>
     {% endif %}

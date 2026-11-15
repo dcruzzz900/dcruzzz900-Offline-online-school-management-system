@@ -6,7 +6,7 @@
 
 <form method="GET" style="margin-bottom:1rem;">
     <label style="display:inline; font-weight:normal;">Filter by school:</label>
-    <select name="school_id" onchange="this.form.submit()" style="width:auto; display:inline-block;">
+    <select name="school_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
         <option value="">-- all schools --</option>
         {% for s in schools %}
         <option value="{{ s.id }}" {% if school_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
@@ -15,7 +15,7 @@
 </form>
 
 <div class="card">
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Name</th><th>Username</th><th>Role</th><th>School</th><th>Actions</th></tr>
         {% for u in users %}
         <tr>
@@ -27,11 +27,11 @@
                 <form method="POST" action="{{ url_for('platform_reset_user_password', user_id=u.id) }}"
                       onsubmit="return confirm('Reset the password for {{ u.name }}?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-small" type="submit">Reset Password</button>
+                    <button class="btn btn-primary btn-sm" type="submit">Reset Password</button>
                 </form>
             </td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
 </div>
 {% endblock %}

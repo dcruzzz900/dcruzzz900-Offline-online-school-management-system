@@ -9,7 +9,7 @@
     {% if not summaries %}
     <p style="color:#999;">No active students in this class yet.</p>
     {% else %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Admission No.</th><th>Student</th><th>Days Open</th><th>Present</th><th>Absent</th><th>Attendance %</th></tr>
         {% for row in summaries %}
         <tr>
@@ -21,7 +21,7 @@
             <td>{{ row.percentage }}%</td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
 </div>
 
@@ -30,19 +30,19 @@
     {% if not dates %}
     <p style="color:#999;">No roll call has been taken yet this term.</p>
     {% else %}
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Date</th><th>Present</th><th>Absent</th><th></th></tr>
         {% for d in dates %}
         <tr>
             <td>{{ d.date|dmy }}</td>
             <td>{{ d.present }}</td>
             <td>{{ d.absent }}</td>
-            <td><a class="btn btn-small" href="{{ url_for('roll_call', class_id=class_row.id, date=d.date) }}">Review / Edit</a></td>
+            <td><a class="btn btn-primary btn-sm" href="{{ url_for('roll_call', class_id=class_row.id, date=d.date) }}">Review / Edit</a></td>
         </tr>
         {% endfor %}
-    </table>
+    </table></div>
     {% endif %}
 </div>
 
-<a class="btn btn-small" href="{{ url_for('roll_call', class_id=class_row.id) }}">&larr; Back to Today's Roll Call</a>
+<a class="btn btn-primary btn-sm" href="{{ url_for('roll_call', class_id=class_row.id) }}">&larr; Back to Today's Roll Call</a>
 {% endblock %}

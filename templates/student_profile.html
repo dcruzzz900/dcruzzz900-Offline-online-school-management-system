@@ -22,7 +22,7 @@
             <p><b>Tribe:</b> {{ student.tribe or '—' }}</p>
             <p><b>Address:</b> {{ student.address or '—' }}</p>
             <p><b>Date of Admission:</b> {{ student.date_of_admission|dmy if student.date_of_admission else '—' }}</p>
-            <p><a class="btn btn-small" href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Full Profile</a></p>
+            <p><a class="btn btn-primary btn-sm" href="{{ url_for('student_profile_edit', student_id=student.id) }}">Edit Full Profile</a></p>
         </div>
         <div>
             <p><b>Parent/Guardian Name:</b> {{ student.parent_name or '—' }}</p>
@@ -47,12 +47,12 @@
 {% if enrollment_history %}
 <div class="card">
     <h3>Academic History</h3>
-    <table>
+    <div class="table-responsive"><table class="table table-hover align-middle">
         <tr><th>Session</th><th>Class / Arm</th></tr>
         {% for e in enrollment_history %}
         <tr><td>{{ e.session_name }}</td><td>{{ e.class_name }}</td></tr>
         {% endfor %}
-    </table>
+    </table></div>
 </div>
 {% endif %}
 
@@ -67,16 +67,16 @@
     <form method="POST" action="{{ url_for('set_student_login', student_id=student.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Username</label>
-        <input type="text" name="username" value="{{ student.username or '' }}" required>
+        <input type="text" name="username" value="{{ student.username or '' }}" required class="form-control">
         <label>Password {% if student.username %}(leave blank to keep the current one){% endif %}</label>
-        <input type="password" name="password" {% if not student.username %}required{% endif %} minlength="6">
-        <button class="btn" type="submit">{% if student.username %}Update{% else %}Create{% endif %} Student Login</button>
+        <input type="password" name="password" {% if not student.username %}required{% endif %} minlength="6" class="form-control">
+        <button class="btn btn-primary" type="submit">{% if student.username %}Update{% else %}Create{% endif %} Student Login</button>
     </form>
     {% if student.username %}
     <form method="POST" action="{{ url_for('remove_student_login', student_id=student.id) }}" style="margin-top:0.75rem;"
           onsubmit="return confirm('Remove this student\'s login? They will no longer be able to sign in.');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-small" style="background:#b3261e;" type="submit">Remove Login</button>
+        <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Remove Login</button>
     </form>
     {% endif %}
 </div>

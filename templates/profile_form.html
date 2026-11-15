@@ -8,18 +8,18 @@
     <div class="ro">{% if r.kind in ('dob_student','dob_staff','admission_date') and r.value %}{{ r.value|dmy }}{% elif r.kind == 'gender' %}{{ {'M':'Male','F':'Female'}.get(r.value, r.value or '—') }}{% else %}{{ r.value or '—' }}{% endif %}</div>
     <small class="muted">Protected — only the school administration can change this.</small>
   {% elif r.kind == 'gender' %}
-    <select id="in_{{ r.key }}" name="{{ r.key }}"><option value="">— Select —</option>
+    <select id="in_{{ r.key }}" name="{{ r.key }}" class="form-select"><option value="">— Select —</option>
       <option value="M" {{ 'selected' if r.value=='M' }}>Male</option><option value="F" {{ 'selected' if r.value=='F' }}>Female</option></select>
   {% elif r.kind in ('dob_student','dob_staff','admission_date') %}
-    <input id="in_{{ r.key }}" type="date" name="{{ r.key }}" value="{{ r.value }}" max="{{ today }}">
+    <input id="in_{{ r.key }}" type="date" name="{{ r.key }}" value="{{ r.value }}" max="{{ today }}" class="form-control">
   {% elif r.kind == 'email' %}
-    <input id="in_{{ r.key }}" type="email" name="{{ r.key }}" value="{{ r.value }}" maxlength="{{ r.maxlen }}" autocomplete="off">
+    <input id="in_{{ r.key }}" type="email" name="{{ r.key }}" value="{{ r.value }}" maxlength="{{ r.maxlen }}" autocomplete="off" class="form-control">
   {% elif r.kind == 'phone' %}
-    <input id="in_{{ r.key }}" type="tel" name="{{ r.key }}" value="{{ r.value }}" maxlength="20" inputmode="tel" placeholder="e.g. 08012345678">
+    <input id="in_{{ r.key }}" type="tel" name="{{ r.key }}" value="{{ r.value }}" maxlength="20" inputmode="tel" placeholder="e.g. 08012345678" class="form-control">
   {% elif r.kind == 'address' %}
-    <textarea id="in_{{ r.key }}" name="{{ r.key }}" rows="3" maxlength="{{ r.maxlen }}">{{ r.value }}</textarea>
+    <textarea id="in_{{ r.key }}" name="{{ r.key }}" rows="3" maxlength="{{ r.maxlen }}" class="form-control">{{ r.value }}</textarea>
   {% else %}
-    <input id="in_{{ r.key }}" type="text" name="{{ r.key }}" value="{{ r.value }}" maxlength="{{ r.maxlen }}" {% if r.datalist %}list="dl_{{ r.datalist }}"{% endif %}>
+    <input id="in_{{ r.key }}" type="text" name="{{ r.key }}" value="{{ r.value }}" maxlength="{{ r.maxlen }}" {% if r.datalist %}list="dl_{{ r.datalist }}"{% endif %} class="form-control">
   {% endif %}
   {% if r.error %}<div class="pf-err" role="alert">{{ r.error }}</div>{% endif %}
 </div>
@@ -34,29 +34,29 @@
     <div class="ro">{% if r.field_type == 'multiselect' %}{{ r.value|join(', ') or '—' }}{% elif r.field_type == 'file' %}{{ r.value.name if r.value else '—' }}{% else %}{{ r.value or '—' }}{% endif %}</div>
     <small class="muted">This field is managed by the school.</small>
   {% elif r.field_type == 'long_text' %}
-    <textarea id="in_{{ name }}" name="{{ name }}" rows="3" maxlength="2000">{{ r.value }}</textarea>
+    <textarea id="in_{{ name }}" name="{{ name }}" rows="3" maxlength="2000" class="form-control">{{ r.value }}</textarea>
   {% elif r.field_type == 'number' %}
-    <input id="in_{{ name }}" type="text" inputmode="decimal" name="{{ name }}" value="{{ r.value }}">
+    <input id="in_{{ name }}" type="text" inputmode="decimal" name="{{ name }}" value="{{ r.value }}" class="form-control">
   {% elif r.field_type == 'date' %}
-    <input id="in_{{ name }}" type="date" name="{{ name }}" value="{{ r.value }}">
+    <input id="in_{{ name }}" type="date" name="{{ name }}" value="{{ r.value }}" class="form-control">
   {% elif r.field_type == 'email' %}
-    <input id="in_{{ name }}" type="email" name="{{ name }}" value="{{ r.value }}">
+    <input id="in_{{ name }}" type="email" name="{{ name }}" value="{{ r.value }}" class="form-control">
   {% elif r.field_type == 'phone' %}
-    <input id="in_{{ name }}" type="tel" name="{{ name }}" value="{{ r.value }}" maxlength="20">
+    <input id="in_{{ name }}" type="tel" name="{{ name }}" value="{{ r.value }}" maxlength="20" class="form-control">
   {% elif r.field_type == 'yes_no' %}
-    <select id="in_{{ name }}" name="{{ name }}"><option value="">— Select —</option><option {{ 'selected' if r.value=='Yes' }}>Yes</option><option {{ 'selected' if r.value=='No' }}>No</option></select>
+    <select id="in_{{ name }}" name="{{ name }}" class="form-select"><option value="">— Select —</option><option {{ 'selected' if r.value=='Yes' }}>Yes</option><option {{ 'selected' if r.value=='No' }}>No</option></select>
   {% elif r.field_type == 'select' %}
-    <select id="in_{{ name }}" name="{{ name }}"><option value="">— Select —</option>
+    <select id="in_{{ name }}" name="{{ name }}" class="form-select"><option value="">— Select —</option>
       {% for o in r.options if o.is_active or o.option_value == r.value %}<option value="{{ o.option_value }}" {{ 'selected' if o.option_value == r.value }}>{{ o.option_value }}</option>{% endfor %}</select>
   {% elif r.field_type == 'multiselect' %}
-    <div class="pf-checks">{% for o in r.options if o.is_active or o.option_value in r.value %}<label class="pf-check"><input type="checkbox" name="{{ name }}" value="{{ o.option_value }}" {{ 'checked' if o.option_value in r.value }}> {{ o.option_value }}</label>{% endfor %}</div>
+    <div class="pf-checks">{% for o in r.options if o.is_active or o.option_value in r.value %}<label class="pf-check"><input type="checkbox" name="{{ name }}" value="{{ o.option_value }}" {{ 'checked' if o.option_value in r.value }} class="form-check-input"> {{ o.option_value }}</label>{% endfor %}</div>
   {% elif r.field_type == 'file' %}
     {% if r.value %}<div class="ro"><a href="{{ url_for('custom_field_file', field_id=r.id, entity_type=kind, entity_id=entity_id) }}">{{ r.value.name }}</a> ({{ (r.value.size/1024)|round(1) }} KB)</div>
-      {% if not r.is_required %}<label class="pf-check"><input type="checkbox" name="{{ name }}__remove" value="1"> Remove this file</label>{% endif %}{% endif %}
-    <input id="in_{{ name }}" type="file" name="{{ name }}" accept=".pdf,.png,.jpg,.jpeg" data-max-bytes="1048576" data-size-message="{{ r.label }} must not exceed 1 MB.">
+      {% if not r.is_required %}<label class="pf-check"><input type="checkbox" name="{{ name }}__remove" value="1" class="form-check-input"> Remove this file</label>{% endif %}{% endif %}
+    <input id="in_{{ name }}" type="file" name="{{ name }}" accept=".pdf,.png,.jpg,.jpeg" data-max-bytes="1048576" data-size-message="{{ r.label }} must not exceed 1 MB." class="form-control">
     <small class="muted">PDF, PNG or JPG · maximum 1 MB</small>
   {% else %}
-    <input id="in_{{ name }}" type="text" name="{{ name }}" value="{{ r.value }}" maxlength="200">
+    <input id="in_{{ name }}" type="text" name="{{ name }}" value="{{ r.value }}" maxlength="200" class="form-control">
   {% endif %}
   {% if r.error %}<div class="pf-err" role="alert">{{ r.error }}</div>{% endif %}
 </div>
@@ -90,18 +90,18 @@
     <div class="pf-media">
       <div class="pf-field{{ ' has-error' if photo_error }}"><label>Passport photograph <em class="tag">Optional</em></label>
         {% if photo_url %}<img class="passport-img" src="{{ photo_url }}" alt="Current passport photograph"><br>{% endif %}
-        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Passport photograph must not exceed 500 KB.">
+        <input type="file" name="photo" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Passport photograph must not exceed 500 KB." class="form-control">
         <small class="muted">PNG, JPG or GIF · maximum 500 KB</small>
-        {% if kind == 'student' and photo_url %}<label class="pf-check"><input type="checkbox" name="remove_photo" value="1"> Remove current photograph</label>{% endif %}
+        {% if kind == 'student' and photo_url %}<label class="pf-check"><input type="checkbox" name="remove_photo" value="1" class="form-check-input"> Remove current photograph</label>{% endif %}
         {% if photo_error %}<div class="pf-err" role="alert">{{ photo_error }}</div>{% endif %}</div>
       {% if has_signature %}<div class="pf-field{{ ' has-error' if signature_error }}"><label>Signature <em class="tag">Optional</em></label>
         {% if signature_url %}<img src="{{ signature_url }}" alt="Current signature"><br>{% endif %}
-        <input type="file" name="signature" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB.">
+        <input type="file" name="signature" accept=".png,.jpg,.jpeg,.gif" data-max-bytes="512000" data-size-message="Signature must not exceed 500 KB." class="form-control">
         <small class="muted">PNG, JPG or GIF · maximum 500 KB</small>
         {% if signature_error %}<div class="pf-err" role="alert">{{ signature_error }}</div>{% endif %}</div>{% endif %}
     </div></div>
   {% if custom %}<div class="card"><h3>Additional information</h3><div class="pf-grid">{% for r in custom %}{{ cfield(r) }}{% endfor %}</div></div>{% endif %}
-  <div style="margin:14px 0"><button type="submit" class="btn" id="saveBtn" data-label="{{ 'Save Profile' }}">Save Profile</button>
+  <div style="margin:14px 0"><button type="submit" class="btn btn-primary" id="saveBtn" data-label="{{ 'Save Profile' }}">Save Profile</button>
     <a class="btn btn-secondary" href="{{ cancel }}">Cancel</a></div>
 </form></div>
 <script>

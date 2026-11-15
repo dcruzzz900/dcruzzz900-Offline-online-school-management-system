@@ -15,7 +15,7 @@
   <p><strong>Tenant ID:</strong> <code>{{ school.tenant_id or '—' }}</code></p>
   <hr>
   <p>Thank you. This receipt represents a confirmed payment recorded for the school account.</p>
-  <button class="btn no-print" onclick="window.print()">Print receipt</button>
-  <a class="btn btn-small no-print" href="{{ url_for('school_billing_portal') }}">Back to billing</a>
+  <button class="btn btn-primary no-print" onclick="window.print()">Print receipt</button>
+  <a class="btn btn-primary btn-sm no-print" href="{{ url_for('school_billing_portal') }}">Back to billing</a>
 </div>
 {% endblock %}

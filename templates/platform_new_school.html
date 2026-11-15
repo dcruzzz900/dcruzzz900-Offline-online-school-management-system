@@ -14,19 +14,19 @@
     <form method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>School Name</label>
-        <input type="text" name="school_name" required>
+        <input type="text" name="school_name" required class="form-control">
 
         <label>School's Registered Email</label>
-        <input type="email" name="registered_email" required>
+        <input type="email" name="registered_email" required class="form-control">
 
         <label>School Admin's Full Name</label>
-        <input type="text" name="admin_name" required>
+        <input type="text" name="admin_name" required class="form-control">
 
         <label>School Admin's Username</label>
-        <input type="text" name="admin_username" required>
+        <input type="text" name="admin_username" required class="form-control">
 
-        <button class="btn" type="submit" style="margin-top:1rem;">Onboard School &amp; Send Activation Code</button>
+        <button class="btn btn-primary" type="submit" style="margin-top:1rem;">Onboard School &amp; Send Activation Code</button>
     </form>
 </div>
-<a class="btn btn-small" href="{{ url_for('platform_schools') }}">&larr; Back to Schools</a>
+<a class="btn btn-primary btn-sm" href="{{ url_for('platform_schools') }}">&larr; Back to Schools</a>
 {% endblock %}
