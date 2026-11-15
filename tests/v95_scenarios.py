@@ -154,7 +154,6 @@ print("=== 1) Admin Dashboard: all 4 analytics charts render with real, correctl
 adash = html(ADMIN.get("/admin/analytics"))
 check("Chart.js is loaded", "chart.js@4.4.4" in adash or "Chart.js" in adash or "chart.umd" in adash)
 check("Student Performance by Class canvas present", 'id="chartClassPerf"' in adash)
-check("Gender Distribution canvas present", 'id="chartGender"' in adash)
 check("Attendance Trend canvas present", 'id="chartAttendance"' in adash)
 check("Enrolment by Class Level canvas present", 'id="chartEnrolment"' in adash)
 check("Top Performing Students table present", "Top Performing Students" in adash)
@@ -168,9 +167,12 @@ jss2_idx = class_labels.index("JSS2B")
 check("JSS1A's average score is the real computed figure, not a placeholder", class_avg[jss1_idx] == 60.0, class_avg)
 check("JSS2B (nothing assessed) shows null, never a false zero", class_avg[jss2_idx] is None, class_avg)
 
-gender_boys = js_array(adash, "genderBoys")
-gender_girls = js_array(adash, "genderGirls")
-check("gender donut figures are present (not both zero)", (gender_boys or 0) + (gender_girls or 0) > 0, (gender_boys, gender_girls))
+# V106: Gender Distribution on /admin/analytics now renders the SAME shared donut component
+# (templates/partials/gender_donut.html) the V105 admin dashboard introduced, instead of its own
+# separate Chart.js canvas -- so every dashboard that shows a gender breakdown looks identical.
+check("Gender Distribution donut present (shared component)", 'class="ad-donut"' in adash and 'class="ad-legend"' in adash)
+check("gender donut figures are present (not both zero)", re.search(r'<b>Male</b><span>([\d,]+)', adash) and re.search(r'<b>Female</b><span>([\d,]+)', adash)
+      and (int(re.search(r'<b>Male</b><span>([\d,]+)', adash).group(1).replace(",", "")) + int(re.search(r'<b>Female</b><span>([\d,]+)', adash).group(1).replace(",", ""))) > 0)
 
 enr_labels = js_array(adash, "enrolmentLabels")
 enr_counts = js_array(adash, "enrolmentCount")
