@@ -30,19 +30,36 @@ html[data-bs-theme="light"]{
   --ux-surface:#fff;--ux-muted:#5b6b82;--ux-border:#e5e7eb;--enh-text:#172033;--enh-muted:#475569;--enh-border:#cbd5e1;--enh-surface:#fff;
   --bs-body-bg:var(--bg);--bs-body-color:var(--text);
 }
-/* ---- dark surfaces ---- */
+/* ---- dark surfaces (V107 palette) ---- */
 html[data-bs-theme="dark"]{
   color-scheme:dark;
-  --bg:#0f172a;--surface:#182234;--surface-soft:#1c2740;--surface-2:#1c2740;--text:#e5ebf5;--ink:#e5ebf5;--muted:#9fb0c8;--mut:#9fb0c8;
-  --border:#2c3a52;--line:#2c3a52;--ai-bg:#0f172a;--ai-border:#2c3a52;
-  --ux-surface:#182234;--ux-muted:#9fb0c8;--ux-border:#2c3a52;--enh-text:#e5ebf5;--enh-muted:#b4c2d6;--enh-border:#34445f;--enh-surface:#182234;
-  --success:#4ade80;--error:#f87171;
+  --bg:#0B1120;--sidebar-bg:#111827;--surface:#182235;--surface-soft:#1d2a40;--surface-2:#202D40;--input-bg:#202D40;
+  --text:#F1F5F9;--ink:#F1F5F9;--muted:#B0BDCE;--mut:#B0BDCE;--border:#334155;--line:#334155;--ai-bg:#0B1120;--ai-border:#334155;
+  --accent:#38BDF8;--success:#34D399;--warning:#FBBF24;--error:#F87171;
+  --ux-surface:#182235;--ux-muted:#B0BDCE;--ux-border:#334155;--enh-text:#F1F5F9;--enh-muted:#B0BDCE;--enh-border:#334155;--enh-surface:#182235;
   --bs-body-bg:var(--bg);--bs-body-color:var(--text);--bs-secondary-bg:var(--surface-2);--bs-tertiary-bg:var(--surface-2);--bs-border-color:var(--border);
-  /* a very dark brand colour would vanish on a dark surface: lift it for links and text, keep it for solid fills */
-  --brand-link:color-mix(in srgb,var(--theme-primary,#1f6feb) 55%,#fff);
+  --bs-secondary-color:var(--muted);--bs-emphasis-color:#fff;--bs-link-color:var(--accent);--bs-link-hover-color:#7dd3fc;--bs-link-color-rgb:56,189,248;
+  --bs-success:#34D399;--bs-warning:#FBBF24;--bs-danger:#F87171;
+  --bs-focus-ring-color:rgba(56,189,248,.35);
+  --brand-link:var(--accent);
   --navy:color-mix(in srgb,var(--theme-secondary,#0b3b75) 40%,#fff);
   --brand-ink:color-mix(in srgb,var(--theme-secondary,#0b3b75) 30%,#fff);
 }
+html[data-bs-theme="dark"] .app-sidebar{background:var(--sidebar-bg)!important;border-right:1px solid var(--border)}
+html[data-bs-theme="dark"] .card,html[data-bs-theme="dark"] .panel,html[data-bs-theme="dark"] .modal-content,html[data-bs-theme="dark"] .dropdown-menu{background:var(--surface);border-color:var(--border);color:var(--text)}
+html[data-bs-theme="dark"] input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),html[data-bs-theme="dark"] select,html[data-bs-theme="dark"] textarea,
+html[data-bs-theme="dark"] .form-control,html[data-bs-theme="dark"] .form-select{background-color:var(--input-bg);color:var(--text);border-color:var(--border)}
+html[data-bs-theme="dark"] input:disabled,html[data-bs-theme="dark"] select:disabled,html[data-bs-theme="dark"] textarea:disabled,html[data-bs-theme="dark"] .btn:disabled,html[data-bs-theme="dark"] .btn.disabled{opacity:.55;cursor:not-allowed}
+html[data-bs-theme="dark"] .form-control:focus,html[data-bs-theme="dark"] .form-select:focus,html[data-bs-theme="dark"] input:focus,html[data-bs-theme="dark"] select:focus,html[data-bs-theme="dark"] textarea:focus{border-color:var(--accent);box-shadow:0 0 0 .22rem rgba(56,189,248,.28);outline:0}
+html[data-bs-theme="dark"] :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+html[data-bs-theme="dark"] .btn-secondary{--bs-btn-bg:var(--surface-2);--bs-btn-color:var(--text);--bs-btn-border-color:var(--border);--bs-btn-hover-bg:#2a3b54;--bs-btn-hover-color:#fff;--bs-btn-hover-border-color:var(--accent);--bs-btn-active-bg:#33465f;--bs-btn-active-color:#fff}
+html[data-bs-theme="dark"] .table{--bs-table-hover-bg:rgba(56,189,248,.08);--bs-table-striped-bg:rgba(255,255,255,.03)}
+html[data-bs-theme="dark"] .app-sidebar a.active,html[data-bs-theme="dark"] .app-sidebar a:hover{background:rgba(56,189,248,.14);color:#fff}
+html[data-bs-theme="dark"] .alert-success{--bs-alert-bg:rgba(52,211,153,.12);--bs-alert-color:#6ee7b7;--bs-alert-border-color:rgba(52,211,153,.4)}
+html[data-bs-theme="dark"] .alert-warning{--bs-alert-bg:rgba(251,191,36,.12);--bs-alert-color:#fcd34d;--bs-alert-border-color:rgba(251,191,36,.4)}
+html[data-bs-theme="dark"] .alert-danger{--bs-alert-bg:rgba(248,113,113,.12);--bs-alert-color:#fca5a5;--bs-alert-border-color:rgba(248,113,113,.4)}
+html[data-bs-theme="dark"] .alert-info{--bs-alert-bg:rgba(56,189,248,.12);--bs-alert-color:#7dd3fc;--bs-alert-border-color:rgba(56,189,248,.4)}
+html[data-bs-theme="dark"] .text-success{color:var(--success)!important}html[data-bs-theme="dark"] .text-danger{color:var(--error)!important}html[data-bs-theme="dark"] .text-warning{color:var(--warning)!important}
 html[data-bs-theme="dark"] body,html[data-bs-theme="dark"] .app-main,html[data-bs-theme="dark"] .parent-shell{background:var(--bg);color:var(--text)}
 html[data-bs-theme="dark"] h1,html[data-bs-theme="dark"] h2,html[data-bs-theme="dark"] h3,html[data-bs-theme="dark"] h4,html[data-bs-theme="dark"] h5{color:var(--text)}
 html[data-bs-theme="dark"] .topbar{background:rgba(24,34,52,.9);border-color:var(--border)}
@@ -125,3 +142,59 @@ html[data-bs-theme="dark"] svg text{fill:var(--muted)}
 /* position:sticky needs an ancestor that is NOT a scroll container; `overflow-x:hidden` on <body> made it one, so use clip (same
    "never scroll sideways" effect, no scroll container). Needed by the sticky live preview and sticky save bars. */
 html,body{overflow-x:clip!important;overflow-y:visible!important}
+
+
+/* ---- V107: professional typography + global text size ----
+   Every font-size in the app is in rem (tools/px_to_rem.py), so this one root size scales ALL text. Desktop gets a larger default;
+   the person's A- / A+ choice (data-font-scale: 90..150 %) multiplies it. Printed paper is always 16px-based (see @media print). */
+html{--fs-root:16px;--fs-scale:1;font-size:calc(var(--fs-root) * var(--fs-scale));-webkit-text-size-adjust:100%}
+@media (min-width:992px){html{--fs-root:17px}}
+@media (min-width:1400px){html{--fs-root:18px}}
+html[data-font-scale="90"]{--fs-scale:.9}html[data-font-scale="100"]{--fs-scale:1}html[data-font-scale="115"]{--fs-scale:1.15}
+html[data-font-scale="130"]{--fs-scale:1.3}html[data-font-scale="150"]{--fs-scale:1.5}
+body{font-family:var(--app-font,Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif);line-height:1.55;font-size:1rem;-webkit-font-smoothing:antialiased}
+h1{font-size:clamp(1.55rem,1.2rem + 1.2vw,2.1rem)}h2{font-size:clamp(1.3rem,1.1rem + .7vw,1.65rem)}h3{font-size:1.2rem}
+/* layouts must survive big text: long words wrap, flex rows wrap, tables scroll inside their wrapper, buttons grow with their label */
+body{overflow-wrap:break-word;hyphens:manual}.top-actions{flex-wrap:wrap;gap:6px}.btn{white-space:normal}
+table{font-size:.95rem}.table-responsive{max-width:100%}
+.fs-control{flex:none;margin-right:8px}.fs-control .btn{padding:.2rem .5rem;font-weight:700;line-height:1.2;min-width:2.2rem}.fs-control .fs-val{min-width:3.4rem;font-size:.8rem}
+.theme-fab{display:flex;gap:8px;align-items:center}
+@media print{html{font-size:16px!important;--fs-scale:1!important}.fs-control{display:none!important}}
+/* keyboard users always see where they are (light mode too) */
+:focus-visible{outline:2px solid var(--theme-primary,#1f6feb);outline-offset:2px}
+
+/* ---- V107: a shell that survives large text ----
+   The sidebar width and the content offset share ONE variable in rem, so they grow together with the text instead of the
+   fixed-pixel sidebar crushing its own labels. When text is large and the screen is not, the sidebar goes off-canvas (hamburger). */
+:root{--sidebar-w:min(15.5rem,30vw)}
+@media (min-width:1001px){
+  .app-sidebar{width:var(--sidebar-w)!important}
+  .app-main{margin-left:var(--sidebar-w)!important;width:calc(100% - var(--sidebar-w))!important}
+}
+@media (min-width:1001px) and (max-width:1500px){
+  html[data-font-scale="130"] .app-sidebar,html[data-font-scale="150"] .app-sidebar{transform:translateX(-100%);transition:.2s;max-width:86vw}
+  html[data-font-scale="130"] .app-sidebar.open,html[data-font-scale="150"] .app-sidebar.open{transform:translateX(0)}
+  html[data-font-scale="130"] .app-main,html[data-font-scale="150"] .app-main{margin-left:0!important;width:100%!important}
+  html[data-font-scale="130"] .sidebar-toggle,html[data-font-scale="150"] .sidebar-toggle{display:block!important;border:0;background:transparent;margin-right:12px;font-size:1.4rem}
+}
+.app-sidebar a,.app-sidebar .brand{overflow-wrap:break-word;word-break:normal}
+/* stat tiles / chart rows wrap to more rows instead of squeezing their text */
+.ad-kpis{grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))!important}
+.ad-row-charts,.ad-row-bottom{grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr))!important}
+.ad-tiles{grid-template-columns:repeat(auto-fit,minmax(6.5rem,1fr))!important}
+
+/* ---- V107: passport photographs: one frame everywhere ----
+   Uploads are normalised to 4:5 by passport_fit.py; every frame shows the stored picture whole (never stretched). Photographs stored
+   before V107 keep their own shape and are shown whole too (contain), never cropped through the face. */
+.passport-img,.passport-frame{aspect-ratio:4/5;width:var(--passport-w,9rem);max-width:100%;height:auto;object-fit:contain;display:block;border-radius:.6rem;
+  border:1px solid var(--border,#d5dde8);background-color:var(--surface-2,#eef2f7);overflow:hidden;position:relative}
+.passport-frame{background-size:cover;background-position:center;flex:none;width:7rem}
+.passport-frame img{width:100%;height:100%;display:block}
+.passport-frame .pp-fill{object-fit:cover;object-position:50% 18%}
+.passport-frame .pp-fit{object-fit:contain;position:relative;backdrop-filter:blur(0)}
+.passport-frame:has(.pp-fit)::before{content:"";position:absolute;inset:0;background:inherit;filter:blur(14px);transform:scale(1.2);opacity:.9}
+.passport-frame:has(.pp-fit) img{position:relative}
+
+/* small phones: keep the top bar on one row (text-size control loses its % label, buttons shrink) */
+@media (max-width:520px){.fs-control{margin-right:4px}.fs-control .fs-val{display:none}.fs-control .btn{min-width:1.9rem;padding:.15rem .35rem}
+  .theme-toggle{width:34px;height:34px}.top-actions{gap:4px;flex-wrap:nowrap}}

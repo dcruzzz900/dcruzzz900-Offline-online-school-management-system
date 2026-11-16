@@ -1,0 +1,24 @@
+/* V107: the shared dashboard welcome header (derived from the School Administration banner; desktop rules + explicit mobile rules). */
+/* banner */
+.wh-banner{position:relative;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:128px;padding:14px 26px;border-radius:16px;color:#fff;overflow:hidden;
+  background:linear-gradient(100deg,var(--theme-secondary,#0b4fd0) 0%,var(--theme-primary,#1469e6) 38%,rgba(var(--theme-primary-rgb,20,105,230),.35) 62%,rgba(var(--theme-primary-rgb,20,105,230),0) 100%),var(--banner-img) right center/auto 100% no-repeat,var(--theme-secondary,#0b57d0);box-shadow:0 6px 18px rgba(16,60,140,.25)}
+.wh-banner-main{display:flex;align-items:center;gap:18px;min-width:0}
+.wh-banner-logo{display:grid;place-items:center;opacity:.95}
+.wh-banner h1{margin:0;font-size:clamp(1.4rem,2.6vw,2.2rem);line-height:1.15;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.25)}
+.wh-banner p{margin:4px 0 0;font-size:clamp(.9rem,1.4vw,1.15rem);opacity:.96}
+.wh-banner-clock{display:grid;gap:8px;padding:12px 18px;border-radius:12px;background:rgba(7,32,90,.45);backdrop-filter:blur(2px);font-size:1.05rem;font-weight:700;white-space:nowrap}
+.wh-banner-clock>div{display:flex;align-items:center;gap:12px}
+/* ---- tablet + small laptop (701 - 1280px) ---- */
+
+/* ---- phone (<= 700px): follows the approved mobile design ---- */
+
+
+
+
+/* heading colours must beat the global h1/h2 rules */
+.wh-banner h1,.wh-banner p{color:#fff}
+.wh-banner{margin-bottom:16px}.wh-banner h1,.wh-banner p{color:#fff}
+.wh-banner-clock{display:grid}
+@media (max-width:760px){.wh-banner{flex-direction:column;align-items:flex-start;padding:16px;min-height:0}.wh-banner h1{font-size:1.35rem}.wh-banner p{font-size:.9rem}
+  .wh-banner-logo svg{width:44px;height:44px}.wh-banner-clock{width:100%;white-space:normal;font-size:.95rem;padding:10px 14px}}
+
