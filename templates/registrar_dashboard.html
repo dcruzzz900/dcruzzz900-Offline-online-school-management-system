@@ -1,17 +1,17 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Registrar &amp; Admissions{% endblock %}
 {% block content %}
-<h1>Registrar &amp; Admissions</h1>
+{{ welcome_header('registrar') }}
+<h2 class="h4">Registrar &amp; Admissions</h2>
 <div class="card"><h3>Students by status</h3>
 {% for c in counts %}<span style="margin-right:.6rem">{{ c.status|status_badge }} <b>{{ c.c }}</b></span>{% else %}<span class="muted">No students yet.</span>{% endfor %}</div>
 <div class="card"><h3>Register a new student</h3>
 <form method="POST" action="{{ url_for('registrar_register_student') }}" class="form-grid"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>First name<input name="first_name" required class="form-control"></label><label>Last name<input name="last_name" required class="form-control"></label><label>Other names<input name="other_names" class="form-control"></label>
-<label>Gender<select name="gender" required class="form-select"><option value="M">Male</option><option value="F">Female</option></select></label>
 <label>Class / arm<select name="class_id" required class="form-select">{% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
 <label>Admission No. (blank = {{ suggestion }})<input name="admission_no" placeholder="{{ suggestion }}" class="form-control"></label>
 <label>Register No. (blank = next in class)<input name="register_no" class="form-control"></label>
-<label>Date of birth<input type="date" name="date_of_birth" class="form-control"></label><label>Previous school<input name="previous_school" class="form-control"></label>
+<div style="grid-column:1/-1">{{ identity_fields(min_age=1, who='student', uid='rg') }}</div><label>Previous school<input name="previous_school" class="form-control"></label>
 <label>Parent / guardian<input name="parent_name" class="form-control"></label><label>Parent phone<input name="parent_phone" class="form-control"></label><label>Parent email<input type="email" name="parent_email" class="form-control"></label>
 <label>Admission notes<input name="admission_notes" class="form-control"></label>
 <button class="btn btn-primary" type="submit">Admit student</button></form></div>
