@@ -80,6 +80,7 @@
         {{ tile('Staff Attendance', url_for('staff_attendance'), 'check', 'green', m=10) }}
         {{ tile('Themes & Branding', url_for('admin_theme'), 'palette', 'pink', m=11) }}
         {{ tile('Learning Materials', url_for('materials'), 'book', 'blue', m=12) }}
+        {{ tile('Data Completion', url_for('admin_data_completion'), 'check', 'orange', badge=identity_gap_count, m=13) }}
         {{ tile('Timetable', url_for('timetable_hub'), 'calendar', 'green', m=13) }}
         {{ tile('Result Approval', url_for('result_workflow'), 'factcheck', 'orange', '', pending_reviews, m=14) }}
         {{ tile('Billings', url_for('school_billing_portal'), 'wallet', 'purple', m=15) }}

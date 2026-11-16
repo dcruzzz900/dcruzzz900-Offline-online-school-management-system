@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Teachers{% endblock %}
 {% block content %}
 <h1>Teachers</h1>
@@ -11,6 +11,7 @@
         <input type="text" name="name" required class="form-control">
         <label>Staff / Employee ID <span class="req">*</span></label>
         <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014" class="form-control">
+        {{ identity_fields(min_age=14, who='staff', uid='at') }}
         <label>Username</label>
         <input type="text" name="username" required class="form-control">
         <label>Email (optional)</label>
