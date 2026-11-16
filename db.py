@@ -4318,3 +4318,26 @@ def migration_084_v106_show_gender(conn):
 
 
 STEPS.append(("result_sheet_gender_v106", migration_084_v106_show_gender))
+
+
+def migration_085_v107_ui_preferences(conn):
+    """V107: each person's own theme (light / dark) and text size, kept on the server so it follows them across devices and sessions.
+    Keyed by (kind, actor_id): kind is 'user' (staff / admins), 'student' or 'parent'. Purely additive."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS ui_preferences (
+        kind TEXT NOT NULL, actor_id INTEGER NOT NULL, school_id INTEGER,
+        theme TEXT, font_scale INTEGER NOT NULL DEFAULT 100, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (kind, actor_id))""")
+
+
+STEPS.append(("ui_preferences_v107", migration_085_v107_ui_preferences))
+
+
+def migration_086_v107_parent_identity(conn):
+    """V107: Date of Birth + Gender are now compulsory for parents / guardians too (students and staff already had the columns).
+    Existing parents keep NULL until they - or the school - complete them; nothing is invented."""
+    ensure_column(conn, "parent_accounts", "date_of_birth", "TEXT")
+    ensure_column(conn, "parent_accounts", "gender", "TEXT")
+
+
+STEPS.append(("parent_identity_v107", migration_086_v107_parent_identity))
+

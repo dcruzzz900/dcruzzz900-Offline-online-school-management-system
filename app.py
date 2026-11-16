@@ -38,6 +38,7 @@ from db import (
     TIMEZONE_CHOICES, RESULT_HEADER_LAYOUTS,
 )
 import datetime
+import zoneinfo
 import json
 from pdf_utils import build_broadsheet_pdf, build_result_pdf, build_class_results_pdf, build_cumulative_result_pdf, build_generic_table_pdf
 import html_pdf
@@ -1277,6 +1278,173 @@ app.jinja_env.filters["hex_rgb"] = hex_rgb
 app.jinja_env.filters["contrast_ink"] = contrast_ink
 
 
+from passport_fit import save_passport, fit_passport   # V107: passport photographs
+from identity_rules import GENDER_CODES, GENDER_LABELS, normalise_gender, parse_dob, identity_errors   # V107: the one DOB + Gender rule
+
+
+app.jinja_env.globals["today_iso"] = lambda: datetime.date.today().isoformat()
+
+WELCOME_COPY = {
+    "platform": ("Welcome, Super Administrator!", "Here is an overview of all registered schools on the platform."),
+    "admin": ("Welcome, Administrator!", "Here is an overview of your school system."),
+    "teacher": ("Welcome, Teacher!", "Here is an overview of your classes, students and academic activities."),
+    "accountant": ("Welcome, Accountant!", "Here is an overview of school fees, payments and financial activities."),
+    "registrar": ("Welcome, Registrar!", "Here is an overview of student admissions and registration activities."),
+    "student": ("Welcome, {name}!", "Here is an overview of your academic activities and progress."),
+    "parent": ("Welcome, {name}!", "Here is an overview of your children's academic activities and progress."),
+    "staff": ("Welcome, {name}!", "Here is an overview of your assigned duties and activities."),
+}
+
+
+def welcome_header_data(kind, name=""):
+    """V107: the data behind the shared dashboard welcome header. The heading and description come from the role (never from user input);
+    the clock uses the SCHOOL's timezone (the platform owner's uses Africa/Lagos) and the server's real UTC time as its anchor."""
+    heading, desc = WELCOME_COPY.get(kind, WELCOME_COPY["staff"])
+    tzname = "Africa/Lagos"
+    if kind != "platform":
+        try:
+            conn = get_db()
+            row = conn.execute("SELECT timezone FROM schools WHERE id=?", (current_school_id(),)).fetchone()
+            conn.close()
+            if row and row["timezone"]:
+                tzname = row["timezone"]
+        except Exception:
+            pass
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc).astimezone(zoneinfo.ZoneInfo(tzname))
+    except Exception:
+        tzname = "Africa/Lagos"
+        now = datetime.datetime.now(datetime.timezone.utc).astimezone(zoneinfo.ZoneInfo(tzname))
+    return {"kind": kind, "heading": heading.format(name=(name or "").strip() or "there"), "description": desc, "tz": tzname,
+            "utc_ms": int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000),
+            "date": f"{now.strftime('%A')}, {now.day} {now.strftime('%B %Y')}", "time": now.strftime("%I:%M %p").lstrip("0")}
+
+
+app.jinja_env.globals["welcome_header_data"] = welcome_header_data
+
+FONT_SCALES = (90, 100, 115, 130, 150)     # the A- / A+ steps (percent of the default text size)
+
+
+def current_actor():
+    """V107: who is signed in, as (kind, id) - staff/admin, student or parent - or None."""
+    if session.get("user_id"):
+        return ("user", session["user_id"])
+    if session.get("student_id"):
+        return ("student", session["student_id"])
+    if session.get("parent_id"):
+        return ("parent", session["parent_id"])
+    return None
+
+
+def get_ui_pref():
+    actor = current_actor()
+    pref = {"theme": None, "font_scale": 100}
+    if not actor:
+        return pref
+    try:
+        conn = get_db()
+        row = conn.execute("SELECT theme, font_scale FROM ui_preferences WHERE kind=? AND actor_id=?", actor).fetchone()
+        conn.close()
+        if row:
+            pref["theme"] = row["theme"] if row["theme"] in ("light", "dark") else None
+            pref["font_scale"] = row["font_scale"] if row["font_scale"] in FONT_SCALES else 100
+    except Exception:
+        pass
+    return pref
+
+
+@app.context_processor
+def inject_ui_pref():
+    return {"ui_pref": get_ui_pref(), "font_scales": FONT_SCALES}
+
+
+def identity_gaps(conn, school_id):
+    """V107: records still missing a Date of Birth or a Gender (from before both became compulsory). Only THIS school's records;
+    nothing is guessed - the school completes them through /admin/data-completion."""
+    def gap(dob, gender):
+        return (not (dob or "").strip()) or normalise_gender(gender) is None
+    out = {"student": [], "staff": [], "parent": []}
+    for r in conn.execute("SELECT s.id, s.first_name, s.last_name, s.admission_no, c.name AS class_name, s.date_of_birth, s.gender FROM students s "
+                          "JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 AND COALESCE(s.is_deleted,0)=0 ORDER BY c.name, s.last_name", (school_id,)).fetchall():
+        if gap(r["date_of_birth"], r["gender"]):
+            out["student"].append({"id": r["id"], "name": f"{r['last_name']} {r['first_name']}", "ref": f"{r['admission_no']} · {r['class_name']}", "dob": r["date_of_birth"], "gender": r["gender"]})
+    for r in conn.execute("SELECT id, name, username, role, date_of_birth, gender FROM users WHERE school_id=? AND COALESCE(is_deleted,0)=0 AND COALESCE(is_active,1)=1 ORDER BY name", (school_id,)).fetchall():
+        if gap(r["date_of_birth"], r["gender"]):
+            out["staff"].append({"id": r["id"], "name": r["name"], "ref": f"{r['username']} · {r['role']}", "dob": r["date_of_birth"], "gender": r["gender"]})
+    for r in conn.execute("SELECT id, name, username, date_of_birth, gender FROM parent_accounts WHERE school_id=? AND COALESCE(is_active,1)=1 ORDER BY name", (school_id,)).fetchall():
+        if gap(r["date_of_birth"], r["gender"]):
+            out["parent"].append({"id": r["id"], "name": r["name"], "ref": r["username"] or "", "dob": r["date_of_birth"], "gender": r["gender"]})
+    return out
+
+
+def _identity_gap_count():
+    conn = get_db()
+    try:
+        return sum(len(v) for v in identity_gaps(conn, current_school_id()).values())
+    finally:
+        conn.close()
+
+
+@app.route("/admin/data-completion")
+@login_required("admin", "sub_admin")
+def admin_data_completion():
+    conn = get_db()
+    gaps = identity_gaps(conn, current_school_id())
+    conn.close()
+    return render_template("admin_data_completion.html", gaps=gaps, total=sum(len(v) for v in gaps.values()))
+
+
+@app.route("/admin/data-completion/save", methods=["POST"])
+@login_required("admin", "sub_admin")
+def admin_data_completion_save():
+    kind = request.form.get("kind")
+    rid = request.form.get("id", type=int)
+    min_age = {"student": 1, "staff": 14, "parent": 15}.get(kind)
+    if min_age is None or not rid:
+        flash("Unknown record.", "error")
+        return redirect(url_for("admin_data_completion"))
+    dob, gender, errs = identity_errors(request.form, min_age=min_age)
+    if errs:
+        for e in errs:
+            flash(e, "error")
+        return redirect(url_for("admin_data_completion"))
+    conn = get_db()
+    school_id = current_school_id()
+    if kind == "student":
+        cur = conn.execute("UPDATE students SET date_of_birth=?, gender=?, profile_updated_at=CURRENT_TIMESTAMP WHERE id=? AND class_id IN (SELECT id FROM classes WHERE school_id=?)", (dob, gender, rid, school_id))
+    elif kind == "staff":
+        cur = conn.execute("UPDATE users SET date_of_birth=?, gender=? WHERE id=? AND school_id=?", (dob, gender, rid, school_id))
+    else:
+        cur = conn.execute("UPDATE parent_accounts SET date_of_birth=?, gender=? WHERE id=? AND school_id=?", (dob, gender, rid, school_id))
+    conn.commit(); conn.close()
+    flash("Saved." if cur.rowcount else "That record was not found in your school.", "success" if cur.rowcount else "error")
+    return redirect(url_for("admin_data_completion"))
+
+
+@app.route("/api/preferences", methods=["GET", "POST"])
+def api_preferences():
+    """V107: read / save the signed-in person's theme and text size (any role). CSRF-protected like every /api/ POST."""
+    actor = current_actor()
+    if not actor:
+        return jsonify({"ok": False, "error": "Sign in first."}), 401
+    if request.method == "GET":
+        return jsonify({"ok": True, **get_ui_pref()})
+    body = request.get_json(silent=True) or {}
+    cur = get_ui_pref()
+    theme = body.get("theme", cur["theme"])
+    scale = body.get("font_scale", cur["font_scale"])
+    if theme not in ("light", "dark", None):
+        return jsonify({"ok": False, "error": "Theme must be light or dark."}), 400
+    if scale not in FONT_SCALES:
+        return jsonify({"ok": False, "error": f"Text size must be one of {list(FONT_SCALES)}."}), 400
+    conn = get_db()
+    conn.execute("INSERT INTO ui_preferences (kind, actor_id, school_id, theme, font_scale, updated_at) VALUES (?,?,?,?,?,CURRENT_TIMESTAMP) "
+                 "ON CONFLICT(kind, actor_id) DO UPDATE SET theme=excluded.theme, font_scale=excluded.font_scale, updated_at=CURRENT_TIMESTAMP",
+                 (actor[0], actor[1], session.get("school_id"), theme, scale))
+    conn.commit(); conn.close()
+    return jsonify({"ok": True, "theme": theme, "font_scale": scale})
+
+
 @app.context_processor
 def inject_school_settings():
     if "school_id" in session:
@@ -1673,6 +1841,7 @@ def register():
         if len(first)<2 or len(first)>50 or not re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ' -]+",first): errors.append("First name is required.")
         if len(last)<2 or len(last)>50 or not re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ' -]+",last): errors.append("Surname is required.")
         if other and len(other)>100: errors.append("Other names must not exceed 100 characters.")
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=14); errors += _ierrs
         errors += validate_password_policy(password,username)
         if password!=confirm: errors.append("Password and confirmation don't match.")
         row,msg=verify_signup_code(conn,code,"staff",consume=False)
@@ -1686,7 +1855,7 @@ def register():
             full=" ".join(x for x in (first,last,other) if x)
             cur=conn.execute("INSERT INTO users(school_id,tenant_id,name,first_name,surname,other_names,username,password_hash,role,first_login_required,account_status,signup_status,activation_status) VALUES(?,?,?,?,?,?,?, ?,'teacher',1,'active','approved','active')",(row["school_id"],row["tenant_id"],full,first,last,other or None,username,generate_password_hash(password)))
             uid=cur.lastrowid
-            conn.execute("UPDATE users SET staff_id=? WHERE id=?",(staff_id_val,uid))
+            conn.execute("UPDATE users SET staff_id=?, date_of_birth=?, gender=? WHERE id=?",(staff_id_val,_dob,_gen,uid))
             apply_active_role(conn, uid, row["school_id"], "Teacher", None, "System (staff signup)", reason="Initial role on staff signup", action="role_assigned_on_signup")
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,verified_at,approved_at,school_id,tenant_id,request_id) VALUES(?,?,?,?,?,?,?,?)",(uid,"staff","approved",datetime.datetime.utcnow().isoformat(),datetime.datetime.utcnow().isoformat(),row["school_id"],row["tenant_id"],request_id()))
             verify_signup_code(conn,code,"staff",school_id=row["school_id"],consume=True)
@@ -1712,6 +1881,7 @@ def register_parent():
         if not email and not username: errors.append("Email or username is required.")
         if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+",email): errors.append("Enter a valid email address.")
         ident=username or email or "parent"
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=15); errors += _ierrs
         errors += validate_password_policy(password,ident)
         if password!=confirm: errors.append("Password and confirmation don't match.")
         if email and conn.execute("SELECT 1 FROM parent_accounts WHERE LOWER(email)=LOWER(?)",(email,)).fetchone(): errors.append("This email is already in use.")
@@ -1737,6 +1907,7 @@ def register_parent():
         try:
             ident=username or email
             cur=conn.execute("INSERT INTO parent_accounts(school_id,tenant_id,name,username,email,phone,password_hash,is_active,account_status,signup_status) VALUES(?,?,?,?,?,?,?,1,'active','pending')",(school_id,tenant_id,f"{first} {last}",ident,email,phone,generate_password_hash(password)))
+            conn.execute("UPDATE parent_accounts SET date_of_birth=?, gender=? WHERE id=?",(_dob,_gen,cur.lastrowid))
             conn.execute("INSERT INTO notifications(sender_label,school_id,target_role,title,message) VALUES (?,?,?,?,?)",("System",school_id,"admin","New parent signup",f"{first} {last} submitted a parent signup request."))
             pid=cur.lastrowid
             conn.execute("INSERT INTO signups(user_id,signup_type,signup_status,school_id,tenant_id,request_id,notes) VALUES(NULL,'parent','pending',?,?,?,?)",(school_id,tenant_id,request_id(),f"Parent account {pid} awaiting child verification"))
@@ -2716,7 +2887,7 @@ def dashboard():
         alerts = plan_usage_alerts(conn, school_id)
         conn.close()
         return render_template(
-            "admin_dashboard.html", term=term, ov=ov, activities=activities, school=school, pending_reviews=pending_reviews,
+            "admin_dashboard.html", identity_gap_count=_identity_gap_count(), term=term, ov=ov, activities=activities, school=school, pending_reviews=pending_reviews,
             now_local=now_local, plan_alerts=alerts, hide_banners=True,
             school_local_ms=int(now_local.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if now_local else 0,
         )
@@ -3261,9 +3432,7 @@ def upload_my_photo():
         old_path = os.path.join(STAFF_PHOTOS_DIR, old["photo_filename"])
         if os.path.exists(old_path):
             os.remove(old_path)
-    new_filename = f"staff_{user_id}.{ext}"
-    os.makedirs(STAFF_PHOTOS_DIR, exist_ok=True)
-    file.save(os.path.join(STAFF_PHOTOS_DIR, new_filename))
+    new_filename = save_passport(file, STAFF_PHOTOS_DIR, f"staff_{user_id}")      # V107: one 4:5 passport frame for everyone
     conn.execute("UPDATE users SET photo_filename=? WHERE id=?", (new_filename, user_id))
     conn.commit()
     conn.close()
@@ -3540,11 +3709,15 @@ def staff_onboarding():
     if not user: conn.close(); session.clear(); return redirect(url_for("login"))
     if request.method=="POST":
         first=request.form.get("first_name","").strip(); last=request.form.get("surname","").strip(); other=request.form.get("other_names","").strip()
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=14)
         if not first or not last: flash("First name and surname are required.","error")
+        elif _ierrs:
+            for _e in _ierrs: flash(_e,"error")
         else:
             vals={"name":" ".join(x for x in (first,last,other) if x),"first_name":first,"surname":last,"other_names":other or None,"email":request.form.get("email","").strip() or None,"phone":request.form.get("phone","").strip() or None,"first_login_required":0,"first_login_completed_at":datetime.datetime.utcnow().isoformat(timespec="seconds")}
-            for col in ("address","date_of_birth","gender","qualifications"):
+            for col in ("address","qualifications"):
                 if col in user.keys(): vals[col]=request.form.get(col,"").strip() or None
+            vals["date_of_birth"]=_dob; vals["gender"]=_gen
             conn.execute(f"UPDATE users SET {', '.join(k+'=?' for k in vals)} WHERE id=?",list(vals.values())+[uid]); conn.commit(); conn.close(); flash("Staff profile saved.","success"); return redirect(url_for("dashboard"))
     conn.close(); return render_template("staff_onboarding.html",user=user)
 
@@ -3993,7 +4166,7 @@ def admin_students():
         if not admission: errors.append("Admission No. / Register No. is required.")
         if not first: errors.append("First name is required.")
         if not last: errors.append("Last name is required.")
-        if request.form.get("gender") not in ("M","F"): errors.append("Gender is required.")
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=1); errors += _ierrs
         if conn.execute("SELECT 1 FROM students s WHERE s.class_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))",(class_id,admission)).fetchone(): errors.append("That Admission No. / Register No. is already used by another student in this class. (The same number may be used in a different class.)")
         if errors:
             for e in errors: flash(e,"error")
@@ -4018,7 +4191,7 @@ def admin_students():
                     "INSERT INTO students (school_id,tenant_id,admission_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,parent_name,parent_address,parent_email,parent_phone,parent_relationship,status,phone) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (school_id,tenant,admission,first,last,request.form.get("other_names","").strip() or None,
-                     request.form.get("gender"),class_id,request.form.get("date_of_birth","").strip() or None,
+                     _gen,class_id,_dob,
                      request.form.get("religion","").strip() or None,request.form.get("parent_name","").strip() or None,
                      request.form.get("parent_address","").strip() or None,parent_email,
                      request.form.get("parent_phone","").strip() or None,request.form.get("parent_relationship","").strip() or None,
@@ -4507,9 +4680,7 @@ def upload_student_photo(student_id):
         old_path = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])
         if os.path.exists(old_path):
             os.remove(old_path)
-    new_filename = f"student_{student_id}.{ext}"
-    os.makedirs(STUDENT_PHOTOS_DIR, exist_ok=True)
-    file.save(os.path.join(STUDENT_PHOTOS_DIR, new_filename))
+    new_filename = save_passport(file, STUDENT_PHOTOS_DIR, f"student_{student_id}")      # V107: one 4:5 passport frame for everyone
     conn.execute("UPDATE students SET photo_filename=? WHERE id=?", (new_filename, student_id))
     conn.commit()
     conn.close()
@@ -4637,8 +4808,8 @@ def students_bulk_upload():
     school_id = current_school_id()
     classes_by_name = {row["name"].strip().lower(): row["id"] for row in conn.execute("SELECT id, name FROM classes WHERE school_id=?", (school_id,)).fetchall()}
     try:
-        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name", "class_name"),
-                                        optional=("other_names", "gender", "date_of_birth", "religion", "parent_name", "parent_address",
+        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name", "class_name", "gender", "date_of_birth"),
+                                        optional=("other_names", "religion", "parent_name", "parent_address",
                                                   "parent_email", "parent_phone", "parent_relationship"))
     except csvi.CsvProblem as exc:
         conn.close()
@@ -4672,6 +4843,8 @@ def students_bulk_upload():
         dob, e2 = csvi.v_date(row.get("date_of_birth", ""))
         pemail, e3 = csvi.v_email(row.get("parent_email", ""))
         pphone, e4 = csvi.v_phone(row.get("parent_phone", ""))
+        if not (row.get("gender") or "").strip() and not e1: e1 = "gender is required - use M or F"          # V107: compulsory
+        if not (row.get("date_of_birth") or "").strip() and not e2: e2 = "date of birth is required - use YYYY-MM-DD"   # V107: compulsory
         for col, e in (("gender", e1), ("date_of_birth", e2), ("parent_email", e3), ("parent_phone", e4)):
             if e:
                 errors.append(f"Row {n}, column {col}: {e}")
@@ -4735,7 +4908,11 @@ def admin_teachers():
         rbac_role=request.form.get("rbac_role","Teacher").strip()
         if rbac_role not in ROLE_CATALOG or rbac_role == "School Admin": rbac_role="Teacher"
         position={"Principal":"principal","Vice Principal":"vice_principal","Head Teacher":"principal","Class Teacher / Form Teacher":"form_teacher","Form Teacher":"form_teacher","Class Teacher":"form_teacher","Examination/Result Officer":"exam_officer","Examination Officer":"exam_officer","Vice Principal / Deputy Principal":"vice_principal"}.get(rbac_role)
-        if not staff_id_val:
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=14)
+        if _ierrs:
+            for _e in _ierrs:
+                flash(_e, "error")
+        elif not staff_id_val:
             flash("Staff / Employee ID is required.", "error")
         elif conn.execute("SELECT 1 FROM users WHERE school_id=? AND LOWER(staff_id)=LOWER(?)", (school_id, staff_id_val)).fetchone():
             flash(f"Staff / Employee ID '{staff_id_val}' is already used by another staff member in this school.", "error")
@@ -4749,7 +4926,7 @@ def admin_teachers():
             try:
                 tenant=conn.execute("SELECT tenant_id FROM schools WHERE id=?",(school_id,)).fetchone()["tenant_id"]
                 cur=conn.execute("INSERT INTO users (school_id,tenant_id,name,username,email,phone,password_hash,role,position,rbac_role) VALUES (?,?,?,?,?,?,?,?,?,?)",(school_id,tenant,name,username,email,phone,generate_password_hash(password),"teacher",position,rbac_role))
-                conn.execute("UPDATE users SET staff_id=? WHERE id=?", (staff_id_val, cur.lastrowid))
+                conn.execute("UPDATE users SET staff_id=?, date_of_birth=?, gender=? WHERE id=?", (staff_id_val, _dob, _gen, cur.lastrowid))
                 ra=conn.execute("INSERT INTO role_assignments(user_id,school_id,tenant_id,school_level,role,status,requested_by,approved_by,approved_at) VALUES (?,?,?,'All',?,'active',?,?,CURRENT_TIMESTAMP)",(cur.lastrowid,school_id,tenant,rbac_role,session.get("user_id"),session.get("user_id"))).lastrowid
                 for perm in ROLE_CATALOG.get(rbac_role,[]): conn.execute("INSERT INTO role_assignment_permissions(assignment_id,permission,granted) VALUES (?,?,1)",(ra,perm))
                 conn.commit()
@@ -5984,6 +6161,12 @@ def my_class_roster(class_id):
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=1)      # V107: Date of Birth and Gender are compulsory
+        if _ierrs:
+            conn.close()
+            for _e in _ierrs:
+                flash(_e, "error")
+            return redirect(url_for("my_class_roster", class_id=class_id))
         try:
             cur = conn.execute(
                 "INSERT INTO students (admission_no, first_name, last_name, other_names, "
@@ -5994,9 +6177,9 @@ def my_class_roster(class_id):
                     request.form["first_name"].strip(),
                     request.form["last_name"].strip(),
                     request.form.get("other_names", "").strip() or None,
-                    request.form.get("gender") or None,
+                    _gen,
                     class_id,
-                    request.form.get("date_of_birth", "").strip() or None,
+                    _dob,
                     request.form.get("religion", "").strip() or None,
                     request.form.get("parent_name", "").strip() or None,
                     request.form.get("parent_address", "").strip() or None,
@@ -6219,8 +6402,8 @@ def my_class_csv_upload(class_id):
         flash("Please choose a CSV file to upload.", "error")
         return redirect(url_for("my_class_roster", class_id=class_id))
     try:
-        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name"),
-                                        optional=("other_names", "gender", "date_of_birth", "religion", "parent_name", "parent_address",
+        rows, ignored = csvi.read_table(file, required=("admission_no", "first_name", "last_name", "gender", "date_of_birth"),
+                                        optional=("other_names", "religion", "parent_name", "parent_address",
                                                   "parent_email", "parent_phone", "parent_relationship"))
     except csvi.CsvProblem as exc:
         conn.close()
@@ -6240,6 +6423,8 @@ def my_class_csv_upload(class_id):
         dob, e2 = csvi.v_date(row.get("date_of_birth", ""))
         pemail, e3 = csvi.v_email(row.get("parent_email", ""))
         pphone, e4 = csvi.v_phone(row.get("parent_phone", ""))
+        if not (row.get("gender") or "").strip() and not e1: e1 = "gender is required - use M or F"          # V107: compulsory
+        if not (row.get("date_of_birth") or "").strip() and not e2: e2 = "date of birth is required - use YYYY-MM-DD"   # V107: compulsory
         for col, e in (("gender", e1), ("date_of_birth", e2), ("parent_email", e3), ("parent_phone", e4)):
             if e:
                 errors.append(f"Row {n}, column {col}: {e}")
@@ -6304,6 +6489,12 @@ def my_class_edit_student(class_id, student_id):
         status = request.form.get("status", "Active")
         if status not in ("Active", "Graduated", "Transferred", "Withdrawn", "Suspended"):
             status = "Active"
+        _dob, _gen, _ierrs = identity_errors(request.form, min_age=1)
+        if _ierrs:
+            conn.close()
+            for _e in _ierrs:
+                flash(_e, "error")
+            return redirect(request.referrer or url_for("dashboard"))
         # Protected fields (Admission No. / Register No., administrative status) can only be changed by the school administration.
         if not is_school_admin_user:
             status = existing_student["status"] or "Active"
@@ -6320,8 +6511,8 @@ def my_class_edit_student(class_id, student_id):
                 request.form["last_name"].strip(),
                 request.form.get("other_names", "").strip() or None,
                 protected_admission_no,
-                request.form.get("gender") or None,
-                request.form.get("date_of_birth", "").strip() or None,
+                _gen,
+                _dob,
                 request.form.get("religion", "").strip() or None,
                 request.form.get("parent_name", "").strip() or None,
                 request.form.get("parent_address", "").strip() or None,
