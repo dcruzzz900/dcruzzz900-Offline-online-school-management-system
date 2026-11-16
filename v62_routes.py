@@ -1,6 +1,7 @@
 """V62: central Result Display Settings (+ live sample preview), dedicated broadsheet print, school custom information,
 parent passports. Registered from app.py with register_v62_routes(app, helpers). School and tenant always come from
 the signed-in session, never from the URL or a form."""
+from passport_fit import fit_passport   # V107
 import datetime
 import re
 import sqlite3
@@ -442,9 +443,9 @@ def register_v62_routes(app, h):
                     old = p["photo_filename"]
                     new_name = None
                     if blob is not None:
-                        new_name = f"parent_{p['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+                        new_name = f"parent_{p['id']}_{uuid.uuid4().hex[:8]}.jpg"
                         with open(os.path.join(PARENT_PHOTOS_DIR, new_name), "wb") as fh:
-                            fh.write(blob)
+                            fh.write(fit_passport(blob))      # V107: same 4:5 passport frame as students and staff
                     conn.execute("UPDATE parent_accounts SET photo_filename=? WHERE id=? AND school_id=?", (new_name, p["id"], sid()))
                     conn.commit()
                     if old:

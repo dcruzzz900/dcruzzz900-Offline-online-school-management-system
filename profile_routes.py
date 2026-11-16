@@ -7,6 +7,8 @@ import json
 import os
 import sqlite3
 import uuid
+
+from passport_fit import fit_passport   # V107
 from functools import wraps
 
 from flask import (abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for)
@@ -205,10 +207,10 @@ def register_profile_routes(app, h):
             photo_changed = False
             if blob is not None:
                 os.makedirs(STUDENT_PHOTOS_DIR, exist_ok=True)
-                fname = f"student_{sid}_{uuid.uuid4().hex[:8]}.{ext}"
+                fname = f"student_{sid}_{uuid.uuid4().hex[:8]}.jpg"
                 new_photo_path = os.path.join(STUDENT_PHOTOS_DIR, fname)
                 with open(new_photo_path, "wb") as fh:
-                    fh.write(blob)
+                    fh.write(fit_passport(blob))      # V107: same 4:5 passport frame everywhere
                 conn.execute("UPDATE students SET photo_filename=? WHERE id=?", (fname, sid))
                 if student["photo_filename"]:
                     old_photo_path = os.path.join(STUDENT_PHOTOS_DIR, student["photo_filename"])
