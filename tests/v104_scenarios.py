@@ -154,11 +154,11 @@ check("the same Admission No. twice in ONE class is refused (database)", dup_sam
 c.execute("INSERT INTO students (school_id, tenant_id, admission_no, first_name, last_name, class_id) SELECT 1, tenant_id, 'X-100', 'Ee', 'Ff', ? FROM schools WHERE id=1", (CLS2,)); c.commit()
 check("the same Admission No. in a DIFFERENT class is allowed", c.execute("SELECT COUNT(*) FROM students WHERE admission_no='X-100'").fetchone()[0] == 2)
 c.close()
-r = post(ADMIN, "/admin/teachers", {"name": "New Teacher", "username": "newteach", "password": "Pass12345", "email": "nt@example.com", "phone": "08031234567", "rbac_role": "Teacher"}, "/admin/teachers")
+r = post(ADMIN, "/admin/teachers", {"name": "New Teacher", "username": "newteach", "password": "Pass12345", "email": "nt@example.com", "phone": "08031234567", "rbac_role": "Teacher", "date_of_birth": "1985-03-02", "gender": "F"}, "/admin/teachers")
 check("Staff / Employee ID is required when registering staff", one("SELECT COUNT(*) FROM users WHERE username='newteach'") == 0 and "Staff / Employee ID is required" in flashes(r), flashes(r))
-r = post(ADMIN, "/admin/teachers", {"name": "New Teacher", "username": "newteach", "staff_id": "GSS/T/014", "password": "Pass12345", "email": "nt@example.com", "phone": "08031234567", "rbac_role": "Teacher"}, "/admin/teachers")
+r = post(ADMIN, "/admin/teachers", {"name": "New Teacher", "username": "newteach", "staff_id": "GSS/T/014", "password": "Pass12345", "email": "nt@example.com", "phone": "08031234567", "rbac_role": "Teacher", "date_of_birth": "1985-03-02", "gender": "F"}, "/admin/teachers")
 check("...and is saved with the new staff member", one("SELECT staff_id FROM users WHERE username='newteach'") == "GSS/T/014", flashes(r))
-r = post(ADMIN, "/admin/teachers", {"name": "Other T", "username": "newteach2", "staff_id": "gss/t/014", "password": "Pass12345", "email": "nt2@example.com", "phone": "08031234568", "rbac_role": "Teacher"}, "/admin/teachers")
+r = post(ADMIN, "/admin/teachers", {"name": "Other T", "username": "newteach2", "staff_id": "gss/t/014", "password": "Pass12345", "date_of_birth": "1985-03-02", "gender": "F", "email": "nt2@example.com", "phone": "08031234568", "rbac_role": "Teacher"}, "/admin/teachers")
 check("a duplicate Staff ID in the same school is refused with a clear message", one("SELECT COUNT(*) FROM users WHERE username='newteach2'") == 0 and "already used" in flashes(r), flashes(r))
 import profile_core as PC
 spec = next(f for f in PC.STAFF_FIELDS if f["key"] == "staff_id") if hasattr(PC, "STAFF_FIELDS") else None
@@ -181,7 +181,7 @@ check("hamburger: the menu is stacked ABOVE its backdrop, and has an in-menu Clo
 # ======================================================= 7) CSV imports
 tpl = ADMIN.get("/admin/students/csv_template").get_data(as_text=True).strip().splitlines()[0]
 check("student template headings are exactly the importable fields", tpl.split(",")[:4] == ["admission_no", "first_name", "last_name", "other_names"] and "class_name" in tpl)
-good = "admission_no,first_name,last_name,class_name,gender,date_of_birth,parent_email\nA-001,Ada,Obi,JSS1A,F,2012-05-14,ada@example.com\nA-002,Bayo,Eze,JSS1A,m,14/05/2011,\nA-001,Kemi,Lawal,JSS2B,F,,\n"
+good = "admission_no,first_name,last_name,class_name,gender,date_of_birth,parent_email\nA-001,Ada,Obi,JSS1A,F,2012-05-14,ada@example.com\nA-002,Bayo,Eze,JSS1A,m,14/05/2011,\nA-001,Kemi,Lawal,JSS2B,F,2012-06-01,\n"
 r = post(ADMIN, "/admin/students/bulk_upload", {}, "/admin/students", files=csvfile(good))
 check("a valid student file imports every row", one("SELECT COUNT(*) FROM students WHERE admission_no IN ('A-001','A-002')") == 3 and "Imported 3 student(s)" in flashes(r), flashes(r))
 check("...dates and gender are normalised", one("SELECT date_of_birth FROM students WHERE admission_no='A-002'") == "2011-05-14" and one("SELECT gender FROM students WHERE admission_no='A-002'") == "M")
@@ -193,10 +193,10 @@ check("a file with problems saves NOTHING", one("SELECT COUNT(*) FROM students")
 check("...and every problem is named with its row and column", all(x in fl for x in ("Row 3, column gender", "Row 4, column class_name", "Row 5, column admission_no", "Row 6, column admission_no", "Row 6, column date_of_birth")), fl)
 r = post(ADMIN, "/admin/students/bulk_upload", {}, "/admin/students", files=csvfile("name,class\nx,y\n"))
 check("wrong headings give a clear message listing what is missing", "Missing required heading(s): admission_no, first_name, last_name" in flashes(r), flashes(r))
-r = post(ADMIN, "/admin/students/bulk_upload", {}, "/admin/students", files=csvfile("admission_no,first_name,last_name,class_name\n"))
+r = post(ADMIN, "/admin/students/bulk_upload", {}, "/admin/students", files=csvfile("admission_no,first_name,last_name,class_name,gender,date_of_birth\n"))
 check("a headings-only file is refused", "no data rows" in flashes(r))
 sql("UPDATE students SET religion='Christianity' WHERE admission_no='A-001'")
-reg = "admission_no,first_name,last_name,religion\nA-001,Ada,Obi,\nA-009,New,Pupil,Islam\n"
+reg = "admission_no,first_name,last_name,gender,date_of_birth,religion\nA-001,Ada,Obi,F,2012-05-14,\nA-009,New,Pupil,M,2012-01-01,Islam\n"
 post(FT, "/my-class/1/csv_upload", {}, "/my-class/1", files=csvfile(reg))
 check("class register upload: a blank cell does not erase saved data", one("SELECT religion FROM students WHERE admission_no='A-001'") == "Christianity")
 check("...and adds new students to THIS class only", one("SELECT class_id FROM students WHERE admission_no='A-009'") == 1)

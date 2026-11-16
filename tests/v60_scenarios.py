@@ -297,10 +297,10 @@ check("same admission no allowed in a DIFFERENT school", raw("INSERT INTO studen
 cc.close()
 
 # ------------------------------------------------------------------------------------ 4. admin student uniqueness
-r = post(a_c, "/admin/students", {"class_id": first_class, "admission_no": "001", "first_name": "Dup", "last_name": "Licate", "gender": "M"}, page="/admin/students")
+r = post(a_c, "/admin/students", {"class_id": first_class, "admission_no": "001", "first_name": "Dup", "last_name": "Licate", "gender": "M", "date_of_birth": "2012-05-14"}, page="/admin/students")
 check("admin cannot create duplicate admission no", "already used by another student in this school" in " ".join(flashes(a_c)) or "already used" in html(r))
 n_before = db().execute("SELECT COUNT(*) FROM students WHERE school_id=1").fetchone()[0]
-r = post(a_c, "/admin/students", {"class_id": first_class, "admission_no": "NEW-77", "first_name": "Newly", "last_name": "Added", "gender": "F"}, page="/admin/students")
+r = post(a_c, "/admin/students", {"class_id": first_class, "admission_no": "NEW-77", "first_name": "Newly", "last_name": "Added", "gender": "F", "date_of_birth": "2012-05-14"}, page="/admin/students")
 check("admin can create a fresh student", db().execute("SELECT COUNT(*) FROM students WHERE school_id=1").fetchone()[0] == n_before + 1)
 new_id = db().execute("SELECT id FROM students WHERE admission_no='NEW-77'").fetchone()[0]
 check("new student is tenant-stamped", tuple(db().execute("SELECT school_id,tenant_id FROM students WHERE id=?", (new_id,)).fetchone()) == (1, "1"))

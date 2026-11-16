@@ -107,7 +107,7 @@ TEACHER = staff("aokafor")
 print("=== 1) Student registration is now logged and shows on the Admin feed ===")
 
 post(ADMIN, "/admin/students", {
-    "class_id": class1, "admission_no": "999", "first_name": "New", "last_name": "Student", "gender": "M",
+    "class_id": class1, "admission_no": "999", "first_name": "New", "last_name": "Student", "gender": "M", "date_of_birth": "2012-05-14",
 }, "/admin/students")
 adash = html(ADMIN.get("/dashboard"))
 check("Recent Activities panel present", "Recent Activities" in adash)
@@ -117,7 +117,7 @@ print("=== 2) Student status change (transfer) is logged ===")
 
 new_student_id = one("SELECT id FROM students WHERE admission_no='999'")["id"]
 post(ADMIN, f"/my-class/{class1}/students/{new_student_id}/edit", {
-    "first_name": "New", "last_name": "Student", "admission_no": "999", "gender": "M", "status": "Transferred",
+    "first_name": "New", "last_name": "Student", "admission_no": "999", "gender": "M", "date_of_birth": "2012-05-14", "status": "Transferred",
 }, f"/my-class/{class1}/roster")
 adash2 = html(ADMIN.get("/dashboard"))
 check("status change appears in the feed", "Student status changed" in adash2 and "Transferred" in adash2, adash2)
