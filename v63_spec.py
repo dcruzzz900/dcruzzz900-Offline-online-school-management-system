@@ -18,6 +18,7 @@ import sqlite3
 from flask import flash, g, redirect, render_template, request, session, url_for
 
 import v63_core as core
+from identity_rules import identity_errors
 
 STAFF_OUTPUT_PATTERNS = [
     (re.compile(r"^/result/(\d+)/(?:pdf|print|email)$"), "student"),
@@ -74,6 +75,8 @@ def register_v63(app, h):
         if u and u["rbac_role"]:
             found.add(canonical_rbac_role(u["rbac_role"]))
         return found
+
+    app.extensions["school_roles_of"] = roles_of      # V107: lets the announcement banners match Accountant / Registrar / other-staff audiences
 
     def is_school_admin():
         return session.get("role") == "admin"
@@ -616,8 +619,8 @@ def register_v63(app, h):
             errors.append("Choose a valid class/arm.")
         if not first or not last:
             errors.append("First and last name are required.")
-        if f.get("gender") not in ("M", "F"):
-            errors.append("Gender is required.")
+        _dob, _gen, _ierrs = identity_errors(f, min_age=1)      # V107: Date of Birth and Gender are compulsory
+        errors += _ierrs
         admission = f.get("admission_no", "").strip() or (next_admission_number(conn, school_id) if not errors else "")
         if admission and class_id and conn.execute("SELECT 1 FROM students s WHERE s.class_id=? AND LOWER(TRIM(s.admission_no))=LOWER(TRIM(?))", (class_id, admission)).fetchone():
             errors.append("That admission number is already used in this class. (The same number may be used in a different class.)")
@@ -637,8 +640,8 @@ def register_v63(app, h):
             cur = conn.execute(
                 "INSERT INTO students (school_id,tenant_id,admission_no,register_no,first_name,last_name,other_names,gender,class_id,date_of_birth,religion,"
                 "parent_name,parent_address,parent_email,parent_phone,parent_relationship,status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'Active')",
-                (school_id, tenant_of(conn, school_id), admission, register_no, first, last, f.get("other_names", "").strip() or None, f.get("gender"), class_id,
-                 f.get("date_of_birth", "").strip() or None, f.get("religion", "").strip() or None, f.get("parent_name", "").strip() or None,
+                (school_id, tenant_of(conn, school_id), admission, register_no, first, last, f.get("other_names", "").strip() or None, _gen, class_id,
+                 _dob, f.get("religion", "").strip() or None, f.get("parent_name", "").strip() or None,
                  f.get("parent_address", "").strip() or None, f.get("parent_email", "").strip() or None, f.get("parent_phone", "").strip() or None,
                  f.get("parent_relationship", "").strip() or None))
             student_id = cur.lastrowid

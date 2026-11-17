@@ -13,8 +13,12 @@ import time
 from flask import abort, flash, redirect, render_template, request, session, url_for
 
 AUDIENCES = (("all", "Everyone"), ("admin", "School administrators"), ("teacher", "Teachers / form teachers"),
-             ("student", "Students"), ("parent", "Parents / guardians"))
-LEVELS = (("info", "Information"), ("success", "Good news"), ("warning", "Important / warning"))
+             ("accountant", "Accountants / bursars"), ("registrar", "Registrars / admissions officers"), ("staff", "Other staff"),
+             ("student", "Students"), ("parent", "Parents / guardians"), ("platform", "Super Administrators (platform)"))
+LEVELS = (("info", "Information"), ("success", "Good news"), ("warning", "Important / warning"), ("danger", "Urgent / alert"))
+PRIORITY_ORDER = "CASE a.level WHEN 'danger' THEN 0 WHEN 'warning' THEN 1 WHEN 'success' THEN 2 ELSE 3 END"
+MAX_DISPLAY_SECONDS = 600
+SCHOOL_AUDIENCES = tuple(x for x in AUDIENCES if x[0] != "platform")
 _VALID_AUD = {a for a, _ in AUDIENCES}
 _VALID_LEVEL = {a for a, _ in LEVELS}
 _last_purge = {"t": 0.0}
@@ -38,6 +42,8 @@ def register_announcements(app, h):
     # ------------------------------------------------------------------ helpers
     def viewer():
         """(actor_type, actor_id, audience_role, school_id) for whoever is logged in, or None."""
+        if session.get("platform_admin_id"):
+            return "platform", session["platform_admin_id"], "platform", None
         if session.get("user_id"):
             role = session.get("role")
             aud = "admin" if role in ("admin", "sub_admin") else ("teacher" if role == "teacher" else role)
@@ -75,23 +81,46 @@ def register_announcements(app, h):
         conn.execute("DELETE FROM announcements WHERE expires_at IS NOT NULL AND expires_at < ?", (cutoff,))
         conn.commit()
 
+    def audiences_for(conn, v):
+        """Every audience this person belongs to. A staff member who is an Accountant (and not a teacher) sees Accountant banners, not Teacher ones."""
+        actor_type, actor_id, aud, school_id = v
+        if actor_type == "platform":
+            return {"platform"}
+        out = {"all", aud}
+        if actor_type == "user" and aud == "teacher":
+            fn = app.extensions.get("school_roles_of")
+            roles = fn(conn, actor_id, school_id) if fn else set()
+            if roles:
+                if not any("Teacher" in r for r in roles):
+                    out.discard("teacher")
+                if "Bursar / Accountant" in roles:
+                    out.add("accountant")
+                if "Registrar / Admissions Officer" in roles:
+                    out.add("registrar")
+                if any(("Teacher" not in r and r not in ("Bursar / Accountant", "Registrar / Admissions Officer")) for r in roles):
+                    out.add("staff")
+        return out
+
     def active_for(conn, v):
         actor_type, actor_id, aud, school_id = v
         now = _fmt(_utc_now())
-        rows = conn.execute(
-            "SELECT a.* FROM announcements a WHERE a.is_active=1 AND (a.school_id IS NULL OR a.school_id=?) "
-            "AND (a.audience='all' OR a.audience=?) AND (a.starts_at IS NULL OR a.starts_at<=?) "
+        auds = sorted(audiences_for(conn, v))
+        marks = ",".join("?" * len(auds))
+        scope = "a.school_id IS NULL" if actor_type == "platform" else "(a.school_id IS NULL OR a.school_id=?)"
+        params = ([] if actor_type == "platform" else [school_id]) + auds + [now, now, actor_type, actor_id]
+        return conn.execute(
+            f"SELECT a.* FROM announcements a WHERE a.is_active=1 AND {scope} "
+            f"AND a.audience IN ({marks}) AND (a.starts_at IS NULL OR a.starts_at<=?) "
             "AND (a.expires_at IS NULL OR a.expires_at>?) "
             "AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.actor_type=? AND d.actor_id=?) "
-            "ORDER BY a.id DESC LIMIT 5", (school_id, aud, now, now, actor_type, actor_id)).fetchall()
-        return rows
+            f"ORDER BY {PRIORITY_ORDER}, a.id DESC LIMIT 5", params).fetchall()
 
     # ------------------------------------------------------------------ banners on dashboards
     @app.context_processor
     def inject_announcement_banners():
         try:
             ep = request.endpoint or ""
-            if "dashboard" not in ep and ep not in ("parent_home", "student_home"):
+            if "dashboard" not in ep and ep not in ("parent_home", "student_home", "registrar_home"):
                 return {}
             v = viewer()
             if not v:
@@ -112,8 +141,9 @@ def register_announcements(app, h):
             abort(403)
         actor_type, actor_id, aud, school_id = v
         conn = get_db()
-        row = conn.execute("SELECT * FROM announcements WHERE id=? AND (school_id IS NULL OR school_id=?) AND (audience='all' OR audience=?)",
-                           (ann_id, school_id, aud)).fetchone()
+        row = conn.execute("SELECT * FROM announcements WHERE id=? AND (school_id IS NULL OR school_id=?)", (ann_id, school_id)).fetchone()
+        if row and row["audience"] not in audiences_for(conn, v):
+            row = None
         if row and row["dismissible"]:
             try:
                 conn.execute("INSERT INTO announcement_dismissals(announcement_id, actor_type, actor_id) VALUES (?,?,?)", (ann_id, actor_type, actor_id))
@@ -124,10 +154,16 @@ def register_announcements(app, h):
         return redirect(request.referrer or url_for("dashboard"))
 
     # ------------------------------------------------------------------ create / list / remove
-    def _create(conn, school_id, created_by, role_label):
+    def _create(conn, school_id, created_by, role_label, allow_platform=False):
         title = (request.form.get("title") or "").strip()[:150]
         message = (request.form.get("message") or "").strip()[:2000]
         audience = request.form.get("audience") if request.form.get("audience") in _VALID_AUD else "all"
+        if audience == "platform" and not allow_platform:
+            audience = "all"                       # only the platform owner may address Super Administrators
+        try:
+            display_seconds = max(0, min(MAX_DISPLAY_SECONDS, int(request.form.get("display_seconds") or 0)))
+        except ValueError:
+            display_seconds = 0
         level = request.form.get("level") if request.form.get("level") in _VALID_LEVEL else "info"
         dismissible = 1 if request.form.get("dismissible") else 0
         tz_school = school_id or (int(request.form.get("tz_school_id")) if (request.form.get("tz_school_id") or "").isdigit() else None)
@@ -151,8 +187,8 @@ def register_announcements(app, h):
                 flash(e, "error")
             return None
         cur = conn.execute(
-            "INSERT INTO announcements(school_id, title, message, audience, level, dismissible, starts_at, expires_at, created_by, created_by_label) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (school_id, title, message, audience, level, dismissible, _fmt(starts) if starts else None, _fmt(expires), created_by, role_label))
+            "INSERT INTO announcements(school_id, title, message, audience, level, dismissible, display_seconds, starts_at, expires_at, created_by, created_by_label) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (school_id, title, message, audience, level, dismissible, display_seconds, _fmt(starts) if starts else None, _fmt(expires), created_by, role_label))
         return cur.lastrowid
 
     @app.route("/admin/announcements", methods=["GET", "POST"])
@@ -177,7 +213,7 @@ def register_announcements(app, h):
         rows = conn.execute("SELECT * FROM announcements WHERE school_id=? ORDER BY id DESC LIMIT 100", (sid,)).fetchall()
         now = _fmt(_utc_now())
         conn.close()
-        return render_template("admin_announcements.html", scope="school", rows=rows, now=now, audiences=AUDIENCES, levels=LEVELS, schools=[])
+        return render_template("admin_announcements.html", scope="school", rows=rows, now=now, audiences=SCHOOL_AUDIENCES, levels=LEVELS, schools=[])
 
     @app.route("/platform/announcements", methods=["GET", "POST"])
     @platform_admin_required
@@ -194,7 +230,7 @@ def register_announcements(app, h):
                 if school_id and not conn.execute("SELECT 1 FROM schools WHERE id=?", (school_id,)).fetchone():
                     flash("That school does not exist.", "error")
                 else:
-                    new_id = _create(conn, school_id, None, f"Platform Admin: {session.get('platform_admin_name')}")
+                    new_id = _create(conn, school_id, None, f"Platform Admin: {session.get('platform_admin_name')}", allow_platform=True)
                     if new_id:
                         log_audit(conn, "platform_admin", session.get("platform_admin_name"), "announcement_created",
                                   details=f"announcement #{new_id} to {school_id or 'ALL schools'}", school_id=school_id)
