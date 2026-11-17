@@ -209,4 +209,112 @@ with A.app.test_request_context():
 check("one reusable React component file drives every header", os.path.exists("static/js/react-ui/welcome-header.js") and "DashboardWelcomeHeader" in open("static/js/react-ui/welcome-header.js").read())
 check("welcome header is branded (uses the school's colours) and works in dark mode", "--theme-secondary" in open("static/css/welcome-header.css").read())
 
+print("=== 10) Theme & Branding backgrounds ===")
+import branding_backgrounds as B, random, subprocess
+check("standard look builds nothing", B.build("default") is None)
+check("every preset: text contrast >= 4.5:1 in light AND dark", all(B.worst_contrast("preset", k) >= 4.5 for k in B.PRESETS), min(B.worst_contrast("preset", k) for k in B.PRESETS))
+random.seed(5); worst = 99
+for _ in range(1500):
+    rc = lambda: "#%06x" % random.randrange(1 << 24)
+    for m in ("solid", "gradient"): worst = min(worst, B.worst_contrast(m, c1=rc(), c2=rc()))
+check("3000 random custom backgrounds: text contrast never below 4.5:1 (a scrim is added automatically)", worst >= 4.5, worst)
+check("garbage colours / modes / angles fall back safely (no CSS injection)", B.clean("evil", "x", "red;}body{display:none", "url(javascript:1)", "abc") == ("default", "sky", "#e6f0ff", "#ffffff", 160) and "javascript" not in str(B.build("gradient", c1="url(javascript:1)", c2="#fff;}")))
+# the browser preview is a port of the server builder: identical output on random inputs
+js = f"""
+global.window = {{}}; global.document = {{ getElementById: () => null }};
+const src = require('fs').readFileSync('static/js/react-ui/theme-bg-preview.js','utf8'); eval(src);
+const P = JSON.parse(process.argv[1]); window.SchoolHubBg.setPresets(P);
+const cases = JSON.parse(process.argv[2]); console.log(JSON.stringify(cases.map(c => window.SchoolHubBg.build(c[0],c[1],c[2],c[3],c[4]))));
+"""
+random.seed(9); cases = []
+for _ in range(600):
+    rc = lambda: "#%06x" % random.randrange(1 << 24)
+    cases.append([random.choice(["default", "preset", "solid", "gradient", "weird"]), random.choice(list(B.PRESETS) + ["nope"]), rc(), rc(), random.choice([0, 45, 135, 160, 360, 999, "x"])])
+presets_js = {k: [v[0], v[1], v[2], v[3], v[4], v[5]] for k, v in B.PRESETS.items()}
+try:
+    out = subprocess.run(["node", "-e", js, json.dumps(presets_js), json.dumps(cases)], capture_output=True, text=True, timeout=60)
+    got = json.loads(out.stdout); want = [B.build(*c) for c in cases]
+    check("live-preview JavaScript == server builder on 600 random inputs", got == want, (out.stderr[:200], sum(1 for g, w in zip(got, want) if g != w)))
+except Exception as e:
+    check("live-preview JavaScript == server builder", False, repr(e)[:200])
+row = lambda: one("SELECT bg_mode||'|'||bg_preset||'|'||bg_apply_auth FROM schools WHERE id=1")
+check("new schools keep the standard look, sign-in switch OFF", row() == "default|sky|0")
+base_form = {"theme_preset": "default", "dashboard_primary_color": "#1f6feb", "dashboard_secondary_color": "#0b3b75", "dashboard_accent_color": "#7c4dff", "dashboard_sidebar_style": "dark", "dashboard_header_style": "solid",
+             "auth_branding_enabled": "1", "auth_logo_opacity": "0.1", "auth_logo_position": "center", "auth_background_style": "watermark", "auth_show_school_name": "1"}
+post(ADMIN, "/admin/theme", {**base_form, "bg_mode": "preset", "bg_preset": "ocean", "bg_apply_auth": "1"}, "/admin/theme")
+check("saving a preset + the sign-in switch stores them", row() == "preset|ocean|1", row())
+d = html(ADMIN.get("/dashboard"))
+check("dashboards get the custom background (light + dark values, readable text colours)", "data-custom-bg" in d and "--custom-bg-light:" in d and "--custom-bg-dark:" in d and "--custom-ink-light:" in d)
+code = one("SELECT school_code FROM schools WHERE id=1")
+check("switch ON: the sign-in page of THAT school uses the background", "data-auth-bg" in html(anon.get("/login?school_code=" + code)) and "data-auth-bg" in html(anon.get("/register?school_code=" + code)))
+check("...an unidentified visitor still sees the standard page (no cross-school leak)", "data-auth-bg" not in html(anon.get("/login")))
+post(ADMIN, "/admin/theme", {**base_form, "bg_mode": "preset", "bg_preset": "ocean"}, "/admin/theme")
+check("switch OFF: sign-in keeps the standard background, dashboards keep the custom one", "data-auth-bg" not in html(anon.get("/login?school_code=" + code)) and "data-custom-bg" in html(ADMIN.get("/dashboard")))
+post(ADMIN, "/admin/theme", {**base_form, "bg_mode": "gradient", "bg_color1": "#ff0000", "bg_color2": "#0000ff", "bg_angle": "45"}, "/admin/theme")
+check("custom gradient is stored and rendered", row().startswith("gradient|") and "linear-gradient(" in html(ADMIN.get("/dashboard")).split("--custom-bg-light:")[1][:200])
+post(ADMIN, "/admin/theme", {**base_form, "bg_mode": "solid", "bg_color1": "x;}body{display:none"}, "/admin/theme")
+check("a malicious colour value is rejected, never reaches the page", "display:none" not in html(ADMIN.get("/dashboard")).split("</style>")[0])
+post(ADMIN, "/admin/theme/reset", {}, "/admin/theme")
+check("Reset to default theme restores colours, standard background and switch OFF", row() == "default|sky|0" and one("SELECT dashboard_primary_color FROM schools WHERE id=1") == "#1f6feb")
+check("a teacher cannot change or reset the theme", FT.post("/admin/theme/reset", data={"csrf_token": csrf(FT)}).status_code in (302, 403))
+pg = html(ADMIN.get("/admin/theme"))
+check("Theme page: backgrounds card, presets, custom colour/gradient, auth switch, live preview, reset", all(x in pg for x in ('id="bgCard"', 'name="bg_preset"', 'name="bg_color1"', 'name="bg_apply_auth"', 'id="bgPreview"', "Reset to default theme", "Apply Custom Background to Authentication Pages")))
+
+print("=== 11) shared notification banner on every dashboard ===")
+pwh = generate_password_hash("Pass1234")
+run("INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, rbac_role, is_active) SELECT school_id, tenant_id, 'Acc Ountant', 'acct107', ?, 'teacher', 'Bursar / Accountant', 1 FROM users WHERE username='admin'", pwh)
+run("INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, rbac_role, is_active) SELECT school_id, tenant_id, 'Reg Istrar', 'regi107', ?, 'teacher', 'Registrar / Admissions Officer', 1 FROM users WHERE username='admin'", pwh)
+run("INSERT INTO users (school_id, tenant_id, name, username, password_hash, role, rbac_role, is_active) SELECT school_id, tenant_id, 'Guide Counsel', 'guid107', ?, 'teacher', 'Guidance/Counselling Officer', 1 FROM users WHERE username='admin'", pwh)
+ACC, REG, GUID = login("acct107"), login("regi107"), login("guid107")
+exp = (datetime.datetime.utcnow() + datetime.timedelta(days=2)).strftime("%Y-%m-%d %H:%M:%S")
+for aud in ("all", "admin", "teacher", "accountant", "registrar", "staff", "student", "parent", "platform"):
+    run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (1,?,?,?,?,1,?,'t')", f"BN-{aud}", "m", aud, "info", exp)
+def seen(c, url):
+    d = html(c.get(url)); return {m for m in re.findall(r"BN-(\w+)", d)}
+check("School Admin sees: everyone + admin", seen(ADMIN, "/dashboard") >= {"all", "admin"} and not (seen(ADMIN, "/dashboard") & {"teacher", "accountant", "registrar", "student", "parent", "platform"}), seen(ADMIN, "/dashboard"))
+check("Teacher sees: everyone + teacher only", seen(FT, "/dashboard") == {"all", "teacher"}, seen(FT, "/dashboard"))
+check("Accountant (not a teacher) sees: everyone + accountant only", seen(ACC, "/dashboard") == {"all", "accountant"}, seen(ACC, "/dashboard"))
+check("Registrar sees: everyone + registrar only", seen(REG, "/dashboard") == {"all", "registrar"} and seen(REG, "/registrar") == {"all", "registrar"}, (seen(REG, "/dashboard"), seen(REG, "/registrar")))
+check("Other staff sees: everyone + other staff only", seen(GUID, "/dashboard") == {"all", "staff"}, seen(GUID, "/dashboard"))
+ST = A.app.test_client()
+with ST.session_transaction() as s:
+    s.update({"student_id": 1, "role": "student", "school_id": 1, "tenant_id": one("SELECT tenant_id FROM schools WHERE id=1"), "login_time": datetime.datetime.utcnow().isoformat(timespec="seconds")})
+check("Student sees: everyone + students only", seen(ST, "/student/dashboard") == {"all", "student"}, seen(ST, "/student/dashboard"))
+run("INSERT INTO parent_accounts (school_id, tenant_id, name, username, password_hash, is_active, account_status, signup_status) SELECT id, tenant_id, 'Par Ent', 'par107', ?, 1, 'active', 'approved' FROM schools WHERE id=1", pwh)
+PID = one("SELECT id FROM parent_accounts WHERE username='par107'")
+PR = A.app.test_client()
+with PR.session_transaction() as s:
+    s.update({"parent_id": PID, "role": "parent", "school_id": 1, "name": "Par Ent", "tenant_id": one("SELECT tenant_id FROM schools WHERE id=1"), "login_time": datetime.datetime.utcnow().isoformat(timespec="seconds"), "account_status": "active"})
+check("Parent sees: everyone + parents only", seen(PR, "/parent/dashboard") == {"all", "parent"}, seen(PR, "/parent/dashboard"))
+run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (NULL,'BN-platformwide','m','platform','info',1,?,'Platform Admin: Root')", exp)
+PA = A.app.test_client()
+with PA.session_transaction() as s: s["platform_admin_id"] = 1; s["platform_admin_name"] = "Root"
+check("Super Admin sees the platform-level banner (and no school's banners)", seen(PA, "/platform/dashboard") == {"platformwide"}, seen(PA, "/platform/dashboard"))
+check("a school-level 'platform' announcement never reaches a Super Admin dashboard or any school user", "platformwide" not in seen(ADMIN, "/dashboard") and "platform" not in seen(PA, "/platform/dashboard"))
+r = post(ADMIN, "/admin/announcements", {"title": "Sneaky", "message": "m", "audience": "platform", "level": "info", "expires_at": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")}, "/admin/announcements")
+check("a School Admin cannot address Super Administrators (coerced to everyone in their own school)", one("SELECT audience FROM announcements WHERE title='Sneaky'") == "all")
+check("the school form does not even offer the Super Administrator audience", 'value="platform"' not in html(ADMIN.get("/admin/announcements")))
+check("...the platform form does", 'value="platform"' in html(PA.get("/platform/announcements")))
+# isolation + priority + duration
+run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (7,'BN-otherschool','m','all','info',1,?,'t')", exp)
+check("another school's banner is never shown (tenant isolation)", "otherschool" not in seen(FT, "/dashboard") | seen(ADMIN, "/dashboard") | seen(ST, "/student/dashboard"))
+run("DELETE FROM announcements WHERE title LIKE 'BN-%'")
+for lvl in ("info", "warning", "danger", "success"):
+    run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,display_seconds,created_by_label) VALUES (1,?,?,?,?,1,?,?,'t')", f"BN-{lvl}", "m", "teacher", lvl, exp, 30 if lvl == "danger" else 0)
+order = re.findall(r"BN-(\w+)", html(FT.get("/dashboard"))); order = [o for i, o in enumerate(order) if o not in order[:i]]
+check("priorities are ordered Urgent, Important, Good news, Information", order == ["danger", "warning", "success", "info"], order)
+d = html(FT.get("/dashboard"))
+check("Urgent banners are announced assertively (role=alert) and carry their auto-hide seconds", 'role="alert"' in d and 'data-ann-seconds="30"' in d and "Urgent</span>" in d)
+rr = post(ADMIN, "/admin/announcements", {"title": "Timed", "message": "m", "audience": "teacher", "level": "info", "display_seconds": "45", "expires_at": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")}, "/admin/announcements")
+check("administrators can configure the display duration", one("SELECT display_seconds FROM announcements WHERE title='Timed'") == 45)
+post(ADMIN, "/admin/announcements", {"title": "Silly", "message": "m", "audience": "teacher", "level": "info", "display_seconds": "999999", "expires_at": (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")}, "/admin/announcements")
+check("...within sensible limits (max 600 s)", one("SELECT display_seconds FROM announcements WHERE title='Silly'") == 600)
+did = one("SELECT id FROM announcements WHERE title='BN-info'")
+FT.post(f"/announcements/{did}/dismiss", data={"csrf_token": csrf(FT)})
+check("a person can dismiss a banner and it stays dismissed for them only", "info" not in seen(FT, "/dashboard") and "BN-info" not in html(ACC.get("/dashboard")))
+check("the ONE shared banner partial is included by the base layout, so every dashboard shows it", '_announcement_banners.html' in open("templates/base.html").read())
+check("...and no dashboard template adds a second copy", not any("_announcement_banners.html" in open(f"templates/{n}").read() for n in ("teacher_dashboard.html", "student_dashboard.html", "parent_dashboard.html", "platform_dashboard.html", "registrar_dashboard.html")))
+run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (1,'BN-once','m','all','info',1,?,'t')", exp)
+check("each banner is rendered exactly once on every dashboard", all(html(c).count("BN-once") == 1 for c in (ADMIN.get("/dashboard"), FT.get("/dashboard"), ACC.get("/dashboard"), REG.get("/registrar"), ST.get("/student/dashboard"), PR.get("/parent/dashboard"))))
+
 print(f"\n{PASS} passed, {len(FAIL)} failed"); sys.exit(1 if FAIL else 0)
