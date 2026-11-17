@@ -15,6 +15,7 @@
       <label>Show to<select name="audience" class="form-select">{% for k, l in audiences %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
       <label>Style<select name="level" class="form-select">{% for k, l in levels %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
       <label>Starts <small class="muted">(optional - blank = now)</small><input type="datetime-local" name="starts_at" class="form-control"></label>
+      <label>Auto-hide after <span class="muted">(seconds; 0 = stays until dismissed or expired)</span><input type="number" name="display_seconds" min="0" max="600" step="5" value="0" class="form-control"></label>
       <label>Expires <span class="req">*</span><input type="datetime-local" name="expires_at" required class="form-control"></label>
     </div>
     <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="dismissible" value="1" checked style="width:auto" class="form-check-input"> Users may dismiss (close) it</label>
