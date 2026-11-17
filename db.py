@@ -4341,3 +4341,23 @@ def migration_086_v107_parent_identity(conn):
 
 STEPS.append(("parent_identity_v107", migration_086_v107_parent_identity))
 
+
+def migration_087_v107_custom_background(conn):
+    """V107: Theme & Branding backgrounds (preset / solid / gradient) and the switch that applies them to the sign-in screens.
+    Additive; existing schools keep the standard look (mode 'default', switch OFF)."""
+    for col, ddl in (("bg_mode", "TEXT NOT NULL DEFAULT 'default'"), ("bg_preset", "TEXT NOT NULL DEFAULT 'sky'"),
+                     ("bg_color1", "TEXT NOT NULL DEFAULT '#e6f0ff'"), ("bg_color2", "TEXT NOT NULL DEFAULT '#ffffff'"),
+                     ("bg_angle", "INTEGER NOT NULL DEFAULT 160"), ("bg_apply_auth", "INTEGER NOT NULL DEFAULT 0")):
+        ensure_column(conn, "schools", col, ddl)
+
+
+STEPS.append(("custom_background_v107", migration_087_v107_custom_background))
+
+
+def migration_088_v107_announcement_duration(conn):
+    """V107: how long (seconds) a banner stays on screen before it tucks itself away; 0 = until dismissed / expired. Additive."""
+    ensure_column(conn, "announcements", "display_seconds", "INTEGER NOT NULL DEFAULT 0")
+
+
+STEPS.append(("announcement_duration_v107", migration_088_v107_announcement_duration))
+

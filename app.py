@@ -725,6 +725,34 @@ def auth_branding():
     return jsonify(payload)
 
 
+def _school_bg(school):
+    if not school:
+        return None
+    k = school.keys()
+    if "bg_mode" not in k:
+        return None
+    return branding_backgrounds.build(school["bg_mode"], school["bg_preset"], school["bg_color1"], school["bg_color2"], school["bg_angle"])
+
+
+@app.context_processor
+def inject_custom_background():
+    """V107: custom background for the dashboards (signed-in school) and - only if 'Apply Custom Background to Authentication Pages' is ON -
+    for the sign-in / sign-up screens of the tenant being visited. Built by branding_backgrounds.py from validated values only."""
+    dash = auth = None
+    try:
+        if session.get("school_id"):
+            conn = get_db()
+            dash = _school_bg(get_school(conn, session["school_id"]))
+            conn.close()
+        else:
+            school = _public_auth_school()
+            if school and "bg_apply_auth" in school.keys() and school["bg_apply_auth"]:
+                auth = _school_bg(school)
+    except Exception:
+        pass
+    return dict(custom_bg=dash, auth_custom_bg=auth)
+
+
 @app.context_processor
 def inject_portal_school():
     return dict(portal_school=g.get("portal_school"))
@@ -1278,6 +1306,7 @@ app.jinja_env.filters["hex_rgb"] = hex_rgb
 app.jinja_env.filters["contrast_ink"] = contrast_ink
 
 
+import branding_backgrounds
 from passport_fit import save_passport, fit_passport   # V107: passport photographs
 from identity_rules import GENDER_CODES, GENDER_LABELS, normalise_gender, parse_dob, identity_errors   # V107: the one DOB + Gender rule
 
@@ -11767,8 +11796,20 @@ def admin_theme():
         auth_background_style=request.form.get("auth_background_style","watermark") if request.form.get("auth_background_style","watermark") in ("watermark","soft","plain") else "watermark"
         auth_show_school_name=1 if request.form.get("auth_show_school_name","1") == "1" else 0
         auth_branding_enabled=1 if request.form.get("auth_branding_enabled","1") == "1" else 0
-        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,auth_logo_opacity=?,auth_logo_position=?,auth_background_style=?,auth_show_school_name=?,auth_branding_enabled=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),auth_logo_opacity,auth_logo_position,auth_background_style,auth_show_school_name,auth_branding_enabled,sid)); conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
-    conn.close(); return render_template("theme_branding.html",school=school,presets=presets)
+        conn.execute("UPDATE schools SET theme_preset=?,dashboard_primary_color=?,dashboard_secondary_color=?,dashboard_accent_color=?,dashboard_sidebar_style=?,dashboard_header_style=?,auth_logo_opacity=?,auth_logo_position=?,auth_background_style=?,auth_show_school_name=?,auth_branding_enabled=? WHERE id=?",(preset,primary,secondary,accent,request.form.get("dashboard_sidebar_style","dark"),request.form.get("dashboard_header_style","solid"),auth_logo_opacity,auth_logo_position,auth_background_style,auth_show_school_name,auth_branding_enabled,sid))
+        _m,_p,_c1,_c2,_ang=branding_backgrounds.clean(request.form.get("bg_mode"),request.form.get("bg_preset"),request.form.get("bg_color1"),request.form.get("bg_color2"),request.form.get("bg_angle"))
+        conn.execute("UPDATE schools SET bg_mode=?,bg_preset=?,bg_color1=?,bg_color2=?,bg_angle=?,bg_apply_auth=? WHERE id=?",(_m,_p,_c1,_c2,_ang,1 if request.form.get("bg_apply_auth")=="1" else 0,sid))
+        conn.commit(); conn.close(); flash("Theme & branding saved.","success"); return redirect(url_for("admin_theme"))
+    conn.close(); return render_template("theme_branding.html",school=school,presets=presets,bg_presets_full={k:{"label":v[0],"la":v[1],"lb":v[2],"da":v[3],"db":v[4],"angle":v[5]} for k,v in branding_backgrounds.PRESETS.items()},bg_presets={k:{"label":v[0],"light":branding_backgrounds.build("preset",k)["light"],"dark":branding_backgrounds.build("preset",k)["dark"]} for k,v in branding_backgrounds.PRESETS.items()})
+
+
+@app.route("/admin/theme/reset",methods=["POST"])
+@login_required("admin","sub_admin")
+def admin_theme_reset():
+    """V107: back to the standard theme - default colours, standard backgrounds, custom background OFF for sign-in pages. Logo, name and fonts are kept."""
+    conn=get_db()
+    conn.execute("UPDATE schools SET theme_preset='default',dashboard_primary_color='#1f6feb',dashboard_secondary_color='#0b3b75',dashboard_accent_color='#7c4dff',dashboard_sidebar_style='dark',dashboard_header_style='solid',bg_mode='default',bg_preset='sky',bg_color1='#e6f0ff',bg_color2='#ffffff',bg_angle=160,bg_apply_auth=0 WHERE id=?",(current_school_id(),))
+    conn.commit(); conn.close(); flash("Theme reset to the standard look.","success"); return redirect(url_for("admin_theme"))
 
 
 @app.route("/school-dashboard")
