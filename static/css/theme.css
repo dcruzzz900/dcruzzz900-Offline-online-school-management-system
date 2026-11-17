@@ -198,3 +198,33 @@ table{font-size:.95rem}.table-responsive{max-width:100%}
 /* small phones: keep the top bar on one row (text-size control loses its % label, buttons shrink) */
 @media (max-width:520px){.fs-control{margin-right:4px}.fs-control .fs-val{display:none}.fs-control .btn{min-width:1.9rem;padding:.15rem .35rem}
   .theme-toggle{width:34px;height:34px}.top-actions{gap:4px;flex-wrap:nowrap}}
+
+
+/* ---- V107: custom backgrounds (Theme & Branding). Colours come from branding_backgrounds.py: a computed scrim guarantees >= 4.6:1 text contrast ---- */
+body[data-custom-bg]{--page-bg:var(--custom-bg-light);--page-ink:var(--custom-ink-light)}
+html[data-bs-theme="dark"] body[data-custom-bg]{--page-bg:var(--custom-bg-dark);--page-ink:var(--custom-ink-dark)}
+body[data-custom-bg] .app-main{background:var(--page-bg)!important;background-attachment:fixed}
+body[data-custom-bg] .app-main .page-heading,body[data-custom-bg] .app-main .page-heading h1,body[data-custom-bg] .app-main .page-heading p,body[data-custom-bg] .app-main .page-heading .eyebrow,
+body[data-custom-bg] .app-main .page-head h1,body[data-custom-bg] .app-main>.container>h1,body[data-custom-bg] .app-main>h1{color:var(--page-ink)!important}
+body[data-auth-bg]{--auth-bg:var(--auth-bg-light);--auth-ink:var(--auth-ink-light)}
+html[data-bs-theme="dark"] body[data-auth-bg]{--auth-bg:var(--auth-bg-dark);--auth-ink:var(--auth-ink-dark)}
+html body[data-auth-bg]{background:var(--auth-bg)!important;background-attachment:fixed;color:var(--auth-ink)}
+body[data-auth-bg] .hub-auth-screen,body[data-auth-bg] .beautiful-auth{background:transparent}
+/* live preview tiles */
+.bgm{border-radius:.7rem;border:1px solid var(--border,#d5dde8);overflow:hidden;min-height:11.5rem;padding:.6rem;display:flex;flex-direction:column;gap:.4rem;font-size:.72rem}
+.bgm-top{padding:.3rem .5rem;border-radius:.4rem;font-weight:700}.bgm-head{display:grid;line-height:1.25}.bgm-head b{font-size:.9rem}
+.bgm-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.4rem}.bgm-c{border-radius:.4rem;padding:.4rem;display:grid}.bgm-c b{font-size:1rem}
+.bgm-auth{align-items:center;justify-content:center}.bgm-card{width:70%;border-radius:.6rem;overflow:hidden;padding-bottom:.5rem;display:grid;gap:.3rem}
+.bgm-hero{padding:.5rem;color:#fff;font-weight:700}.bgm-line{height:.45rem;background:rgba(127,127,127,.28);margin:0 .5rem;border-radius:3px}.bgm-line.short{width:55%}
+.bgm-btn{margin:.2rem .5rem 0;padding:.3rem;border-radius:.35rem;color:#fff;text-align:center;font-weight:700}.bgm-cap{font-weight:600}
+
+/* ---- V107: shared announcement banner: four priorities, both themes, auto-hide ---- */
+.ann{align-items:center}.ann-flag{font-size:1.1rem;flex:none}.ann-pri{font-size:.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:.1rem .45rem;border-radius:99px;background:rgba(0,0,0,.12);margin-left:.35rem}
+.ann-danger{background:#fde8e8;border-color:#f3b4b4;color:#7f1d1d}
+.ann{transition:opacity .35s,max-height .35s,margin .35s;max-height:30rem}.ann.ann-hiding{opacity:0;max-height:0;padding-top:0;padding-bottom:0;margin:0;border-width:0;overflow:hidden}
+html[data-bs-theme="dark"] .ann{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.4);color:#bae6fd}
+html[data-bs-theme="dark"] .ann-success{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.4);color:#a7f3d0}
+html[data-bs-theme="dark"] .ann-warning{background:rgba(251,191,36,.13);border-color:rgba(251,191,36,.45);color:#fde68a}
+html[data-bs-theme="dark"] .ann-danger{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.5);color:#fecaca}
+.ann-body{text-align:left;flex:1}.ann-body b{display:block}
+body[data-custom-bg] .live-clock,body[data-custom-bg] .app-main>.live-clock{color:var(--page-ink)!important}
