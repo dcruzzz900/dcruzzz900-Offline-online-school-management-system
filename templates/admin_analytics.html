@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% block title %}School Analytics - {{ school_name }}{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "partials/role_charts.html" import render_role_charts %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% block title %}School Analytics - {{ school_name }}{% endblock %}{% block content %}
 <div class="page-heading"><div><div class="eyebrow">SCHOOL ADMINISTRATION</div><h1>School Analytics</h1><p>{% if term %}{{ term.session_name }} · {{ term.name }}{% else %}Set an active academic term to get started.{% endif %}</p><div class="tenant-chip">School ID <strong>{{ school_code or session.get('school_code') or '—' }}</strong><span>•</span> Tenant <strong>{{ session.get('tenant_id') or '—' }}</strong></div></div><a class="btn btn-primary" href="{{ url_for('admin_setup_wizard') }}">Complete School Setup →</a></div>
 <div id="dashFilters" data-config='{{ filter_cfg|tojson }}'></div>
 <div class="stat-grid"><div class="stat-box"><div class="num">{{ stats.students }}</div><div class="label">Students</div></div><div class="stat-box"><div class="num">{{ stats.teachers }}</div><div class="label">Staff</div></div><div class="stat-box"><div class="num">{{ stats.classes }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">{{ stats.subjects }}</div><div class="label">Subjects</div></div></div>
@@ -6,6 +6,7 @@
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('bar') }}</span>Student Performance by Class</h3><p class="muted">Average score and pass rate per class, {% if term %}{{ term.name }}{% else %}current term{% endif %}.</p>
 {% if class_performance_chart %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf" role="img" aria-label="Student performance by class"></canvas></div></div>{% else %}<p class="muted" style="margin-top:14px">No classes to chart yet.</p>{% endif %}</div>
 
+{{ render_role_charts(role_charts) }}
 <div data-slot="gender" style="margin-top:18px">{{ gender_panel(gender_stats, 'Students') }}</div>
 
 <div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance Trend (Last Week)</h3><p class="muted">School-wide daily attendance rate.</p>
@@ -34,7 +35,7 @@
 <div data-slot="top-students">{{ top_students_table(top_students) }}</div>
 </div>
 {% endblock %}
-{% block extra_scripts %}{% include "partials/react_cdn.html" %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/role-charts.js') }}"></script>{% include "partials/react_cdn.html" %}
 {% if class_performance_chart or (gender_stats and (gender_stats.boys or gender_stats.girls)) or attendance_trend or enrolment %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard-charts.js') }}"></script>
