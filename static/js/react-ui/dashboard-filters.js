@@ -19,6 +19,7 @@
     var g = slot("gender"); if (g && p.gender_html !== undefined) { g.innerHTML = p.gender_html; g.classList.remove("gp-loading"); }
     var t = slot("top-students"); if (t && p.top_students_html !== undefined) t.innerHTML = p.top_students_html;
     if (window.schoolHubDashboardCharts && window.schoolHubDashboardCharts.update) window.schoolHubDashboardCharts.update(p.charts || {});
+    if (window.schoolHubRoleCharts && p.role_charts) window.schoolHubRoleCharts.update(p.role_charts);
     document.querySelectorAll("[data-scope-label]").forEach(function (n) { n.textContent = p.scope || ""; });
   }
 
