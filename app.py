@@ -1307,6 +1307,7 @@ app.jinja_env.filters["contrast_ink"] = contrast_ink
 
 
 import branding_backgrounds
+import role_charts
 from passport_fit import save_passport, fit_passport   # V107: passport photographs
 from identity_rules import GENDER_CODES, GENDER_LABELS, normalise_gender, parse_dob, identity_errors   # V107: the one DOB + Gender rule
 
@@ -2792,9 +2793,11 @@ def admin_analytics():
     attendance_trend = school_attendance_trend(conn, school_id)
     top_students = top_performing_students(conn, school_id, term["id"]) if term else []
     class_performance_chart = all_classes_performance(conn, school_id, term["id"]) if term else []
+    _all_ids = [r["id"] for r in conn.execute("SELECT id FROM classes WHERE school_id=?", (school_id,)).fetchall()]
+    role_chart_specs = role_charts.teaching_specs(conn, school_id, term, _all_ids, class_term_result_stats, compute_total)
     conn.close()
     return render_template(
-        "admin_analytics.html", filter_cfg=dashboard_filter_cfg(term), term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
+        "admin_analytics.html", role_charts=role_chart_specs, filter_cfg=dashboard_filter_cfg(term), term=term, stats=stats, gender_stats=gender_stats, plan=plan, plan_alerts=alerts,
         performance_trend=performance_trend, high_classes=high_classes, low_classes=low_classes,
         activities=activities, ranked_classes=ranked_classes, enrolment=enrolment,
         attendance_trend=attendance_trend, top_students=top_students,
@@ -2970,10 +2973,11 @@ def dashboard():
         attendance_trend = school_attendance_trend(conn, school_id, class_ids=_class_ids)
         top_students = top_performing_students(conn, school_id, term["id"], class_ids=_class_ids) if term else []
         class_performance_chart = all_classes_performance(conn, school_id, term["id"], class_ids=_class_ids) if term else []
+        role_chart_specs = role_charts.teaching_specs(conn, school_id, term, _class_ids, class_term_result_stats, compute_total)
         gender_stats = student_gender_stats(conn, "c.id IN ({})".format(",".join("?" * len(_class_ids)) or "NULL"), tuple(_class_ids)) if _class_ids else {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}
         conn.close()
         return render_template(
-            "teacher_dashboard.html", filter_cfg=dashboard_filter_cfg(term), term=term, assignments=assignments,
+            "teacher_dashboard.html", filter_cfg=dashboard_filter_cfg(term), role_charts=role_chart_specs, term=term, assignments=assignments,
             position_label=POSITION_LABELS.get(session.get("position")),
             result_classes=result_classes, is_form_teacher=is_form_teacher,
             class_gender=class_gender, class_performance=class_performance, class_trend=class_trend,
@@ -3054,6 +3058,7 @@ def api_dashboard_analytics():
         perf = all_classes_performance(conn, school_id, term["id"], class_ids=class_ids) if term else []
     else:
         gender, enrolment, attendance, top, perf = {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}, [], [], [], []
+    role_chart_specs = role_charts.teaching_specs(conn, school_id, term, class_ids, class_term_result_stats, compute_total)
     conn.close()
     from partials_bridge import render_dashboard_slots
     return jsonify({
@@ -3066,6 +3071,7 @@ def api_dashboard_analytics():
             "attendanceLabels": [r["label"] for r in attendance], "attendanceRate": [r["rate"] for r in attendance],
             "enrolmentLabels": [r["class_name"] for r in enrolment], "enrolmentCount": [r["count"] for r in enrolment],
         },
+        "role_charts": role_chart_specs,
         **render_dashboard_slots(gender, top, scope),
     })
 
@@ -9674,8 +9680,9 @@ def platform_dashboard():
         "notifications": conn.execute("SELECT COUNT(*) c FROM platform_notifications").fetchone()["c"],
     }
     recent_audit = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 10").fetchall()
+    _platform_specs = role_charts.platform_specs(conn)
     conn.close()
-    return render_template("platform_dashboard.html", stats=stats, recent_audit=recent_audit)
+    return render_template("platform_dashboard.html", stats=stats, recent_audit=recent_audit, role_charts=_platform_specs)
 
 
 @app.route("/platform/control-center")
