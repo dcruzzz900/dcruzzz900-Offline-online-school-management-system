@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/identity_fields.html" import identity_fields %}
+{% extends "base.html" %}{% from "partials/role_charts.html" import render_role_charts %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Registrar &amp; Admissions{% endblock %}
 {% block content %}
 {{ welcome_header('registrar') }}
@@ -26,4 +26,7 @@
 <label>School-defined status<input name="name" placeholder="e.g. Deferred" class="form-control"></label><label><input type="checkbox" name="keeps_enrolled" class="form-check-input"> stays on the class list</label><button class="btn btn-secondary" type="submit">Add status</button></form></div>
 <div class="card" style="overflow-x:auto"><h3>Recent status history</h3><div class="table-responsive"><table class="table table-hover align-middle"><tr><th>Server time</th><th>Student</th><th>From</th><th>To</th><th>Destination / previous school</th><th>Reason</th><th>By</th></tr>
 {% for r in history %}<tr><td>{{ r.server_timestamp }}</td><td><a href="{{ url_for('student_status_history_view', student_id=r.student_id) }}">{{ r.last_name }} {{ r.first_name }}</a></td><td>{{ (r.previous_status or '—')|status_badge if r.previous_status else '—' }}</td><td>{{ r.new_status|status_badge }}</td><td>{{ r.destination_school or r.previous_school or '' }}</td><td>{{ r.reason or '' }}</td><td>{{ r.changed_by_name }}</td></tr>{% else %}<tr><td colspan="7" class="muted">Nothing yet.</td></tr>{% endfor %}</table></div></div>
+<h2 class="h4" style="margin-top:22px">Admissions &amp; enrolment analytics</h2>
+{{ render_role_charts(role_charts) }}
 {% endblock %}
+{% block extra_scripts %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script><script src="{{ url_for('static', filename='js/role-charts.js') }}"></script>{% endblock %}

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% from "partials/role_charts.html" import render_role_charts %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/dash_icons.html" import dicon %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
 {% set _r = my_roles or [] %}{% set _kind = 'accountant' if 'Bursar / Accountant' in _r else ('registrar' if 'Registrar / Admissions Officer' in _r else ('staff' if (_r and 'Teacher' not in _r) else 'teacher')) %}{{ welcome_header(_kind) }}
 <div class="page-heading"><div><div class="eyebrow">TEACHER PORTAL</div><p>{% if position_label %}{{ position_label }} · {% endif %}{% if term %}{{ term.session_name }} · {{ term.name }}{% endif %}</p></div><a class="btn btn-primary" href="{{ url_for('ai_command_center') }}">✦ AI Assistant</a></div>
 <div id="dashFilters" data-config='{{ filter_cfg|tojson }}'></div>
@@ -7,6 +7,7 @@
 <div class="stat-grid"><div class="stat-box"><div class="num">{{ assignments|length }}</div><div class="label">Subject assignments</div></div><div class="stat-box"><div class="num">{{ result_classes|length }}</div><div class="label">Classes</div></div><div class="stat-box"><div class="num">AI</div><div class="label">Teaching support</div></div><div class="stat-box"><div class="num">●</div><div class="label">Online</div></div></div>
 
 {% if class_performance_chart %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('bar') }}</span>Class Performance</h3><p class="muted">Average score and pass rate per class you can see, {% if term %}{{ term.name }}{% else %}current term{% endif %}.</p><div class="chart-scroll"><div class="chart-wrap"><canvas id="chartClassPerf" role="img" aria-label="Class performance"></canvas></div></div></div>{% endif %}
+{{ render_role_charts(role_charts) }}
 <div data-slot="gender" style="margin-top:18px">{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}{{ gender_panel(gender_stats, 'Your classes') }}{% endif %}</div>
 {% if attendance_trend %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance Trend (Last Week)</h3><p class="muted">Daily attendance rate across your classes.</p><div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance" role="img" aria-label="Attendance trend, last week"></canvas></div></div>{% endif %}
 {% if enrolment %}<div class="card chart-card" style="margin-top:18px"><h3><span class="card-icon">{{ dicon('building') }}</span>Enrolment by Class</h3><p class="muted">Active students per class you can see.</p><div class="chart-scroll"><div class="chart-wrap"><canvas id="chartEnrolment" role="img" aria-label="Enrolment by class"></canvas></div></div></div>{% endif %}
@@ -23,7 +24,7 @@
 <div data-slot="top-students">{{ top_students_table(top_students) }}</div>
 </div>
 {% endblock %}
-{% block extra_scripts %}{% include "partials/react_cdn.html" %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/role-charts.js') }}"></script>{% include "partials/react_cdn.html" %}
 {% if class_performance_chart or (gender_stats and (gender_stats.boys or gender_stats.girls)) or attendance_trend or enrolment %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard-charts.js') }}"></script>
