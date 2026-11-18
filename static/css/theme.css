@@ -228,3 +228,10 @@ html[data-bs-theme="dark"] .ann-warning{background:rgba(251,191,36,.13);border-c
 html[data-bs-theme="dark"] .ann-danger{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.5);color:#fecaca}
 .ann-body{text-align:left;flex:1}.ann-body b{display:block}
 body[data-custom-bg] .live-clock,body[data-custom-bg] .app-main>.live-clock{color:var(--page-ink)!important}
+
+/* ---- V109: role-specific chart cards ---- */
+.rc-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));margin:18px 0}
+.rc-card{min-width:0;padding:1rem 1.1rem}.rc-card h3{margin:0 0 .15rem}.rc-sub{margin:0 0 .6rem}
+.rc-body{position:relative;height:17rem}.rc-donut{height:17rem}.rc-empty{padding:1.2rem 0;margin:0}
+.rc-table summary{cursor:pointer;color:var(--brand-link,#1f6feb);margin-top:.5rem}.rc-table table{margin:.4rem 0 0}
+@media (max-width:600px){.rc-body,.rc-donut{height:15rem}}
