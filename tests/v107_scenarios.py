@@ -317,4 +317,84 @@ check("...and no dashboard template adds a second copy", not any("_announcement_
 run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (1,'BN-once','m','all','info',1,?,'t')", exp)
 check("each banner is rendered exactly once on every dashboard", all(html(c).count("BN-once") == 1 for c in (ADMIN.get("/dashboard"), FT.get("/dashboard"), ACC.get("/dashboard"), REG.get("/registrar"), ST.get("/student/dashboard"), PR.get("/parent/dashboard"))))
 
+print("=== 12) role-based dashboard charts (real records only) ===")
+import role_charts as RC
+cx = get_db()
+sids = [r[0] for r in cx.execute("SELECT id FROM students WHERE school_id=1 AND admission_no NOT LIKE 'V107-%' AND admission_no NOT LIKE 'OLD-%' ORDER BY id")][:3]
+today = datetime.date.today()
+mo = lambda back: (today.replace(day=1) - datetime.timedelta(days=30 * back)).strftime("%Y-%m")
+for sid_, back in zip(sids, (1, 1, 3)): cx.execute("UPDATE students SET date_of_admission=? WHERE id=?", (mo(back) + "-10", sid_))
+cx.execute("DELETE FROM student_status_history")
+for sid_, st, back in ((sids[0], "Transferred", 1), (sids[1], "Withdrawn", 1), (sids[2], "Transferred", 2)):
+    cx.execute("INSERT INTO student_status_history(school_id,tenant_id,student_id,previous_status,new_status,effective_date,changed_by_name,changed_by_role) SELECT school_id,tenant_id,?,'Active',?,?,'t','admin' FROM students WHERE id=?", (sid_, st, mo(back) + "-15", sid_))
+cx.commit()
+cx.row_factory = __import__("sqlite3").Row
+sp = {s["id"]: s for s in RC.registrar_specs(cx, 1)}
+lab = lambda back: RC._label(mo(back))
+adm = dict(zip(sp["rcAdmissions"]["labels"], sp["rcAdmissions"]["datasets"][0]["data"]))
+check("registrar: admissions per month are the real admission dates (2 last month, 1 three months ago)", adm[lab(1)] == 2 and adm[lab(3)] == 1 and sum(adm.values()) >= 3, adm)
+mv = {d["label"]: dict(zip(sp["rcMovements"]["labels"], d["data"])) for d in sp["rcMovements"]["datasets"]}
+check("registrar: transfers and withdrawals come from the status history", mv["Transferred"][lab(1)] == 1 and mv["Transferred"][lab(2)] == 1 and mv["Withdrawn"][lab(1)] == 1, mv)
+cx.execute("UPDATE students SET date_of_admission=NULL WHERE id=?", (sids[2],)); cx.commit()
+sp2 = {s["id"]: s for s in RC.registrar_specs(cx, 1)}
+check("registrar: students with no admission date are COUNTED in a note, never invented into a month", "no admission date recorded" in sp2["rcAdmissions"]["subtitle"] and sum(sp2["rcAdmissions"]["datasets"][0]["data"]) == sum(adm.values()) - 1)
+check("registrar: enrolment by class equals the real active head-count", dict(zip(sp["rcEnrolment"]["labels"], sp["rcEnrolment"]["datasets"][0]["data"])).get("JSS1A") == one("SELECT COUNT(*) FROM students WHERE class_id=? AND is_active=1", CLASS1))
+check("registrar: a school with no students/history shows empty states, not fake numbers", all(s["empty"] for s in RC.registrar_specs(cx, 7) if s["id"] != "rcEnrolment") and RC.registrar_specs(cx, 7)[0]["empty"])
+check("registrar: another school's students never appear (tenant isolation)", "ZED" not in sp["rcEnrolment"]["labels"])
+run("INSERT INTO schools (id, name, is_suspended, activation_status, created_at) VALUES (8, 'Gone School', 1, 'active', ?)", mo(2) + "-05 10:00:00")
+run("INSERT INTO schools (id, name, is_suspended, activation_status, created_at) VALUES (9, 'Pending School', 0, 'pending', ?)", mo(0) + "-01 10:00:00")
+ps = {s["id"]: s for s in RC.platform_specs(cx)}
+st = dict(zip(ps["rcSchoolStatus"]["labels"], ps["rcSchoolStatus"]["datasets"][0]["data"]))
+check("super admin: schools by status = real counts (active / suspended / inactive)", st["Suspended"] == 1 and st["Inactive"] >= 1 and st["Active"] >= 1 and sum(st.values()) == one("SELECT COUNT(*) FROM schools"), st)
+check("super admin: registration trend counts schools in their registration month", dict(zip(ps["rcRegistrations"]["labels"], ps["rcRegistrations"]["datasets"][0]["data"]))[lab(2)] >= 1)
+g = ps["rcGrowth"]["datasets"][0]["data"]
+check("super admin: growth is cumulative and never decreases, ending at the total number of schools", all(a <= b for a, b in zip(g, g[1:])) and g[-1] == one("SELECT COUNT(*) FROM schools"), g)
+check("super admin: enrolment per school is each school's own active head-count", dict(zip(ps["rcEnrolmentSchools"]["labels"], ps["rcEnrolmentSchools"]["datasets"][0]["data"])).get("My School", dict(zip(ps["rcEnrolmentSchools"]["labels"], ps["rcEnrolmentSchools"]["datasets"][0]["data"])).get(one("SELECT name FROM schools WHERE id=1"))) == one("SELECT COUNT(*) FROM students WHERE school_id=1 AND is_active=1 AND COALESCE(is_deleted,0)=0"))
+from app import class_term_result_stats, compute_total, current_term
+with A.app.test_request_context():
+    from flask import session as _s
+    _s["school_id"] = 1
+    term = current_term(cx)
+    tspecs = {s["id"]: s for s in RC.teaching_specs(cx, 1, term, [CLASS1], class_term_result_stats, compute_total)}
+rows = cx.execute("SELECT sub.name n, sc.ca1, sc.ca2, sc.ca3, sc.exam FROM scores sc JOIN students st ON st.id=sc.student_id AND st.is_active=1 JOIN subjects sub ON sub.id=sc.subject_id WHERE sc.term_id=? AND st.class_id=?", (term["id"], CLASS1)).fetchall()
+manual = {}
+for r in rows: manual.setdefault(r["n"], []).append(compute_total(r["ca1"], r["ca2"], r["exam"], r["ca3"]))
+want = {k: round(sum(v) / len(v), 1) for k, v in manual.items()}
+check("teacher: subject performance equals an independent calculation from the scores table", dict(zip(tspecs["rcSubjects"]["labels"], tspecs["rcSubjects"]["datasets"][0]["data"])) == want, (want, tspecs["rcSubjects"]["datasets"]))
+pf = tspecs["rcPassFail"]["datasets"][0]["data"]
+check("teacher: pass / fail / not-assessed add up to the class head-count", sum(pf) == one("SELECT COUNT(*) FROM students WHERE class_id=? AND is_active=1", CLASS1), pf)
+check("no term or no classes -> an explanatory empty state, not zeros", all(s["empty"] for s in RC.teaching_specs(cx, 1, None, [CLASS1], class_term_result_stats, compute_total)) and all(s["empty"] for s in RC.teaching_specs(cx, 1, term, [], class_term_result_stats, compute_total)))
+cx.close()
+pg_t, pg_a, pg_r = html(FT.get("/dashboard")), html(ADMIN.get("/admin/analytics")), html(ADMIN.get("/registrar"))
+check("Teacher dashboard shows subject performance + pass/fail charts", "rcSubjects" in pg_t and "rcPassFail" in pg_t and "role-charts.js" in pg_t)
+check("School Analytics shows them too", "rcSubjects" in pg_a and "rcPassFail" in pg_a)
+check("Registrar dashboard shows admissions, movements and enrolment charts", all(x in pg_r for x in ("rcAdmissions", "rcMovements", "rcEnrolment")) and "chart.umd" in pg_r)
+pg_p = html(PA.get("/platform/dashboard"))
+check("Super Admin dashboard shows school status, registration trend, growth and enrolment charts", all(x in pg_p for x in ("rcSchoolStatus", "rcRegistrations", "rcGrowth", "rcEnrolmentSchools")))
+check("a school admin's pages never contain platform-wide figures", "rcSchoolStatus" not in pg_a and "Gone School" not in pg_a and "Gone School" not in pg_t)
+check("every chart has an accessible name and a 'view as table' text alternative", pg_r.count('aria-label="New admissions"') == 1 and "View as table" in pg_r)
+j = FT.get("/api/dashboard/analytics?class_id=%d" % CLASS1).get_json()
+check("the dashboard filter API returns refreshed role charts for the chosen class", [s["id"] for s in j["role_charts"]] == ["rcSubjects", "rcPassFail"] and sum(j["role_charts"][1]["datasets"][0]["data"]) == one("SELECT COUNT(*) FROM students WHERE class_id=? AND is_active=1", CLASS1), j.get("role_charts"))
+check("...and refuses a class outside the user's scope", FT.get("/api/dashboard/analytics?class_id=777").status_code == 403)
+js = open("static/js/role-charts.js").read()
+check("charts follow light/dark and the text size, redraw in place, with integer axes", "sh-theme-change" in js and "sh-font-change" in js and "precision: 0" in js and "update:" in js)
+check("fees charts are NOT faked: no fee ledger exists, so none of the Accountant charts are drawn", not any(("payment" in s["id"].lower() or "fee" in s["id"].lower()) for fn in (lambda: RC.registrar_specs(get_db(), 1), lambda: RC.platform_specs(get_db())) for s in fn()))
+
+print("=== 13) parent + student charts ===")
+PTERM = one("SELECT id FROM terms WHERE is_active=1")
+run("INSERT OR IGNORE INTO scores (student_id, subject_id, term_id, ca1, ca2, exam, tenant_id) SELECT 1, 1, ?, 15, 18, 55, tenant_id FROM students WHERE id=1", PTERM)
+run("INSERT OR IGNORE INTO scores (student_id, subject_id, term_id, ca1, ca2, exam, tenant_id) SELECT 1, 2, ?, 10, 12, 40, tenant_id FROM students WHERE id=1", PTERM)
+__import__("wf_helper").publish(A, PTERM)
+run("INSERT INTO parent_students (parent_id, student_id, school_id, tenant_id, status) SELECT ?, 1, school_id, tenant_id, 'verified' FROM students WHERE id=1", PID)
+pd = html(PR.get("/parent/dashboard")); sd = html(ST.get("/student/dashboard"))
+def _arr(d, key):
+    m = re.search(key + r":\s*(\[[^\]]*\])", d); return json.loads(m.group(1)) if m else None
+check("Student dashboard has academic trend and subject-score charts", all(x in sd for x in ('id="chartAcademicTrend"', 'id="chartSubjectScores"')))
+check("Parent dashboard has trend and subject-performance charts", all(x in pd for x in ('id="chartAcademicTrend"', 'id="chartSubjectScores"')))
+real = lambda d: [v for v in (_arr(d, "subjectScores") or []) if v is not None]
+check("...showing the SAME real figures the child sees (88 and 62); subjects with no score are gaps (null), never zeros", _arr(pd, "subjectScores") == _arr(sd, "subjectScores") and sorted(real(pd)) == [62, 88] and None in _arr(pd, "subjectScores"), (_arr(pd, "subjectScores"), _arr(sd, "subjectScores")))
+check("no attendance recorded -> no attendance chart is drawn (nothing invented)", 'id="chartAttendance"' not in pd and 'id="chartAttendance"' not in sd)
+run("INSERT INTO attendance_records (student_id, class_id, term_id, date, status) SELECT 1, class_id, ?, date('now'), 'present' FROM students WHERE id=1", PTERM)
+check("once attendance is recorded, both dashboards chart it", 'id="chartAttendance"' in html(PR.get("/parent/dashboard")) and 'id="chartAttendance"' in html(ST.get("/student/dashboard")))
+
 print(f"\n{PASS} passed, {len(FAIL)} failed"); sys.exit(1 if FAIL else 0)
