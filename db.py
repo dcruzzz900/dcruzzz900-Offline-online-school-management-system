@@ -3568,6 +3568,7 @@ RESULT_BOOL_SETTINGS = [
     ("show_admission_no", "Show Student Admission No. / Register No.", 1),
     ("show_class", "Show Class / Arm", 1),
     ("show_gender", "Show Student Gender", 1),
+    ("show_dob", "Show Student Date of Birth", 1),
     ("show_session", "Show Academic Session", 1),
     ("show_term", "Show Term", 1),
     ("show_teacher_name", "Show Class Teacher's name under the signature", 1),
@@ -4266,6 +4267,14 @@ def migration_083_v105_fee_summary(conn):
 
 
 STEPS.append(("fee_summary_v105", migration_083_v105_fee_summary))
+
+
+def migration_084_v110_show_dob(conn):
+    """V110: Date of Birth on the result sheet, switched ON/OFF in Result Display Settings (default ON)."""
+    ensure_column(conn, "result_display_settings", "show_dob", "INTEGER NOT NULL DEFAULT 1")
+
+
+STEPS.append(("result_show_dob_v110", migration_084_v110_show_dob))
 
 
 def term_sequence_next(conn, term):
