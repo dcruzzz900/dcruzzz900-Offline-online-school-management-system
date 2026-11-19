@@ -1,0 +1,877 @@
+/* ============================================================
+   My School Hub — Design system derived from school-result-system-v105
+   Unique to this product. Not a clone of other school UIs.
+   Tokens from shell-modern.css + admin-dashboard.css (V105)
+   ============================================================ */
+:root {
+  --navy: #0a2a6b;
+  --navy-deep: #07204f;
+  --navy-darker: #051a42;
+  --blue: #1a6fe8;
+  --blue-bright: #1469e6;
+  --ink: #12234a;
+  --mut: #5b6b88;
+  --bg: #eef2f8;
+  --card: #ffffff;
+  --border: #e3e9f3;
+  --green: #27c25a;
+  --green-dark: #0e9a3c;
+  --status-green: #2be26b;
+  --orange: #ffae1a;
+  --orange-dark: #f57a00;
+  --purple: #a259f0;
+  --purple-dark: #7a2fd6;
+  --cyan: #1ec3f7;
+  --red: #e11d48;
+  --radius: 14px;
+  --shadow: 0 5px 14px rgba(20,40,90,.12);
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.45;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+img { max-width: 100%; }
+
+/* ---- App shell (V105) ----
+   The sidebar is an off-canvas overlay drawer at every breakpoint — the
+   same slide-in-over-content + backdrop pattern the phone layout used to
+   have exclusively (see the "Hamburger drawer" block below for the
+   open/close mechanics). It no longer sits in the flex flow, so .main
+   simply fills the full width at all screen sizes. */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar {
+  width: min(280px, 86vw);
+  background: linear-gradient(180deg, #0a2a6b 0%, #07204f 55%, #051a42 100%);
+  color: #e8efff;
+  display: flex; flex-direction: column;
+  position: fixed; left: 0; top: 0; bottom: 0; height: 100vh; overflow-y: auto;
+  z-index: 50;
+  transform: translateX(-105%);
+  transition: transform .25s ease;
+  box-shadow: 8px 0 24px rgba(0,0,0,.25);
+}
+.sidebar.open { transform: translateX(0); }
+.sidebar-brand {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 6px; padding: 18px 14px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.sidebar-brand .logo {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: #fff; color: var(--navy);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 1.35rem;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+}
+.sidebar-brand h2 { font-size: 1.05rem; font-weight: 700; color: #fff; line-height: 1.2; }
+.sidebar-brand small { font-style: italic; color: #cfe0ff; font-size: 0.78rem; }
+.sidebar nav { flex: 1; padding: 10px 0 16px; }
+.nav-group {
+  margin: 14px 18px 4px; font-size: 0.68rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #8fb0ee; font-weight: 700;
+}
+.nav-item {
+  display: block; border-radius: 10px; margin: 2px 10px;
+  padding: 9px 14px; color: #eaf1ff; font-size: 0.875rem; font-weight: 500;
+  text-decoration: none; transition: background .15s;
+}
+.nav-item:hover { background: rgba(255,255,255,.1); text-decoration: none; }
+.nav-item.active, .nav-item[aria-current="page"] {
+  background: #1a6fe8; color: #fff;
+  box-shadow: 0 3px 10px rgba(26,111,232,.45);
+}
+.sidebar-status {
+  display: flex; align-items: center; gap: 10px;
+  margin: 10px 12px 16px; padding: 10px 12px;
+  border-radius: 12px; background: rgba(255,255,255,.1);
+  border: 1px solid rgba(255,255,255,.14);
+}
+.status-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #2be26b; box-shadow: 0 0 0 4px rgba(43,226,107,.22); flex: none;
+}
+.sidebar-status b { display: block; color: #2be26b; font-size: 0.9rem; }
+.sidebar-status small { display: block; color: #e0ebff; font-size: 0.75rem; }
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  background: #fff; border-bottom: 1px solid #e3e9f3;
+  padding: 10px 20px; position: sticky; top: 0;
+  /* Above the drawer (z-index 50) and its backdrop (z-index 45) at every
+     breakpoint, so the hamburger (now a ✕) stays clickable to close the
+     menu instead of being covered by the open drawer. */
+  z-index: 55;
+  box-shadow: 0 1px 0 rgba(15, 44, 107, 0.04);
+}
+
+/* Settings feature grid with icons */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.settings-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 14px;
+  background: #fff;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.settings-tile:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 6px 16px rgba(15, 44, 107, 0.08);
+  transform: translateY(-2px);
+}
+.settings-tile .st-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+  background: #e8f0fe;
+  color: var(--navy, #0f2c6b);
+}
+.settings-tile .st-ico.green { background: #d1fae5; color: #047857; }
+.settings-tile .st-ico.amber { background: #fef3c7; color: #b45309; }
+.settings-tile .st-ico.rose { background: #ffe4e6; color: #be123c; }
+.settings-tile .st-ico.purple { background: #ede9fe; color: #6d28d9; }
+.settings-tile .st-ico.slate { background: #f1f5f9; color: #334155; }
+.settings-tile .st-ico.teal { background: #ccfbf1; color: #0f766e; }
+.settings-tile .st-body { min-width: 0; }
+.settings-tile .st-body strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+  line-height: 1.25;
+}
+.settings-tile .st-body span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--mut, #64748b);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+.topbar-school { flex: 1; min-width: 0; }
+.topbar-school h1 {
+  font-size: clamp(1rem, 1.7vw, 1.3rem); color: var(--navy);
+  font-weight: 800; line-height: 1.15;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar-school p { color: #243457; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.topbar-search {
+  flex: 0 1 280px;
+  min-width: 140px;
+  max-width: 320px;
+}
+.topbar-search input[type="search"] {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px 0 34px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='M10 10l3 3'/%3E%3C/svg%3E") no-repeat 12px center;
+  font-size: 0.85rem;
+  color: var(--ink, #0f172a);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.topbar-search input[type="search"]:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+  background-color: #fff;
+}
+.topbar-search input[type="search"]::placeholder { color: #94a3b8; }
+.role-chip {
+  background: #e8f0fe; color: var(--navy); font-size: 0.75rem;
+  font-weight: 600; padding: 5px 12px; border-radius: 999px;
+}
+.avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--navy); color: #fff;
+  display: grid; place-items: center; font-weight: 700; font-size: 0.85rem;
+}
+.content { padding: 18px 20px 32px; flex: 1; }
+
+/* ---- Page chrome ---- */
+.page-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+}
+.page-header h2 { font-size: 1.35rem; font-weight: 800; color: var(--navy); }
+.page-header p { color: var(--mut); font-size: 0.9rem; margin-top: 2px; }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 16px; border-radius: 10px; font-size: 0.875rem; font-weight: 600;
+  border: none; cursor: pointer; font-family: inherit; text-decoration: none;
+  transition: transform .1s, box-shadow .15s;
+}
+.btn:hover { text-decoration: none; transform: translateY(-1px); }
+.btn-primary { background: var(--blue); color: #fff; box-shadow: 0 3px 10px rgba(26,111,232,.35); }
+.btn-primary:hover { background: #1560d4; color: #fff; }
+.btn-outline {
+  background: #fff; color: var(--navy); border: 1.5px solid #c5d0e6;
+}
+.btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+/* ---- Cards & tables ---- */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.panel-header h3 { font-size: 0.95rem; font-weight: 700; color: var(--navy); }
+.panel-body { padding: 16px; }
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+table.data th {
+  background: var(--navy); color: #fff; text-align: left;
+  padding: 10px 12px; font-weight: 600; white-space: nowrap;
+}
+table.data td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+table.data tbody tr:hover { background: #f5f8fc; }
+table.data tbody tr:last-child td { border-bottom: none; }
+
+/* ---- KPIs (mini) ---- */
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 18px;
+}
+.kpi-mini {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow);
+}
+.kpi-mini .label { font-size: 0.75rem; color: var(--mut); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.kpi-mini .value { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-top: 2px; }
+
+/* ---- Badges ---- */
+.badge {
+  display: inline-block; padding: 3px 9px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700;
+}
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-blue { background: #dbeafe; color: #1e40af; }
+.badge-orange { background: #ffedd5; color: #c2410c; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-gray { background: #f1f5f9; color: #475569; }
+.badge-purple { background: #f3e8ff; color: #6b21a8; }
+
+/* ---- Forms ---- */
+.form-group { margin-bottom: 14px; }
+.form-group label {
+  display: block; font-size: 0.8rem; font-weight: 600;
+  color: var(--mut); margin-bottom: 5px;
+}
+.form-control {
+  width: 100%; padding: 9px 12px; border: 1.5px solid #c5d0e6;
+  border-radius: 10px; font-size: 0.9rem; font-family: inherit;
+  color: var(--ink); background: #fff;
+}
+.form-control:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,111,232,.15); }
+.filters {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center;
+}
+.filters .form-control { width: auto; min-width: 140px; }
+.search-box { flex: 1; min-width: 180px; }
+
+/* ---- V105 Admin Dashboard specific ---- */
+.ad { display: grid; gap: 14px; color: var(--ink); }
+.ad-banner {
+  position: relative; display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; min-height: 120px; padding: 16px 26px; border-radius: 16px; color: #fff;
+  background: linear-gradient(100deg, #0b4fd0 0%, #1469e6 45%, #0a2a6b 100%);
+  box-shadow: 0 6px 18px rgba(16,60,140,.25); overflow: hidden;
+}
+.ad-banner h1 { margin: 0; font-size: clamp(1.3rem, 2.4vw, 2rem); font-weight: 800; line-height: 1.15; }
+.ad-banner p { margin: 4px 0 0; opacity: .95; font-size: 0.95rem; }
+.ad-banner-clock {
+  display: grid; gap: 6px; padding: 12px 16px; border-radius: 12px;
+  background: rgba(7,32,90,.45); font-size: 0.95rem; font-weight: 700; white-space: nowrap;
+}
+.ad-kpis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+.ad-kpi {
+  display: flex; flex-direction: column; border-radius: 14px; overflow: hidden;
+  color: #fff; box-shadow: 0 5px 14px rgba(20,40,90,.22); min-width: 0;
+}
+.ad-kpi-top { display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; }
+.ad-kpi-top span:not(.ad-kpi-ico) { font-size: 0.9rem; font-weight: 700; opacity: .95; }
+.ad-kpi-top b { font-size: clamp(1.4rem, 2.2vw, 2rem); line-height: 1.05; font-weight: 800; display: block; }
+.k-blue { background: linear-gradient(160deg, #1d78f2, #0a56d6); }
+.k-green { background: linear-gradient(160deg, #27c25a, #0e9a3c); }
+.k-purple { background: linear-gradient(160deg, #a259f0, #7a2fd6); }
+.k-cyan { background: linear-gradient(160deg, #1ec3f7, #0594d6); }
+.k-orange { background: linear-gradient(160deg, #ffae1a, #f57a00); }
+.k-fees { background: linear-gradient(160deg, #3ed45e, #14a43f); }
+.ad-kpi-gender {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  background: #fff; color: var(--ink); padding: 8px 12px;
+}
+.ad-kpi-gender b { display: block; font-size: 0.95rem; }
+.ad-kpi-gender small { display: block; color: var(--mut); font-size: 0.72rem; }
+.ad-kpi-link {
+  display: block; text-align: center; padding: 8px;
+  background: rgba(0,0,0,.12); color: #fff; font-size: 0.78rem; font-weight: 600;
+  text-decoration: none;
+}
+.ad-kpi-link:hover { background: rgba(0,0,0,.2); text-decoration: none; color: #fff; }
+
+.ad-panels {
+  display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 14px;
+}
+.ad-panel {
+  background: #fff; border-radius: 14px; border: 1px solid var(--border);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.ad-panel header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.ad-panel header h2 { font-size: 0.95rem; font-weight: 700; color: var(--navy); flex: 1; }
+.ad-panel header a { font-size: 0.78rem; font-weight: 600; }
+
+/* Charts */
+.chart-wrap { padding: 16px; }
+.chart-wrap svg { width: 100%; height: auto; display: block; }
+.donut-wrap { display: flex; align-items: center; gap: 20px; padding: 16px; flex-wrap: wrap; }
+.donut-legend { display: grid; gap: 8px; font-size: 0.85rem; }
+.donut-legend span { display: flex; align-items: center; gap: 8px; }
+.dot-m { width: 10px; height: 10px; border-radius: 50%; background: #1a6fe8; }
+.dot-f { width: 10px; height: 10px; border-radius: 50%; background: #ec4899; }
+
+.ring-wrap { text-align: center; padding: 16px; }
+.ring-wrap .ring-pct { font-size: 1.8rem; font-weight: 800; color: var(--navy); }
+.ring-wrap .ring-sub { font-size: 0.8rem; color: var(--mut); }
+
+.progress-bar {
+  height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-top: 10px;
+}
+.progress-bar > i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #1a6fe8, #27c25a);
+}
+
+.ad-quick {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px; padding: 14px;
+}
+.ad-quick a {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 14px 8px; border-radius: 12px; background: #f5f8fc;
+  border: 1px solid var(--border); text-decoration: none; color: var(--ink);
+  font-size: 0.78rem; font-weight: 600; text-align: center;
+}
+.ad-quick a:hover { background: #e8f0fe; border-color: #93c5fd; color: var(--navy); }
+.ad-quick .q-ico { font-size: 1.4rem; }
+
+.ad-acts { list-style: none; padding: 0; }
+.ad-acts li {
+  display: flex; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border); align-items: flex-start;
+}
+.ad-acts li:last-child { border-bottom: none; }
+.a-ico {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; flex: none; font-size: 0.9rem;
+}
+.a-green { background: #d1fae5; }
+.a-blue { background: #dbeafe; }
+.a-purple { background: #f3e8ff; }
+.a-orange { background: #ffedd5; }
+.ad-acts b { display: block; font-size: 0.875rem; }
+.ad-acts small { color: var(--mut); font-size: 0.75rem; }
+
+.ad-ann-item {
+  display: flex; gap: 12px; padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ad-ann-item:last-child { border-bottom: none; }
+.ad-tip {
+  display: flex; gap: 10px; margin: 12px 16px 16px; padding: 12px;
+  background: #fffbeb; border-radius: 10px; font-size: 0.85rem;
+  border: 1px solid #fde68a;
+}
+
+.ad-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 4px; font-size: 0.8rem; color: var(--mut);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .ad-kpis { grid-template-columns: repeat(3, 1fr); }
+  .ad-panels { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 800px) {
+  /* NOTE: the sidebar is an off-canvas drawer at every breakpoint now (see
+     the base .sidebar rule and the "Hamburger drawer" block) — nothing
+     here needs to hide or show it. */
+  .ad-kpis { grid-template-columns: repeat(2, 1fr); }
+  .ad-panels { grid-template-columns: 1fr; }
+  .ad-banner { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .ad-kpis { grid-template-columns: 1fr 1fr; }
+  .content { padding: 12px; }
+}
+
+/* ============================================================
+   MOBILE (≤700px) — v105 phone shell
+   Sidebar hidden · gradient top bar · bottom tab bar
+   ============================================================ */
+.mobile-tabs { display: none; }
+
+@media (max-width: 700px) {
+  .app-shell { display: block; }
+  .main { min-height: 100vh; }
+
+  .topbar {
+    background: linear-gradient(180deg, #1f3fc8, #1a2aa3) !important;
+    border-bottom: 0 !important;
+    padding: 10px 12px;
+    gap: 8px;
+    /* z-index stays the base rule's 55 — must stay above the drawer (50)
+       and backdrop (45) so the hamburger/✕ remains clickable here too. */
+  }
+  .topbar-school h1 { color: #fff !important; font-size: 0.95rem !important; }
+  .topbar-school p { color: rgba(255,255,255,.85) !important; font-size: 0.72rem !important; }
+  .role-chip {
+    background: rgba(255,255,255,.2) !important;
+    color: #fff !important;
+    font-size: 0.68rem;
+  }
+  .avatar {
+    width: 32px; height: 32px; font-size: 0.75rem;
+    background: rgba(255,255,255,.25) !important;
+  }
+  .topbar-actions .form-control { display: none; }
+
+  .topbar-search { flex: 1 1 auto; max-width: none; min-width: 0; }
+  .topbar-search input[type="search"] {
+    background-color: rgba(255,255,255,.15);
+    border-color: rgba(255,255,255,.25);
+    color: #fff;
+  }
+  .topbar-search input[type="search"]::placeholder { color: rgba(255,255,255,.7); }
+  .topbar-search input[type="search"]:focus {
+    background-color: rgba(255,255,255,.22);
+    border-color: rgba(255,255,255,.45);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.12);
+  }
+
+  .content {
+    padding: 12px 12px 96px;
+  }
+
+  .page-header h2 { font-size: 1.15rem; }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-actions { width: 100%; }
+  .page-actions .btn, .page-actions .form-control { flex: 1; }
+
+  .ad-kpis { grid-template-columns: 1fr 1fr !important; gap: 8px; }
+  .ad-kpi-top b { font-size: 1.25rem; }
+  .ad-panels { grid-template-columns: 1fr !important; gap: 10px; }
+  .ad-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: auto;
+    padding: 14px 16px;
+  }
+  .ad-banner h1 { font-size: 1.25rem; }
+  .ad-banner-clock { width: 100%; font-size: 0.85rem; }
+
+  .kpi-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi-mini .value { font-size: 1.25rem; }
+
+  table.data { font-size: 0.78rem; }
+  table.data th, table.data td { padding: 8px 8px; }
+
+  .filters { flex-direction: column; align-items: stretch; }
+  .filters .form-control { width: 100%; min-width: 0; }
+
+  /* Bottom tab bar — v105 approved mobile design */
+  .mobile-tabs {
+    display: flex;
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 40;
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 -2px 18px rgba(20, 40, 90, 0.22);
+    padding: 6px 4px 8px;
+    justify-content: space-around;
+    align-items: center;
+  }
+  .mobile-tabs a {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #64748b;
+    text-decoration: none;
+    position: relative;
+    border-radius: 12px;
+  }
+  .mobile-tabs a .tab-ico { font-size: 1.25rem; line-height: 1; }
+  .mobile-tabs a.on {
+    color: #1a4fd0;
+  }
+  .mobile-tabs a.on::after {
+    content: "";
+    position: absolute;
+    left: 22%;
+    right: 22%;
+    bottom: 0;
+    height: 3px;
+    border-radius: 3px;
+    background: #1a4fd0;
+  }
+
+  /* Portal header bars (parent/student without app-shell) */
+  body > div[style*="linear-gradient"] {
+    padding: 12px 14px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-kpis { grid-template-columns: 1fr 1fr; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .ad-quick { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .ad-quick a { padding: 10px 4px; font-size: 0.68rem; }
+}
+
+/* Tablet */
+@media (min-width: 701px) and (max-width: 1100px) {
+  .ad-kpis { grid-template-columns: repeat(3, 1fr); }
+  .ad-panels { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================
+   UNIFIED RESPONSIVE SYSTEM
+   Desktop ≥1101 · Tablet 701–1100 · Phone ≤700
+   (Sidebar width/position is handled by the single off-canvas drawer rule
+   near the top of this file — it no longer varies per breakpoint.)
+   ============================================================ */
+
+/* Desktop */
+@media (min-width: 1101px) {
+  .ad-kpis { grid-template-columns: repeat(6, 1fr); }
+  .ad-panels { grid-template-columns: 1fr 1fr 1.2fr; }
+}
+
+/* Tablet */
+@media (min-width: 701px) and (max-width: 1100px) {
+  .content { padding: 14px 16px 28px; }
+  .ad-kpis { grid-template-columns: repeat(3, 1fr); }
+  .ad-panels { grid-template-columns: 1fr 1fr; }
+  .kpi-row { grid-template-columns: repeat(3, 1fr); }
+  .topbar-school h1 { font-size: 1rem; }
+  table.data { font-size: 0.8rem; }
+  .page-header h2 { font-size: 1.2rem; }
+}
+
+/* Shared: prevent horizontal overflow */
+html, body { overflow-x: hidden; }
+.card, .table-wrap, .chart-wrap { max-width: 100%; }
+.chart-wrap svg { max-width: 100%; height: auto; }
+img, svg { max-width: 100%; }
+
+/* Forms full-width on small */
+@media (max-width: 700px) {
+  .form-control, select.form-control, input.form-control {
+    width: 100%;
+    max-width: 100%;
+  }
+  .btn { min-height: 40px; }
+  .page-actions { flex-direction: column; }
+  .page-actions .btn, .page-actions select { width: 100%; }
+  .ad-banner-clock { width: 100%; }
+  .donut-wrap { justify-content: center; }
+  .ad-foot { flex-direction: column; gap: 6px; text-align: center; padding-bottom: 8px; }
+  /* Score entry inputs */
+  .score-in { width: 48px; font-size: 0.8rem; }
+  /* Result sheet */
+  .rs-sheet, [class*="result"] { overflow-x: auto; }
+}
+
+/* Print */
+@media print {
+  .sidebar, .mobile-tabs, .topbar-actions, .hamburger, .sidebar-backdrop { display: none !important; }
+  .content { padding: 0 !important; }
+  .app-shell { display: block; }
+}
+
+/* ============================================================
+   UNIVERSAL RESPONSIVE HARDENING (desktop / tablet / phone)
+   ============================================================ */
+
+/* Prevent horizontal overflow */
+html, body { overflow-x: hidden; }
+.app-shell, .main, .content, .card, .table-wrap { max-width: 100%; }
+.table-wrap { -webkit-overflow-scrolling: touch; }
+
+/* Desktop comfortable reading width for portal pages without sidebar */
+@media (min-width: 1101px) {
+  .content { padding: 20px 24px 40px; }
+}
+
+/* Tablet 701–1100 */
+@media (min-width: 701px) and (max-width: 1100px) {
+  .content { padding: 14px 16px 28px; }
+  .ad-kpis { grid-template-columns: repeat(3, 1fr) !important; }
+  .ad-panels { grid-template-columns: 1fr 1fr !important; }
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .page-header { gap: 10px; }
+}
+
+/* Phone already defined ≤700 — ensure tables and forms */
+@media (max-width: 700px) {
+  .form-control { font-size: 16px; } /* avoid iOS zoom */
+  .btn { min-height: 40px; }
+  .card { border-radius: 12px; }
+  .ad-kpi-gender { font-size: 0.75rem; }
+  .ad-banner-clock { font-size: 0.8rem; padding: 10px 12px; }
+  /* Score entry inputs */
+  .score-in { width: 48px; padding: 8px 4px; font-size: 0.85rem; }
+  /* Stacked result preview */
+  .content > div[style*="grid-template-columns:1fr 1fr"] {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-kpis { grid-template-columns: 1fr 1fr !important; }
+  .ad-quick { grid-template-columns: repeat(4, 1fr) !important; }
+  .topbar-school h1 { font-size: 0.85rem !important; }
+}
+
+/* Stack common 2-col inline grids on phone */
+@media (max-width: 700px) {
+  .content > div[style*="grid-template-columns:1fr 1fr"],
+  .content > div[style*="grid-template-columns: 1fr 1fr"],
+  .content div[style*="grid-template-columns:1.2fr 1fr"],
+  .content div[style*="grid-template-columns:1.4fr 1fr"],
+  .content div[style*="grid-template-columns:1fr 1.1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  .content div[style*="grid-template-columns:repeat(auto-fill"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* ---- Hamburger drawer ----
+   One off-canvas drawer system for the sidebar at EVERY breakpoint —
+   desktop and tablet now behave exactly like phone used to: hidden by
+   default (see the base .sidebar rule above), hamburger slides it in over
+   the content with a dimmed backdrop behind it. Button colors default to
+   a dark icon for the white desktop/tablet topbar; the phone media query
+   below re-themes it to match the navy gradient topbar used there. */
+.hamburger {
+  display: flex;
+  width: 40px; height: 40px;
+  border: none; background: rgba(10,42,107,.08);
+  border-radius: 10px; cursor: pointer;
+  flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  padding: 0; flex-shrink: 0;
+}
+.hamburger span {
+  display: block; width: 18px; height: 2px;
+  background: var(--navy); border-radius: 1px; transition: transform .2s, opacity .2s;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.sidebar-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
+  z-index: 45;
+}
+.sidebar-backdrop.show { display: block; }
+
+@media (max-width: 700px) {
+  /* Re-theme the hamburger for the navy gradient topbar used on phone. */
+  .hamburger { background: rgba(255,255,255,.15); }
+  .hamburger span { background: #fff; }
+  /* overflow containment */
+  .content, .main, .card, .table-wrap, .ad-banner, .ad-panels, .ad-kpis {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  .table-wrap { overflow-x: auto; max-width: 100%; }
+  .chart-wrap { overflow-x: auto; max-width: 100%; }
+  .chart-wrap svg { max-width: 100%; height: auto; }
+  .page-actions { max-width: 100%; }
+  .filters { max-width: 100%; }
+}
+
+/* Grade distribution bars */
+.grade-dist { padding: 16px; }
+.grade-row { margin-bottom: 12px; }
+.grade-row:last-child { margin-bottom: 0; }
+.grade-row-top {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.85rem; margin-bottom: 4px;
+}
+.grade-row-top b { font-weight: 700; color: var(--ink); }
+.grade-bar {
+  height: 12px; background: #e5e7eb; border-radius: 6px; overflow: hidden;
+}
+.grade-bar > i {
+  display: block; height: 100%; border-radius: 6px;
+}
+.g-a > i { background: #27c25a; }
+.g-b > i { background: #1a6fe8; }
+.g-c > i { background: #ffae1a; }
+.g-d > i { background: #f97316; }
+.g-f > i { background: #e11d48; }
+
+/* Nav icons */
+.nav-item .ni {
+  display: inline-block; width: 1.25rem; text-align: center; margin-right: 6px;
+  opacity: .9;
+}
+
+
+/* ============================================================
+   ADMIN DASHBOARD — DESKTOP LAYOUT FIX
+   ============================================================ */
+.ad-panels {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+}
+.ad-panels-1 { grid-template-columns: 1fr !important; }
+.ad-panels-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.ad-panels-bottom {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr) !important;
+}
+.ad-panel {
+  min-width: 0; /* prevent grid blowout */
+  overflow: hidden;
+}
+.ad-quick {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px;
+  padding: 14px;
+}
+.ad-quick a {
+  min-width: 0;
+  padding: 14px 10px;
+}
+.ad-kpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+@media (min-width: 1101px) {
+  .content { max-width: 100%; }
+  .ad-panels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ad-panels-bottom {
+    grid-template-columns: minmax(220px, 1.1fr) minmax(240px, 1.25fr) minmax(220px, 1fr) !important;
+  }
+  .ad-quick {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 701px) and (max-width: 1100px) {
+  .ad-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .ad-panels { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ad-panels-1 { grid-template-columns: 1fr !important; }
+  .ad-panels-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ad-panels-bottom {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .ad-panels-bottom .ad-panel:last-child {
+    grid-column: 1 / -1;
+  }
+  .ad-quick { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 700px) {
+  .ad-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ad-panels,
+  .ad-panels-2,
+  .ad-panels-bottom {
+    grid-template-columns: 1fr !important;
+  }
+  .ad-panels-1 { grid-template-columns: 1fr !important; }
+  .ad-quick {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 8px;
+  }
+  .ad-quick a { padding: 10px 4px; font-size: 0.68rem; }
+}
+
+.app-shell { display: flex; width: 100%; min-height: 100vh; }
+.main { flex: 1 1 auto; min-width: 0; width: auto; }
+.content { width: 100%; box-sizing: border-box; }
+/* Sidebar width/position is the single off-canvas drawer rule near the
+   top of this file — intentionally not overridden per breakpoint here. */
+
+/* Notification bell in topbar */
+.topbar-notif {
+  position: relative;
+  color: var(--navy, #0f2c6b);
+  font-size: 1.2rem;
+  text-decoration: none;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.topbar-notif .notif-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+@media (max-width: 700px) {
+  .topbar-notif { color: #fff; }
+}
