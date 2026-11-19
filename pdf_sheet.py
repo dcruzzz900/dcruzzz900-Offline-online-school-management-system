@@ -983,6 +983,8 @@ def cumulative_page_elements(data, session, school_name, logo_path, student_full
     cum = data.get("cumulative")
     if cum and cum.get("terms"):
         els += cumulative_table(cum, S, None, rs.get("show_subject_position", True))
+    if rs.get("show_next_term_resumes") and data.get("next_term_resumes_iso"):
+        els += [Spacer(1, 4), Paragraph(f"Next Term Resumes: <b>{_esc(format_dmy(data['next_term_resumes_iso']))}</b>", S.p(9))]
     if rs.get("footer"):
         els += [Spacer(1, 4), Paragraph(_esc(rs["footer"]), S.p(8))]
     return els, pal, rs.get("watermark"), _page_color(S)

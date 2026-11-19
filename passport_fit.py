@@ -67,3 +67,26 @@ def save_passport(file_storage, directory, base_name):
     with open(os.path.join(directory, name), "wb") as fh:
         fh.write(data)
     return name
+
+
+LOGO_MAX = 600   # longest side in px: sharp on print, light on a phone
+
+
+def fit_logo(data):
+    """bytes (PNG / JPG / GIF, any size or phone orientation) -> PNG bytes. Turned upright from EXIF, transparency kept, empty transparent
+    margins trimmed (so the logo fills its frame instead of floating in it), proportions never changed, longest side limited to LOGO_MAX."""
+    img = Image.open(io.BytesIO(data))
+    img.load()
+    img = ImageOps.exif_transpose(img).convert("RGBA")
+    box = img.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+    if box:
+        img = img.crop(box)
+    w, h = img.size
+    if w < 1 or h < 1:
+        raise ValueError("Image has no size.")
+    if max(w, h) > LOGO_MAX:
+        k = LOGO_MAX / max(w, h)
+        img = img.resize((max(1, round(w * k)), max(1, round(h * k))), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    return buf.getvalue()
