@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Billing & Subscription — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item"><span class="ni">⌂</span>Dashboard</a>
+        <div class="nav-group">School Administration</div>
+        <a href="89-school-fees.html" class="nav-item"><span class="ni">💰</span>School Fees</a>
+        <a href="22-billing.html" class="nav-item active"><span class="ni">◈</span>Billing & Subscription</a>
+        <a href="48-school-profile.html" class="nav-item"><span class="ni">🏫</span>School Information</a>
+        <a href="30-settings.html" class="nav-item"><span class="ni">⚙</span>Settings</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Billing &amp; Subscription</p></div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">◈</span> Billing &amp; Subscription</h2>
+          <p>Platform subscription for this school — plan, invoices and payment method. Student fee collection is under <a href="89-school-fees.html">School Fees</a>.</p></div>
+          <div class="page-actions"><button class="btn btn-primary btn-sm">Pay outstanding</button></div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-mini"><div class="label">Current plan</div><div class="value" style="font-size:1.1rem">Pro</div></div>
+          <div class="kpi-mini"><div class="label">Status</div><div class="value" style="font-size:1.1rem;color:#059669">Active</div></div>
+          <div class="kpi-mini"><div class="label">Next invoice</div><div class="value" style="font-size:1.1rem">₦45,000</div></div>
+          <div class="kpi-mini"><div class="label">Due</div><div class="value" style="font-size:1.1rem">01 Dec 2026</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Subscription</h3>
+            <p style="font-size:0.85rem;margin-bottom:6px"><b>Plan:</b> Pro · up to 2,000 students</p>
+            <p style="font-size:0.85rem;margin-bottom:6px"><b>Billing cycle:</b> Annual</p>
+            <p style="font-size:0.85rem;margin-bottom:12px"><b>Renews:</b> 1 December 2026</p>
+            <button class="btn btn-outline btn-sm">Change plan</button>
+            <button class="btn btn-outline btn-sm">Download contract</button>
+          </div>
+          <div class="card" style="padding:20px">
+            <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Payment method</h3>
+            <p style="font-size:0.85rem;margin-bottom:6px">Bank transfer / Paystack</p>
+            <p style="font-size:0.85rem;color:var(--mut);margin-bottom:12px">Last payment: ₦45,000 · 28 Nov 2025</p>
+            <button class="btn btn-outline btn-sm">Update payment method</button>
+          </div>
+        </div>
+        <div class="card table-wrap">
+          <div class="panel-header"><h3>Invoices</h3></div>
+          <table class="data">
+            <thead><tr><th>Invoice</th><th>Period</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>INV-2025-0012</td><td>Dec 2025 – Nov 2026</td><td>₦45,000</td><td><span class="badge badge-green">Paid</span></td><td><a href="#">PDF</a></td></tr>
+              <tr><td>INV-2024-0008</td><td>Dec 2024 – Nov 2025</td><td>₦40,000</td><td><span class="badge badge-green">Paid</span></td><td><a href="#">PDF</a></td></tr>
+              <tr><td>INV-2026-0001</td><td>Dec 2026 – Nov 2027</td><td>₦45,000</td><td><span class="badge badge-orange">Upcoming</span></td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs"><a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a><a href="22-billing.html" class="on"><span class="tab-ico">◈</span>Billing</a><a href="30-settings.html"><span class="tab-ico">⚙</span>Settings</a><a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a></nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

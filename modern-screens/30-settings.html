@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item"><span class="ni">⌂</span>Dashboard</a>
+        <a href="30-settings.html" class="nav-item active"><span class="ni">⚙</span>Settings</a>
+        <a href="48-school-profile.html" class="nav-item"><span class="ni">🏫</span>School Information</a>
+        <a href="89-school-fees.html" class="nav-item"><span class="ni">💰</span>School Fees</a>
+        <a href="22-billing.html" class="nav-item"><span class="ni">◈</span>Billing & Subscription</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Settings Hub</p></div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+          <span class="role-chip">Administrator</span>
+          <div class="avatar">AJ</div>
+        </div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div>
+            <h2><span class="ni">⚙</span> Settings</h2>
+            <p>Your account and shortcuts to school configuration</p>
+          </div>
+        </div>
+
+        <!-- Account only on Settings -->
+        <div class="card" style="padding:18px;margin-bottom:16px">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:12px">👤 Your Account</h3>
+          <div class="settings-grid" style="margin-bottom:16px">
+            <a href="39-change-password.html" class="settings-tile">
+              <span class="st-ico">🔒</span>
+              <div class="st-body"><strong>Change Password</strong><span>Update your login password</span></div>
+            </a>
+            <a href="52-staff-profile.html" class="settings-tile">
+              <span class="st-ico teal">☺</span>
+              <div class="st-body"><strong>My Profile</strong><span>Name, photo and contact</span></div>
+            </a>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:640px">
+            <div>
+              <p style="font-size:0.8rem;color:var(--mut);margin-bottom:6px">Current username: <b>admin.gssgg</b></p>
+              <div class="form-group"><label>New username</label><input class="form-control" placeholder="admin.gssgg"></div>
+              <div class="form-group"><label>Current password</label><input class="form-control" type="password"></div>
+              <button class="btn btn-primary btn-sm">Change Username</button>
+            </div>
+            <div>
+              <p style="font-size:0.8rem;color:var(--mut);margin-bottom:6px">Email or phone for alternate login.</p>
+              <div class="form-group"><label>Email</label><input class="form-control" type="email" value="admin@gssgoningora.edu.ng"></div>
+              <div class="form-group"><label>Phone number</label><input class="form-control" value="+234 801 234 5678"></div>
+              <button class="btn btn-primary btn-sm">Save Contact Info</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Links only — no forms that live on School Profile -->
+        <div class="card" style="padding:18px;margin-bottom:16px">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:12px">🏫 School configuration</h3>
+          <p style="font-size:0.85rem;color:var(--mut);margin-bottom:12px">School name, logo, address, motto, timezone, subdomain and staff signup codes are managed in <a href="48-school-profile.html"><b>School Profile</b></a>.</p>
+          <div class="settings-grid">
+            <a href="48-school-profile.html" class="settings-tile">
+              <span class="st-ico">🏫</span>
+              <div class="st-body"><strong>School Profile</strong><span>Identity, logo, subdomain, signup codes</span></div>
+            </a>
+            <a href="73-admin-email.html" class="settings-tile">
+              <span class="st-ico">📧</span>
+              <div class="st-body"><strong>Email Settings</strong><span>SMTP for parent notifications</span></div>
+            </a>
+            <a href="61-result-settings.html" class="settings-tile">
+              <span class="st-ico teal">📄</span>
+              <div class="st-body"><strong>Result Display</strong><span>Layout, colours, preview</span></div>
+            </a>
+            <a href="27-theme-branding.html" class="settings-tile">
+              <span class="st-ico amber">🎨</span>
+              <div class="st-body"><strong>Theme &amp; Branding</strong><span>Colours, login branding</span></div>
+            </a>
+            <a href="13-grading.html" class="settings-tile">
+              <span class="st-ico green">◫</span>
+              <div class="st-body"><strong>Grading Setup</strong><span>Weights and grade bands</span></div>
+            </a>
+            <a href="33-sessions-terms.html" class="settings-tile">
+              <span class="st-ico">◷</span>
+              <div class="st-body"><strong>Sessions &amp; Terms</strong><span>Academic calendar</span></div>
+            </a>
+            <a href="14-promote.html" class="settings-tile">
+              <span class="st-ico green">↗</span>
+              <div class="st-body"><strong>Promote Students</strong><span>End-of-year promotion</span></div>
+            </a>
+            <a href="78-custom-fields.html" class="settings-tile">
+              <span class="st-ico purple">☰</span>
+              <div class="st-body"><strong>Custom Fields</strong><span>Student/staff extra data</span></div>
+            </a>
+            <a href="79-result-permissions.html" class="settings-tile">
+              <span class="st-ico slate">⚿</span>
+              <div class="st-body"><strong>Workflow Permissions</strong><span>Who can approve results</span></div>
+            </a>
+            <a href="80-audit-history.html" class="settings-tile">
+              <span class="st-ico slate">📜</span>
+              <div class="st-body"><strong>Audit History</strong><span>Score and system log</span></div>
+            </a>
+            <a href="77-subadmins.html" class="settings-tile">
+              <span class="st-ico">👤</span>
+              <div class="st-body"><strong>Sub-Admins</strong><span>Delegated administrators</span></div>
+            </a>
+            <a href="89-school-fees.html" class="settings-tile">
+              <span class="st-ico amber">💰</span>
+              <div class="st-body"><strong>School Fees</strong><span>Expected vs collected</span></div>
+            </a>
+            <a href="22-billing.html" class="settings-tile">
+              <span class="st-ico">◈</span>
+              <div class="st-body"><strong>Billing &amp; Subscription</strong><span>Plan and invoices</span></div>
+            </a>
+            <a href="76-setup-wizard.html" class="settings-tile">
+              <span class="st-ico teal">⚙</span>
+              <div class="st-body"><strong>Setup Wizard</strong><span>School readiness checklist</span></div>
+            </a>
+            <a href="41-roles.html" class="settings-tile">
+              <span class="st-ico purple">🎖</span>
+              <div class="st-body"><strong>Roles</strong><span>Position and access levels</span></div>
+            </a>
+          </div>
+        </div>
+
+        <div class="card" style="padding:18px;margin-bottom:16px;border-left:4px solid #d97706">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px">🧹 Clear Demo Data</h3>
+          <p style="font-size:0.85rem;color:var(--mut);margin-bottom:10px">
+            Wipes sample classes, subjects, students and teachers. Login, sessions, grading and skill traits are kept.
+          </p>
+          <div class="form-group" style="max-width:220px">
+            <label>Type RESET to confirm</label>
+            <input class="form-control" placeholder="RESET">
+          </div>
+          <button class="btn btn-outline btn-sm" style="border-color:#d97706;color:#9a3412;margin-top:8px">Clear Demo Data</button>
+        </div>
+
+        <div class="card" style="padding:18px;margin-bottom:14px;border-left:4px solid #b3261e">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:8px;color:#b3261e">⚠ Delete Account</h3>
+          <p style="font-size:0.85rem;color:var(--mut);margin-bottom:10px">
+            Permanently deletes this school’s entire account. <b>This cannot be undone.</b>
+          </p>
+          <div class="form-group" style="max-width:280px"><label>Your password</label><input class="form-control" type="password"></div>
+          <div class="form-group" style="max-width:280px"><label>Type DELETE to confirm</label><input class="form-control" placeholder="DELETE"></div>
+          <button class="btn btn-sm" style="background:#b3261e;color:#fff;margin-top:8px">Permanently Delete My Account</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="30-settings.html" class="on"><span class="tab-ico">⚙</span>Settings</a>
+    <a href="89-school-fees.html"><span class="tab-ico">💰</span>Fees</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

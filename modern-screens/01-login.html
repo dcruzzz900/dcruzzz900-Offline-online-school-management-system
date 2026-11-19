@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Government Secondary School</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0f2c6b;
+      --primary-light: #1a4a9e;
+      --accent: #10b981;
+      --bg: #f0f4f9;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+      --shadow: 0 10px 40px -10px rgba(15, 44, 107, 0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background-image:
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(15, 44, 107, 0.08) 0px, transparent 50%);
+    }
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .login-header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      padding: 36px 32px 28px;
+      text-align: center;
+      color: white;
+      position: relative;
+    }
+    .login-header::after {
+      content: '';
+      position: absolute;
+      bottom: -20px;
+      left: 0; right: 0;
+      height: 40px;
+      background: var(--card);
+      border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+    }
+    .school-logo {
+      width: 72px; height: 72px;
+      background: white;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--primary);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .login-header h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+    .login-header p {
+      font-size: 0.9rem;
+      opacity: 0.85;
+    }
+    .login-body {
+      padding: 40px 32px 32px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      font-size: 1rem;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      background: #f8fafc;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(15, 44, 107, 0.12);
+      background: white;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 15px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      margin-top: 8px;
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(15, 44, 107, 0.3);
+    }
+    .links {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.875rem;
+    }
+    .links a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .links a:hover { text-decoration: underline; }
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .role-hint {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.8rem;
+      color: #166534;
+      margin-top: 20px;
+      line-height: 1.45;
+    }
+    .footer-note {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-header">
+      <div class="school-logo">GG</div>
+      <h1>Government Secondary School</h1>
+      <p>Result &amp; School Management</p>
+    </div>
+    <div class="login-body">
+      <form>
+        <div class="form-group">
+          <label for="username">Username or Staff ID</label>
+          <input type="text" id="username" placeholder="e.g. admin or aokafor" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="Enter your password" autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn-primary">Sign In</button>
+      </form>
+
+      <div class="links">
+        <a href="#">Forgot password?</a>
+        <span style="margin: 0 8px; color: #cbd5e1;">•</span>
+        <a href="#">Staff self-registration</a>
+      </div>
+
+      <div class="role-hint">
+        <strong>Demo accounts</strong><br>
+        Admin: <code>admin</code> / <code>admin123</code><br>
+        Teacher: <code>aokafor</code> / <code>teacher123</code>
+      </div>
+
+      <div class="footer-note">
+        Secure access • Powered by My School Hub
+      </div>
+    </div>
+  </div>
+</body>
+</html>

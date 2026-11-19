@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Tutor — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .topic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+    .topic-card {
+      background: white; border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px; text-align: center; cursor: pointer; transition: all 0.15s;
+    }
+    .topic-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: #93c5fd; }
+    .topic-card .icon { font-size: 2rem; margin-bottom: 10px; }
+    .topic-card h3 { font-size: 0.9rem; font-weight: 700; }
+    .topic-card p { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">AI Tools</div>
+        <a href="24-ai-assistant.html" class="nav-item">Result Assistant</a>
+        <a href="25-ai-comments.html" class="nav-item">AI Comments</a>
+        <a href="26-ai-tutor.html" class="nav-item active"><span class="ni">✦</span>AI Tutor</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b style="color:#34d399">Online</b><br><small>Student Portal</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>AI Learning Tutor</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Student</span><div class="avatar">CO</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2>AI Tutor</h2><p>Get explanations, practice questions and study help</p></div>
+        </div>
+        <div class="card" style="padding:24px;margin-bottom:24px;background:linear-gradient(135deg,#eff6ff,#f0fdf4)">
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:8px">What would you like to learn today?</h3>
+          <input class="form-control" placeholder="e.g. Explain quadratic equations, or give me practice questions on cell division..." style="max-width:500px">
+        </div>
+        <div style="font-size:0.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px">Popular Topics</div>
+        <div class="topic-grid">
+          <div class="topic-card"><div class="icon">📐</div><h3>Quadratic Equations</h3><p>Mathematics</p></div>
+          <div class="topic-card"><div class="icon">🧬</div><h3>Cell Division</h3><p>Biology</p></div>
+          <div class="topic-card"><div class="icon">⚗️</div><h3>Organic Reactions</h3><p>Chemistry</p></div>
+          <div class="topic-card"><div class="icon">⚡</div><h3>Electricity</h3><p>Physics</p></div>
+          <div class="topic-card"><div class="icon">📖</div><h3>Essay Writing</h3><p>English</p></div>
+          <div class="topic-card"><div class="icon">🏛️</div><h3>Constitution</h3><p>Government</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="17-student-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="45-student-result.html"><span class="tab-ico">📄</span><span class="ni">▣</span>Results</a>
+    <a href="69-student-materials.html"><span class="tab-ico">📚</span>Materials</a>
+    <a href="26-ai-tutor.html" class="on"><span class="tab-ico">✦</span>AI Tutor</a>
+  </nav>
+<script src="js/shell.js"></script>
+</body>
+</html>

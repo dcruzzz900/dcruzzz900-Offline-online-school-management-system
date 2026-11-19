@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Portal — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <header class="topbar">
+        <div class="topbar-school">
+          <h1>Government Secondary School</h1>
+          <p>Student Portal</p>
+        </div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">2</span></a>
+          <span class="role-chip">Student</span>
+          <div class="avatar">CO</div>
+        </div>
+      </header>
+
+<div style="background:#fff;border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;overflow-x:auto">
+    <a href="17-student-dashboard.html" style="padding:12px 14px;font-size:0.85rem;font-weight:700;color:var(--blue);border-bottom:2px solid var(--blue);text-decoration:none"><span class="ni">⌂</span>Dashboard</a>
+    <a href="59-student-profile.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none"><span class="ni">☺</span>My Profile</a>
+    <a href="45-student-result.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none">Published <span class="ni">▣</span>Results</a>
+    <a href="51-student-timetable.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none"><span class="ni">▦</span>Timetable</a>
+    <a href="69-student-materials.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none"><span class="ni">▤</span>Learning Materials</a>
+    <a href="26-ai-tutor.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none">AI Tutor</a>
+    <a href="21-notifications.html" style="padding:12px 14px;font-size:0.85rem;font-weight:500;color:var(--mut);text-decoration:none"><span class="ni">🔔</span>Notifications</a>
+  </div>
+  <div class="content" style="max-width:900px;margin:0 auto">
+    <section class="ad-banner" style="margin-top:16px;margin-bottom:16px">
+      <div>
+        <h1>Welcome, Chinedu!</h1>
+        <p>SSS 2A · GSS/2023/0142 · 1st Term</p>
+      </div>
+      <div class="ad-banner-clock">
+        <div>📅 <span data-clock-date>Wednesday, 18 November 2026</span></div>
+        <div>🕐 <span data-clock-time>6:09 AM</span></div>
+      </div>
+    </section>
+    <div class="kpi-row">
+      <div class="kpi-mini"><div class="label">Average</div><div class="value">75.1%</div></div>
+      <div class="kpi-mini"><div class="label">Position</div><div class="value">3rd</div></div>
+      <div class="kpi-mini"><div class="label">Attendance</div><div class="value">94%</div></div>
+      <div class="kpi-mini"><div class="label">Subjects</div><div class="value">8</div></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="panel-header"><h3><span class="ni">📊</span> My Subject Scores</h3><a href="45-student-result.html" style="font-size:0.8rem;font-weight:600">Full result →</a></div>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 420 180" role="img" aria-label="Subject scores">
+          <line x1="40" x2="400" y1="20" y2="20" stroke="#e5e7eb"/>
+          <line x1="40" x2="400" y1="55" y2="55" stroke="#e5e7eb"/>
+          <line x1="40" x2="400" y1="90" y2="90" stroke="#e5e7eb"/>
+          <line x1="40" x2="400" y1="125" y2="125" stroke="#e5e7eb"/>
+          <line x1="40" x2="400" y1="160" y2="160" stroke="#e5e7eb"/>
+          <rect x="50" y="35" width="32" height="125" rx="3" fill="#27c25a"/><text x="66" y="31" text-anchor="middle" font-size="10" font-weight="700">87</text><text x="66" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Math</text>
+          <rect x="95" y="42" width="32" height="118" rx="3" fill="#27c25a"/><text x="111" y="38" text-anchor="middle" font-size="10" font-weight="700">82</text><text x="111" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Eng</text>
+          <rect x="140" y="41" width="32" height="119" rx="3" fill="#27c25a"/><text x="156" y="37" text-anchor="middle" font-size="10" font-weight="700">83</text><text x="156" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Gov</text>
+          <rect x="185" y="48" width="32" height="112" rx="3" fill="#1a6fe8"/><text x="201" y="44" text-anchor="middle" font-size="10" font-weight="700">79</text><text x="201" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Econ</text>
+          <rect x="230" y="54" width="32" height="106" rx="3" fill="#1a6fe8"/><text x="246" y="50" text-anchor="middle" font-size="10" font-weight="700">75</text><text x="246" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Bio</text>
+          <rect x="275" y="62" width="32" height="98" rx="3" fill="#1a6fe8"/><text x="291" y="58" text-anchor="middle" font-size="10" font-weight="700">70</text><text x="291" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Chem</text>
+          <rect x="320" y="70" width="32" height="90" rx="3" fill="#ffae1a"/><text x="336" y="66" text-anchor="middle" font-size="10" font-weight="700">65</text><text x="336" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">Phy</text>
+          <rect x="365" y="78" width="32" height="82" rx="3" fill="#ffae1a"/><text x="381" y="74" text-anchor="middle" font-size="10" font-weight="700">60</text><text x="381" y="176" text-anchor="middle" font-size="8" fill="#5b6b88">F.M</text>
+        </svg>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <a href="45-student-result.html" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📄</div><h3 style="font-size:0.9rem;font-weight:700">My Results</h3><p style="font-size:0.75rem;color:var(--mut)">Terminal report card</p></a>
+      <a href="51-student-timetable.html" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📅</div><h3 style="font-size:0.9rem;font-weight:700">Timetable</h3><p style="font-size:0.75rem;color:var(--mut)">Weekly schedule</p></a>
+      <a href="69-student-materials.html" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📚</div><h3 style="font-size:0.9rem;font-weight:700">Materials</h3><p style="font-size:0.75rem;color:var(--mut)">Notes & resources</p></a>
+      <a href="26-ai-tutor.html" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">🤖</div><h3 style="font-size:0.9rem;font-weight:700">AI Tutor</h3><p style="font-size:0.75rem;color:var(--mut)">Learning help</p></a>
+    </div>
+  </div>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="17-student-dashboard.html" class="on"><span class="tab-ico">⌂</span>Home</a>
+    <a href="45-student-result.html"><span class="tab-ico">📄</span><span class="ni">▣</span>Results</a>
+    <a href="69-student-materials.html"><span class="tab-ico">📚</span>Materials</a>
+    <a href="26-ai-tutor.html"><span class="tab-ico">✦</span>AI Tutor</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

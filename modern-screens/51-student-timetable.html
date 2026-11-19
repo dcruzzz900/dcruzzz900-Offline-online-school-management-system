@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Timetable — Student Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .tt-grid { display: grid; grid-template-columns: 70px repeat(5, 1fr); gap: 3px; font-size: 0.75rem; }
+    .tt-h { background: var(--primary); color: white; padding: 8px 4px; text-align: center; font-weight: 600; border-radius: 6px; }
+    .tt-t { background: #f1f5f9; padding: 10px 4px; text-align: center; font-weight: 600; border-radius: 6px; font-size: 0.7rem; }
+    .tt-c { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 8px 4px; text-align: center; min-height: 52px; }
+    .tt-c b { display: block; font-size: 0.78rem; }
+    .tt-c small { color: var(--muted); font-size: 0.65rem; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+        <div class="topbar-school">
+          <h1>Government Secondary School</h1>
+          <p>Student Portal</p>
+        </div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">2</span></a>
+          <span class="role-chip">Student</span>
+          <div class="avatar">CO</div>
+        </div>
+      </header>
+    <div class="content" style="max-width:900px;margin:0 auto">
+    <div class="page-header" style="margin-top:20px">
+      <div><h2><span class="ni">▦</span> My Timetable</h2><p>SSS 2A • Weekly Schedule</p></div>
+    </div>
+    <div class="card" style="padding:14px;overflow-x:auto">
+      <div class="tt-grid" style="min-width:640px">
+        <div class="tt-h">Time</div><div class="tt-h">Mon</div><div class="tt-h">Tue</div><div class="tt-h">Wed</div><div class="tt-h">Thu</div><div class="tt-h">Fri</div>
+        <div class="tt-t">8:00</div>
+        <div class="tt-c"><b>English</b><small>Mrs Okoro</small></div>
+        <div class="tt-c"><b>Maths</b><small>Mr Okafor</small></div>
+        <div class="tt-c"><b>English</b><small>Mrs Okoro</small></div>
+        <div class="tt-c"><b>Maths</b><small>Mr Okafor</small></div>
+        <div class="tt-c"><b>Biology</b><small>Mrs Bello</small></div>
+        <div class="tt-t">8:40</div>
+        <div class="tt-c"><b>Maths</b><small>Mr Okafor</small></div>
+        <div class="tt-c"><b>Physics</b><small>Mr Adebayo</small></div>
+        <div class="tt-c"><b>Chemistry</b><small>Mr Adebayo</small></div>
+        <div class="tt-c"><b>English</b><small>Mrs Okoro</small></div>
+        <div class="tt-c"><b>F.Math</b><small>Mr Okafor</small></div>
+        <div class="tt-t">9:20</div>
+        <div class="tt-c"><b>Biology</b><small>Mrs Bello</small></div>
+        <div class="tt-c"><b>English</b><small>Mrs Okoro</small></div>
+        <div class="tt-c"><b>Maths</b><small>Mr Okafor</small></div>
+        <div class="tt-c"><b>Physics</b><small>Mr Adebayo</small></div>
+        <div class="tt-c"><b>Chemistry</b><small>Mr Adebayo</small></div>
+        <div class="tt-t">10:20</div>
+        <div class="tt-c"><b>Chemistry</b><small>Mr Adebayo</small></div>
+        <div class="tt-c"><b>F.Math</b><small>Mr Okafor</small></div>
+        <div class="tt-c"><b>Biology</b><small>Mrs Bello</small></div>
+        <div class="tt-c"><b>Government</b><small>Mrs Eze</small></div>
+        <div class="tt-c"><b>Economics</b><small>Mr Danladi</small></div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="17-student-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="45-student-result.html"><span class="tab-ico">📄</span><span class="ni">▣</span>Results</a>
+    <a href="69-student-materials.html"><span class="tab-ico">📚</span>Materials</a>
+    <a href="26-ai-tutor.html"><span class="tab-ico">✦</span>AI Tutor</a>
+  </nav>
+</body>
+</html>

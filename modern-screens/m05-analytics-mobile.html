@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analytics Mobile — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .phone-frame {
+      max-width: 390px; margin: 0 auto; min-height: 100vh;
+      background: var(--bg); position: relative;
+      box-shadow: 0 0 40px rgba(0,0,0,.15);
+    }
+    .sidebar { display: none !important; }
+    .app-shell { display: block !important; }
+    .topbar {
+      background: linear-gradient(180deg, #1f3fc8, #1a2aa3) !important;
+      border-bottom: 0 !important; padding: 10px 12px !important;
+      position: sticky; top: 0; z-index: 30;
+    }
+    .topbar-school h1 { color: #fff !important; font-size: 0.92rem !important; }
+    .topbar-school p { color: rgba(255,255,255,.85) !important; font-size: 0.7rem !important; }
+    .role-chip { background: rgba(255,255,255,.2) !important; color: #fff !important; font-size: 0.68rem !important; }
+    .avatar { background: rgba(255,255,255,.25) !important; width: 32px !important; height: 32px !important; font-size: 0.75rem !important; }
+    .content { padding: 12px 12px 100px !important; }
+    .ad-kpis { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+    .ad-panels { grid-template-columns: 1fr !important; gap: 10px !important; }
+    .ad-banner { flex-direction: column !important; align-items: flex-start !important; padding: 14px !important; min-height: auto !important; }
+    .ad-banner h1 { font-size: 1.2rem !important; }
+    .kpi-row { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+    .page-header h2 { font-size: 1.1rem !important; }
+    .page-header { flex-direction: column !important; }
+    table.data { font-size: 0.75rem !important; }
+    table.data th, table.data td { padding: 7px 6px !important; }
+    .chart-wrap svg { max-height: 160px; }
+    .donut-wrap { flex-direction: column; align-items: center; }
+    .ad-quick { grid-template-columns: repeat(4, 1fr) !important; gap: 6px !important; padding: 10px !important; }
+    .mobile-tabs {
+      display: flex !important; position: fixed;
+      left: max(8px, calc(50% - 195px + 8px));
+      right: max(8px, calc(50% - 195px + 8px));
+      bottom: 8px; max-width: 374px; z-index: 40;
+      background: #fff; border-radius: 22px;
+      box-shadow: 0 -2px 18px rgba(20,40,90,.22);
+      padding: 6px 4px 8px; justify-content: space-around;
+    }
+    .mobile-tabs a {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 2px; padding: 6px 4px; font-size: 0.62rem; font-weight: 600;
+      color: #64748b; text-decoration: none; position: relative;
+    }
+    .mobile-tabs a .tab-ico { font-size: 1.2rem; line-height: 1; }
+    .mobile-tabs a.on { color: #1a4fd0; }
+    .mobile-tabs a.on::after {
+      content: ""; position: absolute; left: 22%; right: 22%; bottom: 0;
+      height: 3px; border-radius: 3px; background: #1a4fd0;
+    }
+    /* hide desktop-only portal nav strips on mobile preview */
+    .content > div[style*="overflow-x:auto"] { display: none !important; }
+  </style>
+</head>
+<body style="background:#94a3b8;padding:16px 0;margin:0">
+  <div style="text-align:center;margin-bottom:8px;font-size:0.75rem;color:#1e293b;font-weight:600">Mobile preview · same data as desktop Analytics</div>
+  <div class="phone-frame">
+    <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      <div class="topbar-school"><h1>Government Secondary School</h1><p>Reports & Insights</p></div>
+              <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Admin</span><div class="avatar">AJ</div></div>
+    </header>
+    <div class="content">
+
+        <div class="page-header">
+          <div><h2>Reports & Insights</h2><p>Performance analytics for the current term</p></div>
+          <div class="page-actions">
+            <select class="form-control" style="width:auto"><option>1st Term 2025/26</option><option>2nd Term</option><option>3rd Term</option></select>
+          </div>
+        </div>
+
+        
+        
+        <div class="filters" style="margin-bottom:16px">
+          <select class="form-control"><option>1st Term 2025/26</option><option>2nd Term</option><option>3rd Term</option></select>
+          <select class="form-control"><option>All classes</option><option>SSS 2A</option><option>SSS 2B</option><option>JSS 3A</option></select>
+          <span style="font-size:0.8rem;color:var(--mut)" data-scope-label>Scope: All classes · 1st Term</span>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-mini"><div class="label">Class Avg</div><div class="value">68.4%</div></div>
+          <div class="kpi-mini"><div class="label">Pass Rate</div><div class="value" style="color:#059669">82%</div></div>
+          <div class="kpi-mini"><div class="label">A Grades</div><div class="value">214</div></div>
+          <div class="kpi-mini"><div class="label">Results Complete</div><div class="value">78%</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:16px">
+          <!-- Enrollment Trend SVG -->
+          <div class="card">
+            <div class="panel-header"><h3><span class="ni">📈</span> Enrollment Trend</h3></div>
+            <div class="chart-wrap">
+              <svg viewBox="0 0 400 200" role="img" aria-label="Enrollment 2021-2025">
+                <line x1="40" x2="390" y1="20" y2="20" stroke="#e5e7eb"/>
+                <line x1="40" x2="390" y1="55" y2="55" stroke="#e5e7eb"/>
+                <line x1="40" x2="390" y1="90" y2="90" stroke="#e5e7eb"/>
+                <line x1="40" x2="390" y1="125" y2="125" stroke="#e5e7eb"/>
+                <line x1="40" x2="390" y1="160" y2="160" stroke="#e5e7eb"/>
+                <text x="36" y="24" text-anchor="end" font-size="9" fill="#666">1400</text>
+                <text x="36" y="59" text-anchor="end" font-size="9" fill="#666">1200</text>
+                <text x="36" y="94" text-anchor="end" font-size="9" fill="#666">1000</text>
+                <text x="36" y="129" text-anchor="end" font-size="9" fill="#666">800</text>
+                <text x="36" y="164" text-anchor="end" font-size="9" fill="#666">600</text>
+                <!-- bars -->
+                <rect x="60" y="72" width="40" height="88" rx="4" fill="#93c5fd"/>
+                <text x="80" y="68" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2a6b">980</text>
+                <text x="80" y="178" text-anchor="middle" font-size="10" fill="#5b6b88">2021</text>
+                <rect x="125" y="65" width="40" height="95" rx="4" fill="#60a5fa"/>
+                <text x="145" y="61" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2a6b">1050</text>
+                <text x="145" y="178" text-anchor="middle" font-size="10" fill="#5b6b88">2022</text>
+                <rect x="190" y="56" width="40" height="104" rx="4" fill="#3b82f6"/>
+                <text x="210" y="52" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2a6b">1120</text>
+                <text x="210" y="178" text-anchor="middle" font-size="10" fill="#5b6b88">2023</text>
+                <rect x="255" y="48" width="40" height="112" rx="4" fill="#2563eb"/>
+                <text x="275" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2a6b">1190</text>
+                <text x="275" y="178" text-anchor="middle" font-size="10" fill="#5b6b88">2024</text>
+                <rect x="320" y="40" width="40" height="120" rx="4" fill="#0a2a6b"/>
+                <text x="340" y="36" text-anchor="middle" font-size="11" font-weight="700" fill="#0a2a6b">1248</text>
+                <text x="340" y="178" text-anchor="middle" font-size="10" fill="#5b6b88">2025</text>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Grade distribution horizontal bars -->
+          <div class="card">
+            <div class="panel-header"><h3><span class="ni">◫</span> Grade Distribution</h3></div>
+            <div style="padding:20px 16px">
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><b>A</b><span>22%</span></div>
+                <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden"><div style="width:22%;height:100%;background:#27c25a;border-radius:6px"></div></div>
+              </div>
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><b>B</b><span>31%</span></div>
+                <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden"><div style="width:31%;height:100%;background:#1a6fe8;border-radius:6px"></div></div>
+              </div>
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><b>C</b><span>29%</span></div>
+                <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden"><div style="width:29%;height:100%;background:#ffae1a;border-radius:6px"></div></div>
+              </div>
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><b>D</b><span>11%</span></div>
+                <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden"><div style="width:11%;height:100%;background:#f97316;border-radius:6px"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px"><b>F</b><span>7%</span></div>
+                <div style="height:12px;background:#e5e7eb;border-radius:6px;overflow:hidden"><div style="width:7%;height:100%;background:#e11d48;border-radius:6px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subject performance bar chart -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="panel-header"><h3>Subject Averages — SSS 2A</h3></div>
+          <div class="chart-wrap">
+            <svg viewBox="0 0 480 200" role="img" aria-label="Subject averages">
+              <line x1="50" x2="470" y1="20" y2="20" stroke="#e5e7eb"/>
+              <line x1="50" x2="470" y1="55" y2="55" stroke="#e5e7eb"/>
+              <line x1="50" x2="470" y1="90" y2="90" stroke="#e5e7eb"/>
+              <line x1="50" x2="470" y1="125" y2="125" stroke="#e5e7eb"/>
+              <line x1="50" x2="470" y1="160" y2="160" stroke="#e5e7eb"/>
+              <text x="46" y="24" text-anchor="end" font-size="9" fill="#666">100</text>
+              <text x="46" y="59" text-anchor="end" font-size="9" fill="#666">80</text>
+              <text x="46" y="94" text-anchor="end" font-size="9" fill="#666">60</text>
+              <text x="46" y="129" text-anchor="end" font-size="9" fill="#666">40</text>
+              <text x="46" y="164" text-anchor="end" font-size="9" fill="#666">20</text>
+              <!-- Eng 78, Math 74, Bio 71, Chem 68, Phy 61, Econ 73, Gov 76, FMath 58 -->
+              <rect x="60" y="48" width="36" height="112" rx="3" fill="#1a6fe8"/><text x="78" y="44" text-anchor="middle" font-size="10" font-weight="700">78</text><text x="78" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Eng</text>
+              <rect x="110" y="54" width="36" height="106" rx="3" fill="#3b82f6"/><text x="128" y="50" text-anchor="middle" font-size="10" font-weight="700">74</text><text x="128" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Math</text>
+              <rect x="160" y="59" width="36" height="101" rx="3" fill="#60a5fa"/><text x="178" y="55" text-anchor="middle" font-size="10" font-weight="700">71</text><text x="178" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Bio</text>
+              <rect x="210" y="64" width="36" height="96" rx="3" fill="#93c5fd"/><text x="228" y="60" text-anchor="middle" font-size="10" font-weight="700">68</text><text x="228" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Chem</text>
+              <rect x="260" y="75" width="36" height="85" rx="3" fill="#f59e0b"/><text x="278" y="71" text-anchor="middle" font-size="10" font-weight="700">61</text><text x="278" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Phy</text>
+              <rect x="310" y="56" width="36" height="104" rx="3" fill="#27c25a"/><text x="328" y="52" text-anchor="middle" font-size="10" font-weight="700">73</text><text x="328" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Econ</text>
+              <rect x="360" y="51" width="36" height="109" rx="3" fill="#0e9a3c"/><text x="378" y="47" text-anchor="middle" font-size="10" font-weight="700">76</text><text x="378" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">Gov</text>
+              <rect x="410" y="80" width="36" height="80" rx="3" fill="#e11d48"/><text x="428" y="76" text-anchor="middle" font-size="10" font-weight="700">58</text><text x="428" y="178" text-anchor="middle" font-size="9" fill="#5b6b88">F.Math</text>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card table-wrap">
+          <div class="panel-header"><h3>Top Performing Classes</h3></div>
+          <table class="data">
+            <thead><tr><th>Class</th><th>Students</th><th>Avg %</th><th>Pass Rate</th><th>Top Student</th></tr></thead>
+            <tbody>
+              <tr><td><strong>SSS 2A</strong></td><td>42</td><td>74.2%</td><td>91%</td><td>Fatima Bello</td></tr>
+              <tr><td><strong>SSS 1A</strong></td><td>44</td><td>71.8%</td><td>88%</td><td>Aisha Musa</td></tr>
+              <tr><td><strong>JSS 3A</strong></td><td>50</td><td>69.5%</td><td>85%</td><td>David Okon</td></tr>
+              <tr><td><strong>SSS 2B</strong></td><td>40</td><td>68.1%</td><td>82%</td><td>Chinedu Okeke</td></tr>
+              <tr><td><strong>JSS 2A</strong></td><td>48</td><td>66.4%</td><td>80%</td><td>Ngozi Eze</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- School Result Performance Trend -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="panel-header"><h3><span class="ni">📈</span> School Result Performance Trend</h3><span style="font-size:0.8rem;color:var(--mut)">Average score by term · 2025/2026</span></div>
+          <div class="chart-wrap" style="padding:16px">
+            <svg viewBox="0 0 420 160" role="img" aria-label="Result performance trend">
+              <line x1="40" y1="20" x2="40" y2="130" stroke="#e3e9f3"/>
+              <line x1="40" y1="130" x2="400" y2="130" stroke="#e3e9f3"/>
+              <polyline fill="none" stroke="#1a6fe8" stroke-width="3" points="60,90 140,75 220,55 300,48 380,42"/>
+              <circle cx="60" cy="90" r="4" fill="#1a6fe8"/><circle cx="140" cy="75" r="4" fill="#1a6fe8"/>
+              <circle cx="220" cy="55" r="4" fill="#1a6fe8"/><circle cx="300" cy="48" r="4" fill="#1a6fe8"/>
+              <circle cx="380" cy="42" r="4" fill="#1a6fe8"/>
+              <text x="60" y="148" text-anchor="middle" font-size="10" fill="#5b6b88">1st 24</text>
+              <text x="140" y="148" text-anchor="middle" font-size="10" fill="#5b6b88">2nd 24</text>
+              <text x="220" y="148" text-anchor="middle" font-size="10" fill="#5b6b88">3rd 24</text>
+              <text x="300" y="148" text-anchor="middle" font-size="10" fill="#5b6b88">1st 25</text>
+              <text x="380" y="148" text-anchor="middle" font-size="10" fill="#5b6b88">2nd 25</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Student Performance by Class -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="panel-header"><h3><span class="ni">📊</span> Student Performance by Class</h3><span style="font-size:0.8rem;color:var(--mut)">Avg score &amp; pass rate</span></div>
+          <div class="chart-wrap" style="padding:16px">
+            <svg viewBox="0 0 420 180" role="img" aria-label="Performance by class">
+              <rect x="50" y="40" width="28" height="90" rx="3" fill="#1a6fe8"/><text x="64" y="35" text-anchor="middle" font-size="10" font-weight="700">74</text>
+              <rect x="90" y="55" width="28" height="75" rx="3" fill="#3b82f6"/><text x="104" y="50" text-anchor="middle" font-size="10" font-weight="700">68</text>
+              <rect x="130" y="35" width="28" height="95" rx="3" fill="#1a6fe8"/><text x="144" y="30" text-anchor="middle" font-size="10" font-weight="700">78</text>
+              <rect x="170" y="48" width="28" height="82" rx="3" fill="#60a5fa"/><text x="184" y="43" text-anchor="middle" font-size="10" font-weight="700">71</text>
+              <rect x="210" y="60" width="28" height="70" rx="3" fill="#93c5fd"/><text x="224" y="55" text-anchor="middle" font-size="10" font-weight="700">65</text>
+              <rect x="250" y="42" width="28" height="88" rx="3" fill="#1a6fe8"/><text x="264" y="37" text-anchor="middle" font-size="10" font-weight="700">76</text>
+              <line x1="40" y1="130" x2="300" y2="130" stroke="#e3e9f3"/>
+              <text x="64" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">2A</text>
+              <text x="104" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">2B</text>
+              <text x="144" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">1A</text>
+              <text x="184" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">1B</text>
+              <text x="224" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">J3A</text>
+              <text x="264" y="148" text-anchor="middle" font-size="8" fill="#5b6b88">J3B</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Enrolment by Class Level -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="panel-header"><h3><span class="ni">🏫</span> Enrolment by Class Level</h3><span style="font-size:0.8rem;color:var(--mut)">Active students per class</span></div>
+          <div class="chart-wrap" style="padding:16px">
+            <svg viewBox="0 0 420 160" role="img" aria-label="Enrolment by class">
+              <rect x="50" y="50" width="36" height="80" rx="3" fill="#27c25a"/><text x="68" y="45" text-anchor="middle" font-size="11" font-weight="700">48</text>
+              <rect x="100" y="55" width="36" height="75" rx="3" fill="#27c25a"/><text x="118" y="50" text-anchor="middle" font-size="11" font-weight="700">45</text>
+              <rect x="150" y="40" width="36" height="90" rx="3" fill="#1a6fe8"/><text x="168" y="35" text-anchor="middle" font-size="11" font-weight="700">52</text>
+              <rect x="200" y="48" width="36" height="82" rx="3" fill="#1a6fe8"/><text x="218" y="43" text-anchor="middle" font-size="11" font-weight="700">50</text>
+              <rect x="250" y="58" width="36" height="72" rx="3" fill="#7c3aed"/><text x="268" y="53" text-anchor="middle" font-size="11" font-weight="700">42</text>
+              <rect x="300" y="62" width="36" height="68" rx="3" fill="#7c3aed"/><text x="318" y="57" text-anchor="middle" font-size="11" font-weight="700">40</text>
+              <line x1="40" y1="130" x2="350" y2="130" stroke="#e3e9f3"/>
+              <text x="68" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">JSS1</text>
+              <text x="118" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">JSS2</text>
+              <text x="168" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">JSS3</text>
+              <text x="218" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">SSS1</text>
+              <text x="268" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">SSS2</text>
+              <text x="318" y="148" text-anchor="middle" font-size="9" fill="#5b6b88">SSS3</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Attendance Trend -->
+        <div class="card" style="margin-bottom:16px">
+          <div class="panel-header"><h3><span class="ni">📅</span> Attendance Trend (Last Week)</h3><span style="font-size:0.8rem;color:var(--mut)">School-wide daily rate</span></div>
+          <div class="chart-wrap" style="padding:16px">
+            <svg viewBox="0 0 420 140" role="img" aria-label="Attendance trend">
+              <polyline fill="none" stroke="#27c25a" stroke-width="3" points="50,50 110,45 170,55 230,40 290,48 350,42"/>
+              <circle cx="50" cy="50" r="4" fill="#27c25a"/><circle cx="110" cy="45" r="4" fill="#27c25a"/>
+              <circle cx="170" cy="55" r="4" fill="#27c25a"/><circle cx="230" cy="40" r="4" fill="#27c25a"/>
+              <circle cx="290" cy="48" r="4" fill="#27c25a"/><circle cx="350" cy="42" r="4" fill="#27c25a"/>
+              <line x1="40" y1="110" x2="380" y2="110" stroke="#e3e9f3"/>
+              <text x="50" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Mon</text>
+              <text x="110" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Tue</text>
+              <text x="170" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Wed</text>
+              <text x="230" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Thu</text>
+              <text x="290" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Fri</text>
+              <text x="350" y="128" text-anchor="middle" font-size="10" fill="#5b6b88">Sat</text>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Classes Needing Improvement -->
+        <div class="card table-wrap" style="margin-bottom:16px">
+          <div class="panel-header"><h3><span class="ni">⚠</span> Classes Needing Improvement</h3><a href="54-ai-command-center.html" style="font-size:0.8rem;font-weight:600">AI Alerts →</a></div>
+          <table class="data">
+            <thead><tr><th>Class</th><th>Assessed</th><th>Avg %</th><th>Pass rate</th><th>Trend</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><strong>JSS 2C</strong></td><td>38</td><td>48.2%</td><td>41%</td><td style="color:#dc2626">▼</td><td><a href="06-broadsheet.html">Report</a></td></tr>
+              <tr><td><strong>SSS 1B</strong></td><td>44</td><td>52.1%</td><td>55%</td><td style="color:#d97706">●</td><td><a href="06-broadsheet.html">Report</a></td></tr>
+              <tr><td><strong>JSS 3B</strong></td><td>41</td><td>54.6%</td><td>58%</td><td style="color:#d97706">●</td><td><a href="06-broadsheet.html">Report</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card table-wrap" style="margin-top:16px" data-slot="top-students">
+          <div class="panel-header"><h3><span class="ni">🏆</span> Top Performing Students</h3><span style="font-size:0.8rem;color:var(--mut)">This term</span></div>
+          <table class="data">
+            <thead><tr><th style="width:60px">Rank</th><th>Student</th><th>Class</th><th>Avg %</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td><strong>Fatima Bello</strong></td><td>SSS 2A</td><td><b>85.8%</b></td></tr>
+              <tr><td>2</td><td><strong>Aisha Musa</strong></td><td>SSS 1A</td><td><b>84.2%</b></td></tr>
+              <tr><td>3</td><td><strong>David Okon</strong></td><td>JSS 3A</td><td><b>82.1%</b></td></tr>
+              <tr><td>4</td><td><strong>Chinedu Okeke</strong></td><td>SSS 2A</td><td><b>75.1%</b></td></tr>
+              <tr><td>5</td><td><strong>Ngozi Eze</strong></td><td>JSS 2A</td><td><b>74.6%</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      
+    </div>
+    <nav class="mobile-tabs">
+      <a href="m01-admin-mobile.html"><span class="tab-ico">⌂</span>Home</a>
+      <a href="m05-analytics-mobile.html" class="on"><span class="tab-ico">▤</span>Reports</a>
+      <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+      <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+    </nav>
+  </div>
+<script src="js/shell.js"></script>
+</body>
+</html>

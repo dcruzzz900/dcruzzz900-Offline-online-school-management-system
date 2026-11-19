@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Platform Dashboard — My School Hub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo" style="background:#7c3aed;color:#fff">PH</div><h2>My School Hub</h2><small>Platform Control</small></div>
+      <nav>
+        <a href="55-platform-hub.html" class="nav-item active"><span class="ni">⌂</span>Platform Dashboard</a>
+        <div class="nav-group">Tenants</div>
+        <a href="55-platform-hub.html" class="nav-item"><span class="ni">🏫</span>All Schools</a>
+        <a href="64-register-school.html" class="nav-item"><span class="ni">＋</span>Register School</a>
+        <a href="55-platform-hub.html" class="nav-item"><span class="ni">✓</span>Activation Requests</a>
+        <div class="nav-group">Billing</div>
+        <a href="56-platform-billing.html" class="nav-item"><span class="ni">◈</span>Subscriptions</a>
+        <a href="56-platform-billing.html" class="nav-item"><span class="ni">◈</span>Billing Operations</a>
+        <a href="56-platform-billing.html" class="nav-item"><span class="ni">▤</span>Billing Analytics</a>
+        <div class="nav-group">System</div>
+        <a href="80-audit-history.html" class="nav-item"><span class="ni">📜</span>Platform Audit</a>
+        <a href="80-audit-history.html" class="nav-item"><span class="ni">🔒</span>Security Audit</a>
+        <a href="55-platform-hub.html" class="nav-item"><span class="ni">💾</span>Backups</a>
+        <a href="55-platform-hub.html" class="nav-item"><span class="ni">👤</span>Users & Roles</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Super Admin</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Platform Control Center</h1><p>All schools · subscriptions · system health</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip" style="background:#f3e8ff;color:#6b21a8">Platform Admin</span><div class="avatar" style="background:#7c3aed">SA</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header"><div><h2><span class="ni">⌂</span> Platform Dashboard</h2><p>Super admin overview</p></div></div>
+        <div class="kpi-row">
+          <div class="kpi-mini"><div class="label">Schools</div><div class="value">24</div></div>
+          <div class="kpi-mini"><div class="label">Active subs</div><div class="value">18</div></div>
+          <div class="kpi-mini"><div class="label">Trial</div><div class="value">4</div></div>
+          <div class="kpi-mini"><div class="label">Past due</div><div class="value" style="color:#dc2626">2</div></div>
+        </div>
+        <div class="card table-wrap">
+          <div class="panel-header"><h3>Recent schools</h3><a href="64-register-school.html" style="font-size:0.8rem;font-weight:600">Register →</a></div>
+          <table class="data">
+            <thead><tr><th>School</th><th>Code</th><th>Plan</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Government Secondary School</strong></td><td>GSS-GG</td><td>Pro</td><td><span class="badge badge-green">Active</span></td></tr>
+              <tr><td><strong>GSS Goni-Gora</strong></td><td>GSS-GG</td><td>Standard</td><td><span class="badge badge-green">Active</span></td></tr>
+              <tr><td><strong>Demo Pilot School</strong></td><td>DEMO-01</td><td>Trial</td><td><span class="badge badge-orange">Trial</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="47-platform-hub.html" class="on"><span class="tab-ico">⌂</span>Home</a>
+    <a href="55-platform-schools.html"><span class="tab-ico">🏫</span>Schools</a>
+    <a href="56-platform-billing.html"><span class="tab-ico">◈</span>Billing</a>
+    <a href="57-platform-subscriptions.html"><span class="tab-ico">⬢</span>Plans</a>
+  </nav>
+<script src="js/shell.js"></script>
+</body>
+</html>

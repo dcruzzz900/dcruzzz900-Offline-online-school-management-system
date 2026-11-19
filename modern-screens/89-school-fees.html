@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School Fees — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item"><span class="ni">⌂</span>Dashboard</a>
+        <div class="nav-group">School Administration</div>
+        <a href="89-school-fees.html" class="nav-item active"><span class="ni">💰</span>School Fees</a>
+        <a href="22-billing.html" class="nav-item"><span class="ni">◈</span>Billing & Subscription</a>
+        <a href="30-settings.html" class="nav-item"><span class="ni">⚙</span>Settings</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>School Fees</p></div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<button class="btn btn-primary btn-sm">+ Record payment</button><span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">💰</span> School Fees</h2>
+          <p>Expected vs collected for the active session · same figures as the dashboard KPI</p></div>
+          <div class="page-actions">
+            <select class="form-control" style="width:auto"><option>2025/2026</option><option>2024/2025</option></select>
+            <select class="form-control" style="width:auto"><option>All classes</option><option>SSS 2A</option><option>JSS 1A</option></select>
+          </div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-mini"><div class="label">Expected</div><div class="value" style="font-size:1.25rem">₦18.4M</div></div>
+          <div class="kpi-mini"><div class="label">Collected</div><div class="value" style="font-size:1.25rem;color:#059669">₦14.2M</div></div>
+          <div class="kpi-mini"><div class="label">Outstanding</div><div class="value" style="font-size:1.25rem;color:#d97706">₦4.2M</div></div>
+          <div class="kpi-mini"><div class="label">Collection rate</div><div class="value" style="font-size:1.25rem">77%</div></div>
+        </div>
+        <div class="card" style="padding:14px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:6px"><span>Progress</span><b>77%</b></div>
+          <div class="progress-bar"><i style="width:77%"></i></div>
+        </div>
+        <div class="card table-wrap">
+          <div class="panel-header"><h3>Recent payments</h3><button class="btn btn-outline btn-sm">Export</button></div>
+          <table class="data">
+            <thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th><th>Method</th><th>Recorded by</th></tr></thead>
+            <tbody>
+              <tr><td>16 Nov 2026</td><td><strong>Chinedu Okeke</strong></td><td>SSS 2A</td><td>₦85,000</td><td>Transfer</td><td>Bursar</td></tr>
+              <tr><td>15 Nov 2026</td><td><strong>Fatima Bello</strong></td><td>SSS 2A</td><td>₦85,000</td><td>Cash</td><td>Bursar</td></tr>
+              <tr><td>14 Nov 2026</td><td><strong>Aisha Musa</strong></td><td>SSS 1A</td><td>₦42,500</td><td>Transfer</td><td>Admin</td></tr>
+              <tr><td>12 Nov 2026</td><td><strong>David Okon</strong></td><td>JSS 3A</td><td>₦35,000</td><td>POS</td><td>Bursar</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:0.8rem;color:var(--mut);margin-top:12px">
+          Platform subscription billing is separate — see <a href="22-billing.html">Billing &amp; Subscription</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="89-school-fees.html" class="on"><span class="tab-ico">💰</span>Fees</a>
+    <a href="22-billing.html"><span class="tab-ico">◈</span>Billing</a>
+    <a href="30-settings.html"><span class="tab-ico">⚙</span>Settings</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

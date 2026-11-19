@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Additional Result Fields — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="61-result-settings.html" class="nav-item"><span class="ni">📄</span>Result Display</a>
+        <a href="81-result-fields.html" class="nav-item active"><span class="ni">☰</span>Additional Result Fields</a>
+        <a href="88-custom-school-info.html" class="nav-item"><span class="ni">🧩</span>Custom School Information</a>
+        <a href="78-custom-fields.html" class="nav-item"><span class="ni">☰</span>Custom Fields</a>
+        <a href="13-grading.html" class="nav-item"><span class="ni">◫</span>Grading</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Additional Result Fields</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div>
+            <h2><span class="ni">☰</span> Additional Result Fields</h2>
+            <p>Extra per-student fields that can print on the result sheet (text, choice list, or number). Shown when “Show additional information fields” is on in Result Display.</p>
+          </div>
+        </div>
+
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <h3 style="font-size:0.95rem;font-weight:700;margin-bottom:12px">Add field</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+            <div class="form-group"><label>Field name</label><input class="form-control" placeholder="e.g. House, Club, Conduct note" maxlength="60"></div>
+            <div class="form-group"><label>Type</label>
+              <select class="form-control"><option value="text">Text</option><option value="choice">Choice list</option><option value="number">Number</option></select>
+            </div>
+            <div class="form-group"><label>Options <small style="color:var(--mut)">(choices, or optional maximum)</small></label>
+              <input class="form-control" placeholder="e.g. Excellent, Good, Fair  or  100" maxlength="300">
+            </div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;margin:12px 0;font-size:0.85rem">
+            <input type="checkbox" checked> Print on result sheet
+          </label>
+          <button class="btn btn-primary btn-sm">Add field</button>
+        </div>
+
+        <div class="card table-wrap">
+          <div class="panel-header"><h3>Configured fields</h3></div>
+          <table class="data">
+            <thead>
+              <tr><th>Field name</th><th>Type</th><th>Options</th><th>On sheet</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input class="form-control" value="House" style="min-width:120px"></td>
+                <td><span class="badge badge-blue">Choice</span></td>
+                <td><input class="form-control" value="Red, Blue, Green, Yellow" style="min-width:140px"></td>
+                <td style="text-align:center"><input type="checkbox" checked></td>
+                <td><span class="badge badge-green">Active</span></td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-outline btn-sm">Save</button>
+                  <button class="btn btn-outline btn-sm">Hide</button>
+                  <button class="btn btn-outline btn-sm" title="Move up">▲</button>
+                  <button class="btn btn-outline btn-sm" title="Move down">▼</button>
+                </td>
+              </tr>
+              <tr>
+                <td><input class="form-control" value="Club" style="min-width:120px"></td>
+                <td><span class="badge badge-blue">Choice</span></td>
+                <td><input class="form-control" value="Debate, Jet, Press, Drama" style="min-width:140px"></td>
+                <td style="text-align:center"><input type="checkbox" checked></td>
+                <td><span class="badge badge-green">Active</span></td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-outline btn-sm">Save</button>
+                  <button class="btn btn-outline btn-sm">Hide</button>
+                  <button class="btn btn-outline btn-sm">▲</button>
+                  <button class="btn btn-outline btn-sm">▼</button>
+                </td>
+              </tr>
+              <tr>
+                <td><input class="form-control" value="Conduct note" style="min-width:120px"></td>
+                <td><span class="badge badge-gray">Text</span></td>
+                <td>—</td>
+                <td style="text-align:center"><input type="checkbox" checked></td>
+                <td><span class="badge badge-green">Active</span></td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-outline btn-sm">Save</button>
+                  <button class="btn btn-outline btn-sm">Hide</button>
+                  <button class="btn btn-outline btn-sm">▲</button>
+                  <button class="btn btn-outline btn-sm">▼</button>
+                </td>
+              </tr>
+              <tr style="opacity:0.65">
+                <td><input class="form-control" value="Old field" style="min-width:120px"></td>
+                <td><span class="badge badge-gray">Text</span></td>
+                <td>—</td>
+                <td style="text-align:center"><input type="checkbox"></td>
+                <td><span class="badge badge-orange">Hidden</span></td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-outline btn-sm">Save</button>
+                  <button class="btn btn-outline btn-sm">Show</button>
+                  <button class="btn btn-outline btn-sm">▲</button>
+                  <button class="btn btn-outline btn-sm">▼</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:0.85rem;color:var(--mut);margin-top:12px">
+          Sheet visibility also depends on <a href="61-result-settings.html">Result Display → Scores → Show additional information fields</a>.
+          School-wide labelled lines (not per student) use <a href="88-custom-school-info.html">Custom School Information</a>.
+        </p>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="61-result-settings.html"><span class="tab-ico">📄</span>Display</a>
+    <a href="81-result-fields.html" class="on"><span class="tab-ico">☰</span>Fields</a>
+    <a href="30-settings.html"><span class="tab-ico">⚙</span>Settings</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

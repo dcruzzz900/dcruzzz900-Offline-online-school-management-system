@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Government Secondary School</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item active"><span class="ni">⌂</span>Dashboard</a>
+        <a href="52-staff-profile.html" class="nav-item"><span class="ni">☺</span>My Profile</a>
+        <div class="nav-group">Academics</div>
+        <a href="08-students.html" class="nav-item"><span class="ni">◉</span>Students</a>
+        <a href="07-classes.html" class="nav-item"><span class="ni">▤</span>Classes</a>
+        <a href="10-subjects.html" class="nav-item"><span class="ni">▦</span>Subjects</a>
+        <a href="34-assign-subjects.html" class="nav-item"><span class="ni">◈</span>Assign Subjects</a>
+        <a href="33-sessions-terms.html" class="nav-item"><span class="ni">◷</span>Sessions & Terms</a>
+        <a href="13-grading.html" class="nav-item"><span class="ni">◫</span>Grading</a>
+        <a href="14-promote.html" class="nav-item"><span class="ni">↗</span>Promote Students</a>
+        <a href="53-class-results.html" class="nav-item"><span class="ni">▣</span>Results</a>
+        <a href="18-result-workflow.html" class="nav-item"><span class="ni">✔</span>Result approval</a>
+        <a href="86-registrar-dashboard.html" class="nav-item"><span class="ni">✎</span>Registrar</a>
+        <a href="79-result-permissions.html" class="nav-item"><span class="ni">⚿</span>Workflow permissions</a>
+        <div class="nav-group">Attendance</div>
+        <a href="29-staff-attendance.html" class="nav-item"><span class="ni">✓</span>Staff Attendance</a>
+        <div class="nav-group">Teaching</div>
+        <a href="38-timetable-hub.html" class="nav-item"><span class="ni">▦</span>Timetable</a>
+        <a href="20-materials.html" class="nav-item"><span class="ni">▤</span>Learning Materials</a>
+        <div class="nav-group">People</div>
+        <a href="09-teachers.html" class="nav-item"><span class="ni">♙</span>Teachers</a>
+        <a href="11-parents.html" class="nav-item"><span class="ni">👥</span>Parents</a>
+        <a href="87-parent-verification.html" class="nav-item"><span class="ni">✓</span>Parent Verification</a>
+        <a href="40-signup-codes.html" class="nav-item"><span class="ni">🔑</span>Signup Codes</a>
+        <div class="nav-group">Reports & Insights</div>
+        <a href="15-analytics.html" class="nav-item"><span class="ni">▤</span>School Analytics</a>
+        <a href="82-reports-hub.html" class="nav-item"><span class="ni">▤</span>Reports & Analytics</a>
+        <a href="54-ai-command-center.html" class="nav-item"><span class="ni">✦</span>AI Assistant</a>
+        <div class="nav-group">Communication</div>
+        <a href="46-messages.html" class="nav-item"><span class="ni">💬</span>Parent Messages</a>
+        <a href="21-notifications.html" class="nav-item"><span class="ni">🔔</span>Notifications</a>
+        <a href="23-announcements.html" class="nav-item"><span class="ni">📢</span>Announcements</a>
+        <div class="nav-group">School Administration</div>
+        <a href="76-setup-wizard.html" class="nav-item"><span class="ni">⚙</span>School Setup</a>
+        <a href="27-theme-branding.html" class="nav-item"><span class="ni">🎨</span>Theme & Branding</a>
+        <a href="61-result-settings.html" class="nav-item"><span class="ni">📄</span>Result Display</a>
+        <a href="48-school-profile.html" class="nav-item"><span class="ni">🏫</span>School Information</a>
+        <a href="89-school-fees.html" class="nav-item"><span class="ni">💰</span>School Fees</a>
+        <a href="22-billing.html" class="nav-item"><span class="ni">◈</span>Billing & Subscription</a>
+        <a href="88-custom-school-info.html" class="nav-item"><span class="ni">🧩</span>Custom School Information</a>
+        <a href="78-custom-fields.html" class="nav-item"><span class="ni">☰</span>Custom Fields</a>
+        <a href="81-result-fields.html" class="nav-item"><span class="ni">☰</span>Additional Result Fields</a>
+        <a href="30-settings.html" class="nav-item"><span class="ni">⚙</span>Settings</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>School Admin Panel</small></div></div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school">
+          <h1>Government Secondary School</h1>
+          <p>Gonin-Gora, Chikun, Kaduna</p>
+        </div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+          <span class="role-chip">Administrator</span>
+          <div class="avatar">AJ</div>
+        </div>
+      </header>
+
+      <div class="content">
+        <div class="ad">
+
+          <!-- Welcome banner (V105) -->
+          <section class="ad-banner">
+            <div>
+              <h1>Welcome, Augustine!</h1>
+              <p>Here is an overview of your school system.</p>
+            </div>
+            <div class="ad-banner-clock" data-school-ms="">
+              <div>📅 <span data-clock-date>Wednesday, 18 November 2026</span></div>
+              <div>🕐 <span data-clock-time>6:09 AM</span></div>
+            </div>
+          </section>
+
+          <!-- KPI cards (V105 layout: Students, Staff, Classes, Subjects, Parents, Fees) -->
+          <section class="ad-kpis">
+            <article class="ad-kpi k-blue">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">👥</span>
+                <div><span>Students</span><b>1,248</b></div>
+              </div>
+              <div class="ad-kpi-gender">
+                <div><b>612</b><small>Male (49%)</small></div>
+                <div><b>636</b><small>Female (51%)</small></div>
+              </div>
+              <a class="ad-kpi-link" href="08-students.html">View Students →</a>
+            </article>
+            <article class="ad-kpi k-green">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">🧑‍🏫</span>
+                <div><span>Staff</span><b>87</b></div>
+              </div>
+              <div class="ad-kpi-gender">
+                <div><b>41</b><small>Male (47%)</small></div>
+                <div><b>46</b><small>Female (53%)</small></div>
+              </div>
+              <a class="ad-kpi-link" href="09-teachers.html">View Staff →</a>
+            </article>
+            <article class="ad-kpi k-purple">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">🏫</span>
+                <div><span>Classes</span><b>28</b></div>
+              </div>
+              <div class="ad-kpi-gender" style="grid-template-columns:1fr">
+                <div><b>JSS 12 · SSS 16</b><small>Active arms</small></div>
+              </div>
+              <a class="ad-kpi-link" href="07-classes.html">View Classes →</a>
+            </article>
+            <article class="ad-kpi k-cyan">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">📚</span>
+                <div><span>Subjects</span><b>42</b></div>
+              </div>
+              <div class="ad-kpi-gender" style="grid-template-columns:1fr">
+                <div><b>Core + Electives</b><small>Curriculum</small></div>
+              </div>
+              <a class="ad-kpi-link" href="10-subjects.html">View Subjects →</a>
+            </article>
+            <article class="ad-kpi k-orange">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">👨‍👩‍👧</span>
+                <div><span>Parents</span><b>890</b></div>
+              </div>
+              <div class="ad-kpi-gender" style="grid-template-columns:1fr">
+                <div><b>812 linked</b><small>78 pending</small></div>
+              </div>
+              <a class="ad-kpi-link" href="11-parents.html">View Parents →</a>
+            </article>
+            <article class="ad-kpi k-fees">
+              <div class="ad-kpi-top">
+                <span class="ad-kpi-ico">💰</span>
+                <div><span>School Fees</span><b>₦18.4M</b></div>
+              </div>
+              <div class="ad-kpi-gender" style="grid-template-columns:1fr">
+                <div><b>72% collected</b><small>This term</small></div>
+              </div>
+              <a class="ad-kpi-link" href="89-school-fees.html">View School Fees →</a>
+            </article>
+          </section>
+
+          <!-- Charts row: Gender donut | Result compilation | Enrollment trend -->
+          <section class="ad-panels">
+            <article class="ad-panel">
+              <header><h2><span class="ni">⚥</span> Gender Distribution</h2></header>
+              <div class="donut-wrap">
+                <!-- Pure SVG donut — male 49% / female 51% -->
+                <svg viewBox="0 0 120 120" width="120" height="120" aria-label="Gender distribution">
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#f1f5f9" stroke-width="16"/>
+                  <!-- Male arc ~176 deg (49%) -->
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#1a6fe8" stroke-width="16"
+                    stroke-dasharray="147.6 301.6" stroke-dashoffset="0"
+                    transform="rotate(-90 60 60)"/>
+                  <!-- Female arc -->
+                  <circle cx="60" cy="60" r="48" fill="none" stroke="#ec4899" stroke-width="16"
+                    stroke-dasharray="153.9 301.6" stroke-dashoffset="-147.6"
+                    transform="rotate(-90 60 60)"/>
+                  <text x="60" y="56" text-anchor="middle" font-size="14" font-weight="800" fill="#0a2a6b">1,248</text>
+                  <text x="60" y="72" text-anchor="middle" font-size="9" fill="#5b6b88">students</text>
+                </svg>
+                <div class="donut-legend">
+                  <span><i class="dot-m"></i> Male — 612 (49%)</span>
+                  <span><i class="dot-f"></i> Female — 636 (51%)</span>
+                </div>
+              </div>
+            </article>
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">◎</span> Result Compilation</h2><a href="18-result-workflow.html">Manage →</a></header>
+              <div class="ring-wrap">
+                <!-- Progress ring 78% -->
+                <svg viewBox="0 0 120 120" width="110" height="110" aria-label="Result compilation 78%">
+                  <circle cx="60" cy="60" r="50" fill="none" stroke="#e5e7eb" stroke-width="12"/>
+                  <circle cx="60" cy="60" r="50" fill="none" stroke="#27c25a" stroke-width="12"
+                    stroke-dasharray="245 314" stroke-dashoffset="0"
+                    stroke-linecap="round" transform="rotate(-90 60 60)"/>
+                  <text x="60" y="56" text-anchor="middle" font-size="22" font-weight="800" fill="#0a2a6b">78%</text>
+                  <text x="60" y="74" text-anchor="middle" font-size="10" fill="#5b6b88">complete</text>
+                </svg>
+                <p class="ring-sub" style="margin-top:8px">974 of 1,248 students have full subject scores this term</p>
+                <div class="progress-bar"><i style="width:78%"></i></div>
+              </div>
+            </article>
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">📈</span> Enrollment Trend</h2><a href="15-analytics.html">Reports →</a></header>
+              <div class="chart-wrap">
+                <!-- Pure SVG bar chart — matches charts.py style -->
+                <svg viewBox="0 0 360 180" role="img" aria-label="Enrollment trend 2021–2025" class="chart">
+                  <!-- grid lines -->
+                  <line x1="40" x2="350" y1="20" y2="20" stroke="#e5e7eb"/>
+                  <line x1="40" x2="350" y1="50" y2="50" stroke="#e5e7eb"/>
+                  <line x1="40" x2="350" y1="80" y2="80" stroke="#e5e7eb"/>
+                  <line x1="40" x2="350" y1="110" y2="110" stroke="#e5e7eb"/>
+                  <line x1="40" x2="350" y1="140" y2="140" stroke="#e5e7eb"/>
+                  <!-- y labels -->
+                  <text x="36" y="24" text-anchor="end" font-size="9" fill="#666">1400</text>
+                  <text x="36" y="54" text-anchor="end" font-size="9" fill="#666">1200</text>
+                  <text x="36" y="84" text-anchor="end" font-size="9" fill="#666">1000</text>
+                  <text x="36" y="114" text-anchor="end" font-size="9" fill="#666">800</text>
+                  <text x="36" y="144" text-anchor="end" font-size="9" fill="#666">600</text>
+                  <!-- bars: 980, 1050, 1120, 1190, 1248  max~1400 -->
+                  <!-- 2021: 980 → h = 120*(980/1400)=84.0  y=140-84=56 -->
+                  <rect x="55" y="56" width="36" height="84" rx="3" fill="#1a6fe8"><title>2021: 980</title></rect>
+                  <text x="73" y="52" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2a6b">980</text>
+                  <text x="73" y="156" text-anchor="middle" font-size="10" fill="#5b6b88">2021</text>
+                  <!-- 2022: 1050 → 90  y=50 -->
+                  <rect x="115" y="50" width="36" height="90" rx="3" fill="#3b82f6"><title>2022: 1050</title></rect>
+                  <text x="133" y="46" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2a6b">1050</text>
+                  <text x="133" y="156" text-anchor="middle" font-size="10" fill="#5b6b88">2022</text>
+                  <!-- 2023: 1120 → 96  y=44 -->
+                  <rect x="175" y="44" width="36" height="96" rx="3" fill="#2563eb"><title>2023: 1120</title></rect>
+                  <text x="193" y="40" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2a6b">1120</text>
+                  <text x="193" y="156" text-anchor="middle" font-size="10" fill="#5b6b88">2023</text>
+                  <!-- 2024: 1190 → 102  y=38 -->
+                  <rect x="235" y="38" width="36" height="102" rx="3" fill="#1d4ed8"><title>2024: 1190</title></rect>
+                  <text x="253" y="34" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2a6b">1190</text>
+                  <text x="253" y="156" text-anchor="middle" font-size="10" fill="#5b6b88">2024</text>
+                  <!-- 2025: 1248 → 107  y=33 -->
+                  <rect x="295" y="33" width="36" height="107" rx="3" fill="#0a2a6b"><title>2025: 1248</title></rect>
+                  <text x="313" y="29" text-anchor="middle" font-size="10" font-weight="700" fill="#0a2a6b">1248</text>
+                  <text x="313" y="156" text-anchor="middle" font-size="10" fill="#5b6b88">2025</text>
+                </svg>
+              </div>
+            </article>
+          
+          <section class="ad-panels ad-panels-2">
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">◫</span> Grade Distribution</h2><a href="15-analytics.html">Details →</a></header>
+              <div class="grade-dist">
+                <div class="grade-row">
+                  <div class="grade-row-top"><b>A</b><span>22%</span></div>
+                  <div class="grade-bar g-a"><i style="width:22%"></i></div>
+                </div>
+                <div class="grade-row">
+                  <div class="grade-row-top"><b>B</b><span>31%</span></div>
+                  <div class="grade-bar g-b"><i style="width:31%"></i></div>
+                </div>
+                <div class="grade-row">
+                  <div class="grade-row-top"><b>C</b><span>29%</span></div>
+                  <div class="grade-bar g-c"><i style="width:29%"></i></div>
+                </div>
+                <div class="grade-row">
+                  <div class="grade-row-top"><b>D</b><span>11%</span></div>
+                  <div class="grade-bar g-d"><i style="width:11%"></i></div>
+                </div>
+                <div class="grade-row">
+                  <div class="grade-row-top"><b>F</b><span>7%</span></div>
+                  <div class="grade-bar g-f"><i style="width:7%"></i></div>
+                </div>
+              </div>
+            </article>
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">✔</span> Pass overview</h2></header>
+              <div class="panel-body" style="font-size:0.9rem;line-height:1.6;color:#334155">
+                <p><b style="color:#059669">82%</b> pass rate (A–C) this term.</p>
+                <p style="margin-top:8px"><b style="color:#e11d48">7%</b> failed (F). <b style="color:#f97316">11%</b> scored D — monitor for support.</p>
+                <p style="margin-top:8px;color:var(--mut);font-size:0.8rem">Source: same scale as Grading Setup (editable).</p>
+              </div>
+            </article>
+          </section>
+
+          <!-- Top Performing Students -->
+          <section class="ad-panels ad-panels-1">
+            <article class="ad-panel">
+              <header>
+                <h2><span class="ni">🏆</span> Top Performing Students</h2>
+                <span style="font-size:0.78rem;color:var(--mut)">1st Term</span>
+              </header>
+              <div class="table-wrap" style="border:0;box-shadow:none;border-radius:0">
+                <table class="data">
+                  <thead><tr><th style="width:60px">Rank</th><th>Student</th><th>Class</th><th>Avg %</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td><strong>Fatima Bello</strong></td><td>SSS 2A</td><td><b>85.8%</b></td></tr>
+                    <tr><td>2</td><td><strong>Aisha Musa</strong></td><td>SSS 1A</td><td><b>84.2%</b></td></tr>
+                    <tr><td>3</td><td><strong>David Okon</strong></td><td>JSS 3A</td><td><b>82.1%</b></td></tr>
+                    <tr><td>4</td><td><strong>Chinedu Okeke</strong></td><td>SSS 2A</td><td><b>75.1%</b></td></tr>
+                    <tr><td>5</td><td><strong>Ngozi Eze</strong></td><td>JSS 2A</td><td><b>74.6%</b></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <!-- Quick Access + Activities + Announcements (desktop 3-col, tablet 2, phone 1) -->
+          <section class="ad-panels ad-panels-bottom">
+            <article class="ad-panel">
+              <header><h2><span class="ni">⚡</span> Quick Access</h2></header>
+              <div class="ad-quick">
+                <a href="08-students.html"><span class="q-ico">👨‍🎓</span>Students</a>
+                <a href="05-teacher-score-entry.html"><span class="q-ico">✏️</span>Score Entry</a>
+                <a href="06-broadsheet.html"><span class="q-ico">📋</span>Broadsheet</a>
+                <a href="19-attendance.html"><span class="q-ico">✅</span>Attendance</a>
+                <a href="38-timetable-hub.html"><span class="q-ico">🗓️</span>Timetable</a>
+                <a href="23-announcements.html"><span class="q-ico">📢</span>Announce</a>
+                <a href="89-school-fees.html"><span class="q-ico">💰</span>School Fees</a>
+                <a href="22-billing.html"><span class="q-ico">◈</span>Billing</a>
+                <a href="15-analytics.html"><span class="q-ico">📈</span>Analytics</a>
+              </div>
+            </article>
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">🕒</span> Recent Activities</h2><a href="42-activities.html">View All →</a></header>
+              <ul class="ad-acts">
+                <li>
+                  <span class="a-ico a-green">✓</span>
+                  <div><b>New student admitted — JSS 1A</b><small>Mrs. Okoro · 2 hours ago</small></div>
+                </li>
+                <li>
+                  <span class="a-ico a-blue">📊</span>
+                  <div><b>Scores submitted for Mathematics (SSS 2B)</b><small>Mr. Okafor · 5 hours ago</small></div>
+                </li>
+                <li>
+                  <span class="a-ico a-orange">📄</span>
+                  <div><b>Terminal results published for JSS 3</b><small>Admin · Yesterday</small></div>
+                </li>
+                <li>
+                  <span class="a-ico a-purple">💰</span>
+                  <div><b>School fees payment recorded — ₦85,000</b><small>Bursar · Yesterday</small></div>
+                </li>
+              </ul>
+            </article>
+
+            <article class="ad-panel">
+              <header><h2><span class="ni">📢</span> Announcements</h2><a href="23-announcements.html">View All →</a></header>
+              <div>
+                <div class="ad-ann-item">
+                  <span style="font-size:1.2rem">ℹ️</span>
+                  <div>
+                    <b>1st Term Examination Schedule</b>
+                    <p style="font-size:0.8rem;color:var(--mut);margin-top:2px">Exams begin 1 December 2026. Timetables are available on the portal.</p>
+                    <small style="color:var(--mut)">Until 15 Dec 2026</small>
+                  </div>
+                </div>
+                <div class="ad-ann-item">
+                  <span style="font-size:1.2rem">ℹ️</span>
+                  <div>
+                    <b>Parent–Teacher Meeting</b>
+                    <p style="font-size:0.8rem;color:var(--mut);margin-top:2px">Saturday 22 November, 10:00 AM in the main hall.</p>
+                    <small style="color:var(--mut)">Until 22 Nov 2026</small>
+                  </div>
+                </div>
+              </div>
+              <div class="ad-tip">
+                <span>💡</span>
+                <div><b>Tip:</b> Use the Timetable menu to view class schedules.</div>
+              </div>
+            </article>
+          </section>
+
+          <footer class="ad-foot">
+            <span>© 2026 Government Secondary School. All rights reserved.</span>
+            <a href="01-login.html">Logout</a>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    var d=new Date();
+    var ds=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    var ts=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+    document.querySelectorAll('[data-clock-date]').forEach(function(el){el.textContent=ds;});
+    document.querySelectorAll('[data-clock-time]').forEach(function(el){el.textContent=ts;});
+  })();
+  </script>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="02-admin-dashboard.html" class="on"><span class="tab-ico">⌂</span>Home</a>
+    <a href="82-reports-hub.html"><span class="tab-ico">▤</span>Reports</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+
+<script src="js/shell.js"></script>
+</body>
+</html>

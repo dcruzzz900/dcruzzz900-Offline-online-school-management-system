@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Broadsheet — SSS 2A · GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .bs-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    .bs-table th, .bs-table td { border: 1px solid #c5d0e6; padding: 6px 5px; text-align: center; white-space: nowrap; }
+    .bs-table th { background: #0a2a6b; color: #fff; font-weight: 600; }
+    .bs-table th.subj { background: #1a4fd0; }
+    .bs-table td.name { text-align: left; font-weight: 600; }
+    .bs-table tr:nth-child(even) td { background: #f8fafc; }
+    .bs-table .pos { font-weight: 800; color: #0a2a6b; }
+    .report-header { text-align: center; margin-bottom: 16px; }
+    .report-header h1 { font-size: 1.35rem; color: var(--navy); margin: 4px 0; }
+    .report-header h2 { font-size: 1rem; margin: 0; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item"><span class="ni">⌂</span>Dashboard</a>
+        <div class="nav-group">Academics</div>
+        <a href="53-class-results.html" class="nav-item"><span class="ni">▣</span>Results</a>
+        <a href="06-broadsheet.html" class="nav-item active"><span class="ni">📊</span>Broadsheet</a>
+        <a href="85-terminal-results-list.html" class="nav-item"><span class="ni">📄</span>Terminal Results</a>
+        <a href="18-result-workflow.html" class="nav-item"><span class="ni">✔</span>Result approval</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Broadsheet</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="report-header">
+          <div class="logo" style="margin:0 auto 8px;width:56px;height:56px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-weight:800">GG</div>
+          <h2>Government Secondary School</h2>
+          <h1>Broadsheet</h1>
+          <p>SSS 2A — 2025/2026 — 1st Term</p>
+        </div>
+        <div class="page-actions" style="margin-bottom:14px;flex-wrap:wrap">
+          <select class="form-control" style="width:auto"><option>2025/2026 — 1st Term (active)</option><option>2025/2026 — 2nd Term</option></select>
+          <button class="btn btn-primary btn-sm">⬇ Download PDF</button>
+          <button class="btn btn-outline btn-sm">🖨 Print Broadsheet</button>
+          <a href="#" class="btn btn-outline btn-sm">📊 Annual / Cumulative Broadsheet</a>
+          <button class="btn btn-outline btn-sm">✉ Email All Results to Parents</button>
+        </div>
+        <div class="table-wrap card" style="padding:0">
+          <table class="bs-table">
+            <thead>
+              <tr>
+                <th rowspan="2">S/N</th>
+                <th rowspan="2">Student</th>
+                <th class="subj" colspan="4">English</th>
+                <th class="subj" colspan="4">Mathematics</th>
+                <th class="subj" colspan="4">Biology</th>
+                <th rowspan="2">Total</th>
+                <th rowspan="2">Avg %</th>
+                <th rowspan="2">Pos</th>
+              </tr>
+              <tr>
+                <th>CA1</th><th>CA2</th><th>Exam</th><th>Tot</th>
+                <th>CA1</th><th>CA2</th><th>Exam</th><th>Tot</th>
+                <th>CA1</th><th>CA2</th><th>Exam</th><th>Tot</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td><td class="name"><a href="03-result-sheet.html">Fatima Bello</a></td>
+                <td>18</td><td>17</td><td>53</td><td><b>88</b></td>
+                <td>19</td><td>18</td><td>54</td><td><b>91</b></td>
+                <td>17</td><td>16</td><td>52</td><td><b>85</b></td>
+                <td><b>264</b></td><td><b>88.0</b></td><td class="pos">1st</td>
+              </tr>
+              <tr>
+                <td>2</td><td class="name"><a href="03-result-sheet.html">Chinedu Okeke</a></td>
+                <td>16</td><td>16</td><td>50</td><td><b>82</b></td>
+                <td>18</td><td>17</td><td>52</td><td><b>87</b></td>
+                <td>15</td><td>14</td><td>46</td><td><b>75</b></td>
+                <td><b>244</b></td><td><b>81.3</b></td><td class="pos">2nd</td>
+              </tr>
+              <tr>
+                <td>3</td><td class="name">Adaora Nnamdi</td>
+                <td>15</td><td>15</td><td>49</td><td><b>79</b></td>
+                <td>16</td><td>15</td><td>45</td><td><b>76</b></td>
+                <td>16</td><td>16</td><td>49</td><td><b>81</b></td>
+                <td><b>236</b></td><td><b>78.7</b></td><td class="pos">3rd</td>
+              </tr>
+              <tr>
+                <td>4</td><td class="name">Ngozi Eze</td>
+                <td>14</td><td>14</td><td>46</td><td><b>74</b></td>
+                <td>15</td><td>14</td><td>44</td><td><b>73</b></td>
+                <td>15</td><td>15</td><td>48</td><td><b>78</b></td>
+                <td><b>225</b></td><td><b>75.0</b></td><td class="pos">4th</td>
+              </tr>
+              <tr>
+                <td>5</td><td class="name">Emeka Chukwu</td>
+                <td>13</td><td>12</td><td>45</td><td><b>70</b></td>
+                <td>14</td><td>13</td><td>41</td><td><b>68</b></td>
+                <td>14</td><td>13</td><td>45</td><td><b>72</b></td>
+                <td><b>210</b></td><td><b>70.0</b></td><td class="pos">5th</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="06-broadsheet.html" class="on"><span class="tab-ico">📊</span>Broad</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

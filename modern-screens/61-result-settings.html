@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Result Display Settings — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .rds-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(280px,0.9fr); gap: 20px; align-items: start; }
+    @media (max-width: 1000px) { .rds-layout { grid-template-columns: 1fr; } }
+    .rds-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 18px 14px; margin-bottom: 14px; }
+    .rds-card h3 { font-size: 0.92rem; font-weight: 800; color: var(--navy); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .rds-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 2px 18px; }
+    .sw { display: flex; gap: 10px; align-items: flex-start; font-size: 0.85rem; font-weight: 500; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+    .sw:last-child { border-bottom: none; }
+    .sw input { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--blue); }
+    .sw span { flex: 1; line-height: 1.35; }
+    .sw small.state { color: var(--mut); font-size: 0.72rem; font-weight: 700; letter-spacing: .04em; min-width: 28px; text-align: right; }
+    .sw small.state.on { color: #059669; }
+    .hlp { margin-top: 10px; font-size: 0.8rem; }
+    .hlp summary { cursor: pointer; color: var(--blue); font-weight: 600; }
+    .hlp p { margin-top: 6px; color: var(--mut); line-height: 1.45; }
+    .rds-prev-wrap { position: sticky; top: 72px; }
+    .rds-prev { background: #e8eef5; border-radius: 14px; padding: 14px; max-height: calc(100vh - 120px); overflow: auto; }
+    .rs-mini { background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 2px 12px rgba(0,0,0,.12); font-size: 0.68rem; }
+    .rs-mini .hdr { text-align: center; border-bottom: 2px solid #0a2a6b; padding-bottom: 8px; margin-bottom: 10px; }
+    .rs-mini table { width: 100%; border-collapse: collapse; }
+    .rs-mini th { background: #0a2a6b; color: #fff; padding: 4px; font-size: 0.62rem; }
+    .rs-mini td { border: 1px solid #e2e8f0; padding: 3px 4px; text-align: center; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="appSidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <a href="02-admin-dashboard.html" class="nav-item"><span class="ni">⌂</span>Dashboard</a>
+        <div class="nav-group">School Administration</div>
+        <a href="61-result-settings.html" class="nav-item active"><span class="ni">📄</span>Result Display</a>
+        <a href="81-result-fields.html" class="nav-item"><span class="ni">☰</span>Additional Result Fields</a>
+        <a href="88-custom-school-info.html" class="nav-item"><span class="ni">🧩</span>Custom School Information</a>
+        <a href="13-grading.html" class="nav-item"><span class="ni">◫</span>Grading</a>
+        <a href="27-theme-branding.html" class="nav-item"><span class="ni">🎨</span>Theme & Branding</a>
+        <a href="30-settings.html" class="nav-item"><span class="ni">⚙</span>Settings</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Result Display Settings</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<button class="btn btn-primary btn-sm">Save settings</button><span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div>
+            <h2><span class="ni">📄</span> Result Display Settings</h2>
+            <p>Controls what appears on every result sheet — on-screen preview, print and PDF.</p>
+          </div>
+        </div>
+
+        <div class="rds-layout">
+          <div>
+            <!-- Identity & header -->
+            <div class="rds-card">
+              <h3>Identity &amp; header</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show School Logo</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Student Passport</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox"><span>Show Watermark</span><small class="state">OFF</small></label>
+              </div>
+              <details class="hlp"><summary>How Passport &amp; Logo work</summary>
+                <p>Logo comes from School Profile. Passport is the student photo on file. Watermark uses the school name (or custom text below) faintly behind the sheet.</p>
+              </details>
+            </div>
+
+            <!-- School information -->
+            <div class="rds-card">
+              <h3>School information</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show School Address</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show School Email</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show School Phone Number</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show School Motto</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show custom school information (chosen fields)</span><small class="state on">ON</small></label>
+              </div>
+              <p style="font-size:0.78rem;color:var(--mut);margin-top:8px">Custom fields are managed under <a href="88-custom-school-info.html">Custom School Information</a>.</p>
+            </div>
+
+            <!-- Student details -->
+            <div class="rds-card">
+              <h3>Student details</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show Student Admission No. / Register No.</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Class / Arm</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Academic Session</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Term</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox"><span>Show Next Term Resumes</span><small class="state">OFF</small></label>
+              </div>
+              <details class="hlp"><summary>How “Next Term Resumes” works</summary>
+                <p>Student name is always shown. “Next Term Resumes” uses the resumption date set for the <b>following</b> term under Sessions &amp; Terms — First Term’s sheet shows Second Term’s date, and so on. It is never typed on this page, and is blank if that term has no date.</p>
+              </details>
+            </div>
+
+            <!-- Scores -->
+            <div class="rds-card">
+              <h3>Scores</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show Score / Mark</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Grade</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Remarks</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Overall Position</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox"><span>Show Subject Position</span><small class="state">OFF</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Domain Ratings</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show additional information fields</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Grading key</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Promotion / Status</span><small class="state on">ON</small></label>
+              </div>
+              <p style="font-size:0.78rem;color:var(--mut);margin-top:8px">Additional fields are configured under <a href="81-result-fields.html">Additional Result Fields</a>.</p>
+            </div>
+
+            <!-- Attendance -->
+            <div class="rds-card">
+              <h3>Attendance</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show Attendance</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Days School Opened</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Days Present</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Days Absent</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Days Late</span><small class="state on">ON</small></label>
+              </div>
+            </div>
+
+            <!-- Comments & signatures -->
+            <div class="rds-card">
+              <h3>Comments &amp; signatures</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Show All Comments (master switch)</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Teacher / Class Teacher Comment</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Principal Comment</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Teacher Signature</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Teacher Sign Date</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Class Teacher's name under the signature</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Principal Signature</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Principal Sign Date</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Show Principal's name under the signature</span><small class="state on">ON</small></label>
+              </div>
+              <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9">
+                <label class="sw"><input type="checkbox" checked><span>Suggest a Class Teacher’s comment when none has been written</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox"><span>Suggest a Principal’s comment when none has been written</span><small class="state">OFF</small></label>
+              </div>
+              <details class="hlp"><summary>How comment suggestions work</summary>
+                <p>When on, a comment is generated from the student’s grade/average if none was typed — useful after CSV score upload. A saved comment is never replaced. Teacher and Principal comments are separate fields.</p>
+              </details>
+            </div>
+
+            <!-- Page & print -->
+            <div class="rds-card">
+              <h3>Page &amp; print</h3>
+              <div class="rds-grid">
+                <label class="sw"><input type="checkbox" checked><span>Automatically Shrink to Fit One Page</span><small class="state on">ON</small></label>
+                <label class="sw"><input type="checkbox" checked><span>Enable the Cumulative / Annual Result for classes and students</span><small class="state on">ON</small></label>
+              </div>
+              <div class="form-row" style="margin-top:12px">
+                <div class="form-group"><label>Result title</label><input class="form-control" value="Terminal Report Sheet"></div>
+                <div class="form-group"><label>Footer text</label><input class="form-control" placeholder="Optional footer line"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Header layout</label>
+                  <select class="form-control">
+                    <option selected>Logo left of the text</option>
+                    <option>Logo above the text</option>
+                    <option>Logo right of the text</option>
+                    <option>No logo</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>Signature layout</label>
+                  <select class="form-control">
+                    <option selected>Teacher left, Principal right</option>
+                    <option>Stacked</option>
+                    <option>Right-aligned</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Text align</label>
+                  <select class="form-control"><option selected>Automatic (follows the style)</option><option>Left</option><option>Centre</option><option>Right</option></select>
+                </div>
+                <div class="form-group"><label>Page orientation</label>
+                  <select class="form-control"><option selected>Portrait</option><option>Landscape</option><option>Automatic (picks whichever fits best)</option></select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Font scale</label>
+                  <select class="form-control"><option>Small</option><option selected>Normal</option><option>Large</option></select>
+                </div>
+                <div class="form-group"><label>Paper size</label>
+                  <select class="form-control"><option selected>A4</option><option>Letter</option><option>Custom</option></select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group"><label>Accent colour</label><input class="form-control" type="color" value="#0a2a6b" style="height:42px;padding:4px"></div>
+                <div class="form-group"><label>Secondary colour</label><input class="form-control" type="color" value="#29a9e0" style="height:42px;padding:4px"></div>
+              </div>
+              <div class="form-group"><label>Watermark text (when watermark is on)</label><input class="form-control" placeholder="Defaults to school name"></div>
+              <div class="form-group"><label>Result sheet style / template</label>
+                <select class="form-control"><option selected>Classic</option><option>Modern</option><option>Compact</option></select>
+              </div>
+            </div>
+
+            <div style="position:sticky;bottom:0;background:#fff;padding:12px 0;border-top:1px solid var(--border);z-index:5;display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn btn-primary">Save settings</button>
+              <a href="03-result-sheet.html" class="btn btn-outline">Open sample result</a>
+              <a href="81-result-fields.html" class="btn btn-outline">Additional Result Fields</a>
+            </div>
+          </div>
+
+          <!-- Live preview -->
+          <div class="rds-prev-wrap">
+            <div class="rds-card" style="margin-bottom:0">
+              <h3>Live preview</h3>
+              <div class="rds-prev">
+                <div class="rs-mini">
+                  <div class="hdr">
+                    <div style="font-weight:800;color:#0a2a6b;font-size:0.85rem">Government Secondary School</div>
+                    <div style="opacity:.75">Gonin-Gora, Chikun, Kaduna · Excellence Through Knowledge</div>
+                    <div style="font-weight:700;margin-top:4px">Terminal Report Sheet</div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:8px">
+                    <div>
+                      <b>Fatima Bello</b><br>
+                      Adm: GSS/2023/0155 · SSS 2A<br>
+                      2025/2026 · 1st Term
+                    </div>
+                    <div style="width:40px;height:48px;background:#e2e8f0;border-radius:4px;flex-shrink:0"></div>
+                  </div>
+                  <table>
+                    <tr><th>Subject</th><th>CA1</th><th>CA2</th><th>Exam</th><th>Tot</th><th>Gr</th><th>Rmk</th></tr>
+                    <tr><td>Mathematics</td><td>19</td><td>18</td><td>54</td><td><b>91</b></td><td>A</td><td>Excellent</td></tr>
+                    <tr><td>English</td><td>18</td><td>17</td><td>53</td><td><b>88</b></td><td>A</td><td>Excellent</td></tr>
+                    <tr><td>Biology</td><td>17</td><td>16</td><td>52</td><td><b>85</b></td><td>A</td><td>Excellent</td></tr>
+                  </table>
+                  <div style="margin-top:8px"><b>Average:</b> 85.8% · <b>Position:</b> 1st of 42</div>
+                  <div style="margin-top:6px;font-size:0.62rem">Opened 48 · Present 47 · Absent 1 · Late 0</div>
+                  <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:0.62rem;color:#64748b">
+                    <div>Class Teacher _________<br>Mr. A. Okafor</div>
+                    <div>Principal _________<br>Mrs. S. Yusuf</div>
+                  </div>
+                </div>
+              </div>
+              <p style="font-size:0.75rem;color:var(--mut);margin-top:10px">Toggles apply to preview, print and PDF. Related: <a href="81-result-fields.html">Additional Result Fields</a> · <a href="13-grading.html">Grading</a> · <a href="88-custom-school-info.html">Custom School Information</a></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="61-result-settings.html" class="on"><span class="tab-ico">📄</span>Display</a>
+    <a href="81-result-fields.html"><span class="tab-ico">☰</span>Fields</a>
+    <a href="30-settings.html"><span class="tab-ico">⚙</span>Settings</a>
+  </nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

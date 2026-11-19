@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compose Notification — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">Communication</div>
+        <a href="21-notifications.html" class="nav-item">Inbox</a>
+        <a href="66-notifications-compose.html" class="nav-item active">Compose</a>
+        <a href="23-announcements.html" class="nav-item"><span class="ni">📢</span>Announcements</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b style="color:#34d399">Online</b></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Compose Notification</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header"><div><h2>Compose Notification</h2></div></div>
+        <div class="card" style="padding:24px;max-width:600px">
+          <div class="form-group">
+            <label>Audience</label>
+            <select class="form-control"><option>All Staff</option><option>All Parents</option><option>All Students</option><option>Specific Class</option><option>Teachers only</option></select>
+          </div>
+          <div class="form-group"><label>Title</label><input class="form-control" placeholder="Notification title"></div>
+          <div class="form-group"><label>Message</label><textarea class="form-control" rows="5" placeholder="Write your message..."></textarea></div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select class="form-control"><option>Normal</option><option>High</option><option>Urgent</option></select>
+          </div>
+          <button class="btn btn-primary">Send Notification</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="82-reports-hub.html"><span class="tab-ico">▤</span>Reports</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+<script src="js/shell.js"></script>
+</body>
+</html>

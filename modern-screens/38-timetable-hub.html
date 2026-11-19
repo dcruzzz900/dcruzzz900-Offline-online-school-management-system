@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Timetable Hub — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">Academics</div>
+        <a href="38-timetable-hub.html" class="nav-item active"><span class="ni">▦</span>Timetable Hub</a>
+        <a href="12-timetable.html" class="nav-item"><span class="ni">▦</span>Class Timetable</a>
+        <a href="07-classes.html" class="nav-item"><span class="ni">▤</span>Classes</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b style="color:#34d399">Online</b><br><small>2025/2026 • 1st Term</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Timetable Management</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">▦</span> Timetable Hub</h2><p>Generate, edit and view class & teacher timetables</p></div>
+          <div class="page-actions"><button class="btn btn-primary">Generate Timetable</button></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin-bottom:24px">
+          <a href="12-timetable.html" class="card" style="padding:20px;text-decoration:none;color:inherit">
+            <div style="font-size:1.8rem;margin-bottom:8px">🏫</div>
+            <h3 style="font-size:0.95rem;font-weight:700">Class Timetables</h3>
+            <p style="font-size:0.8rem;color:var(--muted);margin-top:4px">View by class</p>
+          </a>
+          <a href="#" class="card" style="padding:20px;text-decoration:none;color:inherit">
+            <div style="font-size:1.8rem;margin-bottom:8px">👩‍🏫</div>
+            <h3 style="font-size:0.95rem;font-weight:700">Teacher Timetables</h3>
+            <p style="font-size:0.8rem;color:var(--muted);margin-top:4px">View by teacher</p>
+          </a>
+          <a href="#" class="card" style="padding:20px;text-decoration:none;color:inherit">
+            <div style="font-size:1.8rem;margin-bottom:8px">⚙️</div>
+            <h3 style="font-size:0.95rem;font-weight:700">Setup & Periods</h3>
+            <p style="font-size:0.8rem;color:var(--muted);margin-top:4px">Configure periods</p>
+          </a>
+          <a href="#" class="card" style="padding:20px;text-decoration:none;color:inherit">
+            <div style="font-size:1.8rem;margin-bottom:8px">🔄</div>
+            <h3 style="font-size:0.95rem;font-weight:700">Versions</h3>
+            <p style="font-size:0.8rem;color:var(--muted);margin-top:4px">Timetable history</p>
+          </a>
+        </div>
+        <div class="card">
+          <div class="panel-header"><h3>Recent Timetables</h3></div>
+          <div class="panel-body" style="padding:0">
+            <table class="data">
+              <thead><tr><th>Class</th><th>Version</th><th>Last Updated</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                <tr><td><strong>SSS 2A</strong></td><td>v3</td><td>10 Nov 2026</td><td><span class="badge badge-green">Published</span></td><td><a href="12-timetable.html">View</a> · <a href="#">Edit</a></td></tr>
+                <tr><td><strong>SSS 2B</strong></td><td>v2</td><td>08 Nov 2026</td><td><span class="badge badge-green">Published</span></td><td><a href="#">View</a> · <a href="#">Edit</a></td></tr>
+                <tr><td><strong>JSS 1A</strong></td><td>v1</td><td>05 Nov 2026</td><td><span class="badge badge-orange">Draft</span></td><td><a href="#">View</a> · <a href="#">Edit</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="82-reports-hub.html"><span class="tab-ico">▤</span>Reports</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+
+<script src="js/shell.js"></script>
+</body>
+</html>

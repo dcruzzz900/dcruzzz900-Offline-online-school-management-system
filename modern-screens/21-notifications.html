@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notifications — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .notif-item {
+      display: flex; gap: 14px; padding: 16px 18px;
+      border-bottom: 1px solid var(--border); transition: background 0.15s;
+    }
+    .notif-item:hover { background: #f8fafc; }
+    .notif-item.unread { background: #f0f7ff; }
+    .notif-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: grid; place-items: center; font-size: 1.1rem; flex-shrink: 0;
+    }
+    .notif-icon.blue { background: #dbeafe; }
+    .notif-icon.green { background: #d1fae5; }
+    .notif-icon.orange { background: #ffedd5; }
+    .notif-icon.purple { background: #ede9fe; }
+    .notif-body { flex: 1; }
+    .notif-body b { display: block; font-size: 0.9rem; margin-bottom: 2px; }
+    .notif-body p { font-size: 0.85rem; color: #475569; margin-bottom: 4px; }
+    .notif-body small { font-size: 0.75rem; color: var(--muted); }
+    .notif-dot { width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">Communication</div>
+        <a href="21-notifications.html" class="nav-item active"><span class="ni">🔔</span>Notifications</a>
+        <a href="46-messages.html" class="nav-item"><span class="ni">💬</span>Messages</a>
+        <a href="23-announcements.html" class="nav-item"><span class="ni">📢</span>Announcements</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b style="color:#34d399">Online</b><br><small>2025/2026 • 1st Term</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Notifications Inbox</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">🔔</span> Notifications</h2><p>3 unread</p></div>
+          <div class="page-actions">
+            <button class="btn btn-outline btn-sm">Mark all read</button>
+            <button class="btn btn-primary btn-sm">Compose</button>
+          </div>
+        </div>
+        <div class="card" style="overflow:hidden">
+          <div class="notif-item unread">
+            <div class="notif-icon green">📄</div>
+            <div class="notif-body">
+              <b>Terminal results published — JSS 3</b>
+              <p>Results for JSS 3A and 3B are now available for parents and students.</p>
+              <small>2 hours ago • System</small>
+            </div>
+            <div class="notif-dot"></div>
+          </div>
+          <div class="notif-item unread">
+            <div class="notif-icon blue">👤</div>
+            <div class="notif-body">
+              <b>New student admitted</b>
+              <p>Tunde Adeyemi has been registered into JSS 1A by Mrs. Okoro.</p>
+              <small>5 hours ago • Mrs. Okoro</small>
+            </div>
+            <div class="notif-dot"></div>
+          </div>
+          <div class="notif-item unread">
+            <div class="notif-icon orange">⚠️</div>
+            <div class="notif-body">
+              <b>Score entry deadline approaching</b>
+              <p>Teachers have 3 days left to submit 1st Term scores for approval.</p>
+              <small>Yesterday • System</small>
+            </div>
+            <div class="notif-dot"></div>
+          </div>
+          <div class="notif-item">
+            <div class="notif-icon purple">💰</div>
+            <div class="notif-body">
+              <b>School fees payment received</b>
+              <p>Payment of ₦85,000 recorded for Chinedu Okeke (SSS 2A).</p>
+              <small>2 days ago • Bursar</small>
+            </div>
+          </div>
+          <div class="notif-item">
+            <div class="notif-icon blue">📅</div>
+            <div class="notif-body">
+              <b>Parent-Teacher meeting scheduled</b>
+              <p>Meeting for SSS 2 parents on 22 November 2026 at 10:00 AM.</p>
+              <small>3 days ago • Admin</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="82-reports-hub.html"><span class="tab-ico">▤</span>Reports</a>
+    <a href="21-notifications.html" class="on"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+<script src="js/shell.js"></script>
+</body>
+</html>

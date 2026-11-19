@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Children — Parent Portal</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <header class="topbar">
+        <div class="topbar-school">
+          <h1>Government Secondary School</h1>
+          <p>Parent Portal</p>
+        </div>
+        <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+        <div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">2</span></a>
+          <span class="role-chip">Parent</span>
+          <div class="avatar">PO</div>
+        </div>
+      </header>
+    <div class="content" style="max-width:800px;margin:0 auto">
+    <div class="page-header" style="margin-top:20px">
+      <div><h2>My Children</h2><p>Linked student accounts</p></div>
+      <div class="page-actions"><button class="btn btn-outline btn-sm">+ Link Child</button></div>
+    </div>
+    <div style="display:grid;gap:14px">
+      <a href="36-parent-result.html" class="card" style="padding:20px;display:flex;gap:16px;align-items:center;text-decoration:none;color:inherit">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:white;display:grid;place-items:center;font-weight:700;font-size:1.1rem">CO</div>
+        <div style="flex:1">
+          <h3 style="font-size:1.05rem;font-weight:700">Chinedu Okeke</h3>
+          <p style="font-size:0.85rem;color:var(--muted)">SSS 2A • GSS/2023/0142 • Avg 75.1% • 3rd</p>
+        </div>
+        <span style="color:var(--primary);font-weight:600;font-size:0.85rem">View →</span>
+      </a>
+      <a href="#" class="card" style="padding:20px;display:flex;gap:16px;align-items:center;text-decoration:none;color:inherit">
+        <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#ec4899,#be185d);color:white;display:grid;place-items:center;font-weight:700;font-size:1.1rem">AO</div>
+        <div style="flex:1">
+          <h3 style="font-size:1.05rem;font-weight:700">Adaeze Okeke</h3>
+          <p style="font-size:0.85rem;color:var(--muted)">JSS 3B • GSS/2024/0089 • Avg 81.3% • 2nd</p>
+        </div>
+        <span style="color:var(--primary);font-weight:600;font-size:0.85rem">View →</span>
+      </a>
+    </div>
+  </div>
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="04-parent-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="36-parent-result.html"><span class="tab-ico">📄</span><span class="ni">▣</span>Results</a>
+    <a href="44-parent-attendance.html"><span class="tab-ico">✓</span>Attend</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+  </nav>
+</body>
+</html>

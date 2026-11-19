@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom School Information — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Excellence Through Knowledge</small></div>
+      <nav>
+        <div class="nav-group">School Administration</div>
+        <a href="48-school-profile.html" class="nav-item"><span class="ni">🏫</span>School Information</a>
+        <a href="88-custom-school-info.html" class="nav-item active"><span class="ni">🧩</span>Custom School Information</a>
+        <a href="81-result-fields.html" class="nav-item"><span class="ni">☰</span>Result Fields</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>Admin Panel</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Custom School Information</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Administrator</span><div class="avatar">AJ</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">🧩</span> Custom School Information</h2>
+          <p>Extra labelled fields (e.g. Education Domain) — optional on result sheets</p></div>
+        </div>
+        <div class="card" style="padding:20px;margin-bottom:16px">
+          <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:12px">Add field</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>Field name</label><input class="form-control" placeholder="e.g. Education Domain"></div>
+            <div class="form-group"><label>Value</label><textarea class="form-control" rows="2" placeholder="e.g. Kaduna State Ministry of Education"></textarea></div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;margin:10px 0;font-size:0.85rem">
+            <input type="checkbox" checked> Show on result sheets
+          </label>
+          <button class="btn btn-primary btn-sm">Add field</button>
+        </div>
+        <div class="card table-wrap">
+          <table class="data">
+            <thead><tr><th>Field</th><th>Value</th><th>On results</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Education Domain</strong></td>
+                <td>Kaduna State Ministry of Education</td>
+                <td><span class="badge badge-green">Yes</span></td>
+                <td><button class="btn btn-outline btn-sm">Save</button> <button class="btn btn-outline btn-sm" style="color:#b3261e">Remove</button></td>
+              </tr>
+              <tr>
+                <td><strong>School Type</strong></td>
+                <td>Public Secondary School</td>
+                <td><span class="badge badge-green">Yes</span></td>
+                <td><button class="btn btn-outline btn-sm">Save</button> <button class="btn btn-outline btn-sm" style="color:#b3261e">Remove</button></td>
+              </tr>
+              <tr>
+                <td><strong>LGA</strong></td>
+                <td>Chikun</td>
+                <td><span class="badge badge-gray">No</span></td>
+                <td><button class="btn btn-outline btn-sm">Save</button> <button class="btn btn-outline btn-sm" style="color:#b3261e">Remove</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav class="mobile-tabs"><a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a><a href="88-custom-school-info.html" class="on"><span class="tab-ico">🧩</span>Custom</a><a href="30-settings.html"><span class="tab-ico">⚙</span>Settings</a><a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a></nav>
+  <script src="js/shell.js"></script>
+</body>
+</html>

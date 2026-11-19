@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learning Materials — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .mat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .mat-card {
+      background: white; border: 1px solid var(--border); border-radius: 14px;
+      padding: 20px; transition: all 0.15s;
+    }
+    .mat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .mat-card .icon { font-size: 2rem; margin-bottom: 10px; }
+    .mat-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+    .mat-card p { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; }
+    .mat-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">Resources</div>
+        <a href="20-materials.html" class="nav-item active"><span class="ni">▤</span>Learning Materials</a>
+        <a href="12-timetable.html" class="nav-item"><span class="ni">▦</span>Timetable</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b style="color:#34d399">Online</b><br><small>2025/2026 • 1st Term</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Learning Materials</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Teacher</span><div class="avatar">AO</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div><h2><span class="ni">▤</span> Learning Materials</h2><p>Notes, past questions & resources</p></div>
+          <div class="page-actions"><button class="btn btn-primary">+ Upload Material</button></div>
+        </div>
+        <div class="filters">
+          <div class="search-box"><input class="form-control" placeholder="Search materials..."></div>
+          <select class="form-control"><option>All Subjects</option><option>Mathematics</option><option>English</option></select>
+          <select class="form-control"><option>All Classes</option><option>SSS 2</option><option>JSS 3</option></select>
+        </div>
+        <div class="mat-grid">
+          <div class="mat-card">
+            <div class="icon">📕</div>
+            <h3>Quadratic Equations Notes</h3>
+            <p>Complete notes with worked examples for SSS 2 Mathematics.</p>
+            <div class="mat-meta">
+              <span>Maths • SSS 2</span>
+              <span class="badge badge-blue">PDF</span>
+            </div>
+          </div>
+          <div class="mat-card">
+            <div class="icon">📝</div>
+            <h3>2024 WAEC Past Questions</h3>
+            <p>English Language Paper 1 & 2 with answers.</p>
+            <div class="mat-meta">
+              <span>English • SSS 3</span>
+              <span class="badge badge-blue">PDF</span>
+            </div>
+          </div>
+          <div class="mat-card">
+            <div class="icon">🧪</div>
+            <h3>Organic Chemistry Summary</h3>
+            <p>Key reactions and mechanisms for SSS 2–3.</p>
+            <div class="mat-meta">
+              <span>Chemistry • SSS 2</span>
+              <span class="badge badge-green">DOCX</span>
+            </div>
+          </div>
+          <div class="mat-card">
+            <div class="icon">📊</div>
+            <h3>Statistics Workbook</h3>
+            <p>Practice questions on mean, median, mode & probability.</p>
+            <div class="mat-meta">
+              <span>Maths • SSS 1–2</span>
+              <span class="badge badge-blue">PDF</span>
+            </div>
+          </div>
+          <div class="mat-card">
+            <div class="icon">🌍</div>
+            <h3>Government Scheme of Work</h3>
+            <p>Term 1 scheme covering constitution & political systems.</p>
+            <div class="mat-meta">
+              <span>Government • SSS 1</span>
+              <span class="badge badge-purple">PDF</span>
+            </div>
+          </div>
+          <div class="mat-card">
+            <div class="icon">🧬</div>
+            <h3>Cell Biology Slides</h3>
+            <p>PowerPoint slides on cell structure and division.</p>
+            <div class="mat-meta">
+              <span>Biology • SSS 1</span>
+              <span class="badge badge-orange">PPTX</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="02-admin-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="82-reports-hub.html"><span class="tab-ico">▤</span>Reports</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+    <a href="30-settings.html"><span class="tab-ico">☰</span>More</a>
+  </nav>
+
+<script src="js/shell.js"></script>
+</body>
+</html>

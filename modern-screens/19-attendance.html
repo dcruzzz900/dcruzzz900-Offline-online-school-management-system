@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roll Call — GSS Gonin-Gora</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/modern.css">
+  <style>
+    .rc-radio { display: flex; gap: 4px; }
+    .rc-radio label {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 32px; border-radius: 8px; border: 1.5px solid var(--border);
+      font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #fff;
+    }
+    .rc-radio input { display: none; }
+    .rc-radio input:checked + .p { background: #d1fae5; border-color: #059669; color: #065f46; }
+    .rc-radio input:checked + .a { background: #fee2e2; border-color: #dc2626; color: #991b1b; }
+    .rc-radio input:checked + .l { background: #ffedd5; border-color: #d97706; color: #9a3412; }
+    .rc-radio input:checked + .e { background: #e0e7ff; border-color: #4f46e5; color: #3730a3; }
+    .rc-radio .p, .rc-radio .a, .rc-radio .l, .rc-radio .e {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 36px; height: 32px; border-radius: 8px; border: 1.5px solid var(--border);
+      font-size: 0.7rem; font-weight: 700; cursor: pointer; background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="logo">GG</div><h2>GSS Gonin-Gora</h2><small>Gonin-Gora, Chikun, Kaduna</small></div>
+      <nav>
+        <div class="nav-group">Daily</div>
+        <a href="19-attendance.html" class="nav-item active"><span class="ni">✓</span>Roll Call</a>
+        <a href="62-attendance-history.html" class="nav-item"><span class="ni">◷</span>Attendance History</a>
+        <a href="29-staff-attendance.html" class="nav-item"><span class="ni">✓</span>Staff Attendance</a>
+      </nav>
+      <div class="sidebar-status"><div class="status-dot"></div><div><b>Online</b><small>2025/2026 · 1st Term</small></div></div>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        <button class="hamburger" type="button" aria-label="Open menu"><span></span><span></span><span></span></button>
+        <div class="topbar-school"><h1>Government Secondary School</h1><p>Student Roll Call</p></div>
+                <form class="topbar-search" action="72-search-results.html" method="get" role="search">
+          <input type="search" name="q" placeholder="Search students, staff, classes…" aria-label="Global search">
+        </form>
+<div class="topbar-actions">
+          <a href="21-notifications.html" class="topbar-notif" title="Notifications" aria-label="Notifications">🔔<span class="notif-badge">3</span></a>
+<span class="role-chip">Teacher</span><div class="avatar">AO</div></div>
+      </header>
+      <div class="content">
+        <div class="page-header">
+          <div>
+            <h2><span class="ni">✓</span> Roll Call — SSS 2A</h2>
+            <p>Sunday, 15 November 2026 · Mark present / absent / late / excused</p>
+          </div>
+          <div class="page-actions">
+            <select class="form-control" style="width:auto"><option>SSS 2A</option><option>SSS 2B</option><option>JSS 1A</option></select>
+            <button class="btn btn-primary">Save Roll Call</button>
+          </div>
+        </div>
+
+        
+        <div class="kpi-row">
+          <div class="kpi-mini"><div class="label">Present</div><div class="value" style="color:#059669">37</div></div>
+          <div class="kpi-mini"><div class="label">Absent</div><div class="value" style="color:#dc2626">2</div></div>
+          <div class="kpi-mini"><div class="label">Late</div><div class="value" style="color:#d97706">2</div></div>
+          <div class="kpi-mini"><div class="label">Excused</div><div class="value" style="color:#4f46e5">1</div></div>
+          <div class="kpi-mini"><div class="label">Total</div><div class="value">42</div></div>
+        </div>
+
+        <div class="card table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Adm No</th>
+                <th>Student</th>
+                <th style="text-align:center">Present</th>
+                <th style="text-align:center">Absent</th>
+                <th style="text-align:center">Late</th>
+                <th style="text-align:center">Excused</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GSS/2023/0142</td><td><strong>Chinedu Okeke</strong></td>
+                <td style="text-align:center"><input type="radio" name="s1" checked></td>
+                <td style="text-align:center"><input type="radio" name="s1"></td>
+                <td style="text-align:center"><input type="radio" name="s1"></td>
+                <td style="text-align:center"><input type="radio" name="s1"></td>
+              </tr>
+              <tr>
+                <td>GSS/2023/0155</td><td><strong>Fatima Bello</strong></td>
+                <td style="text-align:center"><input type="radio" name="s2" checked></td>
+                <td style="text-align:center"><input type="radio" name="s2"></td>
+                <td style="text-align:center"><input type="radio" name="s2"></td>
+                <td style="text-align:center"><input type="radio" name="s2"></td>
+              </tr>
+              <tr>
+                <td>GSS/2023/0087</td><td><strong>Adaora Nnamdi</strong></td>
+                <td style="text-align:center"><input type="radio" name="s3"></td>
+                <td style="text-align:center"><input type="radio" name="s3" checked></td>
+                <td style="text-align:center"><input type="radio" name="s3"></td>
+                <td style="text-align:center"><input type="radio" name="s3"></td>
+              </tr>
+              <tr>
+                <td>GSS/2023/0211</td><td><strong>Emeka Chukwu</strong></td>
+                <td style="text-align:center"><input type="radio" name="s4"></td>
+                <td style="text-align:center"><input type="radio" name="s4"></td>
+                <td style="text-align:center"><input type="radio" name="s4" checked></td>
+                <td style="text-align:center"><input type="radio" name="s4"></td>
+              </tr>
+              <tr>
+                <td>GSS/2023/0178</td><td><strong>Ngozi Eze</strong></td>
+                <td style="text-align:center"><input type="radio" name="s5" checked></td>
+                <td style="text-align:center"><input type="radio" name="s5"></td>
+                <td style="text-align:center"><input type="radio" name="s5"></td>
+                <td style="text-align:center"><input type="radio" name="s5"></td>
+              </tr>
+              <tr>
+                <td>GSS/2023/0099</td><td><strong>Ibrahim Yusuf</strong></td>
+                <td style="text-align:center"><input type="radio" name="s6"></td>
+                <td style="text-align:center"><input type="radio" name="s6"></td>
+                <td style="text-align:center"><input type="radio" name="s6"></td>
+                <td style="text-align:center"><input type="radio" name="s6" checked></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        
+        <div class="card" style="padding:16px;margin-top:16px;border-left:4px solid #d97706">
+          <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:6px">Correction mode</h3>
+          <p style="font-size:0.8rem;color:var(--mut);margin-bottom:10px">Attendance for this date was already saved. Changes need a correction reason (required).</p>
+          <div class="form-group" style="max-width:400px;margin-bottom:10px">
+            <label>Reason for correction</label>
+            <input class="form-control" placeholder="e.g. Student arrived late, marked present in error">
+          </div>
+          <button class="btn btn-outline btn-sm">Save correction for today</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-tabs" aria-label="Mobile navigation">
+    <a href="16-teacher-dashboard.html"><span class="tab-ico">⌂</span>Home</a>
+    <a href="05-teacher-score-entry.html"><span class="tab-ico">✎</span>Scores</a>
+    <a href="19-attendance.html" class="on"><span class="tab-ico">✓</span>Attend</a>
+    <a href="21-notifications.html"><span class="tab-ico">🔔</span>Alerts</a>
+  </nav>
+
+<script src="js/shell.js"></script>
+</body>
+</html>
