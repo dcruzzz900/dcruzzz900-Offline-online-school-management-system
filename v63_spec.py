@@ -18,6 +18,7 @@ import sqlite3
 from flask import flash, g, redirect, render_template, request, session, url_for
 
 import v63_core as core
+import role_charts
 from identity_rules import identity_errors
 
 STAFF_OUTPUT_PATTERNS = [
@@ -601,7 +602,8 @@ def register_v63(app, h):
         students = conn.execute("SELECT s.id,s.first_name,s.last_name,s.admission_no,s.status,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? ORDER BY c.name,s.last_name", (school_id,)).fetchall()
         suggestion = next_admission_number(conn, school_id)
         conn.close()
-        return render_template("registrar_dashboard.html", counts=counts, recent=recent, history=history, classes=classes, statuses=statuses,
+        _rc_conn = get_db(); _rc = role_charts.registrar_specs(_rc_conn, school_id); _rc_conn.close()
+        return render_template("registrar_dashboard.html", role_charts=_rc, counts=counts, recent=recent, history=history, classes=classes, statuses=statuses,
                                students=students, suggestion=suggestion, student_full_name=student_full_name)
 
     @app.route("/registrar/register", methods=["POST"])
