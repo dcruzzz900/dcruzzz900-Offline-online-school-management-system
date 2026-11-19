@@ -131,9 +131,14 @@ try:
         page.set_viewport_size({"width": 1300, "height": 800})
         page.goto(f"http://127.0.0.1:{PORT}/dashboard")
         page.wait_for_load_state("networkidle")
-        check("desktop width (1300px) still shows the sidebar normally with no hamburger button",
-              page.eval_on_selector(".sidebar-toggle", "el => getComputedStyle(el).display") == "none"
-              and page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform") == "none")
+        # V112 (v106 Modern Screens): the sidebar is the same off-canvas drawer at EVERY width, so on desktop the
+        # hamburger is visible and the sidebar is tucked away until it is opened (then it opens, with no overlap issue).
+        check("desktop width (1300px): v106 drawer - hamburger visible, sidebar off-canvas until opened",
+              page.eval_on_selector(".sidebar-toggle", "el => getComputedStyle(el).display") != "none"
+              and page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform") != "none")
+        page.click(".sidebar-toggle"); page.wait_for_timeout(300)
+        check("desktop width (1300px): hamburger opens the drawer",
+              page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform") == "none")
 
         browser.close()
 except ImportError:
