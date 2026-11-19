@@ -28,7 +28,7 @@
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 15px; }
+html { font-size: calc(15px * var(--fs-scale, 1)); }
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -660,7 +660,7 @@ html, body { overflow-x: hidden; }
 
 /* Phone already defined ≤700 — ensure tables and forms */
 @media (max-width: 700px) {
-  .form-control { font-size: 16px; } /* avoid iOS zoom */
+  .form-control { font-size: 1rem; } /* avoid iOS zoom */
   .btn { min-height: 40px; }
   .card { border-radius: 12px; }
   .ad-kpi-gender { font-size: 0.75rem; }

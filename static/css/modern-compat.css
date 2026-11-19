@@ -1,0 +1,153 @@
+/* v106 Modern UI/UX -> v111 integration layer.
+   modern.css (verbatim v106) supplies tokens, shell, buttons, cards, badges, KPI, tables.
+   This file only (1) neutralises the legacy v111 shell rules that fight the v106 drawer shell,
+   (2) maps v111 component classes (Bootstrap + .stat-box/.page-heading/...) onto the v106 look,
+   (3) keeps school Theme & Branding colours and Light/Dark mode working. */
+:root{--blue:var(--theme-primary,#1a6fe8);--blue-bright:var(--theme-primary,#1469e6);--font:var(--app-font,'Inter',system-ui,-apple-system,'Segoe UI',sans-serif)}
+html,body{overflow-x:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--ink)}
+
+/* ---- 1. shell: legacy fixed 252px sidebar / margin-left must not apply ---- */
+.app-shell{display:flex;min-height:100vh;background:none}
+.app-shell .app-sidebar.sidebar{position:fixed;left:0;top:0;bottom:0;width:min(280px,86vw);height:100vh;transform:translateX(-105%);z-index:60;border-right:0;padding:0;margin:0}
+.app-shell .app-sidebar.sidebar.open{transform:translateX(0)}
+.app-main.main,.app-shell .main{margin-left:0!important;flex:1;min-width:0;display:flex;flex-direction:column}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(5,26,66,.5);z-index:45;opacity:0;pointer-events:none;transition:opacity .2s}
+.sidebar-backdrop.show{opacity:1;pointer-events:auto}
+.sidebar .sidebar-brand.brand{flex-direction:column;padding:18px 14px 12px;gap:6px}
+.sidebar .brand-mark.logo{width:72px;height:72px;border-radius:50%;background:#fff;color:var(--navy);overflow:hidden;display:grid;place-items:center;font-weight:800}
+.sidebar .brand-mark.logo img{width:100%;height:100%;object-fit:contain}
+.sidebar .brand-text h2{margin:0;font-size:1.05rem;line-height:1.2}.sidebar .brand-text h2 b{color:#fff;font-weight:700}
+.sidebar .school-switcher{display:none}
+.sidebar nav a.nav-item{display:flex;align-items:center;gap:10px;margin:2px 10px;padding:9px 14px;color:#eaf1ff;border-radius:10px}
+.sidebar nav a.nav-item .ni{width:1.2em;text-align:center;flex:none}
+.sidebar nav a.nav-item:hover{background:rgba(255,255,255,.1)}
+.sidebar nav a.nav-item.active,.sidebar nav a.nav-item[aria-current=page]{background:#1a6fe8;color:#fff;box-shadow:0 3px 10px rgba(26,111,232,.45)}
+.sidebar nav a.ai-nav em{margin-left:auto;font-style:normal;font-size:.65rem;background:rgba(255,255,255,.2);padding:1px 6px;border-radius:999px}
+.sidebar .notif-badge{margin-left:auto}
+.sidebar-bottom{padding:0 0 14px;border-top:1px solid rgba(255,255,255,.1)}
+.sidebar-bottom .user-mini{display:flex;gap:10px;align-items:center;padding:12px 18px;color:#fff}
+.sidebar-bottom .user-mini small{display:block;color:#cfe0ff;font-size:.72rem}
+.sidebar-bottom .avatar{background:rgba(255,255,255,.2)}
+.sidebar .side-status{margin:10px 12px}
+.topbar{height:auto;position:sticky;top:0;z-index:55;background:#fff;backdrop-filter:none}
+.topbar .top-logo{height:34px;width:auto;border-radius:8px;object-fit:contain;flex:none}
+.topbar-school h1{margin:0}.topbar-school p{margin:0}
+.topbar .top-search{position:relative}
+.topbar .top-search .top-search-results{position:absolute;top:100%;left:0;right:0;margin-top:6px;z-index:70}
+.topbar-notif{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;text-decoration:none;font-size:1.15rem}
+.notif-badge{background:var(--red);color:#fff;border-radius:999px;font-size:.62rem;font-weight:700;font-style:normal;padding:1px 6px;line-height:1.3}
+.topbar-notif .notif-badge{position:absolute;top:-2px;right:-2px}
+.avatar{overflow:hidden;text-decoration:none;flex:none}.avatar img{width:100%;height:100%;object-fit:cover}
+.hamburger{display:inline-flex;flex-direction:column;justify-content:center;gap:4px;width:40px;height:40px;padding:0 9px;border:0;border-radius:10px;background:transparent;cursor:pointer;flex:none}
+.hamburger span{display:block;height:2.5px;border-radius:2px;background:var(--navy);transition:transform .2s,opacity .2s}
+.hamburger.open span:nth-child(1){transform:translateY(6.5px) rotate(45deg)}.hamburger.open span:nth-child(2){opacity:0}.hamburger.open span:nth-child(3){transform:translateY(-6.5px) rotate(-45deg)}
+.hamburger.sidebar-toggle{font-size:0}
+main.content{max-width:none;margin:0;padding:18px 20px 32px;flex:1}
+.live-clock{display:none}
+/* legacy mobile tabs (svg + button) -> v106 pill bar */
+.mobile-tabs{display:none}
+@media(max-width:700px){
+ .app-shell{display:block}
+ .topbar{background:linear-gradient(180deg,#1f3fc8,#1a2aa3)!important;border-bottom:0!important}
+ .topbar .hamburger span{background:#fff}
+ .topbar-school h1{color:#fff!important}.topbar-school p{color:rgba(255,255,255,.85)!important}
+ .topbar .theme-toggle,.topbar .text-size-control{display:none}
+ .mobile-tabs{display:flex;position:fixed;left:8px;right:8px;bottom:8px;z-index:40;background:#fff;border-radius:22px;padding:6px 4px 8px;box-shadow:0 -2px 18px rgba(20,40,90,.22);justify-content:space-around}
+ .mobile-tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 4px;font-size:.65rem;font-weight:600;color:#64748b;text-decoration:none;position:relative;border-radius:12px}
+ .mobile-tabs a .tab-ico{font-size:1.25rem;line-height:1}.mobile-tabs a.on{color:#1a4fd0}
+ .mobile-tabs a .notif-badge{position:absolute;top:0;right:22%}
+ main.content{padding:12px 12px 96px}
+}
+
+/* ---- portal (parent / student) shells: v106 top bar + tab strip ---- */
+.portal-shell{min-height:100vh}
+.portal-shell>.topbar{position:sticky}
+.portal-tabs{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;overflow-x:auto}
+.portal-tabs a{padding:12px 14px;font-size:.85rem;font-weight:500;color:var(--mut);text-decoration:none;white-space:nowrap;border-bottom:2px solid transparent}
+.portal-tabs a.on{font-weight:700;color:var(--blue);border-bottom-color:var(--blue)}
+.portal-tabs a em{font-style:normal;background:var(--red);color:#fff;border-radius:999px;padding:0 6px;font-size:.65rem}
+.portal-shell>main.content{max-width:1000px;margin:0 auto;width:100%}
+.platform-shell.app-shell>.main>main.content{width:100%}
+
+/* ---- 2. v111 components -> v106 look ---- */
+main.content>h1,main.content .page-heading h1,main.content .page-head h1{font-size:1.35rem;font-weight:800;color:var(--navy);margin:0 0 4px}
+.page-heading,.page-head{margin-bottom:18px}.page-heading p,.page-head p{color:var(--mut);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
+.card h2,.card h3{font-size:.95rem;font-weight:700;color:var(--navy)}
+.btn{border-radius:10px;font-weight:600;font-size:.875rem;padding:9px 16px}
+.btn-sm{padding:6px 12px;font-size:.8rem}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 3px 10px rgba(26,111,232,.35)}
+.btn-primary:hover{background:var(--blue);filter:brightness(.92);color:#fff}
+.btn-secondary,.btn-outline-secondary{background:#fff;color:var(--navy);border:1.5px solid #c5d0e6}
+.btn-secondary:hover{background:#fff;border-color:var(--blue);color:var(--blue)}
+.btn-gold{background:linear-gradient(160deg,#ffae1a,#f57a00);color:#fff;border:0}
+.form-control,.form-select,select,textarea,input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],input[type=search],input[type=tel]{border:1.5px solid #c5d0e6;border-radius:10px;font-size:.9rem;font-family:inherit}
+.form-control:focus,.form-select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,111,232,.15)}
+label{font-size:.8rem;font-weight:600;color:var(--mut)}
+.table-responsive,.table-wrap{overflow-x:auto}
+table.table{width:100%;border-collapse:collapse;font-size:.85rem;--bs-table-bg:transparent}
+table.table thead th,table.table>thead>tr>th{background:var(--navy);color:#fff;text-align:left;padding:10px 12px;font-weight:600;white-space:nowrap;border:0}
+table.table td{padding:10px 12px;border-bottom:1px solid var(--border)}
+table.table-hover tbody tr:hover{background:#f5f8fc}
+table caption{display:none}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.stat-box .label{font-size:.75rem;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.stat-box .num{font-size:1.5rem;font-weight:800;color:var(--navy);margin-top:2px}
+.badge{border-radius:999px;font-weight:700;font-size:.72rem;padding:3px 9px}
+.muted{color:var(--mut)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.grid-2{grid-template-columns:1fr}}
+.alert{border-radius:12px}
+/* dashboard banner/kpi use v106 gradients already via modern.css; keep legacy admin-dashboard.css extras working */
+.ad{gap:14px}
+
+/* ---- 3. dark mode (data-bs-theme=dark) for the v106 shell ---- */
+html[data-bs-theme=dark]{--bg:#12182a;--card:#151c28;--border:#2c3646;--ink:#dde3f0;--mut:#a9b5c6;--navy:#bcd0f5}
+html[data-bs-theme=dark] body{background:#12182a;color:#dde3f0}
+html[data-bs-theme=dark] .topbar{background:#151c28;border-bottom:1px solid #2c3646}
+html[data-bs-theme=dark] .topbar-school h1{color:#bcd0f5}html[data-bs-theme=dark] .topbar-school p{color:#a9b5c6}
+html[data-bs-theme=dark] .hamburger span{background:#bcd0f5}
+html[data-bs-theme=dark] .topbar-search input[type=search]{background-color:#1b2433;border-color:#2c3646;color:#dde3f0}
+html[data-bs-theme=dark] .role-chip{background:#1e2a44;color:#bcd0f5}
+html[data-bs-theme=dark] .avatar{background:#26324a;color:#dde3f0}
+html[data-bs-theme=dark] .card,html[data-bs-theme=dark] .stat-box,html[data-bs-theme=dark] .kpi-mini,html[data-bs-theme=dark] .ad-panel{background:#151c28;border-color:#2c3646}
+html[data-bs-theme=dark] .form-control,html[data-bs-theme=dark] .form-select,html[data-bs-theme=dark] select,html[data-bs-theme=dark] textarea,html[data-bs-theme=dark] input{background:#1b2433;color:#dde3f0;border-color:#3a4558}
+html[data-bs-theme=dark] table.table thead th{background:#20304f}
+html[data-bs-theme=dark] table.table td{border-color:#2c3646;color:#dde3f0}
+html[data-bs-theme=dark] table.table-hover tbody tr:hover{background:#1b2433}
+html[data-bs-theme=dark] .btn-secondary{background:#1b2433;color:#dde3f0;border-color:#3a4558}
+html[data-bs-theme=dark] .portal-tabs{background:#151c28;border-color:#2c3646}
+html[data-bs-theme=dark] .mobile-tabs{background:#151c28}
+html[data-bs-theme=dark] .mobile-tabs a{color:#b0b9ca}html[data-bs-theme=dark] .mobile-tabs a.on{color:#95ace4}
+@media print{.sidebar,.topbar,.mobile-tabs,.portal-tabs,.sidebar-backdrop{display:none!important}main.content{padding:0}}
+
+/* ---- 4. dashboard rows: v106 proportions (beats theme.css auto-fit !important) ---- */
+.ad .ad-row-charts{grid-template-columns:1fr 1fr 1.2fr!important}
+.ad .ad-row-bottom{grid-template-columns:2.2fr 1.25fr 1fr!important}
+@media(max-width:1100px){.ad .ad-row-charts{grid-template-columns:1fr 1fr!important}.ad .ad-row-charts>:last-child{grid-column:1/-1}.ad .ad-row-bottom{grid-template-columns:1fr 1fr!important}.ad .ad-row-bottom>.ad-qa{grid-column:1/-1}}
+@media(max-width:700px){.ad .ad-row-charts,.ad .ad-row-bottom{grid-template-columns:1fr!important}.ad .ad-row-charts>:last-child{display:block}}
+.ad-panel>header{background:#fff;color:var(--navy);border-bottom:1px solid var(--border)}
+.ad .ad-panel>header h2,.gp>header h2{color:var(--navy)}
+.ad-panel>header a{color:var(--blue)}
+.gp>header{background:#fff;color:var(--navy);border-bottom:1px solid var(--border)}
+.gp,.ad-panel{border:1px solid var(--border);box-shadow:var(--shadow);border-radius:14px}
+html[data-bs-theme=dark] .ad-panel>header,html[data-bs-theme=dark] .gp>header{background:#151c28;color:#bcd0f5;border-color:#2c3646}
+html[data-bs-theme=dark] .gp{background:#151c28;border-color:#2c3646}
+/* topbar clean-up */
+.topbar{border-bottom:1px solid var(--border)!important;box-shadow:0 1px 0 rgba(15,44,107,.04)!important}
+.topbar .top-search{border:0!important;background:none!important;padding:0!important;box-shadow:none!important;flex:0 1 280px;min-width:140px}
+.topbar .top-search input[type=search]{width:100%}
+.topbar .theme-toggle{width:38px;height:38px;padding:0;border-radius:50%;display:inline-grid;place-items:center;background:#f1f5f9;border:0}
+.visually-hidden,.tt-label.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.topbar .top-actions,.topbar .topbar-actions{display:flex;align-items:center;gap:10px}
+@media(min-width:1101px){.ad .ad-row-charts>:last-child{grid-column:auto!important}.ad .ad-row-bottom>.ad-qa{grid-column:auto!important}}
+.ad .ad-panel>header,.ad .ad-row-charts .ad-panel>header{background:#fff!important;color:var(--navy)!important;border-bottom:1px solid var(--border);padding:12px 16px}
+.ad .ad-panel>header h2,.ad .ad-row-charts .ad-panel>header h2{color:var(--navy)!important}
+.ad .ad-panel>header svg{color:var(--blue)}
+html[data-bs-theme=dark] .ad .ad-panel>header{background:#151c28!important;color:#bcd0f5!important}
+.ad-trend{max-width:100%}.ad-trend svg{max-height:280px}
+/* drawer: whole sidebar scrolls (legacy nav had its own clipped scroller) */
+.app-shell .app-sidebar.sidebar{overflow-y:auto;overscroll-behavior:contain}
+.app-shell .app-sidebar.sidebar>nav{flex:0 0 auto!important;overflow:visible!important;max-height:none!important;height:auto!important;padding:10px 0 12px}
+.app-shell .app-sidebar.sidebar .sidebar-bottom{margin-top:auto}
