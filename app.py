@@ -11984,6 +11984,36 @@ register_result_fields(app, dict(get_db=get_db, login_required=login_required, l
 # V104: freeze the look of results that were published before snapshots existed (once; only fills NULLs)
 freeze_legacy_published_sheets()
 
+@app.route("/admin/school-fees", methods=["GET", "POST"])
+@login_required("admin", "sub_admin")
+def admin_school_fees():
+    """v112: School Fees screen (v106 modern design). Reads/writes the existing school_fee_summary table that feeds the
+    dashboard School Fees card -- same figures, one source. There is still no per-student invoice/payment ledger."""
+    conn = get_db()
+    school_id = current_school_id()
+    if request.method == "POST":
+        try:
+            expected = max(0.0, float((request.form.get("expected_amount") or "0").replace(",", "")))
+            collected = max(0.0, float((request.form.get("collected_amount") or "0").replace(",", "")))
+        except ValueError:
+            conn.close(); flash("Enter valid amounts (numbers only).", "error"); return redirect(url_for("admin_school_fees"))
+        if collected > expected:
+            conn.close(); flash("Collected cannot be more than expected.", "error"); return redirect(url_for("admin_school_fees"))
+        label = (request.form.get("label") or "").strip()[:80]
+        conn.execute("INSERT INTO school_fee_summary (school_id, label, expected_amount, collected_amount) VALUES (?,?,?,?)", (school_id, label, expected, collected))
+        conn.commit(); conn.close()
+        flash("School fees figures saved. The dashboard card now shows them.", "success")
+        return redirect(url_for("admin_school_fees"))
+    rows = conn.execute("SELECT * FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 20", (school_id,)).fetchall()
+    conn.close()
+    cur = rows[0] if rows else None
+    expected = float(cur["expected_amount"]) if cur else 0.0
+    collected = float(cur["collected_amount"]) if cur else 0.0
+    pct = round(collected * 100 / expected, 1) if expected else 0.0
+    return render_template("admin_school_fees.html", cur=cur, rows=rows, expected=expected, collected=collected,
+                           outstanding=max(0.0, expected - collected), pct=pct)
+
+
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"
     app.run(host="0.0.0.0", port=5050, debug=debug_mode)
