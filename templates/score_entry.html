@@ -18,7 +18,7 @@
         Download the current scores as a CSV, fill it in on your computer, then upload it back — handy for entering many scores at once.
     </p></details>
     <a class="btn btn-primary btn-sm" href="{{ url_for('score_csv_template', class_id=class_row.id, subject_id=subject_row.id) }}">Download CSV Template</a>
-    <form method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
+    <form data-no-hub method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
 <label>Reason for change <span class="muted">(required if results are published)</span><input type="text" name="change_reason" maxlength="300" class="form-control"></label>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Upload Completed CSV</label>
@@ -34,7 +34,7 @@
     <input type="text" id="studentSearch" placeholder="Type a name or Admission No. / Register No..." autocomplete="off" class="form-control">
 </div>
 
-<form method="POST">
+<form data-no-hub method="POST">
 <label class="no-print">Reason for change <span class="muted">(required when the term's results are already published)</span><input type="text" name="change_reason" maxlength="300" placeholder="e.g. Score correction" class="form-control"></label>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="table-responsive"><table class="table table-hover align-middle" id="scoreTable">
