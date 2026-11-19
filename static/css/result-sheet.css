@@ -281,3 +281,16 @@
 .rs-style-sidebar_profile .rs-main .rs-custom-grid{grid-template-columns:repeat(2,1fr)}
 .rs-style-dashboard_cards .rs-card-grid>.rs-custom{grid-column:1/-1;background:#fff;border-radius:3mm;box-shadow:0 .3mm 1.2mm rgba(15,30,60,.16);padding:3mm}
 @media screen and (max-width:820px){.rs-custom-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* V111: result-sheet header on a phone. The school name keeps to the width, the logo and passport shrink but stay whole, and when the
+   header is too tight it wraps (logo/passport on one row, text below) instead of squeezing the name. Print and PDF are untouched (screen only). */
+@media screen and (max-width:820px){
+  .rs-head{flex-wrap:wrap;justify-content:center;gap:3mm}
+  .rs-head .rs-head-text{flex:1 1 100%;order:3;min-width:0;overflow-wrap:anywhere}
+  .rs-head .rs-logo{order:1;max-width:22mm;max-height:20mm;object-fit:contain}
+  .rs-head .rs-passport{order:2;width:22mm;height:27mm}
+  .rs-head-logo-right .rs-logo{order:2}.rs-head-logo-right .rs-passport{order:1}
+  .rs-head h2{font-size:13pt!important;line-height:1.15}.rs-head h1{font-size:12pt}
+  .rs-head .rs-contact,.rs-head .rs-custominfo{font-size:8pt;overflow-wrap:anywhere}
+  .rs-head-logo-center{flex-direction:row}
+}
