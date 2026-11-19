@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}School Fees — {{ school_name }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>💰 School Fees</h1><p>Expected vs collected{% if label %} · {{ label }}{% endif %} · same figures as the dashboard School Fees tile</p></div>
+<div class="page-actions"><button type="button" class="btn btn-secondary" data-open="expectedPanel">Set expected fees</button><button type="button" class="btn btn-primary" data-open="paymentPanel">+ Record payment</button></div></div>
+
+<div class="kpi-row stat-grid">
+  <div class="stat-box"><div class="label">Expected</div><div class="num">₦{{ '{:,.2f}'.format(expected) }}</div></div>
+  <div class="stat-box"><div class="label">Collected</div><div class="num" style="color:#059669">₦{{ '{:,.2f}'.format(collected) }}</div></div>
+  <div class="stat-box"><div class="label">Outstanding</div><div class="num" style="color:#d97706">₦{{ '{:,.2f}'.format(outstanding) }}</div></div>
+  <div class="stat-box"><div class="label">Collection rate</div><div class="num">{{ pct }}%</div></div>
+</div>
+<div class="card" style="padding:14px">
+  <div style="display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:6px"><span>Progress</span><b>{{ pct }}%</b></div>
+  <div class="progress" role="progressbar" aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100" style="height:10px"><div class="progress-bar" style="width:{{ pct }}%"></div></div>
+</div>
+
+<details class="card m-fold" id="expectedPanel"><summary>Set expected fees</summary><div class="m-fold-body">
+  <form method="POST" class="row g-3 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_expected">
+    <div class="col-md-4"><label for="expAmt">Expected total (₦)</label><input id="expAmt" class="form-control" name="expected_amount" inputmode="decimal" required value="{{ '%.2f'|format(expected) }}"></div>
+    <div class="col-md-5"><label for="expLabel">Label (optional, e.g. 2026/2027 · 1st Term)</label><input id="expLabel" class="form-control" name="label" maxlength="80" value="{{ label }}"></div>
+    <div class="col-md-3"><button class="btn btn-primary" type="submit">Save</button></div>
+  </form></div></details>
+
+<details class="card m-fold" id="paymentPanel"><summary>Record a payment</summary><div class="m-fold-body">
+  {% if students %}
+  <form method="POST" class="row g-3 align-items-end">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="record_payment">
+    <div class="col-md-4"><label for="payStudent">Student</label><select id="payStudent" class="form-select" name="student_id" required>{% for s in students %}<option value="{{ s.id }}">{{ s.last_name }} {{ s.first_name }} — {{ s.class_name }} ({{ s.admission_no }})</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label for="payAmt">Amount (₦)</label><input id="payAmt" class="form-control" name="amount" inputmode="decimal" required></div>
+    <div class="col-md-2"><label for="payMethod">Method</label><select id="payMethod" class="form-select" name="method">{% for m in methods %}<option>{{ m }}</option>{% endfor %}</select></div>
+    <div class="col-md-2"><label for="payDate">Date</label><input id="payDate" class="form-control" type="date" name="paid_on" value="{{ today }}"></div>
+    <div class="col-md-2"><label for="payNote">Note</label><input id="payNote" class="form-control" name="note" maxlength="200"></div>
+    <div class="col-12"><button class="btn btn-primary" type="submit">Record payment</button></div>
+  </form>
+  {% else %}<p class="muted mb-0">Add students first, then you can record their payments here.</p>{% endif %}
+</div></details>
+
+<div class="card"><h3 class="mb-3">Recent payments</h3>
+{% if payments %}
+<div class="table-responsive"><table class="table table-hover align-middle"><caption>Recent payments</caption>
+<thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th><th>Method</th><th>Recorded by</th><th>Note</th><th></th></tr></thead><tbody>
+{% for p in payments %}<tr><td>{{ p.paid_on or '—' }}</td><td><strong>{{ ((p.last_name or '') ~ ' ' ~ (p.first_name or ''))|trim or '—' }}</strong>{% if p.admission_no %}<br><small class="muted">{{ p.admission_no }}</small>{% endif %}</td><td>{{ p.class_name or '—' }}</td><td>₦{{ '{:,.2f}'.format(p.amount) }}</td><td>{{ p.method or '—' }}</td><td>{{ p.recorded_by or '—' }}</td><td>{{ p.note or '' }}</td>
+<td><form method="POST" class="inline" onsubmit="return confirm('Remove this payment? The collected total will go down by its amount.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete_payment"><input type="hidden" name="payment_id" value="{{ p.id }}"><button class="btn btn-sm btn-secondary" type="submit">Remove</button></form></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<div class="empty-state">No payments recorded yet.</div>{% endif %}
+</div>
+<p class="muted" style="font-size:.8rem">Platform subscription billing is separate — see <a href="{{ url_for('school_billing_portal') }}">Billing &amp; Subscription</a>.</p>
+<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+{% endblock %}
