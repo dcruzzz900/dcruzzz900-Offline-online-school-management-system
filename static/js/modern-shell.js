@@ -58,3 +58,27 @@
     if (e.key === 'Escape') closeSidebar();
   });
 })();
+
+// ---- v111 integration additions -------------------------------------------
+(function () {
+  function qs(s, r) { return (r || document).querySelector(s); }
+  // Mobile "More" tab opens the same drawer so every role link stays reachable.
+  document.addEventListener('click', function (e) {
+    var more = e.target.closest && e.target.closest('#tabsMore');
+    if (more) { e.preventDefault(); var h = qs('.hamburger'); if (h) h.click(); }
+  });
+  // Mark the current page in the sidebar (aria-current + .active), longest href match wins.
+  var path = location.pathname.replace(/\/+$/, '') || '/';
+  var best = null, bestLen = -1;
+  document.querySelectorAll('.sidebar nav a.nav-item').forEach(function (a) {
+    var h = (a.getAttribute('href') || '').split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
+    if (h === '#' ) return;
+    if (path === h || (h.length > 1 && path.indexOf(h + '/') === 0)) {
+      if (h.length > bestLen) { best = a; bestLen = h.length; }
+    }
+  });
+  if (best) { best.classList.add('active'); best.setAttribute('aria-current', 'page'); }
+  // Keep the active item visible when the drawer opens on a long menu.
+  var h = qs('.hamburger');
+  if (h) h.addEventListener('click', function () { setTimeout(function () { if (best && best.scrollIntoView) best.scrollIntoView({block: 'nearest'}); }, 280); });
+})();

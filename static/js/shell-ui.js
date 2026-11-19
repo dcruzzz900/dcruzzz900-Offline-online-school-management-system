@@ -21,6 +21,7 @@
   function sidebar(){
     var btn=document.getElementById('sidebarToggle'),side=document.querySelector('.app-sidebar');
     if(!btn||!side)return;
+    if(btn.classList.contains('hamburger'))return; /* v106 modern shell: static/js/modern-shell.js owns the drawer */
     var small=window.matchMedia('(max-width:1000px)'),back=document.createElement('div');
     back.className='sidebar-backdrop';document.body.appendChild(back);
     function set(open){
