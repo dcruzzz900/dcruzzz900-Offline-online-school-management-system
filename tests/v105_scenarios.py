@@ -51,7 +51,7 @@ check("Staff card shows total and gender split", re.search(r"Staff</span><b>2</b
 check("Classes, Subjects and Parents cards", all(x in d for x in ("View Classes", "View Subjects", "View Parents")) and re.search(r"Classes</span><b>1</b>", d) and re.search(r"Subjects</span><b>4</b>", d) and re.search(r"Parents</span><b>0</b>", d))
 check("School Fees card shows expected, collected and the percentage", "₦2,650,000" in d and "₦1,890,000" in d and "(71.3%)" in d)
 fees_card = d[d.index('class="ad-kpi k-fees"'):d.index("</article>", d.index('class="ad-kpi k-fees"'))]
-check("the School Fees card has no link (ignored for now)", "<a " not in fees_card and "href" not in fees_card, fees_card[-200:])
+check("the School Fees card links to the School Fees screen (v112)", "/admin/school-fees" in fees_card, fees_card[-200:])
 check("each stat card has its own colour from the design", all(c in d for c in ("k-blue", "k-green", "k-purple", "k-cyan", "k-orange", "k-fees")))
 
 # ---- panels
@@ -71,7 +71,7 @@ check("CBT is a placeholder, not a link (later feature)", "<a " not in cbt.split
 check("phone: bottom tab bar with Home / Reports / Notifications / More for staff", all(x in d for x in ('class="mobile-tabs', ">Home<", ">Reports<", ">Notifications<", ">More<")))
 sql_ = get_db(); sql_.execute("UPDATE schools SET name='Government Secondary School Goni-Gora', school_address='No 10 wake Street, Goni-Gora, Bauchi State' WHERE id=1"); sql_.commit(); sql_.close()
 d_ = html(ADMIN.get("/dashboard"))
-check("top bar shows the school name and address", 'class="top-school"><b>Government Secondary School Goni-Gora</b><small>No 10 wake Street, Goni-Gora, Bauchi State</small>' in d_, re.findall(r'class="top-school".{0,200}', d_)[:1])
+check("top bar shows the school name and address", 'class="topbar-school top-school"><h1>Government Secondary School Goni-Gora</h1><p>No 10 wake Street, Goni-Gora, Bauchi State</p>' in d_, re.findall(r'class="topbar-school.{0,200}', d_)[:1])
 check("one live clock in the banner plus the phone clock bar", d.count('data-school-ms="') == 2 and "ad-clockbar" in d)
 css = open(os.path.join(ROOT, "static/css/admin-dashboard.css")).read()
 check("phone/tablet CSS exists (breakpoints 1280 / 700 / 560)", all(x in css for x in ("max-width:1280px", "max-width:700px", "max-width:560px")))
