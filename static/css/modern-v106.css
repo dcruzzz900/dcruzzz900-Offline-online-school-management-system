@@ -1,0 +1,190 @@
+/* ==========================================================================
+   My School Hub - Modern Screens v106 design layer (ported into v111 -> v112)
+   Loaded LAST (after theme.css and theme-dark.generated.css).
+   * Reference: "Modern Screens - v106 Complete Map" (css/modern.css + js/shell.js).
+   * It re-skins the app's EXISTING markup (Bootstrap + app classes) so every
+     screen, form field, Jinja binding and route keeps working unchanged.
+   * Colours come from the school's Theme & Branding (--theme-primary /
+     --theme-secondary) and the light/dark surface tokens in theme.css, so
+     branding and dark mode keep working. Printing is never restyled.
+   ========================================================================== */
+:root{
+  --m-radius:14px;--m-radius-sm:10px;
+  --m-shadow:0 5px 14px rgba(20,40,90,.12);--m-shadow-lg:0 10px 30px rgba(20,40,90,.16);
+  --m-head:var(--theme-secondary,#0a2a6b);--m-head-ink:var(--theme-secondary-ink,#fff);
+  --m-accent:var(--theme-primary,#1a6fe8);--m-accent-ink:var(--theme-primary-ink,#fff);
+  --m-input-border:#c5d0e6;--m-row-hover:#f5f8fc;--m-chip-bg:#e8f0fe;--m-chip-ink:#0a2a6b;
+}
+html[data-bs-theme="dark"]{
+  --m-shadow:0 5px 14px rgba(0,0,0,.35);--m-shadow-lg:0 10px 30px rgba(0,0,0,.45);
+  --m-head:color-mix(in srgb,var(--theme-secondary,#0a2a6b) 70%,#0b1120);--m-head-ink:#fff;
+  --m-input-border:var(--border);--m-row-hover:rgba(255,255,255,.04);--m-chip-bg:rgba(56,189,248,.14);--m-chip-ink:#e2e8f0;
+}
+
+@media screen{
+/* ---- 1. App shell: ONE off-canvas drawer at every breakpoint (v106 shell.js) ---- */
+body .app-shell .app-sidebar{
+  width:min(280px,86vw)!important;position:fixed!important;inset:0 auto 0 0;height:100vh;height:100dvh;
+  overflow-y:auto;z-index:1001!important;transform:translateX(-105%);transition:transform .18s ease;
+  box-shadow:8px 0 24px rgba(0,0,0,.25);overscroll-behavior:contain;
+}
+body .app-shell .app-sidebar.open{transform:none}
+body .app-shell .app-main{margin-left:0!important;width:100%!important;min-width:0}
+body .app-shell .sidebar-toggle,body .sidebar-toggle{
+  display:inline-flex!important;align-items:center;justify-content:center;flex:none;min-width:44px;min-height:44px;
+  border:0;background:transparent;color:var(--m-head);font-size:1.6rem;line-height:1;border-radius:var(--m-radius-sm);cursor:pointer;
+}
+html[data-bs-theme="dark"] .sidebar-toggle{color:var(--text)}
+.sidebar-toggle:hover{background:var(--m-chip-bg)}
+.sidebar-toggle:focus-visible{outline:2px solid var(--m-accent);outline-offset:2px}
+body .sidebar-backdrop.show{display:block;position:fixed;inset:0;background:rgba(7,28,51,.5);z-index:1000!important;backdrop-filter:blur(1px)}
+body.nav-open{overflow:hidden}
+.app-sidebar .sidebar-close{display:flex;align-items:center;gap:.5rem;margin:.6rem .8rem 0 auto;padding:.35rem .7rem;border:1px solid rgba(255,255,255,.25);border-radius:999px;background:rgba(255,255,255,.08);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer}
+.app-sidebar .sidebar-close:hover{background:rgba(255,255,255,.16)}
+.app-sidebar nav a{display:flex;align-items:center;gap:.55rem;font-size:.875rem;font-weight:500;text-decoration:none}
+.app-sidebar nav a.active,.app-sidebar nav a[aria-current="page"]{background:var(--m-accent)!important;color:var(--m-accent-ink)!important;box-shadow:0 3px 10px rgba(var(--theme-primary-rgb,26,111,232),.45)}
+.app-sidebar nav a.active em,.app-sidebar nav a[aria-current="page"] em{filter:none}
+.app-sidebar nav{padding-bottom:1rem}
+
+body .app-sidebar nav{flex:none!important;overflow:visible!important;max-height:none!important}
+body .app-sidebar .sidebar-bottom{position:static!important;flex:none;margin-top:auto}
+body .app-sidebar .sidebar-bottom a{color:#cfe0ff!important;display:block;padding:.5rem 1rem}
+body .app-sidebar .sidebar-bottom a:hover{color:#fff!important}
+
+/* ---- 2. Top bar ---- */
+body .topbar .top-search{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important}
+.theme-toggle .tt-label{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+body .app-main .topbar{
+  display:flex;align-items:center;gap:14px;height:auto;min-height:62px;padding:8px 20px;
+  background:var(--surface,#fff);border-bottom:1px solid var(--border);box-shadow:0 1px 0 rgba(15,44,107,.04);
+  position:sticky;top:0;z-index:55;backdrop-filter:none;
+}
+.topbar .top-school b{color:var(--m-head);font-weight:800}
+html[data-bs-theme="dark"] .topbar .top-school b{color:var(--text)}
+.topbar .top-search{flex:0 1 300px;max-width:320px;min-width:140px;position:relative}
+.topbar .top-search input[type="search"]{
+  width:100%;height:38px;padding:0 14px 0 36px;border:1px solid var(--border);border-radius:999px;font-size:.85rem;margin:0;
+  background:var(--surface-soft,#f8fafc) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='6' cy='6' r='5'/%3E%3Cpath d='M10 10l3.5 3.5'/%3E%3C/svg%3E") no-repeat 13px center;
+  color:var(--text);transition:border-color .15s,box-shadow .15s;
+}
+.topbar .top-search input[type="search"]:focus{outline:none;border-color:var(--m-accent);box-shadow:0 0 0 3px rgba(var(--theme-primary-rgb,26,111,232),.18);background-color:var(--surface,#fff)}
+.topbar .top-role{background:var(--m-chip-bg);color:var(--m-chip-ink)!important;padding:5px 12px;border-radius:999px;font-size:.78rem}
+.topbar .top-role svg{display:none}
+.topbar .top-avatar{background:var(--m-head);color:var(--m-head-ink);font-weight:700}
+.topbar .top-bell{color:var(--m-head)}
+html[data-bs-theme="dark"] .topbar .top-bell{color:var(--text)}
+@media(max-width:1100px){.topbar .top-search{display:none}}
+
+/* ---- 3. Page chrome ---- */
+.app-main .container{max-width:1500px;padding:18px 20px 40px}
+.page-heading,.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.page-heading h1,.page-head h1,.app-main .container>h1{font-size:1.35rem;font-weight:800;color:var(--m-head);margin:0;letter-spacing:-.01em}
+html[data-bs-theme="dark"] .page-heading h1,html[data-bs-theme="dark"] .page-head h1,html[data-bs-theme="dark"] .app-main .container>h1{color:var(--text)}
+.page-heading p,.page-head p{color:var(--muted);font-size:.9rem;margin:2px 0 0}
+.eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--m-accent)}
+.section-title{font-size:.95rem;font-weight:700;color:var(--m-head)}
+html[data-bs-theme="dark"] .section-title{color:var(--text)}
+
+/* ---- 4. Cards ---- */
+.app-main .card,.app-main .panel,.app-main .chart-card{
+  background:var(--surface,#fff);border:1px solid var(--border);border-radius:var(--m-radius);box-shadow:var(--m-shadow);
+}
+.app-main .card>.card-header,.app-main .panel>header{background:transparent;border-bottom:1px solid var(--border);font-weight:700;color:var(--m-head)}
+html[data-bs-theme="dark"] .app-main .card>.card-header{color:var(--text)}
+.app-main .card h2,.app-main .card h3{color:var(--m-head);font-weight:700}
+html[data-bs-theme="dark"] .app-main .card h2,html[data-bs-theme="dark"] .app-main .card h3{color:var(--text)}
+
+/* ---- 5. Tables: coloured header, soft rows (not the printed result sheets) ---- */
+.app-main table.table,.app-main .table-responsive>table,.app-main .table-wrap>table{
+  --bs-table-bg:transparent;width:100%;border-collapse:separate;border-spacing:0;font-size:.875rem;
+}
+.app-main table.table thead th,.app-main .table-responsive>table thead th,.app-main .table-wrap>table thead th{
+  background:var(--m-head);color:var(--m-head-ink);font-weight:600;white-space:nowrap;border:0;padding:.65rem .8rem;
+}
+.app-main table.table thead th:first-child{border-top-left-radius:10px}.app-main table.table thead th:last-child{border-top-right-radius:10px}
+.app-main table.table td,.app-main .table-responsive>table td,.app-main .table-wrap>table td{padding:.65rem .8rem;border:0;border-bottom:1px solid var(--border);vertical-align:middle}
+.app-main table.table tbody tr:nth-child(even),.app-main .table-wrap>table tbody tr:nth-child(even){background:transparent}
+.app-main table.table.table-hover tbody tr:hover>*,.app-main .table-wrap>table tbody tr:hover>*{background:var(--m-row-hover);--bs-table-accent-bg:transparent}
+.app-main table.table tbody tr:last-child td{border-bottom:0}
+.app-main table.table caption{display:none}
+.app-main .table-responsive,.app-main .table-wrap{border-radius:var(--m-radius-sm)}
+
+/* ---- 6. Buttons ---- */
+.app-main .btn,.hub-auth-screen .btn,.btn{border-radius:var(--m-radius-sm);font-weight:600;transition:transform .1s,box-shadow .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}.btn:active{transform:none}
+.btn-primary{background:var(--m-accent);border-color:var(--m-accent);color:var(--m-accent-ink);box-shadow:0 3px 10px rgba(var(--theme-primary-rgb,26,111,232),.35)}
+.btn-primary:hover,.btn-primary:focus{background:color-mix(in srgb,var(--m-accent) 86%,#000);border-color:color-mix(in srgb,var(--m-accent) 86%,#000);color:var(--m-accent-ink)}
+.btn-secondary,.btn-outline-secondary,.btn-outline-primary{background:var(--surface,#fff);color:var(--m-head);border:1.5px solid var(--m-input-border);box-shadow:none}
+html[data-bs-theme="dark"] .btn-secondary,html[data-bs-theme="dark"] .btn-outline-secondary,html[data-bs-theme="dark"] .btn-outline-primary{color:var(--text)}
+.btn-secondary:hover,.btn-outline-secondary:hover,.btn-outline-primary:hover{background:var(--m-chip-bg);border-color:var(--m-accent);color:var(--m-accent)}
+.btn-sm,.btn-small{padding:.35rem .75rem;font-size:.8rem}
+
+/* ---- 7. Forms ---- */
+.form-control,.form-select,.app-main input[type=text],.app-main input[type=password],.app-main input[type=number],.app-main input[type=email],.app-main input[type=date],.app-main select,.app-main textarea{
+  border:1.5px solid var(--m-input-border);border-radius:var(--m-radius-sm);background-color:var(--surface,#fff);color:var(--text);
+}
+.form-control:focus,.form-select:focus,.app-main input:focus,.app-main select:focus,.app-main textarea:focus{
+  outline:none;border-color:var(--m-accent);box-shadow:0 0 0 3px rgba(var(--theme-primary-rgb,26,111,232),.16);
+}
+.app-main label,.form-label{font-size:.8rem;font-weight:600;color:var(--muted)}
+.form-check-input:checked{background-color:var(--m-accent);border-color:var(--m-accent)}
+
+/* ---- 8. Badges, alerts, stat tiles ---- */
+.badge{border-radius:999px;font-weight:700;font-size:.72rem;padding:.3em .7em}
+.alert{border-radius:var(--m-radius-sm);border-width:1px}
+.stat-grid{gap:12px}
+.stat-box{background:var(--surface,#fff);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--m-shadow)}
+.stat-box .label{font-size:.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.stat-box .num{font-size:1.5rem;font-weight:800;color:var(--m-head);margin-top:2px}
+html[data-bs-theme="dark"] .stat-box .num{color:var(--text)}
+.empty-state{border:1.5px dashed var(--border);border-radius:var(--m-radius);padding:2rem;text-align:center;color:var(--muted)}
+.quick-links a,.settings-grid a{border-radius:12px}
+.live-clock{font-size:.8rem;color:var(--muted);margin-bottom:.5rem}
+
+/* ---- 9. Sign-in / registration screens: navy->blue hero with curved edge, rounded card ---- */
+.hub-welcome-card{border-radius:24px;border:1px solid var(--border);box-shadow:0 10px 40px -10px rgba(15,44,107,.2);background:var(--surface,#fff)}
+.hub-hero{background:linear-gradient(135deg,var(--m-head) 0%,color-mix(in srgb,var(--m-accent) 70%,var(--m-head)) 100%)}
+.hub-hero:after{background:var(--surface,#fff)}
+.hub-primary-btn{background:linear-gradient(135deg,var(--m-head) 0%,color-mix(in srgb,var(--m-accent) 70%,var(--m-head)) 100%);border:0;border-radius:12px;color:#fff;font-weight:600;transition:transform .15s,box-shadow .15s}
+.hub-primary-btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,44,107,.3)}
+.hub-auth-screen input:not([type=checkbox]):not([type=radio]){border:1.5px solid var(--border);border-radius:12px;background:var(--surface-soft,#f8fafc)}
+.hub-auth-screen input:focus{border-color:var(--m-accent);background:var(--surface,#fff);box-shadow:0 0 0 4px rgba(var(--theme-primary-rgb,26,111,232),.14)}
+.hub-register-grid a{border-radius:14px;transition:transform .15s,box-shadow .15s,border-color .15s}
+.hub-register-grid a:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(15,44,107,.1);border-color:var(--m-accent)}
+
+/* ---- 10. Student / Parent / Super-admin top navigation ---- */
+.student-top,.parent-top,.platform-top{box-shadow:0 1px 0 rgba(15,44,107,.06)}
+.student-top nav a,.parent-top nav a,.platform-top nav a{border-radius:999px;font-weight:600;font-size:.85rem;text-decoration:none}
+.student-top nav a.active,.parent-top nav a.active,.platform-top nav a.active,
+.student-top nav a[aria-current="page"],.parent-top nav a[aria-current="page"]{background:var(--m-accent);color:var(--m-accent-ink)}
+.student-shell .container,.parent-shell .container{max-width:1280px}
+
+/* ---- 11. Phone: bottom tab bar + compact header (v106 mobile screens) ---- */
+@media(max-width:700px){
+  body .app-main .topbar{padding:8px 10px;gap:8px}
+  .app-main .container{padding:14px 12px 96px}
+  .page-heading h1,.page-head h1{font-size:1.15rem}
+  .mobile-tabs a.on,.mobile-tabs a.on span{color:var(--m-accent)}
+}
+}/* /screen */
+
+@media print{
+  .sidebar-backdrop,.sidebar-close{display:none!important}
+}
+
+@media screen{
+/* collapsible add / upload panels used by the redesigned list pages */
+details.m-fold{padding:0;overflow:hidden;margin-bottom:1rem}
+details.m-fold>summary{cursor:pointer;list-style:none;padding:.85rem 1.1rem;font-weight:700;color:var(--m-head);display:flex;align-items:center;gap:.5rem}
+html[data-bs-theme="dark"] details.m-fold>summary{color:var(--text)}
+details.m-fold>summary::-webkit-details-marker{display:none}
+details.m-fold>summary::after{content:"\25BE";margin-left:auto;transition:transform .2s;color:var(--muted)}
+details.m-fold[open]>summary::after{transform:rotate(180deg)}
+details.m-fold[open]>summary{border-bottom:1px solid var(--border)}
+.m-fold-body{padding:1rem 1.1rem 1.2rem}
+.kpi-row.stat-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filters .m-filter-label{margin:0}
+.app-main input[type=email],.app-main input[type=tel],.app-main input[type=date],.app-main input[type=search]:not(#topSearchInput){width:100%}
+.page-actions{display:flex;gap:8px;flex-wrap:wrap}
+}
