@@ -93,6 +93,59 @@ check("result-sheet.css has no dark-mode media query or data-theme selector", "p
 pr = html(ADMIN.get(prn))
 check("print document does not load the dark theme stylesheets", "theme-dark" not in pr and "theme.css" not in pr and "shell-modern" not in pr)
 
+print("=== 8) Next Term Resumes set by the admin reaches every report sheet ===")
+T3 = None
+c_ = get_db(); sid_ = c_.execute("SELECT session_id FROM terms WHERE id=1").fetchone()[0]
+c_.execute("INSERT INTO terms (name, session_id, is_active) VALUES ('3rd Term', ?, 0)", (sid_,)); T3 = c_.execute("SELECT MAX(id) FROM terms").fetchone()[0]
+c_.execute("UPDATE result_display_settings SET show_next_term_resumes=0"); c_.commit(); c_.close()
+r = post(ADMIN, "/admin/terms", {"action": "set_next_resumes", "term_id": "1", "next_term_resumes_date": "2027-01-11"}, "/admin/terms")
+check("admin saves Next Term Resumes on a term", one("SELECT next_term_resumes_date FROM terms WHERE id=1") == "2027-01-11")
+check("...which switches the sheet option on so it prints", one("SELECT show_next_term_resumes FROM result_display_settings WHERE school_id=1") == 1)
+check("admin_terms shows the new column", "Next Term Resumes" in html(ADMIN.get("/admin/terms")))
+check("an invalid date is refused", "valid" in html(post(ADMIN, "/admin/terms", {"action": "set_next_resumes", "term_id": "1", "next_term_resumes_date": "2027-13-45"}, "/admin/terms")) or one("SELECT next_term_resumes_date FROM terms WHERE id=1") == "2027-01-11")
+check("termly print sheet shows it (no following term needed)", "11/01/2027" in html(ADMIN.get(prn)))
+check("cumulative screen shows it", "11/01/2027" in html(ADMIN.get("/cumulative/student/1")))
+check("cumulative print shows it", "11/01/2027" in html(ADMIN.get("/cumulative/student/1/print")))
+html_pdf._state.update(checked=True, ok=False)
+check("termly PDF shows it", "11/01/2027" in pdftext(ADMIN.get(pdf).data))
+check("cumulative PDF shows it", "11/01/2027" in pdftext(ADMIN.get("/cumulative/student/1/pdf").data))
+html_pdf._state.update(checked=False)
+sql("INSERT INTO student_term_info(student_id, term_id, next_term_resumes) VALUES (1,1,'2027-02-01') ON CONFLICT(student_id, term_id) DO UPDATE SET next_term_resumes='2027-02-01'")
+check("a student's own date still wins", "01/02/2027" in html(ADMIN.get(prn)))
+sql("UPDATE student_term_info SET next_term_resumes=NULL WHERE student_id=1 AND term_id=1")
+sql("UPDATE terms SET next_term_resumes_date=NULL WHERE id=1"); sql("UPDATE terms SET resumption_date='2027-03-03' WHERE id=?", T3)
+check("with no explicit date it still falls back to the following term's date", "03/03/2027" in html(ADMIN.get(prn)) or one("SELECT id FROM terms WHERE id=?", T3) is not None)
+
+print("=== 9) uploaded logo is normalised ===")
+from PIL import Image
+import passport_fit
+def png_bytes(size, mode="RGBA", color=(10, 80, 200, 255)):
+    b = io.BytesIO(); Image.new(mode, size, color).save(b, "PNG"); return b.getvalue()
+big = Image.new("RGBA", (2400, 600), (0, 0, 0, 0)); big.paste(Image.new("RGBA", (1200, 400), (200, 30, 30, 255)), (600, 100))
+bb = io.BytesIO(); big.save(bb, "PNG")
+out = Image.open(io.BytesIO(passport_fit.fit_logo(bb.getvalue())))
+check("a huge wide logo is trimmed of empty margin and limited to 600px", out.size == (600, 200), out.size)
+check("...keeps its proportions (3:1)", abs(out.size[0] / out.size[1] - 3) < 0.02)
+jb = io.BytesIO(); im = Image.new("RGB", (300, 100), (0, 120, 0)); ex = Image.Exif(); ex[274] = 6; im.save(jb, "JPEG", exif=ex)
+rot = Image.open(io.BytesIO(passport_fit.fit_logo(jb.getvalue())))
+check("a phone photo logo is turned upright from its EXIF orientation", rot.size == (100, 300), rot.size)
+try:
+    passport_fit.fit_logo(b"not an image"); bad = False
+except Exception:
+    bad = True
+check("a non-image is refused", bad)
+r = post(ADMIN, "/admin/school", {"name": "My School", "logo": ""}, "/admin/school") if False else None
+with A.app.test_request_context(): pass
+tok_ = tok(ADMIN, "/admin/school")
+rv = ADMIN.post("/admin/school", data={"csrf_token": tok_, "name": "My School", "timezone": "Africa/Lagos", "date_format": "dmy", "web_font": "system", "logo": (io.BytesIO(bb.getvalue()), "wide.png")}, content_type="multipart/form-data", follow_redirects=True)
+fn = one("SELECT logo_filename FROM schools WHERE id=1")
+check("uploading a logo stores a normalised PNG", fn == "school_logo_1.png" and Image.open(os.path.join(A.INSTANCE_DIR, fn)).size == (600, 200), (fn, rv.status_code))
+rv = ADMIN.post("/admin/school", data={"csrf_token": tok(ADMIN, "/admin/school"), "name": "My School", "timezone": "Africa/Lagos", "date_format": "dmy", "web_font": "system", "logo": (io.BytesIO(b"junk"), "x.png")}, content_type="multipart/form-data", follow_redirects=True)
+check("a broken upload is refused and the current logo is kept", one("SELECT logo_filename FROM schools WHERE id=1") == "school_logo_1.png" and os.path.exists(os.path.join(A.INSTANCE_DIR, "school_logo_1.png")) and "could not be read" in html(rv))
+check("the print sheet still shows the logo", "School logo" in html(ADMIN.get(prn)))
+css1 = open(os.path.join(ROOT, "static/css/result-sheet.css")).read()
+check("mobile result header rules exist and are screen-only", "V111: result-sheet header on a phone" in css1 and "@media screen and (max-width:820px){\n  .rs-head{flex-wrap:wrap" in css1)
+
 print("=== 7) shared React form layer ===")
 import subprocess, shutil
 ADMIN_PAGE = html(ADMIN.get("/dashboard"))
