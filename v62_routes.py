@@ -19,7 +19,7 @@ SIGNATURE_LAYOUTS = [("split", "Teacher left, Principal right"), ("stacked", "St
 SECTIONS = [
     ("Identity & header", ["show_logo", "show_passport", "show_watermark"]),
     ("School information", ["show_address", "show_email", "show_phone", "show_motto", "show_custom_info"]),
-    ("Student details", ["show_admission_no", "show_class", "show_gender", "show_session", "show_term", "show_next_term_resumes"]),
+    ("Student details", ["show_admission_no", "show_class", "show_gender", "show_dob", "show_session", "show_term", "show_next_term_resumes"]),
     ("Scores", ["show_score", "show_grade", "show_remarks", "show_overall_position", "show_subject_position", "show_domains", "show_additional_fields", "show_grading_key", "show_promotion"]),
     ("Attendance", ["show_attendance", "show_days_opened", "show_days_present", "show_days_absent", "show_days_late"]),
     ("Comments & signatures", ["show_all_comments", "show_teacher_comment", "show_principal_comment", "show_teacher_signature", "show_teacher_sign_date",
@@ -79,7 +79,7 @@ def register_v62_routes(app, h):
         from db import SAMPLE_AFFECTIVE_TRAITS, SAMPLE_PSYCHOMOTOR_TRAITS   # V100: the preview shows every sample item
         domain_groups = [{"label": "Affective Domain", "items": [(n, (5, 4, 4, 3, 3, 3, 4, 5)[i % 8]) for i, n in enumerate(SAMPLE_AFFECTIVE_TRAITS)]},
                          {"label": "Psychomotor Domain", "items": [(n, (2, 3, 3, 3, 4, 3, 4)[i % 7]) for i, n in enumerate(SAMPLE_PSYCHOMOTOR_TRAITS)]}]
-        student = {"first_name": "Sample", "last_name": "Student", "other_names": "", "admission_no": "ADM/001", "status": "Active", "gender": "F"}
+        student = {"first_name": "Sample", "last_name": "Student", "other_names": "", "admission_no": "ADM/001", "status": "Active", "gender": "F", "date_of_birth": "2012-05-14"}
         term = {"name": "First Term", "session_name": "2025/2026"}
         rs = dict(cfg_rs)
         rs["passport"] = None

@@ -828,6 +828,10 @@ def result_elements(data, term, school_name, logo_path, student_full_name, style
         _gl = {"M": "Male", "F": "Female", "male": "Male", "female": "Female", "Male": "Male", "Female": "Female"}.get(_g, "")
         if _gl:
             ids.append(("Gender", _gl, False))
+    if rs.get("show_dob", False):
+        _d = (student["date_of_birth"] if "date_of_birth" in (student.keys() if hasattr(student, "keys") else student) else "") or ""
+        if _d:
+            ids.append(("Date of Birth", format_dmy(_d), False))
     if rs.get("show_session", True):
         ids.append(("Academic Session", term["session_name"], False))
     if rs.get("show_term", True):
@@ -968,6 +972,10 @@ def cumulative_page_elements(data, session, school_name, logo_path, student_full
         _gl = {"M": "Male", "F": "Female", "male": "Male", "female": "Female", "Male": "Male", "Female": "Female"}.get(_g, "")
         if _gl:
             ids.append(("Gender", _gl, False))
+    if rs.get("show_dob", False):
+        _d = (student["date_of_birth"] if "date_of_birth" in (student.keys() if hasattr(student, "keys") else student) else "") or ""
+        if _d:
+            ids.append(("Date of Birth", format_dmy(_d), False))
     ids += [("Cumulative Average", data.get("average", "-"), False), ("Grade", f"{data.get('grade', '-')} ({data.get('remark', '')})", False)]
     pos = data.get("position")
     ids.append(("Overall Position", f"{pos}" + (f" of {data['class_size']}" if data.get("class_size") else ""), True))
