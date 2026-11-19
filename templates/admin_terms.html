@@ -67,13 +67,14 @@
         keeps parents from being emailed mid-term while scores are still being entered.
     </p></details>
     <div class="table-responsive"><table class="table table-hover align-middle">
-        <tr><th>Term</th><th>Session</th><th>Status</th><th>Resumption date</th><th>Published?</th><th>Action</th></tr>
+        <tr><th>Term</th><th>Session</th><th>Status</th><th>This term begins <small class="muted">(resumption date)</small></th><th>Next Term Resumes <small class="muted">(printed on this term's sheets)</small></th><th>Published?</th><th>Action</th></tr>
         {% for t in terms %}
         <tr>
             <td>{{ t.name }}</td>
             <td>{{ t.session_name }}</td>
             <td>{% if t.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
             <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}" class="form-control"><button class="btn btn-primary btn-sm" type="submit">Save</button></form></td>
+            <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_next_resumes"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="next_term_resumes_date" value="{{ t.next_term_resumes_date or '' }}" aria-label="Next Term Resumes date for {{ t.name }}" class="form-control"><button class="btn btn-primary btn-sm" type="submit">Save</button></form></td>
             <td>{% if t.is_published %}<span class="badge" style="background:#1d7a4c;">Published</span>{% else %}—{% endif %}</td>
             <td style="white-space:nowrap;">
                 {% if not t.is_active %}

@@ -11,7 +11,7 @@
 <div class="card" style="max-width:520px;">
     <h3>Current Logo</h3>
     {% if settings.logo_filename %}
-        <img src="{{ url_for('school_logo') }}" alt="Current logo" style="max-height:120px; margin-bottom:1rem; display:block;">
+        <img src="{{ url_for('school_logo') }}" alt="Current logo" style="max-height:120px; max-width:100%; width:auto; height:auto; object-fit:contain; margin-bottom:1rem; display:block;">
         <form method="POST" action="{{ url_for('remove_school_logo') }}"
               onsubmit="return confirm('Remove the current logo?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

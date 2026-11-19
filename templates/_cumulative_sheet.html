@@ -29,5 +29,6 @@
    and the same "cumulative" figures embedded in a regular term result sheet uses -- see
    _cumulative_breakdown.html. #}
 {% include "_cumulative_breakdown.html" %}
+{% if rs.show_next_term_resumes and next_term_resumes_iso %}<section class="rs-ntr"><div><span>Next Term Resumes</span><b>{{ next_term_resumes_iso|dmy }}</b></div></section>{% endif %}
 {% if rs.footer %}<footer class="rs-foot"><span>{{ rs.footer }}</span></footer>{% endif %}
 </article>
