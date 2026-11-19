@@ -9,7 +9,7 @@
 </div>
 {% endif %}
 
-<form method="GET" style="margin-bottom:1rem; display:inline-block;">
+<form data-no-hub method="GET" style="margin-bottom:1rem; display:inline-block;">
     <label style="display:inline; font-weight:normal;">Term:</label>
     <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
         {% for t in all_terms %}

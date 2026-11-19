@@ -26,6 +26,7 @@
   {% if rs.show_class %}<div><span>Class / Arm</span><b>{{ class_row.name }}</b></div>{% endif %}
   {% set _g = (student.gender if student.gender is defined else '') %}{% set _gender_label = {'M':'Male','F':'Female','male':'Male','female':'Female','Male':'Male','Female':'Female'}.get(_g, '') %}
   {% if rs.show_gender and _gender_label %}<div class="rs-gender" data-rs-flag="show_gender"><span>Gender</span><b>{{ _gender_label }}</b></div>{% endif %}
+  {% if rs.show_dob and student.date_of_birth is defined and student.date_of_birth %}<div class="rs-dob" data-rs-flag="show_dob"><span>Date of Birth</span><b>{{ student.date_of_birth|dmy }}</b></div>{% endif %}
   {% if rs.show_session %}<div><span>Academic Session</span><b>{{ term.session_name }}</b></div>{% endif %}
   {% if rs.show_term %}<div><span>Term</span><b>{{ term.name }}</b></div>{% endif %}
   {% if rs.show_overall_position %}<div class="rs-pos"><span>Class Position</span><b>{{ position if position is not none else '-' }}{% if class_size %} / {{ class_size }}{% endif %}</b></div>{% endif %}

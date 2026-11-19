@@ -3,7 +3,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/result-sheet.css') }}">
 <div class="no-print" style="margin-bottom:1rem;">
-    <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
+    <form data-no-hub method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
         <label style="display:inline; font-weight:normal;">Session:</label>
         <select name="session_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
             {% for s in all_sessions %}

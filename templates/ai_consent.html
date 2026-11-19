@@ -5,7 +5,7 @@
 <div class="card">
 <h3>Bulk consent update</h3>
 <details class="hlp"><summary class="hlp-t">How bulk updates work</summary><p class="muted hlp-b">Apply one status to many students at once — e.g. a batch of paper consent forms collected at the start of term, or a school-wide policy change. Each student is still recorded individually in the history below; nothing here is a separate or weaker record than changing one student at a time.</p></details>
-<form method="POST" style="display:grid;gap:.6rem;max-width:34rem">
+<form data-no-hub method="POST" style="display:grid;gap:.6rem;max-width:34rem">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="bulk" value="1">
 <label>Class<select id="bulkClassFilter" class="form-select"><option value="">All classes</option>{% for cn in class_names %}<option value="{{ cn }}">{{ cn }}</option>{% endfor %}</select></label>
 <label>Students (ctrl/cmd-click, or shift-click, to select more than one)
@@ -26,7 +26,7 @@
 <tr><td>{{ s.last_name }} {{ s.first_name }}</td><td>{{ s.class_name }}</td>
 <td><span class="status-pill {{ s.consent_status }}">{{ s.consent_status|title }}</span></td>
 <td>{% if s.consent_status == 'granted' and s.granted_by_name %}{{ s.granted_by_name }} <small class="muted">({{ s.relationship }})</small>{% else %}<span class="muted">—</span>{% endif %}</td>
-<td><form method="POST" class="inline consent-form" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
+<td><form data-no-hub method="POST" class="inline consent-form" style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="student_id" value="{{ s.id }}">
 <select name="status" aria-label="Consent status" class="form-select"><option value="pending" {% if s.consent_status=='pending' %}selected{% endif %}>Pending</option><option value="granted" {% if s.consent_status=='granted' %}selected{% endif %}>Granted</option><option value="withdrawn" {% if s.consent_status=='withdrawn' %}selected{% endif %}>Withdrawn</option></select>
 <input name="consenting_name" placeholder="Consent given by (name)" maxlength="120" value="{{ s.granted_by_name or '' }}" style="min-width:11rem" class="form-control">

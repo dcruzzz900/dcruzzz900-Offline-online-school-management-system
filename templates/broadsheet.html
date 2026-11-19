@@ -9,7 +9,7 @@
 </div>
 
 <div class="no-print" style="margin-bottom:1rem;">
-    <form method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
+    <form data-no-hub method="GET" class="inline" style="display:inline-block; margin-right:0.5rem;">
         <label style="display:inline; font-weight:normal;">Term:</label>
         <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
             {% for t in all_terms %}
@@ -23,7 +23,7 @@
     <a class="btn btn-primary" href="{{ url_for('cumulative_broadsheet', class_id=class_row.id, session_id=term.session_id, term_id=term.id) }}">📊 Annual / Cumulative Broadsheet</a>
     {% endif %}
     {% if term.is_active %}
-    <form method="POST" action="{{ url_for('email_class_results', class_id=class_row.id) }}" class="inline"
+    <form data-no-hub method="POST" action="{{ url_for('email_class_results', class_id=class_row.id) }}" class="inline"
           onsubmit="return confirm('Email every student\'s result in this class to their parent email on file?');">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-primary" type="submit">✉ Email All Results to Parents</button>
