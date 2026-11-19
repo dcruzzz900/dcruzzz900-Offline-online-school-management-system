@@ -4277,6 +4277,30 @@ def migration_084_v110_show_dob(conn):
 STEPS.append(("result_show_dob_v110", migration_084_v110_show_dob))
 
 
+def migration_085_v111_term_next_resumes(conn):
+    """V111: the admin sets "Next Term Resumes" directly on a term (the date the NEXT term starts, printed on THIS term's sheets).
+    It works even when the following term / next session has not been created yet (e.g. Third Term)."""
+    ensure_column(conn, "terms", "next_term_resumes_date", "TEXT")
+
+
+STEPS.append(("term_next_resumes_v111", migration_085_v111_term_next_resumes))
+
+
+def resolve_next_term_resumes(conn, term, student_id=None):
+    """ONE rule for every report sheet (termly, cumulative, preview, print, PDF): this student's own date for the term, else the date the
+    admin set as this term's "Next Term Resumes", else the following term's own resumption date. ISO string or None (never guessed)."""
+    if not term:
+        return None
+    k = term.keys()
+    if student_id:
+        r = conn.execute("SELECT next_term_resumes FROM student_term_info WHERE student_id=? AND term_id=?", (student_id, term["id"])).fetchone()
+        if r and (r[0] or "").strip():
+            return r[0].strip()
+    if "next_term_resumes_date" in k and (term["next_term_resumes_date"] or "").strip():
+        return term["next_term_resumes_date"].strip()
+    return next_term_resumes_info(conn, term).get("date_iso") or None
+
+
 def term_sequence_next(conn, term):
     """The term that immediately follows `term`: the next term in the same session
     (by id, i.e. creation order — the same convention `_prev_term` in app.py relies

@@ -29,7 +29,7 @@ from db import (
     seed_school_defaults, upsert_enrollment, log_audit,
     get_visible_notifications, get_unread_notification_count,
     recompute_attendance, attendance_percentage, grading_problems, grading_affected_scores, record_grading_config_change, grade_band_problems, parse_arms,
-    term_sequence_next, next_term_resumes_info,
+    term_sequence_next, next_term_resumes_info, resolve_next_term_resumes,
     generate_teacher_comment, generate_principal_comment,
     CLASS_CATEGORIES, MATERIAL_KINDS, format_dmy, STAFF_ATTENDANCE_STATUSES,
     PDF_FONT_CHOICES, WEB_FONTS, generate_activation_code, current_activation_code_status,
@@ -1308,7 +1308,7 @@ app.jinja_env.filters["contrast_ink"] = contrast_ink
 
 import branding_backgrounds
 import role_charts
-from passport_fit import save_passport, fit_passport   # V107: passport photographs
+from passport_fit import save_passport, fit_passport, fit_logo   # V107: passport photographs
 from identity_rules import GENDER_CODES, GENDER_LABELS, normalise_gender, parse_dob, identity_errors   # V107: the one DOB + Gender rule
 
 
@@ -3171,16 +3171,22 @@ def admin_school():
                 flash("Logo must be a PNG, JPG, or GIF image.", "error")
             else:
                 old = get_school(conn, school_id)
-                if old and old["logo_filename"]:
-                    old_path = os.path.join(INSTANCE_DIR, old["logo_filename"])
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-                new_filename = f"school_logo_{school_id}.{ext}"
-                os.makedirs(INSTANCE_DIR, exist_ok=True)
-                file.save(os.path.join(INSTANCE_DIR, new_filename))
-                conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
-                conn.commit()
-                flash("Logo updated.", "success")
+                try:
+                    logo_png = fit_logo(file.read())     # V111: upright, trimmed, resized PNG so it renders the same on every screen and on paper
+                except Exception:
+                    logo_png = None
+                if logo_png is None:
+                    flash("That file could not be read as an image. Upload a PNG, JPG or GIF logo.", "error")
+                else:
+                    new_filename = f"school_logo_{school_id}.png"
+                    if old and old["logo_filename"] and old["logo_filename"] != new_filename and os.path.exists(os.path.join(INSTANCE_DIR, old["logo_filename"])):
+                        os.remove(os.path.join(INSTANCE_DIR, old["logo_filename"]))
+                    os.makedirs(INSTANCE_DIR, exist_ok=True)
+                    with open(os.path.join(INSTANCE_DIR, new_filename), "wb") as fh:
+                        fh.write(logo_png)
+                    conn.execute("UPDATE schools SET logo_filename=? WHERE id=?", (new_filename, school_id))
+                    conn.commit()
+                    flash("Logo updated.", "success")
 
     settings = get_school(conn, school_id)
     conn.close()
@@ -5459,6 +5465,32 @@ def admin_terms():
             conn.close()
             flash("Results are published through the approval workflow. Open Result approval to submit, review, approve and publish each class.", "error")
             return redirect(url_for("result_workflow", term_id=request.form.get("term_id", type=int)))
+        elif action == "set_next_resumes":
+            tid = request.form.get("term_id", type=int)
+            raw = (request.form.get("next_term_resumes_date") or "").strip()
+            term_row = conn.execute("SELECT t.id, t.next_term_resumes_date FROM terms t JOIN sessions se ON se.id=t.session_id WHERE t.id=? AND se.school_id=?", (tid, school_id)).fetchone() if tid else None
+            parsed = None
+            if raw:
+                try:
+                    parsed = datetime.date.fromisoformat(raw).isoformat()
+                except ValueError:
+                    parsed = False
+            if not term_row:
+                flash("Term not found.", "error")
+            elif parsed is False:
+                flash("Enter a valid Next Term Resumes date.", "error")
+            else:
+                conn.execute("UPDATE terms SET next_term_resumes_date=? WHERE id=?", (parsed, tid))
+                log_audit(conn, session.get("role"), session.get("name"), "next_term_resumes_changed",
+                          f"term {tid}: {term_row['next_term_resumes_date'] or '—'} -> {parsed or '—'}", school_id=school_id)
+                msg = "Next Term Resumes date saved. It now appears on every report sheet of this term." if parsed else "Next Term Resumes date cleared."
+                if parsed:
+                    off = conn.execute("SELECT 1 FROM result_display_settings WHERE school_id=? AND show_next_term_resumes=0", (school_id,)).fetchone()
+                    if off:
+                        conn.execute("UPDATE result_display_settings SET show_next_term_resumes=1 WHERE school_id=?", (school_id,))
+                        msg += " \"Show Next Term Resumes\" was switched on in Result Display Settings so it prints."
+                conn.commit()
+                flash(msg, "success")
         elif action == "set_resumption":
             tid = request.form.get("term_id", type=int)
             raw = (request.form.get("resumption_date") or "").strip()
@@ -7166,6 +7198,14 @@ def build_cumulative_broadsheet_data(conn, class_id, session_id, upto_term_id=No
     return subjects, terms, rows
 
 
+def _cum_next_resumes(conn, student_id, session_id, upto_term_id):
+    """V111: the Next Term Resumes date for a cumulative sheet = the one for the term it runs through (the latest term of the session if none chosen)."""
+    row = conn.execute("SELECT * FROM terms WHERE id=? AND session_id=?", (upto_term_id, session_id)).fetchone() if upto_term_id else None
+    if row is None:
+        row = conn.execute("SELECT * FROM terms WHERE session_id=? ORDER BY id DESC LIMIT 1", (session_id,)).fetchone()
+    return resolve_next_term_resumes(conn, row, student_id) if row else None
+
+
 def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None):
     student = conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
     class_id = student_class_for_session(conn, student_id, session_id)
@@ -7247,6 +7287,7 @@ def build_cumulative_result_data(conn, student_id, session_id, upto_term_id=None
         "average": average, "grade": grade, "remark": remark,
         "position": my_row["position"] if my_row else "-", "class_size": len(rows),
         "show_ca3": show_ca3, "cumulative": cumulative, "max_each": max_each,
+        "next_term_resumes_iso": _cum_next_resumes(conn, student_id, session_id, upto_term_id),
     }
 
 
@@ -7731,7 +7772,8 @@ def build_result_data(conn, student_id, term_id):
     # when that hasn't been configured yet.
     _ntr = next_term_resumes_info(conn, term_row_for_dates) if term_row_for_dates else {"date_iso": None}
     # V103: a date entered on this student's Academic Record page wins; otherwise the school-wide date of the next term.
-    _ntr_iso = (info.get("next_term_resumes") or "").strip() or _ntr.get("date_iso")
+    _ntr_default = resolve_next_term_resumes(conn, term_row_for_dates) if term_row_for_dates else None   # V111: admin-set date for this term, else the following term's date
+    _ntr_iso = (info.get("next_term_resumes") or "").strip() or _ntr_default
     rs["next_term_resumes"] = format_dmy(_ntr_iso) if (rs.get("show_next_term_resumes") and _ntr_iso) else None
     _overall_grade, _overall_remark = grade_for(average, conn, school_id) if subjects_written else ("-", "-")
     # V87: the cumulative section embedded in a term result (only when the school has the
@@ -7772,7 +7814,7 @@ def build_result_data(conn, student_id, term_id):
         "total_obtainable": subjects_written * _max_each, "max_each": _max_each, "cumulative": cumulative, "cum_summary": cum_summary,
         "gender_text": {"M": "Male", "F": "Female"}.get(student["gender"] if "gender" in student.keys() else None, ""), "dob_text": format_dmy(_dob) if _dob else "",
         "rs": rs, "domain_groups": domain_groups, "position_text": ordinal_text(my_row["position"]) if my_row and str(my_row["position"]).isdigit() else (my_row["position"] if my_row else "-"),
-        "custom_fields": custom_fields, "custom_field_inputs": custom_field_inputs, "ntr_iso": _ntr_iso, "ntr_default_iso": _ntr.get("date_iso"), "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
+        "custom_fields": custom_fields, "custom_field_inputs": custom_field_inputs, "ntr_iso": _ntr_iso, "ntr_default_iso": _ntr_default, "promotion_status": promotion, "student_status": student["status"] if "status" in student.keys() else None,
         "student": student, "class_row": class_row, "subjects": subject_details,
         "total": my_row["total"] if my_row else 0,
         "average": my_row["average"] if my_row else 0,
