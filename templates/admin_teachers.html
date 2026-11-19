@@ -1,7 +1,30 @@
 {% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Teachers{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Teachers</h1><p>{{ teachers|length }} teacher{{ '' if teachers|length==1 else 's' }} · Staff & teachers</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Teacher</button></div></div>
+<h1>Teachers</h1>
+
+<div class="card">
+    <h3>Add a Teacher</h3>
+    <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Full Name</label>
+        <input type="text" name="name" required class="form-control">
+        <label>Staff / Employee ID <span class="req">*</span></label>
+        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014" class="form-control">
+        {{ identity_fields(min_age=14, who='staff', uid='at') }}
+        <label>Username</label>
+        <input type="text" name="username" required class="form-control">
+        <label>Email (optional)</label>
+        <input type="email" name="email" class="form-control">
+        <label>Phone Number (optional)</label>
+        <input type="text" name="phone" class="form-control">
+        <label>Password</label>
+        <input type="password" name="password" required minlength="6" class="form-control">
+        <label>RBAC Role</label><select name="rbac_role" required class="form-select">{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
+        <button class="btn btn-primary" type="submit">Add Teacher</button>
+    </form>
+</div>
+
 <div class="card">
     <h3>All Teachers</h3>
     <div class="table-responsive"><table class="table table-hover align-middle"><caption>Staff List</caption>
@@ -49,27 +72,4 @@
         {% endfor %}
     </table></div>
 </div>
-
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Teacher</summary><div class="m-fold-body">
-    
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Full Name</label>
-        <input type="text" name="name" required class="form-control">
-        <label>Staff / Employee ID <span class="req">*</span></label>
-        <input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014" class="form-control">
-        {{ identity_fields(min_age=14, who='staff', uid='at') }}
-        <label>Username</label>
-        <input type="text" name="username" required class="form-control">
-        <label>Email (optional)</label>
-        <input type="email" name="email" class="form-control">
-        <label>Phone Number (optional)</label>
-        <input type="text" name="phone" class="form-control">
-        <label>Password</label>
-        <input type="password" name="password" required minlength="6" class="form-control">
-        <label>RBAC Role</label><select name="rbac_role" required class="form-select">{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
-        <button class="btn btn-primary" type="submit">Add Teacher</button>
-    </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}
