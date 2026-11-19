@@ -1,306 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Sign in · {{ school_name or 'My School Hub' }}{% endblock %}
-{% block extra_head %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-  .modern-login-page {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: #f0f4f9;
-    background-image:
-      radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(15, 44, 107, 0.08) 0px, transparent 50%);
-  }
-  .modern-login-page .login-card {
-    width: 100%;
-    max-width: 440px;
-    background: #fff;
-    border-radius: 24px;
-    box-shadow: 0 10px 40px -10px rgba(15, 44, 107, 0.15);
-    overflow: hidden;
-    border: 1px solid #e2e8f0;
-  }
-  .modern-login-page .login-header {
-    background: linear-gradient(135deg, #0f2c6b 0%, #1a4a9e 100%);
-    padding: 36px 32px 28px;
-    text-align: center;
-    color: white;
-    position: relative;
-  }
-  .modern-login-page .login-header::after {
-    content: '';
-    position: absolute;
-    bottom: -20px;
-    left: 0; right: 0;
-    height: 40px;
-    background: #fff;
-    border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  }
-  .modern-login-page .school-logo {
-    width: 72px; height: 72px;
-    background: white;
-    border-radius: 50%;
-    margin: 0 auto 16px;
-    display: grid;
-    place-items: center;
-    font-size: 28px;
-    font-weight: 800;
-    color: #0f2c6b;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    overflow: hidden;
-  }
-  .modern-login-page .school-logo img {
-    width: 100%; height: 100%; object-fit: cover;
-  }
-  .modern-login-page .login-header h1 {
-    font-size: 1.35rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 4px;
-  }
-  .modern-login-page .login-header p {
-    font-size: 0.9rem;
-    opacity: 0.85;
-  }
-  .modern-login-page .login-body {
-    padding: 40px 32px 32px;
-  }
-  .modern-login-page .form-group {
-    margin-bottom: 18px;
-  }
-  .modern-login-page .form-group label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #334155;
-    margin-bottom: 6px;
-  }
-  .modern-login-page .form-group input {
-    width: 100%;
-    padding: 12px 14px;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 0.95rem;
-    font-family: inherit;
-    background: #f8fafc;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  .modern-login-page .form-group input:focus {
-    outline: none;
-    border-color: #1a4a9e;
-    box-shadow: 0 0 0 3px rgba(26, 74, 158, 0.15);
-    background: #fff;
-  }
-  .modern-login-page .btn-primary {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(135deg, #0f2c6b 0%, #1a4a9e 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
-    margin-top: 8px;
-    font-family: inherit;
-  }
-  .modern-login-page .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 20px rgba(15, 44, 107, 0.3);
-  }
-  .modern-login-page .links {
-    margin-top: 20px;
-    text-align: center;
-    font-size: 0.875rem;
-  }
-  .modern-login-page .links a {
-    color: #0f2c6b;
-    text-decoration: none;
-    font-weight: 500;
-  }
-  .modern-login-page .links a:hover { text-decoration: underline; }
-  .modern-login-page .hlp {
-    margin: 12px 0 16px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 10px 12px;
-    background: #f8fafc;
-  }
-  .modern-login-page .hlp summary {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #475569;
-    cursor: pointer;
-  }
-  .modern-login-page .hlp .hlp-b { margin-top: 10px; }
-  .modern-login-page .hlp small {
-    display: block;
-    margin-top: 6px;
-    font-size: 0.75rem;
-    color: #64748b;
-    line-height: 1.4;
-  }
-  .modern-login-page .optional {
-    font-weight: 400;
-    color: #94a3b8;
-    font-size: 0.75rem;
-  }
-  .modern-login-page .register-panel {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid #e2e8f0;
-  }
-  .modern-login-page .register-panel > div:first-child {
-    font-size: 0.85rem;
-    margin-bottom: 12px;
-    color: #475569;
-  }
-  .modern-login-page .register-panel strong {
-    display: block;
-    color: #0f172a;
-    margin-bottom: 2px;
-  }
-  .modern-login-page .register-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-  .modern-login-page .register-grid a {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    text-decoration: none;
-    color: #0f172a;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: border-color .15s, background .15s;
-  }
-  .modern-login-page .register-grid a:hover {
-    border-color: #93c5fd;
-    background: #eff6ff;
-  }
-  .modern-login-page .register-grid a span { font-size: 1.1rem; }
-  .modern-login-page .register-grid a b { margin-left: auto; color: #64748b; }
-  .modern-login-page .footer-note {
-    text-align: center;
-    margin-top: 24px;
-    font-size: 0.75rem;
-    color: #94a3b8;
-  }
-  .modern-login-page .flash-msg {
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 0.85rem;
-    margin-bottom: 16px;
-  }
-  .modern-login-page .flash-ok {
-    background: #f0fdf4;
-    border-color: #bbf7d0;
-    color: #166534;
-  }
-</style>
-{% endblock %}
+{% block title %}Sign in · My School Hub{% endblock %}
 {% block content %}
-<div class="modern-login-page">
-  <div class="login-card">
-    <div class="login-header">
-      <div class="school-logo">
-        {% if auth_logo_url or school_logo_url %}
-          <img src="{{ auth_logo_url or school_logo_url }}" alt="{{ auth_school_name or school_name or 'School' }}">
-        {% else %}
-          {{ (auth_school_name or school_name or 'MS')[:2]|upper }}
-        {% endif %}
+<div class="hub-auth-screen school-auth-page" data-auth-branding-root style="--auth-bg-image:{% if auth_logo_url %}url('{{ auth_logo_url }}'){% else %}none{% endif %};--auth-opacity:{{ auth_logo_opacity if auth_branding else 0 }};--auth-position:{{ '10% center' if auth_logo_position=='left' else ('90% center' if auth_logo_position=='right' else '50% center') }};">
+  <section class="hub-welcome-card unified-login" aria-label="Sign in">
+    <div class="hub-hero">
+      <div class="hub-brand"><img data-auth-school-logo class="school-auth-brand-logo small{% if not auth_logo_url %} auth-branding-hidden{% endif %}" src="{{ auth_logo_url or '' }}" alt="School logo"><div><strong data-auth-school-name>{{ auth_school_name if auth_branding and auth_show_school_name else "My School Hub" }}</strong><span>LEARN · GROW · SUCCEED</span></div></div>
+      <div class="hub-welcome-copy">
+        <div class="hub-eyebrow">SECURE SCHOOL PORTAL</div>
+        <h1>Welcome Back</h1>
+        <p>One sign-in for administrators, staff, students and parents.</p>
       </div>
-      <h1>{{ auth_school_name if auth_branding and auth_show_school_name else (school_name or 'My School Hub') }}</h1>
-      <p>Result &amp; School Management</p>
     </div>
-    <div class="login-body">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <div class="flash-msg {% if category == 'success' or category == 'ok' %}flash-ok{% endif %}">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-
-      <form method="POST" action="{{ url_for('login') }}" id="unifiedLoginForm" autocomplete="on">
+    <div class="hub-content">
+      <form method="POST" action="{{ url_for('login') }}" id="unifiedLoginForm" class="unified-login-form" autocomplete="on">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-        <div class="form-group">
-          <label for="username">Username, Email, Phone, Admission No. or Register No.</label>
-          <input type="text" id="username" name="username" required autofocus
-                 autocomplete="username" autocapitalize="none" spellcheck="false"
-                 value="{{ request.form.get('username', '') }}"
-                 placeholder="e.g. admin or admission number">
-        </div>
-
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" required
-                 autocomplete="current-password" placeholder="Enter your password">
-        </div>
-
+        <label>Username, Email, Phone, Admission No. or Register No.<input name="username" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false" value="{{ request.form.get('username', '') }}"></label>
+        <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
         <details class="hlp">
-          <summary>Student logging in for the first time?</summary>
+          <summary class="hlp-t">Student logging in for the first time?</summary>
           <div class="hlp-b">
-            <div class="form-group" style="margin-bottom:8px">
-              <label for="class_code">Class Login Code <span class="optional">first login only</span></label>
-              <input type="text" id="class_code" name="class_code" maxlength="20" autocomplete="off"
-                     style="text-transform:uppercase"
-                     value="{{ request.form.get('class_code', '') }}"
-                     placeholder="From your Class / Form Teacher">
-            </div>
-            <small>Enter the Class Login Code your Form Teacher gave you. After your first successful login you will not need it again. Student accounts are created by your school.</small>
+            <label>Class Login Code <span class="optional">first login only</span><input type="text" name="class_code" maxlength="20" autocomplete="off" style="text-transform:uppercase" value="{{ request.form.get('class_code', '') }}" placeholder="From your Class / Form Teacher"></label>
+            <small class="muted">Enter the Class Login Code your Form Teacher gave you. After your first successful login you will not need it again. Student accounts are created by your school. There is no self-registration.</small>
           </div>
         </details>
-
-        <div class="form-group">
-          <label for="school_code">School ID / Tenant ID <span class="optional">optional</span></label>
-          <input type="text" id="school_code" name="school_code"
-                 value="{{ request.form.get('school_code', '') }}"
-                 placeholder="Only if your school asks for it"
-                 autocapitalize="none">
-        </div>
-
-        <button type="submit" class="btn-primary">Sign In</button>
+        <label><span>School ID / Tenant ID <span class="optional">optional</span></span><input name="school_code" value="{{ request.form.get('school_code', '') }}" placeholder="Only if your school asks for it, or if two schools share your number" autocapitalize="none"></label>
+        <button class="hub-primary-btn" type="submit">Sign in <span>→</span></button>
+        <div class="unified-links"><a href="{{ url_for('account_recovery') }}">Forgot password?</a><a href="{{ url_for('activate_school') }}">Activate Your School →</a></div>
+        <p class="unified-note">You are taken to the right dashboard for your account automatically — administrators, staff, students and parents all sign in right here.</p>
       </form>
-
-      <div class="links">
-        <a href="{{ url_for('account_recovery') }}">Forgot password?</a>
-        <span style="margin: 0 8px; color: #cbd5e1;">•</span>
-        <a href="{{ url_for('activate_school') }}">Activate Your School</a>
-      </div>
-
-      <div class="register-panel">
-        <div>
-          <strong>New or Need to Register?</strong>
-          <span>Get started with your school or create your account.</span>
-        </div>
-        <div class="register-grid">
+      <div class="hub-register-panel">
+        <div><strong>New or Need to Register?</strong><span>Get started with your school or create your account.</span></div>
+        <div class="hub-register-grid">
           <a href="{{ url_for('register_school') }}"><span>🏫</span><strong>New School Signup</strong><b>→</b></a>
           <a href="{{ url_for('register') }}"><span>👤</span><strong>Staff Signup</strong><b>→</b></a>
           <a href="{{ url_for('register_parent') }}"><span>👥</span><strong>Parent Signup</strong><b>→</b></a>
         </div>
       </div>
-
-      <div class="footer-note">
-        Secure access • Powered by My School Hub
-      </div>
+      <div class="hub-footer"><span></span><strong>A Smarter Way to Manage Your School</strong><span></span></div>
     </div>
-  </div>
+  </section>
 </div>
 {% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}School Fees — {{ school_name }}{% endblock %}
+{% block content %}
+<div class="page-header"><div><h2><span class="ni">💰</span> School Fees</h2><p>Expected vs collected · the same figures the dashboard School Fees card shows</p></div></div>
+<div class="kpi-row">
+  <div class="kpi-mini"><div class="label">Expected</div><div class="value">₦{{ '{:,.0f}'.format(expected) }}</div></div>
+  <div class="kpi-mini"><div class="label">Collected</div><div class="value">₦{{ '{:,.0f}'.format(collected) }}</div></div>
+  <div class="kpi-mini"><div class="label">Outstanding</div><div class="value">₦{{ '{:,.0f}'.format(outstanding) }}</div></div>
+  <div class="kpi-mini"><div class="label">Collection rate</div><div class="value">{{ pct }}%</div></div>
+</div>
+<div class="card">
+  <div class="panel-header" style="padding:0 0 12px"><h3>Collection progress</h3><span class="badge {{ 'badge-green' if pct >= 70 else 'badge-orange' }}">{{ pct }}% collected</span></div>
+  <div class="progress-bar"><i style="width:{{ [pct,100]|min }}%"></i></div>
+  {% if cur and cur.label %}<p class="muted" style="margin-top:8px">{{ cur.label }}</p>{% endif %}
+</div>
+<div class="card">
+  <h3>Update fee totals</h3>
+  <form method="POST" action="{{ url_for('admin_school_fees') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2">
+      <div class="form-group"><label>Expected (₦)</label><input class="form-control" type="number" step="0.01" min="0" name="expected_amount" value="{{ expected|int }}" required></div>
+      <div class="form-group"><label>Collected (₦)</label><input class="form-control" type="number" step="0.01" min="0" name="collected_amount" value="{{ collected|int }}" required></div>
+    </div>
+    <div class="form-group"><label>Label (optional, e.g. 2026/2027 · 1st Term)</label><input class="form-control" type="text" name="label" maxlength="80"></div>
+    <button class="btn btn-primary" type="submit">Save figures</button>
+  </form>
+  <p class="muted" style="margin-top:10px;font-size:.8rem">Per-student invoices, payments and receipts are not part of this build; this screen manages the school-level totals only.</p>
+</div>
+<div class="card"><h3>History</h3>
+  <div class="table-wrap"><table class="data"><thead><tr><th>Saved</th><th>Label</th><th>Expected</th><th>Collected</th></tr></thead><tbody>
+  {% for r in rows %}<tr><td>{{ r.updated_at }}</td><td>{{ r.label or '—' }}</td><td>₦{{ '{:,.0f}'.format(r.expected_amount) }}</td><td>₦{{ '{:,.0f}'.format(r.collected_amount) }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">No figures saved yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</div>
+{% endblock %}

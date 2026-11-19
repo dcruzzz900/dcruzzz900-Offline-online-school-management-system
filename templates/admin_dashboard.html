@@ -34,7 +34,7 @@
     <article class="ad-kpi k-orange"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('people', 42) }}</span><div><span>Parents</span><b>{{ '{:,}'.format(ov.parents) }}</b></div></div>
       <a class="ad-kpi-btn" href="{{ url_for('admin_parents') }}">View Parents {{ ico('arrow', 14) }}</a></article>
     <article class="ad-kpi k-fees"><div class="ad-kpi-top"><span class="ad-kpi-ico">{{ ico('wallet', 42) }}</span><div><span>School Fees</span><b class="ad-money">₦{{ '{:,.0f}'.format(ov.fees.expected) }}</b></div></div>
-      <div class="ad-fees-collected">Collected: <b>₦{{ '{:,.0f}'.format(ov.fees.collected) }}</b> ({{ ov.fees.pct }}%)</div></article>
+      <a class="ad-kpi-btn" href="{{ url_for('admin_school_fees') }}">View School Fees {{ ico('arrow', 14) }}</a><div class="ad-fees-collected">Collected: <b>₦{{ '{:,.0f}'.format(ov.fees.collected) }}</b> ({{ ov.fees.pct }}%)</div></article>
   </section>
 
   {# ---------------------------------------------------------------- charts row #}
