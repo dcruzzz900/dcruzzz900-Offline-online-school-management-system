@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Parent Profile{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Parent / Guardian Profile</h1><p>Your account and contact details</p></div></div>
-<div class="m-narrow">
+<h1>Parent / Guardian Profile</h1>
 <p><a href="{{ url_for('student_profile', student_id=student.id) }}">&larr; Back to {{ student_full_name(student) }}'s Profile</a></p>
 
 <div class="card" style="max-width:640px;">
@@ -36,6 +35,5 @@
     {% else %}
     <p>No linked children found.</p>
     {% endif %}
-</div>
 </div>
 {% endblock %}

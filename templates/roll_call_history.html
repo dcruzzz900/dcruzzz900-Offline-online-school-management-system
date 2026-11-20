@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Attendance History{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>🗓 Attendance History — {{ class_row.name }}</h1><p>Totals are for the current active term.</p></div><div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('roll_call', class_id=class_row.id) }}">&larr; Back to Today's Roll Call</a></div></div>
+<h1>Attendance History — {{ class_row.name }}</h1>
+<p style="color:#666; font-size:0.9rem;">Totals are for the current active term.</p>
 
 <div class="card">
     <h3>Per-Student Summary</h3>
