@@ -28,4 +28,16 @@ for who in sorted({u.split("|")[0] for u in users})[:3]:
             ok += 1; t = r.get_data(as_text=True)
             if 'class="sidebar app-sidebar"' in t and 'class="hamburger' in t: shell += 1
     print(f"{who}: routes={len(routes)} 200={ok} modern-shell={shell} 5xx={bad}", fails[:8]); bad_total += bad
+
+# v112 guard: a stray </div> in a page body closes the new shell wrapper early and collapses the layout.
+import glob
+extra = []
+for f in sorted(glob.glob(os.path.join(ROOT, "templates", "*.html"))):
+    if f.endswith("base.html"): continue
+    t = open(f, encoding="utf-8").read()
+    m = re.search(r"{%\s*block content\s*%}(.*?){%\s*endblock\s*%}", t, re.S)
+    body = re.sub(r"<script.*?</script>|<!--.*?-->|{#.*?#}", "", m.group(1) if m else t, flags=re.S)
+    if len(re.findall(r"</div\s*>", body)) > len(re.findall(r"<div[\s>]", body)): extra.append(os.path.basename(f))
+print("templates with stray </div>:", extra)
+bad_total += len(extra)
 sys.exit(1 if bad_total else 0)
