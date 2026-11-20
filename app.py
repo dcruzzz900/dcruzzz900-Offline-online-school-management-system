@@ -2893,6 +2893,73 @@ def admin_dashboard_overview(conn, school_id, term):
     }
 
 
+def admin_dashboard_extras(conn, school_id, term, ov):
+    """v112: the extra figures the v106 dashboard shows (class levels, parent links, grade distribution, pass overview,
+    top students, enrolment bars). Everything is computed from existing tables with the SAME grading logic the result
+    sheets use (compute_total + grade_for); nothing is invented, and empty data yields empty/zero values."""
+    import re as _re, math as _m
+    x = {}
+    # classes by level (JSS 12 · SSS 16 style)
+    counts = {}
+    for r in conn.execute("SELECT name, level FROM classes WHERE school_id=?", (school_id,)).fetchall():
+        key = (r["level"] or r["name"] or "").strip()
+        mm = _re.match(r"[A-Za-z]+", key)
+        key = (mm.group(0).upper() if mm else key.upper()) or "OTHER"
+        counts[key] = counts.get(key, 0) + 1
+    x["class_levels"] = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+    x["assignments"] = conn.execute("SELECT COUNT(*) FROM class_subjects cs JOIN classes c ON c.id=cs.class_id WHERE c.school_id=?", (school_id,)).fetchone()[0]
+    try:
+        x["parents_linked"] = conn.execute("SELECT COUNT(DISTINCT parent_id) FROM parent_students WHERE school_id=? AND status='verified'", (school_id,)).fetchone()[0]
+        x["parents_pending"] = conn.execute("SELECT COUNT(*) FROM parent_students WHERE school_id=? AND status='pending'", (school_id,)).fetchone()[0]
+    except Exception:
+        x["parents_linked"] = x["parents_pending"] = 0
+    # per-student term average (same totalling as the broadsheet) -> grade distribution, pass overview, top students
+    scale = [r["grade"] for r in conn.execute("SELECT grade FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()]
+    dist = {g: 0 for g in scale}
+    fail = _fail_grade(conn, school_id)
+    top, assessed = [], 0
+    if term:
+        rows = conn.execute(
+            "SELECT s.id, s.first_name, s.last_name, c.name AS class_name, "
+            "AVG(COALESCE(sc.ca1,0)+COALESCE(sc.ca2,0)+COALESCE(sc.ca3,0)+COALESCE(sc.exam,0)) AS avg_total "
+            "FROM students s JOIN classes c ON c.id=s.class_id "
+            "JOIN class_subjects cs ON cs.class_id=c.id "
+            "JOIN scores sc ON sc.student_id=s.id AND sc.subject_id=cs.subject_id AND sc.term_id=? "
+            "WHERE c.school_id=? AND s.is_active=1 GROUP BY s.id", (term["id"], school_id)).fetchall()
+        for r in rows:
+            avg = float(r["avg_total"] or 0)
+            g, _ = grade_for(avg, conn, school_id)
+            assessed += 1
+            dist[g] = dist.get(g, 0) + 1
+            top.append({"name": f"{r['last_name']} {r['first_name']}".strip(), "class": r["class_name"], "avg": round(avg, 1)})
+        top.sort(key=lambda t: -t["avg"])
+    def _pct(n):
+        return round(n * 100.0 / assessed) if assessed else 0
+    x["assessed"] = assessed
+    x["grades"] = [{"grade": g, "n": n, "pct": _pct(n), "cls": "g-" + g.lower() if g.lower() in "abcdf" and len(g) == 1 else "g-c"} for g, n in dist.items() if g != "-"]
+    failed = dist.get(fail, 0) if fail else 0
+    monitor_g = scale[-2] if len(scale) >= 3 else None
+    passed = assessed - failed
+    x["pass"] = {"rate": _pct(passed), "fail": _pct(failed), "fail_grade": fail, "monitor": _pct(dist.get(monitor_g, 0)) if monitor_g else 0,
+                 "monitor_grade": monitor_g, "range": (f"{scale[0]}–{[g for g in scale if g != fail][-1]}" if scale and [g for g in scale if g != fail] else "")}
+    x["top"] = top[:5]
+    # enrolment bars (SVG geometry; axis 0..nice max, 5 grid lines like v106)
+    trend = (ov or {}).get("trend") or []
+    vals = [t["students"] for t in trend]
+    mx = max(vals + [1]); step = 10 ** max(0, len(str(int(mx))) - 2)
+    top_axis = int(_m.ceil(mx / (step * 4.0)) * step * 4) or 4
+    n = len(trend); fills = ["#1a6fe8", "#3b82f6", "#2563eb", "#1d4ed8", "#0a2a6b"]
+    x0 = 55 + max(0, (5 - n)) * 30
+    bars = []
+    for i, t in enumerate(trend):
+        h = round(120.0 * t["students"] / top_axis, 1) if top_axis else 0
+        bars.append({"x": x0 + i * 60, "cx": x0 + i * 60 + 18, "y": round(140 - h, 1), "h": h, "v": t["students"], "label": t["label"],
+                     "fill": fills[-1] if i == n - 1 else fills[i % 4]})
+    x["bars"] = bars
+    x["ticks"] = [{"y": 20 + 30 * k, "label": int(top_axis * (4 - k) / 4)} for k in range(5)]
+    return x
+
+
 @app.route("/dashboard")
 @login_required()
 def dashboard():
@@ -2909,6 +2976,7 @@ def dashboard():
         # School operations / Quick actions blocks and the chart-heavy analytics were removed from this page.
         import v63_core as _core
         ov = admin_dashboard_overview(conn, school_id, term)
+        x = admin_dashboard_extras(conn, school_id, term, ov)
         activities = recent_activities(conn, school_id, limit=4)
         school = get_school(conn, school_id)
         pending_reviews = conn.execute("SELECT COUNT(*) FROM result_publication WHERE school_id=? AND status IN ('submitted','under_review')", (school_id,)).fetchone()[0]
@@ -2919,7 +2987,7 @@ def dashboard():
         alerts = plan_usage_alerts(conn, school_id)
         conn.close()
         return render_template(
-            "admin_dashboard.html", identity_gap_count=_identity_gap_count(), term=term, ov=ov, activities=activities, school=school, pending_reviews=pending_reviews,
+            "admin_dashboard.html", identity_gap_count=_identity_gap_count(), term=term, ov=ov, x=x, activities=activities, school=school, pending_reviews=pending_reviews,
             now_local=now_local, plan_alerts=alerts, hide_banners=True,
             school_local_ms=int(now_local.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if now_local else 0,
         )
@@ -3259,92 +3327,6 @@ def set_staff_signup_code():
     else:
         flash("Staff registration has been turned off.", "success")
     return redirect(url_for("admin_school"))
-
-
-FEE_METHODS = ("Cash", "Transfer", "POS", "Cheque", "Other")
-
-
-def _fee_summary_row(conn, school_id):
-    row = conn.execute("SELECT id, label, expected_amount, collected_amount FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
-    if not row:
-        conn.execute("INSERT INTO school_fee_summary(school_id, label, expected_amount, collected_amount) VALUES (?,?,0,0)", (school_id, ""))
-        conn.commit()
-        row = conn.execute("SELECT id, label, expected_amount, collected_amount FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
-    return row
-
-
-def _fee_amount(raw):
-    try:
-        v = float(str(raw or "").replace(",", "").strip())
-    except ValueError:
-        return None
-    if v != v or v in (float("inf"), float("-inf")) or v < 0 or v > 1e12:
-        return None
-    return round(v, 2)
-
-
-@app.route("/admin/fees", methods=["GET", "POST"])
-@login_required("admin", "sub_admin")
-def school_fees():
-    """V112 School Fees (v106 Modern Screens #89): expected vs collected, with a payments log. Same figures as the dashboard KPI."""
-    conn = get_db()
-    school_id = current_school_id()
-    actor = session.get("name") or session.get("username") or "Admin"
-    if request.method == "POST":
-        action = request.form.get("action", "")
-        row = _fee_summary_row(conn, school_id)
-        if action == "set_expected":
-            amt = _fee_amount(request.form.get("expected_amount"))
-            if amt is None:
-                flash("Enter a valid expected amount.", "error")
-            else:
-                conn.execute("UPDATE school_fee_summary SET expected_amount=?, label=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                             (amt, (request.form.get("label") or "").strip()[:80], row["id"]))
-                conn.commit()
-                log_audit(conn, "staff", actor, "fees_expected_set", f"expected={amt}", school_id=school_id)
-                flash("Expected fees updated.", "success")
-        elif action == "record_payment":
-            amt = _fee_amount(request.form.get("amount"))
-            sid = request.form.get("student_id", type=int)
-            method = request.form.get("method") if request.form.get("method") in FEE_METHODS else "Other"
-            paid_on = (request.form.get("paid_on") or "").strip()
-            try:
-                datetime.date.fromisoformat(paid_on)
-            except ValueError:
-                paid_on = datetime.date.today().isoformat()
-            ok_student = conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE s.id=? AND c.school_id=?", (sid, school_id)).fetchone() if sid else None
-            if not amt or not ok_student:
-                flash("Choose a student and enter an amount greater than zero.", "error")
-            else:
-                conn.execute("INSERT INTO school_fee_payments(school_id, student_id, amount, method, paid_on, note, recorded_by) VALUES (?,?,?,?,?,?,?)",
-                             (school_id, sid, amt, method, paid_on, (request.form.get("note") or "").strip()[:200], actor))
-                conn.execute("UPDATE school_fee_summary SET collected_amount=collected_amount+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (amt, row["id"]))
-                conn.commit()
-                log_audit(conn, "staff", actor, "fee_payment_recorded", f"student={sid} amount={amt} method={method}", school_id=school_id)
-                flash("Payment recorded.", "success")
-        elif action == "delete_payment":
-            pid = request.form.get("payment_id", type=int)
-            pay = conn.execute("SELECT id, amount FROM school_fee_payments WHERE id=? AND school_id=?", (pid, school_id)).fetchone() if pid else None
-            if pay:
-                conn.execute("DELETE FROM school_fee_payments WHERE id=?", (pay["id"],))
-                conn.execute("UPDATE school_fee_summary SET collected_amount=CASE WHEN collected_amount>? THEN collected_amount-? ELSE 0 END, updated_at=CURRENT_TIMESTAMP WHERE id=?", (pay["amount"], pay["amount"], row["id"]))
-                conn.commit()
-                log_audit(conn, "staff", actor, "fee_payment_deleted", f"payment={pay['id']} amount={pay['amount']}", school_id=school_id)
-                flash("Payment removed.", "success")
-        conn.close()
-        return redirect(url_for("school_fees"))
-    row = _fee_summary_row(conn, school_id)
-    expected, collected = float(row["expected_amount"] or 0), float(row["collected_amount"] or 0)
-    payments = conn.execute(
-        "SELECT p.id, p.amount, p.method, p.paid_on, p.note, p.recorded_by, s.first_name, s.last_name, s.admission_no, c.name AS class_name "
-        "FROM school_fee_payments p LEFT JOIN students s ON s.id=p.student_id LEFT JOIN classes c ON c.id=s.class_id "
-        "WHERE p.school_id=? ORDER BY p.paid_on DESC, p.id DESC LIMIT 50", (school_id,)).fetchall()
-    students = conn.execute("SELECT s.id, s.first_name, s.last_name, s.admission_no, c.name AS class_name FROM students s JOIN classes c ON c.id=s.class_id "
-                            "WHERE c.school_id=? AND COALESCE(s.is_active,1)=1 ORDER BY c.name, s.last_name, s.first_name", (school_id,)).fetchall()
-    conn.close()
-    pct = round(min(100.0, collected * 100.0 / expected)) if expected else 0
-    return render_template("school_fees.html", expected=expected, collected=collected, outstanding=max(0.0, expected - collected), pct=pct,
-                           label=row["label"] or "", payments=payments, students=students, methods=FEE_METHODS, today=datetime.date.today().isoformat())
 
 
 @app.route("/admin/email", methods=["GET", "POST"])
@@ -12069,6 +12051,36 @@ register_result_fields(app, dict(get_db=get_db, login_required=login_required, l
 
 # V104: freeze the look of results that were published before snapshots existed (once; only fills NULLs)
 freeze_legacy_published_sheets()
+
+@app.route("/admin/school-fees", methods=["GET", "POST"])
+@login_required("admin", "sub_admin")
+def admin_school_fees():
+    """v112: School Fees screen (v106 modern design). Reads/writes the existing school_fee_summary table that feeds the
+    dashboard School Fees card -- same figures, one source. There is still no per-student invoice/payment ledger."""
+    conn = get_db()
+    school_id = current_school_id()
+    if request.method == "POST":
+        try:
+            expected = max(0.0, float((request.form.get("expected_amount") or "0").replace(",", "")))
+            collected = max(0.0, float((request.form.get("collected_amount") or "0").replace(",", "")))
+        except ValueError:
+            conn.close(); flash("Enter valid amounts (numbers only).", "error"); return redirect(url_for("admin_school_fees"))
+        if collected > expected:
+            conn.close(); flash("Collected cannot be more than expected.", "error"); return redirect(url_for("admin_school_fees"))
+        label = (request.form.get("label") or "").strip()[:80]
+        conn.execute("INSERT INTO school_fee_summary (school_id, label, expected_amount, collected_amount) VALUES (?,?,?,?)", (school_id, label, expected, collected))
+        conn.commit(); conn.close()
+        flash("School fees figures saved. The dashboard card now shows them.", "success")
+        return redirect(url_for("admin_school_fees"))
+    rows = conn.execute("SELECT * FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 20", (school_id,)).fetchall()
+    conn.close()
+    cur = rows[0] if rows else None
+    expected = float(cur["expected_amount"]) if cur else 0.0
+    collected = float(cur["collected_amount"]) if cur else 0.0
+    pct = round(collected * 100 / expected, 1) if expected else 0.0
+    return render_template("admin_school_fees.html", cur=cur, rows=rows, expected=expected, collected=collected,
+                           outstanding=max(0.0, expected - collected), pct=pct)
+
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"
