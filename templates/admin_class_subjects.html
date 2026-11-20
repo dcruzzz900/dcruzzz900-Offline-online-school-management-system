@@ -1,29 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Assign Subjects{% endblock %}
 {% block content %}
-<h1>Assign Subjects to Classes</h1>
-
-<div class="card">
-    <h3>New Assignment</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Class</label>
-        <select name="class_id" required class="form-select">
-            {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-        </select>
-        <label>Subject</label>
-        <select name="subject_id" required class="form-select">
-            {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-        </select>
-        <label>Teacher</label>
-        <select name="teacher_id" class="form-select">
-            <option value="">-- unassigned --</option>
-            {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-primary" type="submit">Assign</button>
-    </form>
-</div>
-
+<div class="page-heading"><div><h1>Assign Subjects to Classes</h1><p>{{ assignments|length }} assignment{{ '' if assignments|length==1 else 's' }} · Class-subject-teacher links</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ New Assignment</button></div></div>
 <div class="card">
     <h3>Current Assignments</h3>
     <div class="table-responsive"><table class="table table-hover align-middle"><caption>Subject Assignments</caption>
@@ -55,4 +33,26 @@
         {% endfor %}
     </table></div>
 </div>
+
+<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ New Assignment</summary><div class="m-fold-body">
+    
+    <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Class</label>
+        <select name="class_id" required class="form-select">
+            {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+        <label>Subject</label>
+        <select name="subject_id" required class="form-select">
+            {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+        <label>Teacher</label>
+        <select name="teacher_id" class="form-select">
+            <option value="">-- unassigned --</option>
+            {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary" type="submit">Assign</button>
+    </form>
+</div></details>
+<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}
