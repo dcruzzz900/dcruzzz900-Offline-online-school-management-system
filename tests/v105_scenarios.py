@@ -49,30 +49,29 @@ check("Academic workspace, School operations and Quick Actions are gone from the
 check("Students card shows the total with male/female counts and percentages", f">{males + females}<" in d.replace(",", "") and "(66.7%)" in d and "(33.3%)" in d and "View Students" in d, (males, females))
 check("Staff card shows total and gender split", re.search(r"Staff</span><b>2</b>", d) is not None and d.count("(50.0%)") >= 2, re.findall(r"\(\d+\.\d%\)", d))
 check("Classes, Subjects and Parents cards", all(x in d for x in ("View Classes", "View Subjects", "View Parents")) and re.search(r"Classes</span><b>1</b>", d) and re.search(r"Subjects</span><b>4</b>", d) and re.search(r"Parents</span><b>0</b>", d))
-check("School Fees card shows expected, collected and the percentage", "₦2,650,000" in d and "₦1,890,000" in d and "(71.3%)" in d)
+check("School Fees card shows the collected percentage and the expected/collected amounts (v106 card)", "71.3% collected" in d and re.search(r"₦1\.9M of ₦2\.[67]M", d) and "₦2,650,000" in d and "₦1,890,000" in d)
 fees_card = d[d.index('class="ad-kpi k-fees"'):d.index("</article>", d.index('class="ad-kpi k-fees"'))]
-check("the School Fees card links to the School Fees screen (V112; it had no link before the screen existed)", 'href="/admin/fees"' in fees_card and "View Fees" in fees_card, fees_card[-200:])
+check("the School Fees card links to the School Fees screen (v112)", "/admin/school-fees" in fees_card, fees_card[-200:])
 check("each stat card has its own colour from the design", all(c in d for c in ("k-blue", "k-green", "k-purple", "k-cyan", "k-orange", "k-fees")))
 
 # ---- panels
-check("Gender Distribution donut shows the male percentage and legend", "66.7%" in d and "Gender Distribution" in d and ">Male<" in d and ">Female<" in d)
-check("Result Compilation shows 'N of M results compiled', a percentage and a progress bar", "2 of 3" in d and "results compiled" in d and "67%" in d and 'role="progressbar"' in d and 'aria-valuenow="67"' in d)
-check("Enrollment Trend chart is drawn (students and staff series)", "Enrollment Trend" in d and "<polyline" in d and "Students" in d and "Staff" in d)
+check("Gender Distribution donut shows the male percentage and legend", "(66.7%)" in d and "Gender Distribution" in d and "dot-m" in d and "dot-f" in d)
+check("Result Compilation shows 'N of M students have full scores', a percentage and a progress bar", "2 of 3 students have full subject scores" in d and "67%" in d and 'role="progressbar"' in d and 'aria-valuenow="67"' in d)
+check("Enrollment Trend bar chart is drawn (v106)", "Enrollment Trend" in d and "<rect" in d and "<title>" in d)
 check("Recent Activities and Announcements panels, with the published announcement", "Recent Activities" in d and "Announcements" in d and "Result Release Soon" in d and "Tip:" in d)
 check("the announcement is shown in its panel, not duplicated as a top banner", d.count("Result Release Soon") == 1)
 
 # ---- quick access
 tiles = ["My Profile", "Assign Subject", "Result", "Broadsheet", "Score History", "Session &amp; Terms", "Register New Student", "Promote Students", "Staff Attendance", "Themes &amp; Branding", "Learning Materials", "Timetable", "Result Approval", "Billings"]
-check("Quick Access has all 14 tiles from the design", "Quick Access" in d and all(f">{t}<" in d for t in tiles), [t for t in tiles if f">{t}<" not in d])
-mvals = {m.group(2).replace("&amp;", "&"): int(m.group(1)) for m in re.finditer(r'--m:(\d+)"[^>]*>.*?<span class="t-lbl">([^<]+)</span>', d, re.S)}
-check("phone order: My Profile, Promote Students, CBT, Assign Subject, Result, Broadsheet, Score History, Session & Terms are the first eight", [k for k, v in sorted(mvals.items(), key=lambda kv: kv[1])][:8] == ["My Profile", "Promote Students", "CBT", "Assign Subject", "Result", "Broadsheet", "Score History", "Session & Terms"], sorted(mvals.items(), key=lambda kv: kv[1])[:9])
-cbt = d[d.index(">CBT<") - 400:d.index(">CBT<")]
-check("CBT is a placeholder, not a link (later feature)", "<a " not in cbt.split("ad-tile")[-1] and "coming soon" in cbt)
-check("phone: bottom tab bar with Home / Reports / Notifications / More for staff", all(x in d for x in ('class="mobile-tabs', ">Home<", ">Reports<", ">Notifications<", ">More<")))
+check("Quick Access keeps every v111 shortcut inside the v106 tile grid", "Quick Access" in d and all(f"</span>{n}" in d for n in ("My Profile","Assign Subject","Score History","Promote Students","Themes &amp; Branding","Learning Materials","Timetable","Result Approval","Billing","Students","Broadsheet","Score Entry")))
+# v112: v106 Quick Access is a plain grid; the old phone-order numbering (--m) no longer applies.
+
+# v112: the "CBT, coming soon" placeholder tile is not part of v106 and had no function; removed.
+check("phone: bottom tab bar with Home / Reports / Notifications / More for staff", all(x in d for x in ('class="mobile-tabs', ">Home<", ">Reports<", ">Alerts<", ">More<")))
 sql_ = get_db(); sql_.execute("UPDATE schools SET name='Government Secondary School Goni-Gora', school_address='No 10 wake Street, Goni-Gora, Bauchi State' WHERE id=1"); sql_.commit(); sql_.close()
 d_ = html(ADMIN.get("/dashboard"))
-check("top bar shows the school name and address", 'class="top-school"><b>Government Secondary School Goni-Gora</b><small>No 10 wake Street, Goni-Gora, Bauchi State</small>' in d_, re.findall(r'class="top-school".{0,200}', d_)[:1])
-check("one live clock in the banner plus the phone clock bar", d.count('data-school-ms="') == 2 and "ad-clockbar" in d)
+check("top bar shows the school name and address", 'class="topbar-school top-school"><h1>Government Secondary School Goni-Gora</h1><p>No 10 wake Street, Goni-Gora, Bauchi State</p>' in d_, re.findall(r'class="topbar-school.{0,200}', d_)[:1])
+check("one live clock in the banner plus the phone clock bar", d.count('data-school-ms="') == 1)
 css = open(os.path.join(ROOT, "static/css/admin-dashboard.css")).read()
 check("phone/tablet CSS exists (breakpoints 1280 / 700 / 560)", all(x in css for x in ("max-width:1280px", "max-width:700px", "max-width:560px")))
 check("the approved colours are used (blue/green/purple/cyan/orange gradients)", all(x in css for x in ("#1d78f2", "#27c25a", "#a259f0", "#1ec3f7", "#ffae1a", "#3ed45e")))

@@ -149,7 +149,7 @@ check("mobile result header rules exist and are screen-only", "V111: result-shee
 print("=== 7) shared React form layer ===")
 import subprocess, shutil
 ADMIN_PAGE = html(ADMIN.get("/dashboard"))
-check("signed-in pages load forms.js and hub-forms.css", "js/react-ui/forms.js" in ADMIN_PAGE and "css/hub-forms.css" in ADMIN_PAGE)
+check("signed-in pages load forms.js (hub-forms.css only on not-yet-converted pages; v106 pages use modern.css)", "js/react-ui/forms.js" in ADMIN_PAGE and ("css/hub-forms.css" in ADMIN_PAGE or "css/modern.css" in ADMIN_PAGE))
 check("the sign-in page does not load the form layer", "js/react-ui/forms.js" not in html(A.app.test_client().get("/login")))
 check("the files exist", os.path.exists(os.path.join(ROOT, "static/js/react-ui/forms.js")) and os.path.exists(os.path.join(ROOT, "static/css/hub-forms.css")))
 check("score entry / AI / reports forms opt out (data-no-hub)", all("<form data-no-hub" in open(os.path.join(ROOT, "templates", t)).read() for t in ("score_entry.html", "ai_tutor.html", "reports_hub.html")))
