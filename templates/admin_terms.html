@@ -1,9 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Sessions & Terms{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Sessions &amp; Terms</h1><p>{{ sessions|length }} session{{ '' if sessions|length==1 else 's' }} · {{ terms|length }} term{{ '' if terms|length==1 else 's' }}</p></div><div class="page-actions"><button type="button" class="btn btn-secondary" data-open="sessionPanel">+ New Session</button><button type="button" class="btn btn-primary" data-open="termPanel">+ New Term</button></div></div>
+<h1>Sessions &amp; Terms</h1>
 
 <div class="card"><h3>Cumulative / Annual Result</h3><p class="muted">Moved: this setting now lives in <a href="{{ url_for('result_display_settings') }}">Result Display Settings</a> with the other result-sheet options.</p></div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3>New Session</h3>
+        <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="new_session">
+            <label>Session name (e.g. 2026/2027)</label>
+            <input type="text" name="session_name" required class="form-control">
+            <button class="btn btn-primary" type="submit">Create Session</button>
+        </form>
+    </div>
+    <div class="card">
+        <h3>New Term</h3>
+        <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="new_term">
+            <label>Session</label>
+            <select name="session_id" required class="form-select">
+                {% for s in sessions %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+            </select>
+            <label>Term</label>
+            <select name="term_name" required class="form-select">
+                <option>1st Term</option>
+                <option>2nd Term</option>
+                <option>3rd Term</option>
+            </select>
+            <button class="btn btn-primary" type="submit">Create Term</button>
+        </form>
+    </div>
+</div>
 
 <div class="card">
     <h3>Sessions</h3>
@@ -12,7 +43,7 @@
         {% for s in sessions %}
         <tr>
             <td>{{ s.name }}</td>
-            <td>{% if s.is_active %}<span class="badge m-ok">Active</span>{% else %}—{% endif %}</td>
+            <td>{% if s.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
             <td>
                 {% if not s.is_active %}
                 <form method="POST" class="inline">
@@ -41,7 +72,7 @@
         <tr>
             <td>{{ t.name }}</td>
             <td>{{ t.session_name }}</td>
-            <td>{% if t.is_active %}<span class="badge m-ok">Active</span>{% else %}—{% endif %}</td>
+            <td>{% if t.is_active %}<span class="badge">Active</span>{% else %}—{% endif %}</td>
             <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_resumption"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="resumption_date" value="{{ t.resumption_date or '' }}" aria-label="Resumption date for {{ t.name }}" class="form-control"><button class="btn btn-primary btn-sm" type="submit">Save</button></form></td>
             <td><form method="POST" class="inline" style="display:flex;gap:.3rem"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="set_next_resumes"><input type="hidden" name="term_id" value="{{ t.id }}"><input type="date" name="next_term_resumes_date" value="{{ t.next_term_resumes_date or '' }}" aria-label="Next Term Resumes date for {{ t.name }}" class="form-control"><button class="btn btn-primary btn-sm" type="submit">Save</button></form></td>
             <td>{% if t.is_published %}<span class="badge" style="background:#1d7a4c;">Published</span>{% else %}—{% endif %}</td>
@@ -60,31 +91,4 @@
         {% endfor %}
     </table></div>
 </div>
-
-<div class="grid-2"><details class="card m-fold" id="sessionPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ New Session</summary><div class="m-fold-body">
-        <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="new_session">
-            <label>Session name (e.g. 2026/2027)</label>
-            <input type="text" name="session_name" required class="form-control">
-            <button class="btn btn-primary" type="submit">Create Session</button>
-        </form>
-    </div></details><details class="card m-fold" id="termPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ New Term</summary><div class="m-fold-body">
-        <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="new_term">
-            <label>Session</label>
-            <select name="session_id" required class="form-select">
-                {% for s in sessions %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-            </select>
-            <label>Term</label>
-            <select name="term_name" required class="form-select">
-                <option>1st Term</option>
-                <option>2nd Term</option>
-                <option>3rd Term</option>
-            </select>
-            <button class="btn btn-primary" type="submit">Create Term</button>
-        </form>
-    </div></details></div>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select,textarea');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}
