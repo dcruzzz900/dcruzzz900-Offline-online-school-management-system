@@ -121,20 +121,24 @@ try:
             page.wait_for_load_state("networkidle")
             before = page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform")
             page.click(".sidebar-toggle")
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(250)
             after = page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform")
             nav_link_visible = page.is_visible(".app-sidebar nav a")
             check(f"at width={w}, clicking the hamburger actually opens the sidebar (nav links become reachable)",
-                  before != "none" and after in ("none", "matrix(1, 0, 0, 1, 0, 0)") and nav_link_visible, (before, after, nav_link_visible))
+                  before != "none" and after == "none" and nav_link_visible, (before, after, nav_link_visible))
 
-        # v112 (v106 modern UI): the sidebar is an off-canvas drawer at EVERY width, so on desktop the hamburger is visible
-        # and the sidebar starts closed (it never sits in the content flow).
+        # Desktop (above the breakpoint) must be unaffected: toggle hidden, sidebar in its normal fixed position.
         page.set_viewport_size({"width": 1300, "height": 800})
         page.goto(f"http://127.0.0.1:{PORT}/dashboard")
         page.wait_for_load_state("networkidle")
-        check("desktop width (1300px): v106 drawer shell -- hamburger visible, sidebar closed until opened",
+        # V112 (v106 Modern Screens): the sidebar is the same off-canvas drawer at EVERY width, so on desktop the
+        # hamburger is visible and the sidebar is tucked away until it is opened (then it opens, with no overlap issue).
+        check("desktop width (1300px): v106 drawer - hamburger visible, sidebar off-canvas until opened",
               page.eval_on_selector(".sidebar-toggle", "el => getComputedStyle(el).display") != "none"
               and page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform") != "none")
+        page.click(".sidebar-toggle"); page.wait_for_timeout(300)
+        check("desktop width (1300px): hamburger opens the drawer",
+              page.eval_on_selector(".app-sidebar", "el => getComputedStyle(el).transform") == "none")
 
         browser.close()
 except ImportError:

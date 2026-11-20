@@ -620,7 +620,7 @@ check("AI Assistant is reachable from the menu (the dashboard design has no AI c
 check("login/signup layouts: stack on tablets and phones, no horizontal scroll", "@media(max-width:900px){.beautiful-auth{grid-template-columns:1fr" in css and "overflow-x:hidden" in css)
 check("viewport meta present on auth pages", all('name="viewport"' in html(A.app.test_client().get(u)) for u in ("/login", "/student/login", "/register-school")))
 nav = html(root.get("/platform/dashboard"))
-check("Super Admin menu has a real open/close hamburger (v106 drawer)", 'class="hamburger"' in nav and 'id="platformNav"' in nav and "aria-expanded" in nav)
+check("Super Admin menu has a real collapse/expand button", 'class="platform-nav-toggle"' in nav and 'aria-controls="platformNav"' in nav and "aria-expanded" in nav)
 check("collapse script toggles the nav on every screen size", "nav-collapsed" in js and "classList.toggle('nav-collapsed'" in js and "platform-nav-toggle" in js)
 check("collapsed nav is removed from layout (does not cover content)", ".platform-top.nav-collapsed nav{display:none!important}" in css)
 check("nav text: 16px, high contrast on dark, not clipped", ("font-size:16px!important" in css or "font-size:1rem!important" in css) and "color:#f1f5f9!important" in css and "background:#0f172a" in css)
