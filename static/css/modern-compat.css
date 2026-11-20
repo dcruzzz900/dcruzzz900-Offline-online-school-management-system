@@ -70,38 +70,6 @@ main.content{max-width:none;margin:0;padding:18px 20px 32px;flex:1}
 .portal-shell>main.content{max-width:1000px;margin:0 auto;width:100%}
 .platform-shell.app-shell>.main>main.content{width:100%}
 
-/* ---- 2. v111 components -> v106 look ---- */
-main.content>h1,main.content .page-heading h1,main.content .page-head h1{font-size:1.35rem;font-weight:800;color:var(--navy);margin:0 0 4px}
-.page-heading,.page-head{margin-bottom:18px}.page-heading p,.page-head p{color:var(--mut);font-size:.9rem}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:16px}
-.card h2,.card h3{font-size:.95rem;font-weight:700;color:var(--navy)}
-.btn{border-radius:10px;font-weight:600;font-size:.875rem;padding:9px 16px}
-.btn-sm{padding:6px 12px;font-size:.8rem}
-.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 3px 10px rgba(26,111,232,.35)}
-.btn-primary:hover{background:var(--blue);filter:brightness(.92);color:#fff}
-.btn-secondary,.btn-outline-secondary{background:#fff;color:var(--navy);border:1.5px solid #c5d0e6}
-.btn-secondary:hover{background:#fff;border-color:var(--blue);color:var(--blue)}
-.btn-gold{background:linear-gradient(160deg,#ffae1a,#f57a00);color:#fff;border:0}
-.form-control,.form-select,select,textarea,input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],input[type=search],input[type=tel]{border:1.5px solid #c5d0e6;border-radius:10px;font-size:.9rem;font-family:inherit}
-.form-control:focus,.form-select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,111,232,.15)}
-label{font-size:.8rem;font-weight:600;color:var(--mut)}
-.table-responsive,.table-wrap{overflow-x:auto}
-table.table{width:100%;border-collapse:collapse;font-size:.85rem;--bs-table-bg:transparent}
-table.table thead th,table.table>thead>tr>th{background:var(--navy);color:#fff;text-align:left;padding:10px 12px;font-weight:600;white-space:nowrap;border:0}
-table.table td{padding:10px 12px;border-bottom:1px solid var(--border)}
-table.table-hover tbody tr:hover{background:#f5f8fc}
-table caption{display:none}
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:18px}
-.stat-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
-.stat-box .label{font-size:.75rem;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.stat-box .num{font-size:1.5rem;font-weight:800;color:var(--navy);margin-top:2px}
-.badge{border-radius:999px;font-weight:700;font-size:.72rem;padding:3px 9px}
-.muted{color:var(--mut)}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:700px){.grid-2{grid-template-columns:1fr}}
-.alert{border-radius:12px}
-/* dashboard banner/kpi use v106 gradients already via modern.css; keep legacy admin-dashboard.css extras working */
-.ad{gap:14px}
-
 /* ---- 3. dark mode (data-bs-theme=dark) for the v106 shell ---- */
 html[data-bs-theme=dark]{--bg:#12182a;--card:#151c28;--border:#2c3646;--ink:#dde3f0;--mut:#a9b5c6;--navy:#bcd0f5}
 html[data-bs-theme=dark] body{background:#12182a;color:#dde3f0}
@@ -122,18 +90,6 @@ html[data-bs-theme=dark] .mobile-tabs{background:#151c28}
 html[data-bs-theme=dark] .mobile-tabs a{color:#b0b9ca}html[data-bs-theme=dark] .mobile-tabs a.on{color:#95ace4}
 @media print{.sidebar,.topbar,.mobile-tabs,.portal-tabs,.sidebar-backdrop{display:none!important}main.content{padding:0}}
 
-/* ---- 4. dashboard rows: v106 proportions (beats theme.css auto-fit !important) ---- */
-.ad .ad-row-charts{grid-template-columns:1fr 1fr 1.2fr!important}
-.ad .ad-row-bottom{grid-template-columns:2.2fr 1.25fr 1fr!important}
-@media(max-width:1100px){.ad .ad-row-charts{grid-template-columns:1fr 1fr!important}.ad .ad-row-charts>:last-child{grid-column:1/-1}.ad .ad-row-bottom{grid-template-columns:1fr 1fr!important}.ad .ad-row-bottom>.ad-qa{grid-column:1/-1}}
-@media(max-width:700px){.ad .ad-row-charts,.ad .ad-row-bottom{grid-template-columns:1fr!important}.ad .ad-row-charts>:last-child{display:block}}
-.ad-panel>header{background:#fff;color:var(--navy);border-bottom:1px solid var(--border)}
-.ad .ad-panel>header h2,.gp>header h2{color:var(--navy)}
-.ad-panel>header a{color:var(--blue)}
-.gp>header{background:#fff;color:var(--navy);border-bottom:1px solid var(--border)}
-.gp,.ad-panel{border:1px solid var(--border);box-shadow:var(--shadow);border-radius:14px}
-html[data-bs-theme=dark] .ad-panel>header,html[data-bs-theme=dark] .gp>header{background:#151c28;color:#bcd0f5;border-color:#2c3646}
-html[data-bs-theme=dark] .gp{background:#151c28;border-color:#2c3646}
 /* topbar clean-up */
 .topbar{border-bottom:1px solid var(--border)!important;box-shadow:0 1px 0 rgba(15,44,107,.04)!important}
 .topbar .top-search{border:0!important;background:none!important;padding:0!important;box-shadow:none!important;flex:0 1 280px;min-width:140px}
@@ -141,36 +97,11 @@ html[data-bs-theme=dark] .gp{background:#151c28;border-color:#2c3646}
 .topbar .theme-toggle{width:38px;height:38px;padding:0;border-radius:50%;display:inline-grid;place-items:center;background:#f1f5f9;border:0}
 .visually-hidden,.tt-label.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .topbar .top-actions,.topbar .topbar-actions{display:flex;align-items:center;gap:10px}
-@media(min-width:1101px){.ad .ad-row-charts>:last-child{grid-column:auto!important}.ad .ad-row-bottom>.ad-qa{grid-column:auto!important}}
-.ad .ad-panel>header,.ad .ad-row-charts .ad-panel>header{background:#fff!important;color:var(--navy)!important;border-bottom:1px solid var(--border);padding:12px 16px}
-.ad .ad-panel>header h2,.ad .ad-row-charts .ad-panel>header h2{color:var(--navy)!important}
-.ad .ad-panel>header svg{color:var(--blue)}
-html[data-bs-theme=dark] .ad .ad-panel>header{background:#151c28!important;color:#bcd0f5!important}
-.ad-trend{max-width:100%}.ad-trend svg{max-height:280px}
 /* drawer: whole sidebar scrolls (legacy nav had its own clipped scroller) */
 .app-shell .app-sidebar.sidebar{overflow-y:auto;overscroll-behavior:contain}
 .app-shell .app-sidebar.sidebar>nav{flex:0 0 auto!important;overflow:visible!important;max-height:none!important;height:auto!important;padding:10px 0 12px}
 .app-shell .app-sidebar.sidebar .sidebar-bottom{margin-top:auto}
 
-/* ---- 5. wide content scrolls inside its card instead of being clipped ---- */
-main.content .card,main.content .panel{max-width:100%;overflow-x:auto}
-main.content img,main.content video{max-width:100%;height:auto}
-@media(max-width:700px){
- main.content table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
- main.content .form-grid,main.content .grid-2{grid-template-columns:1fr!important}
- main.content .btn{white-space:normal}
- main.content pre,main.content code{white-space:pre-wrap;word-break:break-word}
-}
-
-/* ---- 6. grid utilities templates already use but no stylesheet defined ---- */
-.grid-3,.grid-4,.kpi-grid,.chart-grid,.dashboard-grid{display:grid;gap:12px;margin-bottom:16px}
-.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4,.kpi-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-.chart-grid,.dashboard-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-.grid-4>.card,.grid-3>.card{margin-bottom:0;padding:14px 16px}
-.grid-4>.card b{display:block;font-size:.75rem;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.grid-4>.card h2{font-size:1.5rem;font-weight:800;color:var(--navy);margin:2px 0 0}
-.inline-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-@media(max-width:700px){.grid-3{grid-template-columns:1fr 1fr}}
 
 /* ---- 7. portal shells: top bar layout + floating text-size/theme widget out of the header ---- */
 .portal-shell>.topbar{display:flex;align-items:center;gap:14px;padding:10px 24px}
@@ -202,22 +133,25 @@ html[data-bs-theme=dark] .platform-shell .topbar.platform-top{background:#151c28
  .portal-shell>header.topbar .topbar-school{flex:1 1 auto!important;text-align:left!important}
  .portal-shell>header.topbar .topbar-actions{flex:none!important}
 }
-.badge{display:inline-flex;align-items:center;align-self:center;white-space:nowrap;line-height:1.3;width:auto;height:auto}
 
 /* dark-mode fixes for the light-mode !important header rules above */
-html[data-bs-theme=dark] .ad .ad-panel>header h2,html[data-bs-theme=dark] .ad .ad-row-charts .ad-panel>header h2,html[data-bs-theme=dark] .gp>header h2{color:#bcd0f5!important}
-html[data-bs-theme=dark] .ad .ad-panel>header svg{color:#7fb0ff}
-html[data-bs-theme=dark] .ad .ad-row-charts .ad-panel>header{background:#151c28!important}
 html[data-bs-theme=dark] .topbar .theme-toggle{background:#26324a;color:#e6ecf8}
 html[data-bs-theme=dark] .platform-shell .topbar-school h1{color:#bcd0f5!important}
 html[data-bs-theme=dark] .platform-shell .hamburger span{background:#bcd0f5}
-html[data-bs-theme=dark] main.content>h1,html[data-bs-theme=dark] .card h2,html[data-bs-theme=dark] .card h3,html[data-bs-theme=dark] .stat-box .num,html[data-bs-theme=dark] .grid-4>.card h2{color:#dbe6fb}
-html[data-bs-theme=dark] .badge{filter:none}
 html[data-bs-theme=dark] .platform-shell .role-chip{background:#3b2a63!important;color:#e4d4ff!important}
-input[type=color],.form-control-color{height:40px!important;min-height:40px;padding:4px!important;cursor:pointer;background:#fff}
-html[data-bs-theme=dark] input[type=color]{background:#1b2433}
 
-/* result sheet is "paper": keep dark text on it in dark mode (the shell's dark text colours must not leak in) */
-html[data-bs-theme=dark] .rs-screen-wrap{color:#14213d}
-html[data-bs-theme=dark] .rs-screen-wrap :is(h1,h2,h3,h4,p,small,label,.rs-title,.rs-school){color:#0b2a6f}
-html[data-bs-theme=dark] .rs-screen-wrap tbody :is(td,th){color:#14213d}
+
+/* ---- v111 header controls on v106 pages (legacy CSS is not loaded there) ---- */
+.fs-control{display:inline-flex;gap:4px;align-items:center}
+.fs-control .btn{padding:4px 9px;font-size:.75rem;font-weight:700;border-radius:999px;background:#fff;color:var(--navy);border:1px solid #c5d0e6;box-shadow:none;line-height:1.3}
+.fs-control .btn sup{font-size:.6em;margin-left:1px}
+.theme-toggle{width:38px;height:38px;padding:0;border:0;border-radius:50%;background:#f1f5f9;color:var(--navy);display:inline-grid;place-items:center;cursor:pointer;font-size:1.05rem}
+.theme-toggle .tt-ico::before{content:"\263E"}
+html[data-bs-theme=dark] .theme-toggle .tt-ico::before{content:"\2600"}
+.theme-toggle .tt-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+html[data-bs-theme=dark] .fs-control .btn{background:#1b2433;color:#dde3f0;border-color:#3a4558}
+.top-search-results{background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:6px;max-height:60vh;overflow:auto}
+.top-search-results[hidden]{display:none}
+html[data-bs-theme=dark] .top-search-results{background:#151c28}
+.flash,.alert{border-radius:12px}
+@media(max-width:700px){.topbar .fs-control{display:none}}
