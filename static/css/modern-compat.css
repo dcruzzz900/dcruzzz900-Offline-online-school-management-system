@@ -151,3 +151,73 @@ html[data-bs-theme=dark] .ad .ad-panel>header{background:#151c28!important;color
 .app-shell .app-sidebar.sidebar{overflow-y:auto;overscroll-behavior:contain}
 .app-shell .app-sidebar.sidebar>nav{flex:0 0 auto!important;overflow:visible!important;max-height:none!important;height:auto!important;padding:10px 0 12px}
 .app-shell .app-sidebar.sidebar .sidebar-bottom{margin-top:auto}
+
+/* ---- 5. wide content scrolls inside its card instead of being clipped ---- */
+main.content .card,main.content .panel{max-width:100%;overflow-x:auto}
+main.content img,main.content video{max-width:100%;height:auto}
+@media(max-width:700px){
+ main.content table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+ main.content .form-grid,main.content .grid-2{grid-template-columns:1fr!important}
+ main.content .btn{white-space:normal}
+ main.content pre,main.content code{white-space:pre-wrap;word-break:break-word}
+}
+
+/* ---- 6. grid utilities templates already use but no stylesheet defined ---- */
+.grid-3,.grid-4,.kpi-grid,.chart-grid,.dashboard-grid{display:grid;gap:12px;margin-bottom:16px}
+.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4,.kpi-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.chart-grid,.dashboard-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.grid-4>.card,.grid-3>.card{margin-bottom:0;padding:14px 16px}
+.grid-4>.card b{display:block;font-size:.75rem;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.grid-4>.card h2{font-size:1.5rem;font-weight:800;color:var(--navy);margin:2px 0 0}
+.inline-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+@media(max-width:700px){.grid-3{grid-template-columns:1fr 1fr}}
+
+/* ---- 7. portal shells: top bar layout + floating text-size/theme widget out of the header ---- */
+.portal-shell>.topbar{display:flex;align-items:center;gap:14px;padding:10px 24px}
+.portal-shell>.topbar .topbar-actions{margin-left:auto}
+.portal-tabs .ni{margin-right:6px;opacity:.8}
+body:has(.portal-shell) .theme-fab{top:auto;bottom:18px;right:16px}
+@media(max-width:700px){
+ .portal-shell>.topbar{padding:10px 14px;background:linear-gradient(180deg,#1f3fc8,#1a2aa3)}
+ .portal-shell>.topbar .topbar-school h1{color:#fff}.portal-shell>.topbar .topbar-school p{color:rgba(255,255,255,.85)}
+ body:has(.portal-shell) .theme-fab{bottom:76px}
+ .portal-tabs{padding:0 8px}
+}
+.platform-shell .topbar.platform-top{background:#fff!important;display:flex;align-items:center;gap:14px;padding:10px 20px}
+.platform-shell .topbar.platform-top .topbar-actions{margin-left:auto}
+.platform-shell .topbar-school h1{color:var(--navy)!important}.platform-shell .topbar-school p{color:var(--mut)!important}
+.platform-shell .hamburger span{background:var(--navy)}
+body:has(.platform-shell) .theme-fab{top:auto;bottom:18px;right:16px}
+html[data-bs-theme=dark] .platform-shell .topbar.platform-top{background:#151c28!important}
+@media(max-width:700px){.platform-shell .topbar.platform-top{background:linear-gradient(180deg,#5b21b6,#4c1d95)!important}.platform-shell .topbar-school h1,.platform-shell .topbar-school p{color:#fff!important}.platform-shell .hamburger span{background:#fff}body:has(.platform-shell) .theme-fab{display:none!important}}
+@media(max-width:700px){
+ .portal-shell>.topbar{flex-wrap:nowrap;gap:8px}
+ .portal-shell>.topbar .topbar-school{flex:1;min-width:0;text-align:left}
+ .portal-shell>.topbar .topbar-school h1{font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .portal-shell>.topbar .topbar-actions{margin-left:0;gap:6px}
+ body:has(.portal-shell) .theme-fab{display:none!important}
+}
+@media(max-width:700px){
+ .portal-shell>header.topbar{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:space-between!important;text-align:left!important}
+ .portal-shell>header.topbar .topbar-school{flex:1 1 auto!important;text-align:left!important}
+ .portal-shell>header.topbar .topbar-actions{flex:none!important}
+}
+.badge{display:inline-flex;align-items:center;align-self:center;white-space:nowrap;line-height:1.3;width:auto;height:auto}
+
+/* dark-mode fixes for the light-mode !important header rules above */
+html[data-bs-theme=dark] .ad .ad-panel>header h2,html[data-bs-theme=dark] .ad .ad-row-charts .ad-panel>header h2,html[data-bs-theme=dark] .gp>header h2{color:#bcd0f5!important}
+html[data-bs-theme=dark] .ad .ad-panel>header svg{color:#7fb0ff}
+html[data-bs-theme=dark] .ad .ad-row-charts .ad-panel>header{background:#151c28!important}
+html[data-bs-theme=dark] .topbar .theme-toggle{background:#26324a;color:#e6ecf8}
+html[data-bs-theme=dark] .platform-shell .topbar-school h1{color:#bcd0f5!important}
+html[data-bs-theme=dark] .platform-shell .hamburger span{background:#bcd0f5}
+html[data-bs-theme=dark] main.content>h1,html[data-bs-theme=dark] .card h2,html[data-bs-theme=dark] .card h3,html[data-bs-theme=dark] .stat-box .num,html[data-bs-theme=dark] .grid-4>.card h2{color:#dbe6fb}
+html[data-bs-theme=dark] .badge{filter:none}
+html[data-bs-theme=dark] .platform-shell .role-chip{background:#3b2a63!important;color:#e4d4ff!important}
+input[type=color],.form-control-color{height:40px!important;min-height:40px;padding:4px!important;cursor:pointer;background:#fff}
+html[data-bs-theme=dark] input[type=color]{background:#1b2433}
+
+/* result sheet is "paper": keep dark text on it in dark mode (the shell's dark text colours must not leak in) */
+html[data-bs-theme=dark] .rs-screen-wrap{color:#14213d}
+html[data-bs-theme=dark] .rs-screen-wrap :is(h1,h2,h3,h4,p,small,label,.rs-title,.rs-school){color:#0b2a6f}
+html[data-bs-theme=dark] .rs-screen-wrap tbody :is(td,th){color:#14213d}
