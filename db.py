@@ -4394,3 +4394,21 @@ def migration_088_v107_announcement_duration(conn):
 
 STEPS.append(("announcement_duration_v107", migration_088_v107_announcement_duration))
 
+def migration_089_v112_fee_payments(conn):
+    """V112: School Fees screen (v106 Modern Screens #89). One row per payment the school records; the totals shown on the
+    dashboard card still come from school_fee_summary, which the screen keeps in step."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS school_fee_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_id INTEGER NOT NULL,
+        student_id INTEGER,
+        amount REAL NOT NULL,
+        method TEXT,
+        paid_on TEXT,
+        note TEXT,
+        recorded_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_school_fee_payments_school ON school_fee_payments(school_id, id)")
+
+
+STEPS.append(("fee_payments_v112", migration_089_v112_fee_payments))
+

@@ -3261,6 +3261,92 @@ def set_staff_signup_code():
     return redirect(url_for("admin_school"))
 
 
+FEE_METHODS = ("Cash", "Transfer", "POS", "Cheque", "Other")
+
+
+def _fee_summary_row(conn, school_id):
+    row = conn.execute("SELECT id, label, expected_amount, collected_amount FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
+    if not row:
+        conn.execute("INSERT INTO school_fee_summary(school_id, label, expected_amount, collected_amount) VALUES (?,?,0,0)", (school_id, ""))
+        conn.commit()
+        row = conn.execute("SELECT id, label, expected_amount, collected_amount FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 1", (school_id,)).fetchone()
+    return row
+
+
+def _fee_amount(raw):
+    try:
+        v = float(str(raw or "").replace(",", "").strip())
+    except ValueError:
+        return None
+    if v != v or v in (float("inf"), float("-inf")) or v < 0 or v > 1e12:
+        return None
+    return round(v, 2)
+
+
+@app.route("/admin/fees", methods=["GET", "POST"])
+@login_required("admin", "sub_admin")
+def school_fees():
+    """V112 School Fees (v106 Modern Screens #89): expected vs collected, with a payments log. Same figures as the dashboard KPI."""
+    conn = get_db()
+    school_id = current_school_id()
+    actor = session.get("name") or session.get("username") or "Admin"
+    if request.method == "POST":
+        action = request.form.get("action", "")
+        row = _fee_summary_row(conn, school_id)
+        if action == "set_expected":
+            amt = _fee_amount(request.form.get("expected_amount"))
+            if amt is None:
+                flash("Enter a valid expected amount.", "error")
+            else:
+                conn.execute("UPDATE school_fee_summary SET expected_amount=?, label=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                             (amt, (request.form.get("label") or "").strip()[:80], row["id"]))
+                conn.commit()
+                log_audit(conn, "staff", actor, "fees_expected_set", f"expected={amt}", school_id=school_id)
+                flash("Expected fees updated.", "success")
+        elif action == "record_payment":
+            amt = _fee_amount(request.form.get("amount"))
+            sid = request.form.get("student_id", type=int)
+            method = request.form.get("method") if request.form.get("method") in FEE_METHODS else "Other"
+            paid_on = (request.form.get("paid_on") or "").strip()
+            try:
+                datetime.date.fromisoformat(paid_on)
+            except ValueError:
+                paid_on = datetime.date.today().isoformat()
+            ok_student = conn.execute("SELECT 1 FROM students s JOIN classes c ON c.id=s.class_id WHERE s.id=? AND c.school_id=?", (sid, school_id)).fetchone() if sid else None
+            if not amt or not ok_student:
+                flash("Choose a student and enter an amount greater than zero.", "error")
+            else:
+                conn.execute("INSERT INTO school_fee_payments(school_id, student_id, amount, method, paid_on, note, recorded_by) VALUES (?,?,?,?,?,?,?)",
+                             (school_id, sid, amt, method, paid_on, (request.form.get("note") or "").strip()[:200], actor))
+                conn.execute("UPDATE school_fee_summary SET collected_amount=collected_amount+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (amt, row["id"]))
+                conn.commit()
+                log_audit(conn, "staff", actor, "fee_payment_recorded", f"student={sid} amount={amt} method={method}", school_id=school_id)
+                flash("Payment recorded.", "success")
+        elif action == "delete_payment":
+            pid = request.form.get("payment_id", type=int)
+            pay = conn.execute("SELECT id, amount FROM school_fee_payments WHERE id=? AND school_id=?", (pid, school_id)).fetchone() if pid else None
+            if pay:
+                conn.execute("DELETE FROM school_fee_payments WHERE id=?", (pay["id"],))
+                conn.execute("UPDATE school_fee_summary SET collected_amount=CASE WHEN collected_amount>? THEN collected_amount-? ELSE 0 END, updated_at=CURRENT_TIMESTAMP WHERE id=?", (pay["amount"], pay["amount"], row["id"]))
+                conn.commit()
+                log_audit(conn, "staff", actor, "fee_payment_deleted", f"payment={pay['id']} amount={pay['amount']}", school_id=school_id)
+                flash("Payment removed.", "success")
+        conn.close()
+        return redirect(url_for("school_fees"))
+    row = _fee_summary_row(conn, school_id)
+    expected, collected = float(row["expected_amount"] or 0), float(row["collected_amount"] or 0)
+    payments = conn.execute(
+        "SELECT p.id, p.amount, p.method, p.paid_on, p.note, p.recorded_by, s.first_name, s.last_name, s.admission_no, c.name AS class_name "
+        "FROM school_fee_payments p LEFT JOIN students s ON s.id=p.student_id LEFT JOIN classes c ON c.id=s.class_id "
+        "WHERE p.school_id=? ORDER BY p.paid_on DESC, p.id DESC LIMIT 50", (school_id,)).fetchall()
+    students = conn.execute("SELECT s.id, s.first_name, s.last_name, s.admission_no, c.name AS class_name FROM students s JOIN classes c ON c.id=s.class_id "
+                            "WHERE c.school_id=? AND COALESCE(s.is_active,1)=1 ORDER BY c.name, s.last_name, s.first_name", (school_id,)).fetchall()
+    conn.close()
+    pct = round(min(100.0, collected * 100.0 / expected)) if expected else 0
+    return render_template("school_fees.html", expected=expected, collected=collected, outstanding=max(0.0, expected - collected), pct=pct,
+                           label=row["label"] or "", payments=payments, students=students, methods=FEE_METHODS, today=datetime.date.today().isoformat())
+
+
 @app.route("/admin/email", methods=["GET", "POST"])
 @login_required("admin", "sub_admin")
 def admin_email():
@@ -11983,36 +12069,6 @@ register_result_fields(app, dict(get_db=get_db, login_required=login_required, l
 
 # V104: freeze the look of results that were published before snapshots existed (once; only fills NULLs)
 freeze_legacy_published_sheets()
-
-@app.route("/admin/school-fees", methods=["GET", "POST"])
-@login_required("admin", "sub_admin")
-def admin_school_fees():
-    """v112: School Fees screen (v106 modern design). Reads/writes the existing school_fee_summary table that feeds the
-    dashboard School Fees card -- same figures, one source. There is still no per-student invoice/payment ledger."""
-    conn = get_db()
-    school_id = current_school_id()
-    if request.method == "POST":
-        try:
-            expected = max(0.0, float((request.form.get("expected_amount") or "0").replace(",", "")))
-            collected = max(0.0, float((request.form.get("collected_amount") or "0").replace(",", "")))
-        except ValueError:
-            conn.close(); flash("Enter valid amounts (numbers only).", "error"); return redirect(url_for("admin_school_fees"))
-        if collected > expected:
-            conn.close(); flash("Collected cannot be more than expected.", "error"); return redirect(url_for("admin_school_fees"))
-        label = (request.form.get("label") or "").strip()[:80]
-        conn.execute("INSERT INTO school_fee_summary (school_id, label, expected_amount, collected_amount) VALUES (?,?,?,?)", (school_id, label, expected, collected))
-        conn.commit(); conn.close()
-        flash("School fees figures saved. The dashboard card now shows them.", "success")
-        return redirect(url_for("admin_school_fees"))
-    rows = conn.execute("SELECT * FROM school_fee_summary WHERE school_id=? ORDER BY id DESC LIMIT 20", (school_id,)).fetchall()
-    conn.close()
-    cur = rows[0] if rows else None
-    expected = float(cur["expected_amount"]) if cur else 0.0
-    collected = float(cur["collected_amount"]) if cur else 0.0
-    pct = round(collected * 100 / expected, 1) if expected else 0.0
-    return render_template("admin_school_fees.html", cur=cur, rows=rows, expected=expected, collected=collected,
-                           outstanding=max(0.0, expected - collected), pct=pct)
-
 
 if __name__ == "__main__":
     debug_mode = os.environ.get("FLASK_DEBUG", "1") == "1"
