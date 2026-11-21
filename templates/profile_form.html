@@ -73,7 +73,7 @@
 .btn[disabled]{opacity:.6;cursor:wait}
 </style>
 <div class="pf-wrap">
-<h1>{{ title }}</h1>
+<div class="page-heading"><div><h1>{{ title }}</h1><p>Review and update your details.</p></div></div>
 {% if form_error or errors %}
 <div class="pf-summary" role="alert"><b>Nothing was saved.</b> {{ form_error or 'Please correct the following and save again — everything you entered has been kept:' }}
   {% set shown = errors|dictsort|rejectattr(0,'equalto','_form')|list %}{% if shown %}<ul>{% for k,v in shown %}<li><a href="#{{ 'f_' ~ k if not k.startswith('cf_') else k }}">{{ v }}</a></li>{% endfor %}</ul>{% endif %}

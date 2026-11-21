@@ -1,11 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
+<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">⚙</span> Settings</h1><p>Your account and shortcuts to school configuration</p></div></div>
 
 <div class="card">
     <h3>Your Account</h3>
-    <a class="btn btn-primary" href="{{ url_for('change_password') }}">Change Password</a>
+    <div class="settings-grid" style="margin-bottom:14px">
+      <a class="settings-tile" href="{{ url_for('change_password') }}"><span class="st-ico">🔒</span><div class="st-body"><strong>Change Password</strong><span>Update your login password</span></div></a>
+      {% if session.get('user_id') %}<a class="settings-tile" href="{{ url_for('staff_profile', user_id=session.get('user_id')) }}"><span class="st-ico teal">☺</span><div class="st-body"><strong>My Profile</strong><span>Name, photo and contact</span></div></a>{% endif %}
+    </div>
+    <div class="two-col-forms"><div>
 
     <details class="hlp"><summary class="hlp-t">Your username</summary>
     <p class="muted hlp-b" style="font-size:0.9rem; margin-top:1rem;">
@@ -21,6 +25,7 @@
         <button class="btn btn-primary" type="submit" style="margin-top:0.5rem;">Change Username</button>
     </form>
 
+    </div><div>
     <details class="hlp"><summary class="hlp-t">Why add this</summary>
     <p class="muted hlp-b" style="font-size:0.9rem; margin-top:1rem;">
         Add an email or phone number so you can also log in with either of them,
@@ -34,6 +39,7 @@
         <input type="text" name="phone" value="{{ me.phone or '' }}" class="form-control">
         <button class="btn btn-primary" type="submit" style="margin-top:0.5rem;">Save Contact Info</button>
     </form>
+    </div></div>
 </div>
 
 
@@ -41,9 +47,12 @@
 {% if session.get('role') in ['admin', 'sub_admin'] %}
 <div class="card">
     <h3>School Settings</h3>
-    <a class="btn btn-primary" href="{{ url_for('admin_school') }}">School Profile (name, logo, alignment, signup code)</a>
-    <a class="btn btn-primary" href="{{ url_for('admin_email') }}">Email Settings (SMTP for parent notifications)</a>
-    <a class="btn btn-primary" href="{{ url_for('admin_promote') }}">Promote Students</a>
+    <div class="settings-grid">
+      <a class="settings-tile" href="{{ url_for('admin_school') }}"><span class="st-ico">🏫</span><div class="st-body"><strong>School Profile</strong><span>Name, logo, alignment, signup code</span></div></a>
+      <a class="settings-tile" href="{{ url_for('admin_email') }}"><span class="st-ico amber">📧</span><div class="st-body"><strong>Email Settings</strong><span>SMTP for parent notifications</span></div></a>
+      <a class="settings-tile" href="{{ url_for('admin_promote') }}"><span class="st-ico green">↗</span><div class="st-body"><strong>Promote Students</strong><span>Move students to the next class</span></div></a>
+      {% if session.get('role') == 'admin' %}<a class="settings-tile" href="{{ url_for('admin_subadmins') }}"><span class="st-ico purple">👤</span><div class="st-body"><strong>Sub-Admins</strong><span>Manage delegated administrators</span></div></a>{% endif %}
+    </div>
 </div>
 
 <div class="card" style="border-left: 4px solid var(--gold);">
@@ -66,11 +75,6 @@
 {% endif %}
 
 {% if session.get('role') == 'admin' %}
-<div class="card">
-    <h3>Sub-Admins</h3>
-    <a class="btn btn-primary" href="{{ url_for('admin_subadmins') }}">Manage Sub-Admins</a>
-</div>
-
 <div class="card" style="border-left: 4px solid #b3261e;">
     <h3>Delete Account</h3>
     <p style="font-size:0.9rem; color:#666;">

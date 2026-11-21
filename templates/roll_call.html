@@ -1,21 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Roll Call{% endblock %}
 {% block content %}
-<h1>Roll Call — {{ class_row.name }}</h1>
-<p style="color:#666; font-size:0.9rem;">
-    Attendance is recorded for <strong>today only</strong> ({{ now_label }}, school time).
-</p>
+<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">✓</span> Roll Call — {{ class_row.name }}</h1>
+<p>{{ now_label }} · recorded for <strong>today only</strong> (school time) · mark present, absent, late or excused</p></div>
+<div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('class_register', class_id=class_row.id) }}">Class register</a><a class="btn btn-secondary" href="{{ url_for('roll_call_history', class_id=class_row.id) }}">View Attendance History</a></div></div>
 <details class="hlp"><summary class="hlp-t">How this works</summary>
 <p class="muted hlp-b" style="font-size:0.9rem;">
     The date and time come from the school server — the
     device clock and any date you type are ignored. Everyone defaults to Present; switch the students who are absent, late or excused, then save.
 </p></details>
 
+{% if students %}<div class="kpi-row stat-grid" id="rcKpi" aria-live="polite">
+  <div class="stat-box"><div class="label">Present</div><div class="num" id="rcPresent" style="color:#059669">0</div></div>
+  <div class="stat-box"><div class="label">Absent</div><div class="num" id="rcAbsent" style="color:#dc2626">0</div></div>
+  <div class="stat-box"><div class="label">Late</div><div class="num" id="rcLate" style="color:#d97706">0</div></div>
+  <div class="stat-box"><div class="label">Excused</div><div class="num" id="rcExcused" style="color:#4f46e5">0</div></div>
+  <div class="stat-box"><div class="label">Total</div><div class="num" id="rcTotal">{{ students|length }}</div></div>
+</div>{% endif %}
 <div class="card">
     <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
         <span class="badge">Today: {{ today|dmy }}</span>
-        <a class="btn btn-primary btn-sm" href="{{ url_for('class_register', class_id=class_row.id) }}">Class register</a>
-        <a class="btn btn-primary btn-sm" style="margin-left:auto;" href="{{ url_for('roll_call_history', class_id=class_row.id) }}">View Attendance History</a>
     </div>
 
     {% if not students %}
@@ -28,14 +32,14 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if recorded %}<input type="hidden" name="mode" value="correct">{% endif %}
         <div class="table-responsive"><table class="table table-hover align-middle">
-            <tr><th>Admission No.</th><th>Student</th><th>Present</th><th>Absent</th><th>Late</th><th>Excused</th></tr>
+            <tr><th>Admission No.</th><th>Student</th><th class="ta-c">Present</th><th class="ta-c">Absent</th><th class="ta-c">Late</th><th class="ta-c">Excused</th></tr>
             {% for s in students %}
             {% set current = existing.get(s.id, 'present') %}
             <tr>
                 <td>{{ s.admission_no }}</td>
                 <td>{{ student_full_name(s) }}</td>
                 {% for st in statuses %}
-                <td><input type="radio" name="status_{{ s.id }}" value="{{ st }}" {% if current == st %}checked{% endif %} class="form-check-input"></td>
+                <td class="ta-c"><input type="radio" name="status_{{ s.id }}" value="{{ st }}" {% if current == st %}checked{% endif %} class="form-check-input"></td>
                 {% endfor %}
             </tr>
             {% endfor %}
@@ -49,4 +53,8 @@
     </form>
     {% endif %}
 </div>
+<script>(function(){var f=document.querySelector('form input[type=radio][name^="status_"]');if(!f)return;var form=f.form;
+function upd(){var c={present:0,absent:0,late:0,excused:0};form.querySelectorAll('input[type=radio][name^="status_"]:checked').forEach(function(r){if(c.hasOwnProperty(r.value))c[r.value]++;});
+['present','absent','late','excused'].forEach(function(k){var e=document.getElementById('rc'+k.charAt(0).toUpperCase()+k.slice(1));if(e)e.textContent=c[k];});}
+form.addEventListener('change',upd);upd();})();</script>
 {% endblock %}
