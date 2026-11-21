@@ -118,8 +118,8 @@ dash = html(ADMIN.get("/admin/analytics"))
 check("admin dashboard has exactly one shared gender panel", dash.count('data-gender-panel') == 1, dash.count('data-gender-panel'))
 check("admin dashboard shows 2 boys", (gp(dash) or (None,))[0] == 2, gp(dash))
 check("admin dashboard shows 1 girl", (gp(dash) or (None, None))[1] == 1, gp(dash))
-check("Male label present", ">Male<" in dash)
-check("Female label present", ">Female<" in dash)
+check("Male label present (V112 v106 legend: 'Male — n (x%)')", "Male —" in dash)
+check("Female label present (V112 v106 legend)", "Female —" in dash)
 
 print("=== 2) Figures are tenant-scoped -- a second school's admin sees only its own ===")
 

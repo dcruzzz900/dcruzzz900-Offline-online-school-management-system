@@ -71,14 +71,15 @@ check("phone: bottom tab bar with Home / Reports / Notifications / More for staf
 sql_ = get_db(); sql_.execute("UPDATE schools SET name='Government Secondary School Goni-Gora', school_address='No 10 wake Street, Goni-Gora, Bauchi State' WHERE id=1"); sql_.commit(); sql_.close()
 d_ = html(ADMIN.get("/dashboard"))
 check("top bar shows the school name and address", 'class="topbar-school top-school"><h1>Government Secondary School Goni-Gora</h1><p>No 10 wake Street, Goni-Gora, Bauchi State</p>' in d_, re.findall(r'class="topbar-school.{0,200}', d_)[:1])
-check("one live clock in the banner plus the phone clock bar", d.count('data-school-ms="') == 1)
+check("one live school-timezone clock in the v106 banner (V112: tz + UTC anchor in data-config)", d.count('data-welcome-header') == 1 and '"tz"' in d and '"utc_ms"' in d)
 css = open(os.path.join(ROOT, "static/css/admin-dashboard.css")).read()
 check("phone/tablet CSS exists (breakpoints 1280 / 700 / 560)", all(x in css for x in ("max-width:1280px", "max-width:700px", "max-width:560px")))
 check("the approved colours are used (blue/green/purple/cyan/orange gradients)", all(x in css for x in ("#1d78f2", "#27c25a", "#a259f0", "#1ec3f7", "#ffae1a", "#3ed45e")))
 
 # ---- other dashboards: Quick Access instead of Quick Actions
 t = html(FT.get("/dashboard"))
-check("teacher dashboard shows Quick Access and no Quick Actions", "Quick Access" in t and "Quick Actions" not in t and "qa-tile" in t)
+_qa_block = t.split('id="quick-access"', 1)[-1].split("</article>", 1)[0]
+check("teacher dashboard shows Quick Access (exactly 7 tiles, V112) and no Quick Actions", "Quick Access" in t and "Quick Actions" not in t and 'data-qa-count="7"' in t and _qa_block.count("<a ") == 7, _qa_block.count("<a "))
 check("teacher Quick Access has no Staff Attendance, has Student Attendance", "Staff Attendance" not in t and "Student Attendance" in t)
 sub = html(ADMIN.get("/dashboard?x=1"))
 check("sub-pages are unaffected by the dashboard styles (settings page still renders)", ADMIN.get("/admin/result-display-settings").status_code == 200)

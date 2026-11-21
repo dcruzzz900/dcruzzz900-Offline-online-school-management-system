@@ -140,7 +140,7 @@ adash4 = html(ADMIN.get("/dashboard"))
 check("a score entry shows up in the admin feed", "Score entered" in adash4 or "Score " in adash4, adash4)
 
 tdash = html(TEACHER.get("/dashboard"))
-check("Recent Class Activities panel present on the teacher dashboard", "Recent Class Activities" in tdash)
+check("Recent Activities panel present on the teacher dashboard (V112 v106 name)", "Recent Activities" in tdash)
 check("the score entry for the teacher's own class appears there too", "Score entered" in tdash or "Score " in tdash, tdash)
 
 print("=== 5) Teacher's feed is scoped to accessible classes only ===")
