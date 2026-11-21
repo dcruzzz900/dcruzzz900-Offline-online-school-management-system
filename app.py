@@ -2960,6 +2960,69 @@ def admin_dashboard_extras(conn, school_id, term, ov):
     return x
 
 
+def _svg_bars(items, vmax, base_y, height, x0, step, width, y_top):
+    """Pure geometry for the v106 SVG bar charts: items = [(label, value)]; returns dicts with x, cx, y, h, v, label."""
+    out = []
+    for i, (label, v) in enumerate(items):
+        v = max(0.0, min(float(v or 0), vmax)); h = round(height * v / vmax, 1)
+        out.append({"x": x0 + i * step, "cx": x0 + i * step + width / 2, "y": round(base_y - h, 1), "h": h, "v": round(v, 1) if v % 1 else int(v), "label": label})
+    return out
+
+
+def teacher_dashboard_extras(conn, school_id, term, class_ids, assignments, class_gender, chart, attendance, user_id):
+    """v112: figures for the v106 teacher dashboard -- ALL scoped to the classes this staff member can see, real DB data only:
+    KPI numbers, Subject Performance, Pass/Fail distribution, Grade Distribution, chart geometry, the 7 Quick Access tiles."""
+    x = {"students": sum((g["total"] if g else 0) for g in (class_gender or {}).values()), "scores_pending": 0}
+    palette = ["#1a6fe8", "#3b82f6", "#60a5fa", "#2563eb", "#1d4ed8", "#0a2a6b"]
+    # scores still to enter for this term (assigned class+subject x active students without a score row)
+    if term:
+        for a in assignments or []:
+            x["scores_pending"] += conn.execute(
+                "SELECT COUNT(*) FROM students s WHERE s.class_id=? AND s.is_active=1 AND NOT EXISTS "
+                "(SELECT 1 FROM scores sc WHERE sc.student_id=s.id AND sc.subject_id=? AND sc.term_id=?)",
+                (a["class_id"], a["subject_id"], term["id"])).fetchone()[0]
+    # class performance bars (avg %)
+    cb = [(c["class_name"], c["avg_score"] or 0) for c in (chart or [])]
+    step = max(60, min(100, 340 // max(1, len(cb)))); x0 = 80 + max(0, (340 - step * len(cb))) // 2 if cb else 80
+    x["class_bars"] = [dict(b, fill=palette[i % len(palette)]) for i, b in enumerate(_svg_bars(cb, 100, 160, 140, x0, step, 44, 20))]
+    # attendance bars (40-100% axis so the differences are visible)
+    ab = [(a["label"], a["rate"] if a["rate"] is not None else 0) for a in (attendance or [])]
+    stp = max(36, min(45, 240 // max(1, len(ab))))
+    bars = []
+    for i, (lab, v) in enumerate(ab):
+        v = max(40.0, min(100.0, float(v))); h = round(90.0 * (v - 40) / 60.0, 1)
+        bars.append({"x": 40 + i * stp, "cx": 40 + i * stp + 14, "y": round(105 - h, 1), "h": h, "v": int(round(v)) if ab[i][1] else 0, "label": lab,
+                     "fill": "#27c25a" if v >= 90 else "#ffae1a" if v >= 80 else "#ef4444"})
+    x["att_bars"] = bars
+    # score-level analytics for the visible classes
+    sp, dist, per_student = {}, {}, {}
+    fail = _fail_grade(conn, school_id)
+    scale = [r["grade"] for r in conn.execute("SELECT grade FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()]
+    dist = {g: 0 for g in scale}
+    if term and class_ids:
+        ph = ",".join("?" * len(class_ids))
+        rows = conn.execute(
+            "SELECT sc.student_id, sub.name AS subject, sc.ca1, sc.ca2, sc.ca3, sc.exam FROM scores sc "
+            "JOIN students s ON s.id=sc.student_id AND s.is_active=1 "
+            "JOIN class_subjects cs ON cs.class_id=s.class_id AND cs.subject_id=sc.subject_id "
+            "JOIN subjects sub ON sub.id=sc.subject_id "
+            f"WHERE sc.term_id=? AND s.class_id IN ({ph}) AND s.school_id=?", (term["id"], *class_ids, school_id)).fetchall()
+        for r in rows:
+            tot = float(compute_total(r["ca1"], r["ca2"], r["exam"], r["ca3"]) or 0)
+            e = sp.setdefault(r["subject"], {"sum": 0.0, "n": 0, "pass": 0}); e["sum"] += tot; e["n"] += 1
+            g, _ = grade_for(tot, conn, school_id)
+            if not fail or g != fail: e["pass"] += 1
+            ps = per_student.setdefault(r["student_id"], [0.0, 0]); ps[0] += tot; ps[1] += 1
+        for tot, n in per_student.values():
+            g, _ = grade_for(tot / n, conn, school_id); dist[g] = dist.get(g, 0) + 1
+    subj = sorted(({"name": k, "avg": round(v["sum"] / v["n"], 1), "pass": round(v["pass"] * 100.0 / v["n"]), "n": v["n"]} for k, v in sp.items()), key=lambda d: -d["avg"])
+    x["subjects"] = subj
+    n_assessed = len(per_student)
+    x["grades"] = [{"grade": g, "pct": round(c * 100.0 / n_assessed) if n_assessed else 0, "cls": "g-" + g.lower() if len(g) == 1 and g.lower() in "abcdf" else "g-c"} for g, c in dist.items() if g != "-"]
+    x["n_assessed"] = n_assessed
+    return x
+
+
 @app.route("/dashboard")
 @login_required()
 def dashboard():
@@ -3043,9 +3106,39 @@ def dashboard():
         class_performance_chart = all_classes_performance(conn, school_id, term["id"], class_ids=_class_ids) if term else []
         role_chart_specs = role_charts.teaching_specs(conn, school_id, term, _class_ids, class_term_result_stats, compute_total)
         gender_stats = student_gender_stats(conn, "c.id IN ({})".format(",".join("?" * len(_class_ids)) or "NULL"), tuple(_class_ids)) if _class_ids else {"total": 0, "boys": 0, "girls": 0, "unspecified": 0}
+        tx = teacher_dashboard_extras(conn, school_id, term, _class_ids, assignments, class_gender, class_performance_chart, attendance_trend, session["user_id"])
+        _perf = [p for p in class_performance.values() if p]
+        tx["pass_fail"] = {k: sum((p.get(k) or 0) for p in _perf) for k in ("passed", "failed", "not_assessed")}
+        # The 7 Quick Access tiles (exactly seven, always, in this order). Every target page still enforces its own permissions.
+        _ft = list(form_teacher_class_ids(conn, session["user_id"]) or [])
+        _pend = next((a for a in (assignments or []) if term and conn.execute(
+            "SELECT 1 FROM students s WHERE s.class_id=? AND s.is_active=1 AND NOT EXISTS (SELECT 1 FROM scores sc WHERE sc.student_id=s.id AND sc.subject_id=? AND sc.term_id=?) LIMIT 1",
+            (a["class_id"], a["subject_id"], term["id"])).fetchone()), None) or ((assignments or [None])[0])
+        _awaiting = conn.execute("SELECT COUNT(*) FROM result_publication WHERE school_id=? AND term_id=? AND status IN ('submitted','under_review')",
+                                 (school_id, term["id"] if term else 0)).fetchone()[0]
+        try:
+            import v63_core as _core
+            now_local = _core.school_now(conn, school_id)
+        except Exception:
+            now_local = datetime.datetime.now()
+        try:
+            _core_today = _core.school_today(conn, school_id)
+        except Exception:
+            _core_today = datetime.date.today().isoformat()
+        tx["tiles"] = [
+            {"label": "Score Entry", "icon": "✏️", "badge": tx["scores_pending"] or "",
+             "url": url_for("score_entry", class_id=_pend["class_id"], subject_id=_pend["subject_id"]) if _pend else url_for("my_class")},
+            {"label": "Take Class Attendance", "icon": "✅", "badge": "", "state": (("Today — Taken" if conn.execute("SELECT 1 FROM attendance_records WHERE class_id=? AND date=? LIMIT 1", (_ft[0], _core_today)).fetchone() else "Today — Not Taken") if (_ft and term) else ""), "url": url_for("roll_call", class_id=_ft[0]) if _ft else url_for("student_attendance_hub")},
+            {"label": "Results Approval", "icon": "☑️", "badge": _awaiting or "", "url": url_for("result_workflow")},
+            {"label": "Show Results", "icon": "📋", "badge": "", "url": url_for("classes_list")},
+            {"label": "View Timetable", "icon": "🗓️", "badge": "", "url": url_for("timetable_hub")},
+            {"label": "My Profile", "icon": "🙂", "badge": "", "url": url_for("my_profile")},
+            {"label": "Learning Materials", "icon": "📘", "badge": "", "url": url_for("materials")},
+        ]
         conn.close()
         return render_template(
-            "teacher_dashboard.html", filter_cfg=dashboard_filter_cfg(term), role_charts=role_chart_specs, term=term, assignments=assignments,
+            "teacher_dashboard.html", tx=tx, now_local=now_local,
+            school_local_ms=int(now_local.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if now_local else 0, filter_cfg=dashboard_filter_cfg(term), role_charts=role_chart_specs, term=term, assignments=assignments,
             position_label=POSITION_LABELS.get(session.get("position")),
             result_classes=result_classes, is_form_teacher=is_form_teacher,
             class_gender=class_gender, class_performance=class_performance, class_trend=class_trend,
