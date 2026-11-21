@@ -21,8 +21,7 @@
   function sidebar(){
     var btn=document.getElementById('sidebarToggle'),side=document.querySelector('.app-sidebar');
     if(!btn||!side)return;
-    if(btn.classList.contains('hamburger'))return; /* v106 modern shell: static/js/modern-shell.js owns the drawer */
-    var small=window.matchMedia('(max-width:1000px)'),back=document.createElement('div');
+    var small=window.matchMedia('(min-width:0px)'),back=document.createElement('div');
     back.className='sidebar-backdrop';document.body.appendChild(back);
     function set(open){
       side.classList.toggle('open',open);back.classList.toggle('show',open&&small.matches);
@@ -40,5 +39,18 @@
     if(small.addEventListener)small.addEventListener('change',onChange);else if(small.addListener)small.addListener(onChange);
     window.addEventListener('resize',onChange);window.addEventListener('pageshow',function(){set(false);});
   }
-  document.addEventListener('DOMContentLoaded',function(){greet();menu();sidebar();});
+  /* v106 modern shell: highlight the current page in the sidebar / top nav */
+  function active(){
+    var path=location.pathname.replace(/\/+$/,'')||'/',best=null,len=-1;
+    document.querySelectorAll('.app-sidebar nav a[href],.student-top nav a[href],.parent-top nav a[href]').forEach(function(a){
+      var u;try{u=new URL(a.getAttribute('href'),location.href);}catch(e){return;}
+      if(u.origin!==location.origin||u.hash)return;
+      var p=u.pathname.replace(/\/+$/,'')||'/';
+      if(p===path||(p!=='/'&&path.indexOf(p+'/')===0)){if(p.length>len){len=p.length;best=a;}}
+    });
+    if(best){best.classList.add('active');best.setAttribute('aria-current','page');}
+  }
+  function clock(){var c=document.getElementById('liveClock'),a=document.querySelector('.topbar .top-actions');
+    if(c&&a&&!c.dataset.moved){c.dataset.moved='1';c.classList.add('in-topbar');a.insertBefore(c,a.firstChild);}}
+  document.addEventListener('DOMContentLoaded',function(){greet();menu();sidebar();active();clock();});
 })();
