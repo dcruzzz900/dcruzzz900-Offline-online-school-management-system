@@ -2,7 +2,7 @@
 
 Goal: every screen uses the exact v106 markup/CSS (`modern.css`) with live v111 data and forms. A converted template sets `{% set v106_page = true %}`, which stops legacy v111 CSS loading on that page so nothing leaks in.
 
-**Screens: 91 in v106. Converted: 3. Remaining: 88.**
+**Screens: 91 in v106. Converted: 4. Remaining: 87.**
 
 | v106 screen | v111 template | status |
 |---|---|---|
@@ -22,7 +22,7 @@ Goal: every screen uses the exact v106 markup/CSS (`modern.css`) with live v111 
 | 13-grading | admin_grading | styled via shared layer only – NOT yet converted |
 | 14-promote | admin_promote | styled via shared layer only – NOT yet converted |
 | 15-analytics | admin_analytics | styled via shared layer only – NOT yet converted |
-| 16-teacher-dashboard | teacher_dashboard | styled via shared layer only – NOT yet converted |
+| 16-teacher-dashboard | teacher_dashboard | EXACT v106 markup + live data + 7 Quick Access tiles + Subject/Pass-Fail/Top/Recent analytics (done)|
 | 17-student-dashboard | student_dashboard | styled via shared layer only – NOT yet converted |
 | 18-result-workflow | result_workflow | styled via shared layer only – NOT yet converted |
 | 19-attendance | roll_call | styled via shared layer only – NOT yet converted |
