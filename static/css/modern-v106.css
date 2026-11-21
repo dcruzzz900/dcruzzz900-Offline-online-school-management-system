@@ -76,41 +76,41 @@ html[data-bs-theme="dark"] .topbar .top-bell{color:var(--text)}
 @media(max-width:1100px){.topbar .top-search{display:none}}
 
 /* ---- 3. Page chrome ---- */
-.app-main .container{max-width:1500px;padding:18px 20px 40px}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .container{max-width:1500px;margin-left:auto;margin-right:auto;padding:18px 20px 40px}
 .page-heading,.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-.page-heading h1,.page-head h1,.app-main .container>h1{font-size:1.35rem;font-weight:800;color:var(--m-head);margin:0;letter-spacing:-.01em}
-html[data-bs-theme="dark"] .page-heading h1,html[data-bs-theme="dark"] .page-head h1,html[data-bs-theme="dark"] .app-main .container>h1{color:var(--text)}
+.page-heading h1,.page-head h1,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .container>h1{font-size:1.35rem;font-weight:800;color:var(--m-head);margin:0;letter-spacing:-.01em}
+html[data-bs-theme="dark"] .page-heading h1,html[data-bs-theme="dark"] .page-head h1,html[data-bs-theme="dark"] :is(.app-main,.platform-shell,.parent-shell,.student-shell) .container>h1{color:var(--text)}
 .page-heading p,.page-head p{color:var(--muted);font-size:.9rem;margin:2px 0 0}
 .eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--m-accent)}
 .section-title{font-size:.95rem;font-weight:700;color:var(--m-head)}
 html[data-bs-theme="dark"] .section-title{color:var(--text)}
 
 /* ---- 4. Cards ---- */
-.app-main .card,.app-main .panel,.app-main .chart-card{
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .panel,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .chart-card{
   background:var(--surface,#fff);border:1px solid var(--border);border-radius:var(--m-radius);box-shadow:var(--m-shadow);
 }
-.app-main .card>.card-header,.app-main .panel>header{background:transparent;border-bottom:1px solid var(--border);font-weight:700;color:var(--m-head)}
-html[data-bs-theme="dark"] .app-main .card>.card-header{color:var(--text)}
-.app-main .card h2,.app-main .card h3{color:var(--m-head);font-weight:700}
-html[data-bs-theme="dark"] .app-main .card h2,html[data-bs-theme="dark"] .app-main .card h3{color:var(--text)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card>.card-header,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .panel>header{background:transparent;border-bottom:1px solid var(--border);font-weight:700;color:var(--m-head)}
+html[data-bs-theme="dark"] :is(.app-main,.platform-shell,.parent-shell,.student-shell) .card>.card-header{color:var(--text)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card h2,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card h3{color:var(--m-head);font-weight:700}
+html[data-bs-theme="dark"] :is(.app-main,.platform-shell,.parent-shell,.student-shell) .card h2,html[data-bs-theme="dark"] :is(.app-main,.platform-shell,.parent-shell,.student-shell) .card h3{color:var(--text)}
 
 /* ---- 5. Tables: coloured header, soft rows (not the printed result sheets) ---- */
-.app-main table.table,.app-main .table-responsive>table,.app-main .table-wrap>table{
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-responsive>table,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap>table{
   --bs-table-bg:transparent;width:100%;border-collapse:separate;border-spacing:0;font-size:.875rem;
 }
-.app-main table.table thead th,.app-main .table-responsive>table thead th,.app-main .table-wrap>table thead th{
-  background:var(--m-head);color:var(--m-head-ink);font-weight:600;white-space:nowrap;border:0;padding:.65rem .8rem;
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table thead th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-responsive>table thead th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap>table thead th{
+  background:var(--m-head);color:var(--m-head-ink);font-weight:600;white-space:nowrap;border:0;padding:10px 12px;
 }
-.app-main table.table thead th:first-child{border-top-left-radius:10px}.app-main table.table thead th:last-child{border-top-right-radius:10px}
-.app-main table.table td,.app-main .table-responsive>table td,.app-main .table-wrap>table td{padding:.65rem .8rem;border:0;border-bottom:1px solid var(--border);vertical-align:middle}
-.app-main table.table tbody tr:nth-child(even),.app-main .table-wrap>table tbody tr:nth-child(even){background:transparent}
-.app-main table.table.table-hover tbody tr:hover>*,.app-main .table-wrap>table tbody tr:hover>*{background:var(--m-row-hover);--bs-table-accent-bg:transparent}
-.app-main table.table tbody tr:last-child td{border-bottom:0}
-.app-main table.table caption{display:none}
-.app-main .table-responsive,.app-main .table-wrap{border-radius:var(--m-radius-sm)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table thead th:first-child{border-top-left-radius:10px}:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table thead th:last-child{border-top-right-radius:10px}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table td,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-responsive>table td,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap>table td{padding:10px 12px;border:0;border-bottom:1px solid var(--border);vertical-align:middle}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table tbody tr:nth-child(even),:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap>table tbody tr:nth-child(even){background:transparent}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table.table-hover tbody tr:hover>*,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap>table tbody tr:hover>*{background:var(--m-row-hover);--bs-table-accent-bg:transparent}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table tbody tr:last-child td{border-bottom:0}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table caption{display:none}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-responsive,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .table-wrap{border-radius:var(--m-radius-sm)}
 
 /* ---- 6. Buttons ---- */
-.app-main .btn,.hub-auth-screen .btn,.btn{border-radius:var(--m-radius-sm);font-weight:600;transition:transform .1s,box-shadow .15s,background .15s}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .btn,.hub-auth-screen .btn,.btn{border-radius:var(--m-radius-sm);font-weight:600;transition:transform .1s,box-shadow .15s,background .15s}
 .btn:hover{transform:translateY(-1px)}.btn:active{transform:none}
 .btn-primary{background:var(--m-accent);border-color:var(--m-accent);color:var(--m-accent-ink);box-shadow:0 3px 10px rgba(var(--theme-primary-rgb,26,111,232),.35)}
 .btn-primary:hover,.btn-primary:focus{background:color-mix(in srgb,var(--m-accent) 86%,#000);border-color:color-mix(in srgb,var(--m-accent) 86%,#000);color:var(--m-accent-ink)}
@@ -120,18 +120,19 @@ html[data-bs-theme="dark"] .btn-secondary,html[data-bs-theme="dark"] .btn-outlin
 .btn-sm,.btn-small{padding:.35rem .75rem;font-size:.8rem}
 
 /* ---- 7. Forms ---- */
-.form-control,.form-select,.app-main input[type=text],.app-main input[type=password],.app-main input[type=number],.app-main input[type=email],.app-main input[type=date],.app-main select,.app-main textarea{
+.form-control,.form-select,:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=text],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=password],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=number],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=email],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=date],:is(.app-main,.platform-shell,.parent-shell,.student-shell) select,:is(.app-main,.platform-shell,.parent-shell,.student-shell) textarea{
   border:1.5px solid var(--m-input-border);border-radius:var(--m-radius-sm);background-color:var(--surface,#fff);color:var(--text);
 }
-.form-control:focus,.form-select:focus,.app-main input:focus,.app-main select:focus,.app-main textarea:focus{
+.form-control:focus,.form-select:focus,:is(.app-main,.platform-shell,.parent-shell,.student-shell) input:focus,:is(.app-main,.platform-shell,.parent-shell,.student-shell) select:focus,:is(.app-main,.platform-shell,.parent-shell,.student-shell) textarea:focus{
   outline:none;border-color:var(--m-accent);box-shadow:0 0 0 3px rgba(var(--theme-primary-rgb,26,111,232),.16);
 }
-.app-main label,.form-label{font-size:.8rem;font-weight:600;color:var(--muted)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) label,.form-label{font-size:.8rem;font-weight:600;color:var(--muted)}
 .form-check-input:checked{background-color:var(--m-accent);border-color:var(--m-accent)}
 
 /* ---- 8. Badges, alerts, stat tiles ---- */
 .badge{border-radius:999px;font-weight:700;font-size:.72rem;padding:.3em .7em}
-.badge[class="badge"]{background:var(--m-chip-bg);color:var(--m-chip-ink)}
+.badge[class="badge"]:not([style]){background:var(--m-chip-bg);color:var(--m-chip-ink)}
+.badge[style*="background"]{color:#fff}
 .badge.m-ok{background:#dcfce7;color:#166534}.badge.m-warn{background:#fef3c7;color:#92400e}
 html[data-bs-theme="dark"] .badge.m-ok{background:rgba(34,197,94,.18);color:#bbf7d0}html[data-bs-theme="dark"] .badge.m-warn{background:rgba(245,158,11,.18);color:#fde68a}
 .alert{border-radius:var(--m-radius-sm);border-width:1px}
@@ -169,7 +170,7 @@ html[data-bs-theme="dark"] .stat-box .num{color:var(--text)}
 /* ---- 11. Phone: bottom tab bar + compact header (v106 mobile screens) ---- */
 @media(max-width:700px){
   body .app-main .topbar{padding:8px 10px;gap:8px}
-  .app-main .container{padding:14px 12px 96px}
+  :is(.app-main,.platform-shell,.parent-shell,.student-shell) .container{padding:14px 12px 96px}
   .page-heading h1,.page-head h1{font-size:1.15rem}
   .mobile-tabs a.on,.mobile-tabs a.on span{color:var(--m-accent)}
 }
@@ -192,9 +193,9 @@ details.m-fold[open]>summary{border-bottom:1px solid var(--border)}
 .kpi-row.stat-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .filters .m-filter-label{margin:0}
-.app-main input[type=email],.app-main input[type=tel],.app-main input[type=date],.app-main input[type=search]:not(#topSearchInput){width:100%}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=email],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=tel],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=date],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=search]:not(#topSearchInput){width:100%}
 .page-actions{display:flex;gap:8px;flex-wrap:wrap}
-.app-main input[type=email],.app-main input[type=tel],.app-main input[type=date],.app-main input[type=time]{min-height:40px;padding:.5rem .75rem}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=email],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=tel],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=date],:is(.app-main,.platform-shell,.parent-shell,.student-shell) input[type=time]{min-height:40px;padding:.5rem .75rem}
 }
 
 @media screen{
@@ -215,8 +216,249 @@ details.m-fold[open]>summary{border-bottom:1px solid var(--border)}
 .report-grid>.card{margin:0}
 }
 
-@media screen{.ta-c{text-align:center!important}.app-main td.ta-c input[type=radio]{width:18px;height:18px;cursor:pointer}}
+@media screen{.ta-c{text-align:center!important}:is(.app-main,.platform-shell,.parent-shell,.student-shell) td.ta-c input[type=radio]{width:18px;height:18px;cursor:pointer}}
 
 @media screen{.m-narrow{max-width:860px;margin:0 auto}.m-narrow .card{max-width:none!important}}
 
 @media screen{.pf-wrap{margin-left:auto;margin-right:auto}}
+
+@media screen{
+/* Super-admin bar: grow with its menu (style.css pinned it to 72px, so the menu row spilled onto the page) */
+.platform-top{height:auto!important;min-height:72px;flex-wrap:wrap;row-gap:6px;padding-top:10px;padding-bottom:10px;align-items:center}
+.platform-top nav{width:100%!important;max-width:100%!important;max-height:none!important;overflow:visible!important;flex-wrap:wrap;margin-left:0;justify-content:flex-start}
+.platform-top nav a{color:rgba(255,255,255,.92)!important;font-size:.9rem}
+.platform-top nav a:hover{background:rgba(255,255,255,.16)!important;color:#fff!important}
+.platform-top .brand b{color:#fff}.platform-top .brand small{color:rgba(255,255,255,.7)}
+.platform-nav-toggle{color:#fff;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.08);border-radius:10px;display:inline-block;margin-left:auto}
+.platform-top.nav-collapsed nav{display:none}
+}
+
+@media screen{
+.platform-top nav a.active,.platform-top nav a[aria-current="page"]{background:#fff!important;color:var(--m-head)!important;box-shadow:none}
+}
+@media screen and (min-width:900px){
+.platform-top{padding-right:18px!important}
+.platform-top .platform-nav-toggle{margin-right:232px}
+}
+
+@media screen{
+/* tables written without <thead> (first row of <th>) get the same coloured header */
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table>tbody>tr:first-child>th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table>tr:first-child>th{background:var(--m-head);color:var(--m-head-ink);font-weight:600;white-space:nowrap;border:0;padding:10px 12px}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table th{border-left:0;border-right:0}
+}
+
+@media screen{
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table thead th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table>tbody>tr:first-child>th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table>tr:first-child>th{background:var(--m-head)!important;color:var(--m-head-ink)!important;border:0!important}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table td{border-left:0!important;border-right:0!important;border-top:0!important;border-bottom:1px solid var(--border)!important}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table tbody tr:last-child td{border-bottom:0!important}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table th{border-left:0!important;border-right:0!important}
+}
+
+@media screen{.platform-shell .container{max-width:1280px}}
+
+/* ==========================================================================
+   V112 pixel alignment pass - values copied from v106 css/modern.css
+   ========================================================================== */
+:root{--fs-root:15px;--app-font:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --ink:#12234a;--text:#12234a;--muted:#5b6b88;--mut:#5b6b88;--border:#e3e9f3;--line:#e3e9f3;--bg:#eef2f8;
+  --m-radius:14px;--m-shadow:0 5px 14px rgba(20,40,90,.12);--m-input-border:#c5d0e6}
+@media screen{
+html body{font-size:1rem;line-height:1.45;font-family:var(--app-font)}
+html:not([data-bs-theme="dark"]) body{background:#eef2f8;color:#12234a}
+/* ---- top bar ---- */
+body .app-main .topbar{padding:10px 20px;gap:14px;min-height:0;height:auto;background:#fff;border-bottom:1px solid #e3e9f3}
+.topbar .top-school b{font-size:clamp(1rem,1.7vw,1.3rem);font-weight:800;line-height:1.15;color:#0a2a6b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.topbar .top-school small{font-size:.75rem;color:#5b6b88;display:block}
+.topbar .top-search{flex:0 1 280px;min-width:140px;max-width:320px}
+.topbar .top-search input[type="search"]{height:36px;padding:0 12px 0 34px;border:1px solid #e2e8f0;font-size:.875rem;background-position:12px center}
+.topbar .top-search input[type="search"]::placeholder{color:#94a3b8}
+.topbar .top-search input[type="search"]:focus{border-color:#93c5fd;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.topbar .top-role{background:#e8f0fe;color:#0a2a6b!important;font-size:.75rem;font-weight:600;padding:5px 12px;border-radius:999px}
+.topbar .top-avatar{width:38px;height:38px;background:#0a2a6b;color:#fff;font-size:.85rem;font-weight:700}
+.top-actions{gap:12px}
+/* ---- hamburger: 40x40 chip with three 18x2 bars (v106 .hamburger) ---- */
+body .sidebar-toggle,body .app-shell .sidebar-toggle{width:40px;height:40px;min-width:40px;min-height:40px;padding:0;border-radius:10px;border:0;flex:none;
+  font-size:0;line-height:0;color:transparent;position:relative;
+  background:linear-gradient(#0a2a6b,#0a2a6b) center 12px/18px 2px no-repeat,linear-gradient(#0a2a6b,#0a2a6b) center 19px/18px 2px no-repeat,linear-gradient(#0a2a6b,#0a2a6b) center 26px/18px 2px no-repeat,rgba(10,42,107,.08)}
+body .sidebar-toggle:hover{background-color:rgba(10,42,107,.14)}
+body .sidebar-toggle[aria-expanded="true"]{background:rgba(10,42,107,.08)}
+body .sidebar-toggle[aria-expanded="true"]::before,body .sidebar-toggle[aria-expanded="true"]::after{content:"";position:absolute;left:11px;top:19px;width:18px;height:2px;background:#0a2a6b;border-radius:1px}
+body .sidebar-toggle[aria-expanded="true"]::before{transform:rotate(45deg)}body .sidebar-toggle[aria-expanded="true"]::after{transform:rotate(-45deg)}
+/* ---- sidebar / drawer ---- */
+body .app-shell .app-sidebar{width:min(280px,86vw)!important;background:linear-gradient(180deg,#0a2a6b 0%,#07204f 55%,#051a42 100%);color:#e8efff;padding:0;display:flex;flex-direction:column}
+.app-sidebar .brand{flex-direction:column;align-items:center;text-align:center;gap:6px;padding:18px 14px 12px;border-bottom:1px solid rgba(255,255,255,.1);margin:0}
+.app-sidebar .brand-mark{width:72px;height:72px;border-radius:50%;background:#fff;color:#0a2a6b;font-weight:800;font-size:1.35rem;box-shadow:0 4px 14px rgba(0,0,0,.35);overflow:hidden;display:grid;place-items:center}
+.app-sidebar .brand-mark img{width:100%;height:100%;object-fit:cover}
+.app-sidebar .brand b{font-size:1.05rem;font-weight:700;color:#fff;line-height:1.2}
+.app-sidebar .brand small{font-style:italic;color:#cfe0ff;font-size:.78rem;margin:0}
+.app-sidebar .school-switcher{display:none}
+body .app-sidebar nav{padding:10px 0 16px}
+.app-sidebar nav a{display:block;border-radius:10px;margin:2px 10px;padding:9px 14px;color:#eaf1ff;font-size:.875rem;font-weight:500;text-decoration:none;transition:background .15s}
+.app-sidebar nav a:hover{background:rgba(255,255,255,.1);color:#eaf1ff}
+.app-sidebar nav a.active,.app-sidebar nav a[aria-current="page"]{background:#1a6fe8!important;color:#fff!important;box-shadow:0 3px 10px rgba(26,111,232,.45)}
+.app-sidebar .nav-group{margin:14px 18px 4px;padding:0;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:#8fb0ee;font-weight:700}
+.app-sidebar nav a.ai-nav{background:transparent;color:#eaf1ff}
+.app-sidebar .sidebar-bottom{border-top:0;padding:0;margin-top:auto}
+.app-sidebar .side-status{display:flex;align-items:center;gap:10px;margin:10px 12px 16px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14)}
+.app-sidebar .side-status .dot{width:12px;height:12px;border-radius:50%;background:#2be26b;box-shadow:0 0 0 4px rgba(43,226,107,.22);flex:none}
+.app-sidebar .side-status b{display:block;color:#2be26b;font-size:.9rem}
+.app-sidebar .side-status small{display:block;color:#e0ebff;font-size:.75rem}
+.app-sidebar .user-mini{margin:0 12px 6px;padding:0 2px}
+.app-sidebar .user-mini b{color:#fff;font-size:.875rem}.app-sidebar .user-mini small{color:#cfe0ff;font-size:.72rem}
+.app-sidebar .sidebar-bottom>a{margin:0 10px 12px}
+/* ---- content / page header ---- */
+body :is(.app-main,.platform-shell,.parent-shell,.student-shell) .container{padding:18px 20px 32px}
+:is(.page-heading,.page-head) h1{font-size:1.35rem;font-weight:800;color:#0a2a6b;line-height:1.3;margin:0}
+:is(.page-heading,.page-head) p{font-size:.9rem;color:#5b6b88;margin:2px 0 0}
+:is(.page-heading,.page-head){margin-bottom:18px;gap:12px}
+/* ---- KPI tiles (v106 .kpi-mini) ---- */
+.kpi-row.stat-grid{gap:12px;margin-bottom:18px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.kpi-row .stat-box{padding:14px 16px;border:1px solid #e3e9f3;border-radius:12px;box-shadow:0 5px 14px rgba(20,40,90,.12);border-left:1px solid #e3e9f3;overflow:visible}
+.kpi-row .stat-box::after,.kpi-row .stat-box::before{display:none!important}
+.kpi-row .stat-box .label{font-size:.75rem;font-weight:600;letter-spacing:.04em;color:#5b6b88;margin:0}
+.kpi-row .stat-box .num{font-size:1.5rem;font-weight:800;color:#0a2a6b;margin-top:2px;line-height:1.45}
+/* ---- cards / tables ---- */
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card{border:1px solid #e3e9f3;border-radius:14px;box-shadow:0 5px 14px rgba(20,40,90,.12)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table{font-size:.85rem}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table td{padding:10px 12px;font-size:.85rem}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table thead th,:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table>tbody>tr:first-child>th{background:#0a2a6b!important;border-radius:0!important}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table td{color:#12234a}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table.table-hover tbody tr:hover>*{background:#f5f8fc}
+/* ---- buttons ---- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 16px;border-radius:10px;font-size:.875rem;font-weight:600;line-height:1.45;border:none;font-family:inherit}
+.btn.btn-sm,.btn-sm{padding:6px 12px;font-size:.8rem}
+.btn-primary{background:#1a6fe8;box-shadow:0 3px 10px rgba(26,111,232,.35)}
+.btn-primary:hover{background:#1560d4}
+.btn-secondary,.btn-outline-secondary,.btn-outline-primary,.btn-outline{background:#fff;color:#0a2a6b;border:1.5px solid #c5d0e6;box-shadow:none}
+.btn-secondary:hover,.btn-outline-secondary:hover,.btn-outline-primary:hover{border-color:#1a6fe8;color:#1a6fe8;background:#fff}
+/* ---- forms ---- */
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) :is(input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=search]),select,textarea),.form-control,.form-select{padding:9px 12px;border:1.5px solid #c5d0e6;border-radius:10px;font-size:.9rem;font-family:inherit;color:#12234a;background-color:#fff;line-height:1.45}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) :is(input,select,textarea):focus{border-color:#1a6fe8;box-shadow:0 0 0 3px rgba(26,111,232,.15)}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) label,.form-label{display:block;font-size:.8rem;font-weight:600;color:#5b6b88;margin-bottom:5px}
+/* ---- badges (v106 .badge) ---- */
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:700;line-height:1.45}
+.filters{margin-bottom:16px}
+}
+
+@media screen{
+/* typeface: Inter everywhere (v106 --font), form controls and buttons inherit it */
+html body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif!important}
+html body :is(button,input,select,textarea,table,th,td,a,label,.btn,h1,h2,h3,h4,h5,h6,p,span,div,li,small,b,strong,summary){font-family:inherit!important}
+/* text colour */
+:is(.card,.stat-box,.panel){color:#12234a}
+/* top bar: keep the accessibility controls inside the v106 62px bar */
+.top-actions{min-height:0;gap:12px}
+.top-actions .fs-control .btn{min-height:0;padding:4px 10px;font-size:.78rem;line-height:1.3;border-width:1px}
+.top-actions .theme-toggle{min-height:0;height:36px;padding:0 10px;line-height:1}
+.top-actions :is(.top-bell,.top-avatar){flex:none}
+/* tiles: v106 .kpi-mini sizing (responsive-ui.css pinned 108px) */
+.kpi-row .stat-box{min-height:0;display:block}
+/* card = v106 panel: 16px body, first heading is the panel header band */
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card{padding:16px}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card>h3:first-child,:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card>.section-title:first-child{font-size:.95rem;font-weight:700;color:#0a2a6b;margin:-16px -16px 14px;padding:12px 16px;border-bottom:1px solid #e3e9f3;line-height:1.45}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card>h3:first-child:only-child{margin-bottom:-16px;border-bottom:0}
+html[data-bs-theme="dark"] :is(.card,.stat-box,.panel){color:var(--text)}
+html[data-bs-theme="dark"] .card>h3:first-child{color:var(--text);border-bottom-color:var(--border)}
+}
+
+@media screen{
+/* status chips -> v106 .badge palette (text stays; the emoji is a duplicate cue) */
+.status-badge{padding:3px 9px!important;font-size:.72rem!important;font-weight:700!important;border:0!important;gap:0!important;line-height:1.45}
+.status-badge>span[aria-hidden]{display:none}
+.status-badge.st-active{background:#d1fae5!important;color:#065f46!important}
+.status-badge.st-suspended{background:#ffedd5!important;color:#c2410c!important}
+.status-badge.st-withdrawn,.status-badge.st-expelled{background:#fee2e2!important;color:#b91c1c!important}
+.status-badge.st-transferred{background:#dbeafe!important;color:#1e40af!important}
+.status-badge.st-graduated{background:#f3e8ff!important;color:#6b21a8!important}
+/* mock filter row: search left, selects right */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filters>.form-control[type=search]{width:auto;flex:0 1 260px;min-width:180px}
+.filters .filters-right{display:flex;gap:10px;flex-wrap:wrap;margin-left:auto}
+.filters .filters-right .form-control{width:auto;min-width:140px}
+/* a card whose body is a table: v106 table-in-card (no padding, clipped corners) */
+.card.card-flush,.card:has(>.table-responsive:last-child:not(:first-child)){padding:0;overflow:hidden}
+.card.card-flush>.table-responsive{margin:0}
+.card.card-flush table.table thead th:first-child,.card.card-flush table.table thead th:last-child{border-radius:0}
+.card:has(>.table-responsive:last-child:not(:first-child))>h3:first-child{margin:0}
+/* row actions look like v106 text links */
+td.row-actions{white-space:nowrap}
+td.row-actions form{display:inline}
+.btn.act{background:none!important;box-shadow:none!important;border:0!important;padding:0 10px 0 0!important;min-height:0;color:#1a6fe8!important;font-weight:500;font-size:.85rem;display:inline}
+.btn.act:hover{text-decoration:underline;transform:none}
+.btn.act-danger{color:#b91c1c!important}
+/* page icon glyph like v106 "◉ Students" */
+.page-heading h1 .ni,.page-head h1 .ni{font-weight:700}
+/* live clock sits in the top bar */
+.live-clock.in-topbar{margin:0;font-size:.75rem;color:#5b6b88;white-space:nowrap;order:-1}
+@media(max-width:900px){.live-clock.in-topbar{display:none}}
+}
+
+@media screen{
+:is(.page-heading,.page-head){margin-top:0}
+:is(.page-heading,.page-head) h1{line-height:1.45}
+body .topbar .top-search{height:36px;display:flex;align-items:center}
+body .topbar .top-search input[type="search"]{height:36px}
+.top-actions .top-bell{width:38px;height:38px;min-height:0;display:grid;place-items:center;padding:0;position:relative}
+}
+
+@media screen{
+body .topbar .top-actions{height:40px;padding:0;align-items:center}
+body .topbar .top-actions>*{margin-top:0;margin-bottom:0}
+}
+@media screen{body .app-main .topbar{min-height:62px}}
+@media screen{.badge.m-bad{background:#fee2e2;color:#b91c1c}html[data-bs-theme="dark"] .badge.m-bad{background:rgba(239,68,68,.18);color:#fecaca}
+td.row-actions{display:table-cell}}
+@media screen{:is(.app-main,.platform-shell,.parent-shell,.student-shell) table.table :is(th,td){min-height:0!important}}
+@media screen{.btn.act,td .btn{margin-top:0!important}td .btn.btn-sm.act{vertical-align:baseline}}
+
+@media screen{
+/* v106 announcement cards */
+.ann-list{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+.ann-card{background:var(--surface,#fff);border:1px solid #e3e9f3;border-left:4px solid #1a6fe8;border-radius:12px;padding:14px 16px;box-shadow:0 5px 14px rgba(20,40,90,.12)}
+.ann-card.ann-live{border-left-color:#1a6fe8}.ann-card.ann-scheduled{border-left-color:#f59e0b}.ann-card.ann-expired{border-left-color:#94a3b8}.ann-card.ann-removed{border-left-color:#e11d48}
+.ann-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ann-head h3{font-size:.95rem;font-weight:700;color:#0a2a6b;margin:0;line-height:1.45}
+.ann-msg{font-size:.85rem;color:#5b6b88;margin:6px 0 8px;line-height:1.5}
+.ann-meta{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:.75rem;color:#5b6b88}
+.ann-meta .ann-remove{margin:0 0 0 auto}
+.ann-badge{flex:none}
+.ann-badge-live{background:#dbeafe;color:#1e40af}.ann-badge-scheduled{background:#fef3c7;color:#92400e}.ann-badge-expired{background:#f1f5f9;color:#475569}.ann-badge-removed{background:#fee2e2;color:#b91c1c}
+html[data-bs-theme="dark"] .ann-head h3{color:var(--text)}html[data-bs-theme="dark"] .ann-msg,html[data-bs-theme="dark"] .ann-meta{color:var(--muted)}
+}
+@media screen{.filters>select.form-control,.filters>.form-select{width:auto;min-width:140px}}
+
+@media screen{
+/* Grading Setup (v106 #13) */
+.grading-grid{display:grid;grid-template-columns:minmax(260px,360px) 1fr;gap:16px;align-items:start;margin-bottom:16px}
+@media(max-width:900px){.grading-grid{grid-template-columns:1fr}}
+.grading-grid .card{margin-bottom:0}
+.stack-fields{display:flex;flex-direction:column;gap:12px;margin-bottom:12px}
+.stack-fields>div{min-width:0}
+.gs-head,.grade-scale-row{display:grid;grid-template-columns:3.4rem 5rem 5rem minmax(7rem,1fr) auto auto;gap:8px;align-items:center}
+.gs-head{font-size:.75rem;font-weight:700;color:#fff;background:#0a2a6b;border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.grade-scale-row{padding:6px 0;border-bottom:1px solid #e3e9f3}
+.grade-scale-row .grade-scale-editform{display:contents}
+.grade-scale-row .grade-scale-editform .form-control{width:100%!important;min-width:0}
+.grade-scale-row>form:last-child{margin:0}
+.gs-preview{display:flex;flex-direction:column;gap:10px;max-width:640px}
+.gs-prev-top{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:4px;color:#12234a}
+.gs-bar{height:10px;border-radius:999px;background:#eef2f8;overflow:hidden}
+.gs-fill{display:block;height:100%;border-radius:999px}
+.gs-c0{background:#22c55e}.gs-c1{background:#1a6fe8}.gs-c2{background:#f59e0b}.gs-c3{background:#f97316}.gs-c4{background:#ef4444}
+html[data-bs-theme="dark"] .gs-bar{background:rgba(255,255,255,.08)}html[data-bs-theme="dark"] .gs-prev-top{color:var(--text)}
+}
+
+@media screen{
+/* notification rows (v106 #21) */
+.notif-list{padding:0!important}
+.notif-row{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid #e3e9f3}
+.notif-row:last-child{border-bottom:0}
+.notif-row.unread{background:#eef5ff}
+.notif-ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:#dbeafe;color:#1e40af;font-size:1.05rem;flex:none}
+.notif-body{flex:1;min-width:0}
+.notif-title{font-size:.9rem;font-weight:700;color:#0a2a6b;line-height:1.4}
+.notif-msg{font-size:.85rem;color:#5b6b88;margin:2px 0 4px;white-space:pre-wrap}
+.notif-meta{font-size:.75rem;color:#8a97ad}
+.notif-row .notif-dot{width:8px;height:8px;border-radius:50%;background:#2563eb;flex:none;margin-top:6px}
+html[data-bs-theme="dark"] .notif-row.unread{background:rgba(56,189,248,.08)}html[data-bs-theme="dark"] .notif-title{color:var(--text)}
+}
