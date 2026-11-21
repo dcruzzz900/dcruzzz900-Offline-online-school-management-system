@@ -35,7 +35,8 @@ def register_v64(app, h):
         from markupsafe import Markup, escape
         name = (value or "Active")
         icon, fg, bg = STATUS_BADGES.get(name, ("⚪", "#37474f", "#eceff1"))
-        return Markup(f'<span class="status-badge" style="display:inline-flex;gap:.3rem;align-items:center;padding:.1rem .55rem;border-radius:999px;'
+        slug = "".join(ch for ch in name.lower() if ch.isalnum()) or "active"
+        return Markup(f'<span class="status-badge st-{slug}" style="display:inline-flex;gap:.3rem;align-items:center;padding:.1rem .55rem;border-radius:999px;'
                       f'font-size:.8rem;font-weight:600;color:{fg};background:{bg};border:1px solid {fg}33"><span aria-hidden="true">{icon}</span>{escape(name)}</span>')
 
     @app.template_filter("staff_name")
