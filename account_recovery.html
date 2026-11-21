@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Forgot Username or Password · My School Hub{% endblock %}
+{% block content %}
+<div class="beautiful-auth school-auth-page" data-auth-branding-root>
+  <section class="beautiful-auth-hero platform-hero"><div class="hub-brand"><img data-auth-school-logo class="school-auth-brand-logo small auth-branding-hidden" alt="School logo"><div><strong data-auth-school-name>My School Hub</strong><span>ACCOUNT RECOVERY</span></div></div><div><div class="hub-eyebrow">ACCOUNT RECOVERY</div><h1>Forgot your username or password?</h1><p>Enter the email address on your account and we'll email you a secure link.</p></div></section>
+  <section class="beautiful-auth-form">
+    <a class="back-home" href="{{ url_for('login') }}">← Back</a>
+    <div class="form-brand"><img data-auth-school-logo class="school-auth-brand-logo small auth-branding-hidden" alt="School logo"><div><strong data-auth-school-name>Account Recovery</strong><small>Email-based recovery</small></div></div>
+    <div class="form-intro"><h2>Forgot Your Username or Password?</h2><p>Staff and parents can recover their account by email. We'll send your username and a link to set a new password.</p></div>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>Email address<input type="email" name="email" required autofocus autocomplete="email" autocapitalize="none"></label>
+      <button class="hub-primary-btn" type="submit">Send recovery email <span>→</span></button>
+    </form>
+    <details class="hlp">
+      <summary class="hlp-t">No email on file?</summary>
+      <div class="hlp-b">
+        <p class="muted">Staff with a security question set up can still <a href="{{ url_for('recover') }}">recover by username</a> instead. Students and parents without an email on file should ask their school administrator to reset their password directly — there is no self-registration.</p>
+      </div>
+    </details>
+    <p class="form-notice">If you cannot recover the account, ask your school administrator to help reset it.</p>
+  </section>
+</div>
+{% endblock %}

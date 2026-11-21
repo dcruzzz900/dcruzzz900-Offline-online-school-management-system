@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
+{% block title %}Data Completion{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">SCHOOL ADMINISTRATION</div><h1>Data Completion</h1>
+<p>Date of Birth and Gender are now compulsory. These existing records pre-date that rule and are missing one or both. Nothing is filled in automatically &mdash; enter what the school's records show.</p></div></div>
+{% if not total %}<div class="alert alert-success" role="alert">Every active student, staff member and parent in your school has a Date of Birth and a Gender.</div>{% endif %}
+{% for kind, label in (('student','Students'),('staff','Staff'),('parent','Parents / Guardians')) %}{% set rows = gaps[kind] %}{% if rows %}
+<div class="card mb-3"><h3>{{ label }} <span class="badge text-bg-warning">{{ rows|length }} to complete</span></h3>
+<div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Name</th><th>Details</th><th style="min-width:20rem">Date of Birth &amp; Gender</th><th></th></tr></thead><tbody>
+{% for r in rows %}<tr><td>{{ r.name }}</td><td class="muted">{{ r.ref }}</td>
+<td colspan="2"><form method="POST" action="{{ url_for('admin_data_completion_save') }}" class="d-flex flex-wrap gap-2 align-items-end">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="id" value="{{ r.id }}">
+<div style="flex:1;min-width:18rem">{{ identity_fields(dob=r.dob, gender=r.gender, min_age={'student':1,'staff':14,'parent':15}[kind], who=kind, uid='dc' ~ kind ~ r.id) }}</div>
+<button class="btn btn-primary" type="submit">Save</button></form></td></tr>{% endfor %}
+</tbody></table></div></div>{% endif %}{% endfor %}
+{% endblock %}

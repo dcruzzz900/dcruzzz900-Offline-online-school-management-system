@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Announcements{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">📢</span> Announcements</h1><p>{{ rows|length }} announcement{{ '' if rows|length==1 else 's' }} · broadcast messages to staff, parents &amp; students</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ New announcement</button></div></div>
+<p class="muted" style="margin-top:-6px">Temporary banners shown at the top of the chosen users' dashboards until they expire.
+{% if scope == 'platform' %}As Super Admin you can reach every school or one school.{% else %}Only users of your school will see them.{% endif %}</p>
+{% if rows %}<div class="ann-list">
+  {% for r in rows %}{% if not r.is_active %}{% set st = 'Removed' %}{% set sc = 'removed' %}{% elif r.expires_at and r.expires_at <= now %}{% set st = 'Expired' %}{% set sc = 'expired' %}{% elif r.starts_at and r.starts_at > now %}{% set st = 'Scheduled' %}{% set sc = 'scheduled' %}{% else %}{% set st = 'Live' %}{% set sc = 'live' %}{% endif %}
+  <article class="ann-card ann-{{ sc }}">
+    <div class="ann-head"><h3>{{ r.title }}</h3><span class="badge ann-badge ann-badge-{{ sc }}">{{ st }}</span></div>
+    <p class="ann-msg">{{ r.message }}</p>
+    <div class="ann-meta"><span>Audience: {{ r.audience }}</span>{% if scope == 'platform' %}<span>School: {{ r.school_name or 'All schools' }}</span>{% endif %}{% if r.expires_at %}<span>Expires (UTC): {{ r.expires_at }}</span>{% endif %}
+    {% if r.is_active %}<form method="POST" class="ann-remove"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="act" value="remove"><input type="hidden" name="id" value="{{ r.id }}"><button class="btn btn-sm act act-danger" type="submit">Remove</button></form>{% endif %}</div>
+  </article>{% endfor %}
+</div>{% else %}<div class="card"><p class="muted" style="margin:0">No announcements yet.</p></div>{% endif %}
+
+<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ New announcement</summary><div class="m-fold-body">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if scope == 'platform' %}<label>Send to<select name="school_id" class="form-select"><option value="">All schools</option>{% for s in schools %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Title<input name="title" maxlength="150" required class="form-control"></label>
+    <label>Message<textarea name="message" rows="3" maxlength="2000" required class="form-control"></textarea></label>
+    <div class="form-grid">
+      <label>Show to<select name="audience" class="form-select">{% for k, l in audiences %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+      <label>Style<select name="level" class="form-select">{% for k, l in levels %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select></label>
+      <label>Starts <small class="muted">(optional - blank = now)</small><input type="datetime-local" name="starts_at" class="form-control"></label>
+      <label>Auto-hide after <span class="muted">(seconds; 0 = stays until dismissed or expired)</span><input type="number" name="display_seconds" min="0" max="600" step="5" value="0" class="form-control"></label>
+      <label>Expires <span class="req">*</span><input type="datetime-local" name="expires_at" required class="form-control"></label>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="dismissible" value="1" checked style="width:auto" class="form-check-input"> Users may dismiss (close) it</label>
+    <button class="btn btn-primary" type="submit">Publish announcement</button>
+  </form>
+</div></details>
+<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select,textarea');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+{% endblock %}

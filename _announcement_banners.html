@@ -1,0 +1,14 @@
+{# V104/V107: THE shared announcement banner - used on every dashboard (Super Admin, School Admin, Teacher, Accountant, Registrar, Student, Parent,
+   other staff). Which announcements appear is decided on the server by audience / school / dates (announcements.py); the priority
+   (Information, Good news, Important, Urgent) sets the style; "auto-hide after N seconds" is set by the administrator. #}
+{% if announcement_banners %}
+<div class="ann-wrap" role="region" aria-label="Announcements" data-announcement-banners>
+{% for a in announcement_banners %}
+  <div class="ann ann-{{ a.level }}" role="{{ 'alert' if a.level == 'danger' else 'status' }}" data-ann-seconds="{{ a['display_seconds'] or 0 }}">
+    <span class="ann-flag" aria-hidden="true">{{ {'danger':'⚠','warning':'❗','success':'✔'}.get(a.level, 'ℹ') }}</span>
+    <div class="ann-body"><b>{{ a.title }}{% if a.level == 'danger' %} <span class="ann-pri">Urgent</span>{% elif a.level == 'warning' %} <span class="ann-pri">Important</span>{% endif %}</b><span>{{ a.message }}</span></div>
+    {% if a.dismissible %}<form method="POST" action="{{ url_for('announcement_dismiss', ann_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="ann-x" type="submit" aria-label="Dismiss announcement" title="Dismiss">&times;</button></form>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% endif %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Terminal Results{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1><span class="ni" aria-hidden="true">▣</span> Terminal Results — {{ class_row.name }}</h1><p>Pick a class — open Broadsheet or Terminal Results (same flow as classes_list.html)</p></div></div>
+{% if review_info and review_info.status != 'draft' %}
+<div class="card" style="border-left:5px solid #1f6feb;margin:0 0 1rem;padding:.8rem 1rem">
+  <b>{{ review_info.label }}</b>{% if review_info.submitter %} — submitted by <b>{{ review_info.submitter }}</b>{% if review_info.submitted_at %} on {{ review_info.submitted_at[:16] }}{% endif %}{% endif %}.
+  Open any student below to check the submitted result, then go back to <a href="{{ url_for('result_workflow', term_id=term.id) }}">Result Workflow</a> to approve it or return it for correction.
+</div>
+{% endif %}
+
+<form data-no-hub method="GET" style="margin-bottom:1rem; display:inline-block;">
+    <label style="display:inline; font-weight:normal;">Term:</label>
+    <select name="term_id" onchange="this.form.submit()" style="width:auto; display:inline-block;" class="form-select">
+        {% for t in all_terms %}
+        <option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}{% if t.is_active %} (active){% endif %}</option>
+        {% endfor %}
+    </select>
+</form>
+{% if not pub_state or pub_state.published %}<a class="btn btn-primary" href="{{ url_for('class_results_pdf', class_id=class_row.id, term_id=term.id) }}">⬇ Download All Results as One PDF</a>{% else %}<span class="badge">{{ pub_state.label }} — preview only; PDF unlocks after publication</span>{% endif %}
+
+<div class="card">
+    <div class="table-responsive"><table class="table table-hover align-middle">
+        <tr><th>Admission No. / Register No.</th><th>Name</th><th>Action</th></tr>
+        {% for s in students %}
+        <tr>
+            <td>{{ s.admission_no }}</td>
+            <td>{{ student_full_name(s) }}</td>
+            <td><a class="btn btn-primary btn-sm" href="{{ url_for('result', student_id=s.id, term_id=term.id) }}">View Result</a></td>
+        </tr>
+        {% endfor %}
+    </table></div>
+</div>
+{% endblock %}
