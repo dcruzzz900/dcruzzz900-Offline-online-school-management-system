@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}
 {% block title %}Dashboard — {{ school_name }}{% endblock %}
 {% block content %}
 {% set st = ov.students %}{% set sf = ov.staff %}{% set cp = ov.compilation %}{% set fe = ov.fees %}
@@ -6,16 +6,8 @@
 <div class="ad">
 
   <!-- Welcome banner -->
-  <section class="ad-banner">
-    <div>
-      <h1>Welcome, <span data-first-name>{{ (session.get('name') or '').split(' ')[0] or 'Administrator' }}</span>!</h1>
-      <p>Here is an overview of your school system.</p>
-    </div>
-    <div class="ad-banner-clock" data-school-ms="{{ school_local_ms }}">
-      <div>📅 <span data-clock-date>{{ now_local.strftime('%A, %d %B %Y') }}</span></div>
-      <div>🕐 <span data-clock-time>{{ now_local.strftime('%I:%M %p').lstrip('0') }}</span></div>
-    </div>
-  </section>
+{% set _p = (session.get('name') or '').split() %}{% set _nm %}{% if _p and _p|length > 1 and _p[0].rstrip('.')|lower in ['mr','mrs','ms','miss','dr','prof','engr','chief','sir','madam','pastor','rev'] %}{{ _p[0] }} {{ _p[-1] }}{% else %}{{ _p[0] if _p else 'Administrator' }}{% endif %}{% endset %}
+  {{ v106_banner('admin', _nm|trim, 'Here is an overview of your school system.') }}
 
   <!-- KPI cards -->
   <section class="ad-kpis">
@@ -147,8 +139,8 @@
   <!-- Quick Access + Activities + Announcements -->
   <section class="ad-panels ad-panels-bottom">
     <article class="ad-panel">
-      <header><h2><span class="ni">⚡</span> Quick Access</h2></header>
-      <div class="ad-quick">
+      <header><h2><span class="ni">⚡</span> Quick Access</h2><button type="button" class="qa-toggle-btn" id="qaToggle" aria-controls="adQuick" aria-expanded="false" data-all="View All ({{ 18 }})" data-less="View Less">View All (18)</button></header>
+      <div class="ad-quick" id="adQuick" data-qa-count="{{ 18 }}">
         <a href="{{ url_for('admin_students') }}"><span class="q-ico">👨‍🎓</span>Students</a>
         <a href="{{ url_for('classes_list') }}"><span class="q-ico">✏️</span>Score Entry</a>
         <a href="{{ url_for('classes_list') }}"><span class="q-ico">📋</span>Broadsheet</a>
@@ -157,16 +149,16 @@
         <a href="{{ url_for('school_announcements') }}"><span class="q-ico">📢</span>Announce</a>
         <a href="{{ url_for('admin_school_fees') }}"><span class="q-ico">💰</span>School Fees</a>
         <a href="{{ url_for('school_billing_portal') }}"><span class="q-ico">◈</span>Billing</a>
-        <a href="{{ url_for('admin_analytics') }}"><span class="q-ico">📈</span>Analytics</a>
-        <a href="{{ url_for('result_workflow') }}"><span class="q-ico">☑️</span>Result Approval{% if pending_reviews %} <em class="notif-badge">{{ pending_reviews }}</em>{% endif %}</a>
-        <a href="{{ url_for('admin_data_completion') }}"><span class="q-ico">🧩</span>Data Completion{% if identity_gap_count %} <em class="notif-badge">{{ identity_gap_count }}</em>{% endif %}</a>
-        <a href="{{ url_for('admin_terms') }}"><span class="q-ico">📅</span>Sessions &amp; Terms</a>
-        <a href="{{ url_for('staff_profile', user_id=session.get('user_id')) }}"><span class="q-ico">🙂</span>My Profile</a>
-        <a href="{{ url_for('admin_class_subjects') }}"><span class="q-ico">📚</span>Assign Subject</a>
-        <a href="{{ url_for('score_history_all') }}"><span class="q-ico">🕘</span>Score History</a>
-        <a href="{{ url_for('admin_promote') }}"><span class="q-ico">⬆️</span>Promote Students</a>
-        <a href="{{ url_for('admin_theme') }}"><span class="q-ico">🎨</span>Themes &amp; Branding</a>
-        <a href="{{ url_for('materials') }}"><span class="q-ico">📘</span>Learning Materials</a>
+        <a class="qa-extra" href="{{ url_for('admin_analytics') }}"><span class="q-ico">📈</span>Analytics</a>
+        <a class="qa-extra" href="{{ url_for('result_workflow') }}"><span class="q-ico">☑️</span>Result Approval{% if pending_reviews %} <em class="notif-badge">{{ pending_reviews }}</em>{% endif %}</a>
+        <a class="qa-extra" href="{{ url_for('admin_data_completion') }}"><span class="q-ico">🧩</span>Data Completion{% if identity_gap_count %} <em class="notif-badge">{{ identity_gap_count }}</em>{% endif %}</a>
+        <a class="qa-extra" href="{{ url_for('admin_terms') }}"><span class="q-ico">📅</span>Sessions &amp; Terms</a>
+        <a class="qa-extra" href="{{ url_for('staff_profile', user_id=session.get('user_id')) }}"><span class="q-ico">🙂</span>My Profile</a>
+        <a class="qa-extra" href="{{ url_for('admin_class_subjects') }}"><span class="q-ico">📚</span>Assign Subject</a>
+        <a class="qa-extra" href="{{ url_for('score_history_all') }}"><span class="q-ico">🕘</span>Score History</a>
+        <a class="qa-extra" href="{{ url_for('admin_promote') }}"><span class="q-ico">⬆️</span>Promote Students</a>
+        <a class="qa-extra" href="{{ url_for('admin_theme') }}"><span class="q-ico">🎨</span>Themes &amp; Branding</a>
+        <a class="qa-extra" href="{{ url_for('materials') }}"><span class="q-ico">📘</span>Learning Materials</a>
       </div>
     </article>
 
@@ -203,13 +195,13 @@
   </footer>
 </div>
 <script>
-(function(){ /* live school clock (school's own time zone, no network needed) */
-  var els=document.querySelectorAll('[data-school-ms]'); if(!els.length) return;
-  var base=Number(els[0].getAttribute('data-school-ms')), t0=Date.now();
-  function tick(){var d=new Date(base+(Date.now()-t0));
-    var ds=d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}),ts=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'UTC'});
-    els.forEach(function(el){var D=el.querySelector('[data-clock-date]'),T=el.querySelector('[data-clock-time]');if(D)D.textContent=ds;if(T)T.textContent=ts;});}
-  tick(); setInterval(tick,15000);
+(function(){ /* Quick Access: 8 tiles by default; View All / View Less (remembered on this device) */
+  var box=document.getElementById('adQuick'),btn=document.getElementById('qaToggle'); if(!box||!btn) return;
+  var KEY='sh_qa_open';
+  function set(open){box.classList.toggle('show-all',open);btn.setAttribute('aria-expanded',open?'true':'false');btn.textContent=open?btn.getAttribute('data-less'):btn.getAttribute('data-all');}
+  var saved=false; try{saved=localStorage.getItem(KEY)==='1';}catch(e){}
+  set(saved);
+  btn.addEventListener('click',function(){var o=!box.classList.contains('show-all');set(o);try{localStorage.setItem(KEY,o?'1':'0');}catch(e){}});
 })();
 </script>
 {% endblock %}
