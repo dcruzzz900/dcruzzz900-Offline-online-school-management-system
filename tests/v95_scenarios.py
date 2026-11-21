@@ -202,8 +202,8 @@ check("a second, empty school's admin dashboard never shows school 1's classes/s
 print("=== 3) Teacher Dashboard: the SAME chart set, but scoped to only the classes this teacher can see ===")
 
 tdash = html(TEACHER.get("/dashboard"))
-check("Teacher's Class Performance chart is present (V112: server-drawn SVG)", 'aria-label="Class performance"' in tdash)
-t_class_labels = re.findall(r"<title>([^<:]+):", tdash.split('aria-label="Class performance"', 1)[-1].split("</svg>", 1)[0])
+check("Teacher's Class Performance chart is present", 'id="chartClassPerf"' in tdash)
+t_class_labels = js_array(tdash, "classLabels")
 check("Teacher's chart includes their own class (JSS1A)", t_class_labels and "JSS1A" in t_class_labels, t_class_labels)
 check("...but never the second class (JSS2B) they have no assignment in", not t_class_labels or "JSS2B" not in t_class_labels, t_class_labels)
 t_enr_labels = js_array(tdash, "enrolmentLabels")

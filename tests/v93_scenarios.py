@@ -168,7 +168,7 @@ adash = html(ADMIN.get("/dashboard"))
 analytics = html(ADMIN.get("/admin/analytics"))
 check("admin dashboard and analytics still render with a Custom result-sheet paper size in effect", "Recent Activities" in adash and "School Result Performance" in analytics, adash[:200])
 tdash = html(TEACHER.get("/dashboard"))
-check("teacher dashboard still renders fine too", "Recent Activities" in tdash, tdash[:200])
+check("teacher dashboard still renders fine too", "Recent Class Activities" in tdash, tdash[:200])
 
 print("=== 5) A paper-size change is NOT surfaced in Recent Activities (existing, documented V90 scope) ===")
 

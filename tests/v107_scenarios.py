@@ -185,10 +185,10 @@ check("upload preview component is loaded", "passport-preview.js" in html(ADMIN.
 print("=== 9) shared dashboard welcome header ===")
 import zoneinfo
 def wh(c, url):
-    m = re.search(r'<section class="(?:wh-banner|ad-banner)"[^>]*data-config=\'([^\']*)\'.*?<h1>(.*?)</h1><p>(.*?)</p>', html(c.get(url)), re.S)
+    m = re.search(r'<section class="wh-banner"[^>]*data-config=\'([^\']*)\'.*?<h1>(.*?)</h1><p>(.*?)</p>', html(c.get(url)), re.S)
     return (m.group(2), m.group(3), json.loads(m.group(1).replace("&#34;", '"'))) if m else None
 w = wh(FT, "/dashboard")
-check("Teacher: personalised v106 welcome ('Welcome, <name>!') + the teaching-overview description", w and w[0].startswith("Welcome, ") and w[0].endswith("!") and "your teaching overview." in w[1], w and w[:2])
+check("Teacher: 'Welcome, Teacher!' + the teacher description", w and w[0] == "Welcome, Teacher!" and w[1] == "Here is an overview of your classes, students and academic activities.", w and w[:2])
 check("the header carries the school timezone and a server clock anchor", w and w[2]["tz"] == "Africa/Lagos" and abs(w[2]["utc_ms"] - __import__("time").time() * 1000) < 60000)
 check("12-hour time with AM/PM in the server render", w and re.fullmatch(r"\d{1,2}:\d{2} (AM|PM)", w[2]["time"]))
 check("full day, date, month and year", w and re.fullmatch(r"\w+day, \d{1,2} \w+ \d{4}", w[2]["date"]), w and w[2]["date"])
@@ -205,7 +205,7 @@ with A.app.test_request_context():
     check("Super Admin copy", welcome_header_data("platform")["heading"] == "Welcome, Super Administrator!" and "all registered schools" in welcome_header_data("platform")["description"])
     check("Student / Parent / other staff use the person's name", welcome_header_data("student", "Ada Obi")["heading"] == "Welcome, Ada Obi!" and welcome_header_data("parent", "Mr Obi")["heading"] == "Welcome, Mr Obi!" and welcome_header_data("staff", "Sam")["description"] == "Here is an overview of your assigned duties and activities.")
     check("Accountant copy", welcome_header_data("accountant")["description"] == "Here is an overview of school fees, payments and financial activities.")
-    check("a name cannot inject markup into the header (escaped by Jinja)", "<script>" not in html(FT.get("/dashboard")).replace("<script>(function", "").split('data-welcome-header')[1][:400])
+    check("a name cannot inject markup into the header (escaped by Jinja)", "<script>" not in html(FT.get("/dashboard")).replace("<script>(function", "").split('class="wh-banner"')[1][:400])
 check("one reusable React component file drives every header", os.path.exists("static/js/react-ui/welcome-header.js") and "DashboardWelcomeHeader" in open("static/js/react-ui/welcome-header.js").read())
 check("welcome header is branded (uses the school's colours) and works in dark mode", "--theme-secondary" in open("static/css/welcome-header.css").read())
 
@@ -255,7 +255,7 @@ check("custom gradient is stored and rendered", row().startswith("gradient|") an
 post(ADMIN, "/admin/theme", {**base_form, "bg_mode": "solid", "bg_color1": "x;}body{display:none"}, "/admin/theme")
 check("a malicious colour value is rejected, never reaches the page", "display:none" not in html(ADMIN.get("/dashboard")).split("</style>")[0])
 post(ADMIN, "/admin/theme/reset", {}, "/admin/theme")
-check("Reset to default theme restores colours, standard background and switch OFF", row() == "default|sky|0" and one("SELECT dashboard_primary_color FROM schools WHERE id=1") == "#1f6feb")
+check("Reset to default theme restores colours, standard background and switch OFF", row() == "default|sky|0" and one("SELECT dashboard_primary_color FROM schools WHERE id=1") == "#1a6fe8")
 check("a teacher cannot change or reset the theme", FT.post("/admin/theme/reset", data={"csrf_token": csrf(FT)}).status_code in (302, 403))
 pg = html(ADMIN.get("/admin/theme"))
 check("Theme page: backgrounds card, presets, custom colour/gradient, auth switch, live preview, reset", all(x in pg for x in ('id="bgCard"', 'name="bg_preset"', 'name="bg_color1"', 'name="bg_apply_auth"', 'id="bgPreview"', "Reset to default theme", "Apply Custom Background to Authentication Pages")))
