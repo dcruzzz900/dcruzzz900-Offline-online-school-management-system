@@ -1731,8 +1731,8 @@ def migration_049_school_theme(conn):
     """Dashboard theme tokens are per-school and safe to change without affecting data."""
     for col, typ in [
         ("theme_preset", "TEXT NOT NULL DEFAULT 'default'"),
-        ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1a6fe8'"),
-        ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0a2a6b'"),
+        ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1f6feb'"),
+        ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0b3b75'"),
         ("dashboard_accent_color", "TEXT NOT NULL DEFAULT '#7c4dff'"),
         ("dashboard_sidebar_style", "TEXT NOT NULL DEFAULT 'dark'"),
         ("dashboard_header_style", "TEXT NOT NULL DEFAULT 'solid'"),
@@ -3114,8 +3114,8 @@ def migration_058_runtime_schema_repair(conn):
         for col, typ in [
             ("tenant_id", "TEXT"), ("school_code", "TEXT"), ("registered_email", "TEXT"), ("registered_phone", "TEXT"),
             ("cumulative_enabled", "INTEGER DEFAULT 0"), ("theme_preset", "TEXT NOT NULL DEFAULT 'default'"),
-            ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1a6fe8'"),
-            ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0a2a6b'"),
+            ("dashboard_primary_color", "TEXT NOT NULL DEFAULT '#1f6feb'"),
+            ("dashboard_secondary_color", "TEXT NOT NULL DEFAULT '#0b3b75'"),
             ("dashboard_accent_color", "TEXT NOT NULL DEFAULT '#7c4dff'"),
             ("dashboard_sidebar_style", "TEXT NOT NULL DEFAULT 'dark'"),
             ("dashboard_header_style", "TEXT NOT NULL DEFAULT 'solid'"),
@@ -4393,32 +4393,4 @@ def migration_088_v107_announcement_duration(conn):
 
 
 STEPS.append(("announcement_duration_v107", migration_088_v107_announcement_duration))
-
-def migration_089_v112_fee_payments(conn):
-    """V112: School Fees screen (v106 Modern Screens #89). One row per payment the school records; the totals shown on the
-    dashboard card still come from school_fee_summary, which the screen keeps in step."""
-    conn.execute("""CREATE TABLE IF NOT EXISTS school_fee_payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        school_id INTEGER NOT NULL,
-        student_id INTEGER,
-        amount REAL NOT NULL,
-        method TEXT,
-        paid_on TEXT,
-        note TEXT,
-        recorded_by TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP)""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_school_fee_payments_school ON school_fee_payments(school_id, id)")
-
-
-STEPS.append(("fee_payments_v112", migration_089_v112_fee_payments))
-
-def migration_090_v112_brand_defaults(conn):
-    """V112: v106 Modern Screens palette (#1a6fe8 / #0a2a6b). Only schools still on the UNTOUCHED old default pair are moved;
-    any school that picked its own colours (or another preset) keeps them."""
-    conn.execute("UPDATE schools SET dashboard_primary_color='#1a6fe8', dashboard_secondary_color='#0a2a6b' "
-                 "WHERE LOWER(COALESCE(dashboard_primary_color,''))='#1f6feb' AND LOWER(COALESCE(dashboard_secondary_color,''))='#0b3b75' "
-                 "AND COALESCE(theme_preset,'default') IN ('default','custom','')")
-
-
-STEPS.append(("brand_defaults_v112", migration_090_v112_brand_defaults))
 
