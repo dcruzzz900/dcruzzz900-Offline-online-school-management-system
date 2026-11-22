@@ -1,0 +1,68 @@
+/* AUTO-GENERATED (V112): dark counterparts for every legacy light background; see tools note in V112_IMPLEMENTATION_NOTES.md */
+html[data-bs-theme=dark] .ad-panel,
+html[data-bs-theme=dark] .ad-quick a,
+html[data-bs-theme=dark] .ad-tip,
+html[data-bs-theme=dark] .ai-card,
+html[data-bs-theme=dark] .ai-feature-card,
+html[data-bs-theme=dark] .attendance-strip>div,
+html[data-bs-theme=dark] .card,
+html[data-bs-theme=dark] .chat-bubble,
+html[data-bs-theme=dark] .chat-panel,
+html[data-bs-theme=dark] .child-card,
+html[data-bs-theme=dark] .child-insight,
+html[data-bs-theme=dark] .feature-toggle,
+html[data-bs-theme=dark] .gender-stat-card,
+html[data-bs-theme=dark] .material-output,
+html[data-bs-theme=dark] .mini-result-table i,
+html[data-bs-theme=dark] .notice,
+html[data-bs-theme=dark] .panel,
+html[data-bs-theme=dark] .password-field button,
+html[data-bs-theme=dark] .platform-top,
+html[data-bs-theme=dark] .preview-body,
+html[data-bs-theme=dark] .preview-cards i,
+html[data-bs-theme=dark] .privacy-steps span,
+html[data-bs-theme=dark] .quick-links a,
+html[data-bs-theme=dark] .result-profile-grid,
+html[data-bs-theme=dark] .result-summary div,
+html[data-bs-theme=dark] .result-summary>div,
+html[data-bs-theme=dark] .role-cards button,
+html[data-bs-theme=dark] .role-chip,
+html[data-bs-theme=dark] .settings-tile,
+html[data-bs-theme=dark] .settings-tile .st-ico,
+html[data-bs-theme=dark] .settings-tile .st-ico.amber,
+html[data-bs-theme=dark] .settings-tile .st-ico.green,
+html[data-bs-theme=dark] .settings-tile .st-ico.purple,
+html[data-bs-theme=dark] .settings-tile .st-ico.rose,
+html[data-bs-theme=dark] .settings-tile .st-ico.slate,
+html[data-bs-theme=dark] .settings-tile .st-ico.teal,
+html[data-bs-theme=dark] .stat-box,
+html[data-bs-theme=dark] .stat-card,
+html[data-bs-theme=dark] .student-top,
+html[data-bs-theme=dark] .subject-chip,
+html[data-bs-theme=dark] .tenant-chip,
+html[data-bs-theme=dark] .top-avatar,
+html[data-bs-theme=dark] .top-search,
+html[data-bs-theme=dark] .top-search-results,
+html[data-bs-theme=dark] .tsr-group,
+html[data-bs-theme=dark] .upload-strip>div,
+html[data-bs-theme=dark] body,
+html[data-bs-theme=dark] img.passport-img,
+html[data-bs-theme=dark] table,
+html[data-bs-theme=dark] table caption{background-color:#151c28;color:#dde3f0;border-color:#2c3646}
+
+html[data-bs-theme=dark] .flash-success,html[data-bs-theme=dark] .ann-success{background:#14391f;color:#bbf7d0;border-color:#1f5a33}
+html[data-bs-theme=dark] .flash-error,html[data-bs-theme=dark] .ann-danger{background:#4c1d24;color:#fecaca;border-color:#7a2a35}
+html[data-bs-theme=dark] .ann,html[data-bs-theme=dark] .ann-warning{background:#3a3217;color:#fde68a;border-color:#5b4d1c}
+html[data-bs-theme=dark] .stat-box,html[data-bs-theme=dark] .chart-card,html[data-bs-theme=dark] .chart-box{background:#151c28;border-color:#2c3646;color:#dde3f0}
+html[data-bs-theme=dark] .stat-box .num{color:#cfe0ff}html[data-bs-theme=dark] .stat-box .label{color:#a9b5c6}
+html[data-bs-theme=dark] .chart-card h2,html[data-bs-theme=dark] .chart-card h3,html[data-bs-theme=dark] .chart-box h3{color:#cfe0ff}
+html[data-bs-theme=dark] .kpi{background:#151c28!important;border-color:#2c3646!important;color:#dde3f0}
+html[data-bs-theme=dark] .kpi strong{color:#e6ecf8}html[data-bs-theme=dark] .kpi span{color:#a9b5c6}
+html[data-bs-theme=dark] .rt-wrap{border-color:#2c3646}html[data-bs-theme=dark] .rt th,html[data-bs-theme=dark] .rt td{background:#151c28;color:#dde3f0;border-color:#2c3646}
+html[data-bs-theme=dark] .rt-l{color:#a9b5c6}
+html[data-bs-theme=dark] a.ai-card{background:#151c28!important;border-color:#2c3646!important}
+html[data-bs-theme=dark] a.ai-card h3{color:#e6ecf8}html[data-bs-theme=dark] a.ai-card p{color:#a9b5c6}html[data-bs-theme=dark] a.ai-card .icon{background:#1e2a44}
+html[data-bs-theme=dark] a.ai-card .arrow{color:#7db3ff}
+html[data-bs-theme=dark] .ro{background:#1b2433!important;color:#dde3f0!important;border-color:#3a4558!important}
+html[data-bs-theme=dark] .req,html[data-bs-theme=dark] .req-tag{color:#fb7185}
+html[data-bs-theme=dark] .req-tag,html[data-bs-theme=dark] em.tag.req-tag{background:#4c1d24!important;color:#fecaca!important}

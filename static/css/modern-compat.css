@@ -212,3 +212,110 @@ html[data-bs-theme=dark] .sh-fab-theme{background:#1b2433;color:#dde3f0;border-c
 .more-tools>summary::after{content:"▾";margin-left:auto;color:var(--mut)}
 .more-tools[open]>summary::after{content:"▴"}
 .more-tools .ad-quick{padding:0 16px 16px}
+
+/* ---- V112: selectable charts (admin dashboard) + line charts. Uses theme variables so dark mode is always readable. ---- */
+.shc-svg{width:100%;height:auto;display:block;max-height:300px}
+.shc-grid{stroke:var(--border);stroke-width:1}
+.shc-ax{fill:var(--mut);font-size:.56rem}
+.shc-val{fill:var(--navy);font-size:.62rem;font-weight:700}
+.shc-empty{padding:28px 12px;text-align:center;color:var(--mut);font-size:.9rem}
+.ch-controls{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px 0}
+.seg{display:inline-flex;border:1px solid #c5d0e6;border-radius:999px;overflow:hidden;background:var(--card)}
+.seg button{border:0;background:transparent;color:var(--navy);font:600 .78rem/1 var(--font);padding:7px 11px;cursor:pointer;white-space:nowrap}
+.seg button+button{border-left:1px solid #c5d0e6}
+.seg button[aria-pressed=true]{background:var(--blue);color:#fff}
+.seg button:focus-visible{outline:2px solid #93c5fd;outline-offset:-2px}
+.ch-note{padding:6px 16px 0;font-size:.78rem;color:var(--mut)}
+html[data-bs-theme=dark] .seg{border-color:#3a4558}html[data-bs-theme=dark] .seg button+button{border-color:#3a4558}
+html[data-bs-theme=dark] .seg button{color:#dde3f0}html[data-bs-theme=dark] .seg button[aria-pressed=true]{background:#2f6fe0;color:#fff}
+/* SVG text/track colours follow the theme (hard-coded navy was unreadable in dark mode) */
+.pf-num{fill:var(--navy)}.pf-lbl{fill:var(--mut)}.pf-track{stroke:var(--border)}
+.ad-two{align-items:stretch}
+.ad-two>.ad-panel,.ad-two>.card,.ad-two>div>.ad-panel{height:100%;margin-bottom:0}
+
+/* =====================================================================================================================
+   V112 DARK MODE — complete pass. Everything readable: every v106 component that hard-codes a light background or dark text
+   gets a dark counterpart; links/eyebrows use a lighter blue (>=4.5:1); SVG text follows the theme; inline colours are mapped.
+   ===================================================================================================================== */
+html[data-bs-theme=dark]{color-scheme:dark;--link:#7db3ff}
+html[data-bs-theme=dark] body,html[data-bs-theme=dark] .ad{color:#dde3f0}
+/* links, eyebrows, small blue actions */
+html[data-bs-theme=dark] main a:not(.btn):not(.ad-kpi-link):not(.nav-item):not(.q-ico),html[data-bs-theme=dark] .eyebrow,html[data-bs-theme=dark] summary.hlp-t,
+html[data-bs-theme=dark] .qa-toggle-btn,html[data-bs-theme=dark] .ad-panel header a,html[data-bs-theme=dark] .arrow,html[data-bs-theme=dark] .panel-header a,
+html[data-bs-theme=dark] .sh-fab-reset{color:#7db3ff}
+html[data-bs-theme=dark] .ad-quick a{color:#dde3f0}
+html[data-bs-theme=dark] .qa-toggle-btn:hover{background:#1e2a44}
+/* KPI cards (lower panel), panels, tiles */
+html[data-bs-theme=dark] .ad-kpi-gender{background:#1b2433;color:#dde3f0}
+html[data-bs-theme=dark] .ad-kpi-gender b{color:#eef2fb}html[data-bs-theme=dark] .ad-kpi-gender small{color:#a9b5c6}
+html[data-bs-theme=dark] .ad-panel,html[data-bs-theme=dark] .settings-tile,html[data-bs-theme=dark] .kpi-mini,html[data-bs-theme=dark] .table-wrap,html[data-bs-theme=dark] .card{background:#151c28;border-color:#2c3646;color:#dde3f0}
+html[data-bs-theme=dark] .ad-panel header,html[data-bs-theme=dark] .panel-header{border-color:#2c3646}
+html[data-bs-theme=dark] .ad-panel header h2,html[data-bs-theme=dark] .panel-header h3,html[data-bs-theme=dark] .page-header h2,html[data-bs-theme=dark] .kpi-mini .value,html[data-bs-theme=dark] .ring-wrap .ring-pct{color:#cfe0ff}
+html[data-bs-theme=dark] .kpi-mini .label,html[data-bs-theme=dark] .page-header p,html[data-bs-theme=dark] .muted,html[data-bs-theme=dark] .ring-sub,html[data-bs-theme=dark] .chart-empty{color:#a9b5c6}
+html[data-bs-theme=dark] .settings-tile .st-ico{background:#1e2a44}html[data-bs-theme=dark] .settings-tile .st-ico.amber{background:#3a3217}html[data-bs-theme=dark] .settings-tile .st-ico.rose{background:#44202a}html[data-bs-theme=dark] .settings-tile .st-ico.purple{background:#33284f}html[data-bs-theme=dark] .settings-tile .st-ico.slate{background:#26303f}
+/* Quick Access tiles, activities, tips */
+html[data-bs-theme=dark] .ad-quick a{background:#1b2433;border-color:#2c3646}
+html[data-bs-theme=dark] .ad-quick a:hover{background:#243049;border-color:#4a6fb5;color:#fff}
+html[data-bs-theme=dark] .ad-quick a small{color:#a9b5c6}
+html[data-bs-theme=dark] .ad-acts li{border-color:#2c3646}html[data-bs-theme=dark] .ad-acts b{color:#e6ecf8}html[data-bs-theme=dark] .ad-acts small{color:#a9b5c6}
+html[data-bs-theme=dark] .a-green{background:#14391f}html[data-bs-theme=dark] .a-blue{background:#1b3a6b}html[data-bs-theme=dark] .a-purple{background:#33284f}html[data-bs-theme=dark] .a-orange{background:#4a2f12}
+html[data-bs-theme=dark] .ad-ann-item{border-color:#2c3646}html[data-bs-theme=dark] .ad-ann-item b{color:#e6ecf8}
+html[data-bs-theme=dark] .ad-tip{background:#3a3217;color:#fde68a;border-color:#5b4d1c}html[data-bs-theme=dark] .ad-tip b{color:#fff3b0}
+html[data-bs-theme=dark] .more-tools>summary{color:#cfe0ff}
+/* tables (v106 table.data) */
+html[data-bs-theme=dark] table.data thead th{background:#20304f;color:#e6ecf8}
+html[data-bs-theme=dark] table.data tbody td{color:#dde3f0;border-color:#2c3646}
+html[data-bs-theme=dark] table.data tbody tr:hover{background:#1b2433}
+html[data-bs-theme=dark] table.data td strong,html[data-bs-theme=dark] table.data td b{color:#f1f5fb}
+/* bars, tracks, grade rows */
+html[data-bs-theme=dark] .progress-bar,html[data-bs-theme=dark] .grade-bar{background:#2b3446}
+html[data-bs-theme=dark] .grade-row-top b{color:#e6ecf8}html[data-bs-theme=dark] .grade-row-top span{color:#a9b5c6}
+/* badges */
+html[data-bs-theme=dark] .badge{border:0}
+html[data-bs-theme=dark] .badge-blue{background:#1b3a6b;color:#bfdbfe}html[data-bs-theme=dark] .badge-green{background:#14391f;color:#86efac}
+html[data-bs-theme=dark] .badge-orange{background:#4a2f12;color:#fdba74}html[data-bs-theme=dark] .badge-red{background:#4c1d24;color:#fca5a5}
+html[data-bs-theme=dark] .badge-gray{background:#2a3446;color:#cbd5e1}html[data-bs-theme=dark] .badge-purple{background:#3b2a63;color:#e4d4ff}
+html[data-bs-theme=dark] .badge:not([class*=badge-]){background:#2a3446;color:#e6ecf8}
+/* form-ish + buttons */
+html[data-bs-theme=dark] .btn-outline{background:transparent;color:#dde3f0;border-color:#4a5568}
+html[data-bs-theme=dark] .avatar{background:#2f3f63;color:#fff}
+html[data-bs-theme=dark] .sidebar-brand .logo,html[data-bs-theme=dark] .sidebar .brand-mark.logo{background:#fff;color:#0a2a6b}
+html[data-bs-theme=dark] .notif-badge{color:#fff}
+/* status colours (classes + legacy inline colours) */
+html[data-bs-theme=dark] .t-ok,html[data-bs-theme=dark] [style*="#1a7f37"],html[data-bs-theme=dark] [style*="color:#059669"]{color:#4ade80!important}
+html[data-bs-theme=dark] .t-bad,html[data-bs-theme=dark] b[style*="e11d48"]{color:#fb7185!important}
+html[data-bs-theme=dark] .t-warn{color:#fdba74}
+html[data-bs-theme=dark] [style*="#7a2a20"],html[data-bs-theme=dark] .hlp-b{color:#fbd5c0!important}
+html[data-bs-theme=dark] .t-bad{color:#fb7185}
+.t-ok{color:#059669}.t-bad{color:#e11d48}.t-warn{color:#f97316}
+/* SVG text and lines drawn with fixed colours in templates -> follow the theme */
+html[data-bs-theme=dark] svg text[fill="#0a2a6b"],html[data-bs-theme=dark] svg text[fill="#0b2a6f"]{fill:#cfe0ff}
+html[data-bs-theme=dark] svg text[fill="#5b6b88"],html[data-bs-theme=dark] svg text[fill="#666"],html[data-bs-theme=dark] svg text[fill="#64748b"]{fill:#a9b5c6}
+html[data-bs-theme=dark] svg [stroke="#e5e7eb"],html[data-bs-theme=dark] svg [stroke="#f1f5f9"]{stroke:#33405a}
+html[data-bs-theme=dark] svg text.gp-pct{fill:#cfe0ff}html[data-bs-theme=dark] svg text.gp-lbl{fill:#a9b5c6}
+html[data-bs-theme=dark] .donut-legend,html[data-bs-theme=dark] .donut-legend span{color:#dde3f0}
+html[data-bs-theme=dark] .ring-wrap svg text{fill:#cfe0ff}
+html[data-bs-theme=dark] .chart-wrap{background:transparent}
+html[data-bs-theme=dark] details.hlp summary.hlp-t{color:#7db3ff}
+html[data-bs-theme=dark] :not(.btn)[style*="#b3261e"]{color:#fb7185!important}
+html[data-bs-theme=dark] .btn[style*="#b3261e"],html[data-bs-theme=dark] .btn[style*="background"]{color:#fff!important}
+html[data-bs-theme=dark] a.btn.btn-primary,html[data-bs-theme=dark] button.btn.btn-primary{color:#fff}
+html[data-bs-theme=dark] .badge[style*="background"]{color:#fff}
+html[data-bs-theme=dark] .badge[style*="c99a2e"]{color:#1a1200}
+html[data-bs-theme=dark] :not(.btn):not(.badge)[style*="color:#1d7a4c"]{color:#4ade80!important}
+/* selectors must never clip: wrap onto extra rows on narrow screens / large text */
+.seg{flex-wrap:wrap;max-width:100%}
+.seg button{flex:0 1 auto}
+@media(max-width:600px){
+ .seg{border:0;background:transparent;gap:6px;overflow:visible}
+ .seg button,.seg button+button{border:1px solid #c5d0e6;border-radius:999px;padding:8px 12px}
+ html[data-bs-theme=dark] .seg button,html[data-bs-theme=dark] .seg button+button{border-color:#3a4558}
+}
+/* extreme case: very narrow screens and/or very large text -> banner + KPI cards reflow instead of clipping */
+.ad-banner h1{overflow-wrap:anywhere;font-size:clamp(1.25rem,5.6vw,2rem)}
+.ad-banner p{overflow-wrap:anywhere}
+.ad-banner-clock{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.ad-kpi *{min-width:0;overflow-wrap:anywhere}
+.ad-kpi-gender{flex-wrap:wrap}
+@media(max-width:420px){.ad-banner{flex-direction:column;align-items:flex-start;gap:12px}.ad-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}}
+html[data-font-scale="150"] .ad-kpi-gender{grid-template-columns:1fr}
