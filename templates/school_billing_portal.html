@@ -5,15 +5,17 @@
   <div><h1><span class="ni" aria-hidden="true">◈</span> Billing & Subscription</h1><p>School billing records, subscription status and payment receipts.</p></div>
 </div>
 
+<div class="kpi-row stat-grid">
+  <div class="stat-box"><div class="label">Current plan</div><div class="num">{{ plan.name if plan else (school.subscription_plan or 'Legacy / Existing') }}</div></div>
+  <div class="stat-box"><div class="label">Status</div><div class="num">{{ state.label }}</div></div>
+  <div class="stat-box"><div class="label">Days remaining</div><div class="num">{{ state.days_left if state.days_left is not none else 'Not applicable' }}</div></div>
+  <div class="stat-box"><div class="label">Expiry</div><div class="num">{{ school.trial_ends_at if state.status == 'trial' else (school.subscription_ends_at or 'Not applicable') }}</div></div>
+</div>
 <div class="card">
-  <h2>Current subscription</h2>
+  <h2>Subscription</h2>
   <div class="dashboard-grid">
     <div><strong>School ID</strong><br><code>{{ school.school_code or '—' }}</code></div>
     <div><strong>Tenant ID</strong><br><code>{{ school.tenant_id or '—' }}</code></div>
-    <div><strong>Plan</strong><br>{{ plan.name if plan else (school.subscription_plan or 'Legacy / Existing') }}</div>
-    <div><strong>Status</strong><br>{{ state.label }}</div>
-    <div><strong>Days remaining</strong><br>{{ state.days_left if state.days_left is not none else 'Not applicable' }}</div>
-    <div><strong>Expiry</strong><br>{{ school.trial_ends_at if state.status == 'trial' else (school.subscription_ends_at or 'Not applicable') }}</div>
   </div>
   {% if state.status in ['expired', 'suspended', 'cancelled'] %}
   <p class="alert alert-error">Your school currently does not have active subscription access. Contact the platform administrator for renewal.</p>
