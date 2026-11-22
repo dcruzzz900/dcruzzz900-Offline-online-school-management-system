@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Staff Attendance{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1><span class="ni" aria-hidden="true">✓</span> Staff Attendance</h1><p>Attendance is saved directly to the school server.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
+<div class="page-heading"><div><div class="eyebrow">STAFF</div><h1>Staff Attendance</h1><p>Attendance is saved directly to the school server.</p></div><a class="btn btn-secondary" href="{{ url_for('staff_attendance_history') }}">History & Reports</a></div>
 
 <div class="card attendance-self-actions">
   <div class="section-title"><div><h3>My Attendance</h3><p class="muted">Record your own check-in and check-out without creating duplicate daily records.</p></div><span id="staffAttendanceStatus" class="badge"></span></div>

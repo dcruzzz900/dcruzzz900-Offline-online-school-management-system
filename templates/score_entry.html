@@ -1,11 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Score Entry{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">✎</span> Score Entry — {{ subject_row.name }}</h1>
-<p>{{ class_row.name }} · {{ term.session_name }} {{ term.name }} · Max marks — CA1: {{ config.ca1_max }}, CA2: {{ config.ca2_max }}{% if config.ca3_max %}, CA3: {{ config.ca3_max }}{% endif %}, Exam: {{ config.exam_max }}</p></div>
-<div class="page-actions no-print"><a class="btn btn-secondary" href="{{ url_for('score_history_view', class_id=class_row.id, subject_id=subject_row.id) }}">View Change History</a><button type="button" class="btn btn-secondary" data-open="bulkPanel">Bulk Upload CSV</button></div></div>
-{% set scored = namespace(n=0) %}{% for s in students %}{% if s.id in existing %}{% set scored.n = scored.n + 1 %}{% endif %}{% endfor %}
-<div class="kpi-row stat-grid no-print"><div class="stat-box"><div class="label">Students</div><div class="num">{{ students|length }}</div></div><div class="stat-box"><div class="label">Scores saved</div><div class="num" style="color:#059669">{{ scored.n }}</div></div><div class="stat-box"><div class="label">Not yet scored</div><div class="num" style="color:#d97706">{{ students|length - scored.n }}</div></div></div>
+<h1>Score Entry</h1>
+<p class="badge">{{ class_row.name }} — {{ subject_row.name }} — {{ term.session_name }} {{ term.name }}</p>
+<p style="font-size:0.85rem; color:#666;">
+    Max marks — CA1: {{ config.ca1_max }}, CA2: {{ config.ca2_max }}{% if config.ca3_max %}, CA3: {{ config.ca3_max }}{% endif %}, Exam: {{ config.exam_max }}
+</p>
+
+<div class="no-print" style="margin-bottom:1rem;">
+    <a class="btn btn-primary btn-sm" href="{{ url_for('score_history_view', class_id=class_row.id, subject_id=subject_row.id) }}">View Change History</a>
+</div>
+
+<div class="card">
+    <h3>Bulk Upload (CSV)</h3>
+    <details class="hlp"><summary class="hlp-t">How this works</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
+        Download the current scores as a CSV, fill it in on your computer, then upload it back — handy for entering many scores at once.
+    </p></details>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('score_csv_template', class_id=class_row.id, subject_id=subject_row.id) }}">Download CSV Template</a>
+    <form data-no-hub method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
+<label>Reason for change <span class="muted">(required if results are published)</span><input type="text" name="change_reason" maxlength="300" class="form-control"></label>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Upload Completed CSV</label>
+        <input type="file" name="csv_file" accept=".csv" required class="form-control">
+        <button class="btn btn-primary" type="submit">Upload &amp; Save Scores</button>
+    </form>
+</div>
 
 <div id="scoreApp" data-config='{{ score_boot|tojson }}'></div>
 <div id="scoreFallback">
@@ -83,20 +103,5 @@ document.querySelectorAll('.score-input').forEach(function(input) {
 });
 </script>
 </div>
-<details class="card m-fold" id="bulkPanel"><summary>⬆ Bulk Upload (CSV)</summary><div class="m-fold-body">
-    <details class="hlp"><summary class="hlp-t">How this works</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem;">
-        Download the current scores as a CSV, fill it in on your computer, then upload it back — handy for entering many scores at once.
-    </p></details>
-    <a class="btn btn-primary btn-sm" href="{{ url_for('score_csv_template', class_id=class_row.id, subject_id=subject_row.id) }}">Download CSV Template</a>
-    <form data-no-hub method="POST" action="{{ url_for('score_csv_upload', class_id=class_row.id, subject_id=subject_row.id) }}" enctype="multipart/form-data" style="margin-top:1rem;">
-<label>Reason for change <span class="muted">(required if results are published)</span><input type="text" name="change_reason" maxlength="300" class="form-control"></label>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Upload Completed CSV</label>
-        <input type="file" name="csv_file" accept=".csv" required class="form-control">
-        <button class="btn btn-primary" type="submit">Upload &amp; Save Scores</button>
-    </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden])');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}
 {% block extra_scripts %}{% include "partials/react_cdn.html" %}<script src="{{ url_for('static', filename='js/react-ui/score-entry.js') }}"></script>{% endblock %}

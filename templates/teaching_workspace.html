@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% set v106_page = true %}
+{% block title %}My Teaching Workspace — {{ school_name }}{% set qa = quick_actions() %}{% set _core = ['enter_scores','take_attendance','my_profile','timetable','materials'] %}
+{% set _extra = qa.actions|rejectattr('key','in',_core)|list if qa.actions else [] %}
+{% if _extra %}<article class="ad-panel" id="more-tools" style="margin-top:16px">
+  <header><h2><span class="ni">🧰</span> More tools for your role</h2><span style="font-size:0.78rem;color:var(--mut)">{{ _extra|length }} shortcuts</span></header>
+  {% if qa.roles and qa.roles|length > 1 %}<p style="padding:10px 16px 0;color:var(--mut);font-size:.8rem">Combined from your roles: {{ qa.roles|join(', ') }}. Shortcuts only; every page still checks your permissions.</p>{% endif %}
+  <div class="ad-quick" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))!important;padding:12px 16px 16px">
+    {% for a in _extra %}<a href="{{ a.url }}" title="{{ a.hint or a.label }}"><span class="q-ico">{{ a.icon }}</span>{{ a.label }}{% if a.badge %} <em class="notif-badge">{{ a.badge }}</em>{% endif %}{% if a.state_label %}<small style="display:block;color:var(--mut);font-weight:500">{{ a.state_label }}</small>{% endif %}</a>{% endfor %}
+  </div>
+</article>{% endif %}
+{% endblock %}
+{% block content %}
+<div class="page-header"><div><h2><span class="ni">▣</span> My Teaching Workspace</h2><p>{% if term %}{{ term.session_name }} · {{ term.name }} — {% endif %}your subject assignments: enter scores, open the class roster, take attendance</p></div>
+  <a class="btn btn-primary" href="{{ url_for('student_attendance_hub') }}">Student Attendance</a></div>
+<div class="card table-wrap" id="teaching-workspace">
+  <div class="panel-header"><h3><span class="ni">✏️</span> Score entry by class &amp; subject</h3><a href="{{ url_for('dashboard') }}" style="font-size:0.8rem;font-weight:600">← Dashboard</a></div>
+  {% if rows %}<table class="data">
+    <thead><tr><th>Class</th><th>Subject</th><th>Students</th><th>Scores</th><th>Avg</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for m in rows %}<tr><td><strong>{{ m.class_name }}</strong></td><td>{{ m.subject_name }}</td><td>{{ m.students }}</td>
+        <td>{{ m.done }}/{{ m.students }}{% if m.students and m.done < m.students %} <span class="badge badge-orange">{{ m.students - m.done }} pending</span>{% endif %}</td>
+        <td>{{ (m.avg ~ '%') if m.avg is not none else '—' }}</td>
+        <td><a href="{{ url_for('score_entry', class_id=m.class_id, subject_id=m.subject_id) }}">Enter scores</a> · <a href="{{ url_for('my_class_roster', class_id=m.class_id) }}">Roster</a></td></tr>{% endfor %}
+    </tbody></table>
+  {% else %}<p style="padding:16px;color:var(--mut)">No subject assignments yet. Ask the school administrator to assign you to a class and subject.</p>{% endif %}
+</div>
+{% endblock %}

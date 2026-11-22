@@ -1,24 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Result approval workflow{% endblock %}
 {% block content %}
-{% set cnt = namespace(pending=0, approved=0, published=0, returned=0) %}{% for r in rows %}{% if r.status in ['submitted','under_review'] %}{% set cnt.pending = cnt.pending + 1 %}{% elif r.status == 'approved' %}{% set cnt.approved = cnt.approved + 1 %}{% elif r.status == 'published' %}{% set cnt.published = cnt.published + 1 %}{% elif r.status in ['returned','reopened'] %}{% set cnt.returned = cnt.returned + 1 %}{% endif %}{% endfor %}
-<div class="page-head"><div><h1><span class="ni" aria-hidden="true">✔</span> Result Approval</h1><p>Review and publish class results · {{ term.session_name }} {{ term.name }}</p></div></div>
-<div class="kpi-row stat-grid"><div class="stat-box"><div class="label">Pending review</div><div class="num">{{ cnt.pending }}</div></div><div class="stat-box"><div class="label">Approved</div><div class="num">{{ cnt.approved }}</div></div><div class="stat-box"><div class="label">Published</div><div class="num">{{ cnt.published }}</div></div><div class="stat-box"><div class="label">Returned</div><div class="num">{{ cnt.returned }}</div></div></div>
+<h1>Result approval &amp; publication</h1>
 <details class="hlp"><summary class="hlp-t">How the workflow works</summary><p class="muted hlp-b">Draft &rarr; Submitted &rarr; Under review &rarr; Approved &rarr; Published. Unpublished results can be viewed or previewed by authorised staff only; printing, download and PDF are blocked until a result is published.</p></details>
-<form method="GET" class="filters">
-  <label style="display:inline;margin:0" for="termSel">Term:</label>
-  <select id="termSel" name="term_id" onchange="this.form.submit()" class="form-select">
+<form method="GET" style="margin-bottom:1rem">
+  <label style="display:inline">Term:</label>
+  <select name="term_id" onchange="this.form.submit()" style="width:auto;display:inline-block" class="form-select">
     {% for t in terms %}<option value="{{ t.id }}" {% if t.id == term.id %}selected{% endif %}>{{ t.session_name }} — {{ t.name }}</option>{% endfor %}
   </select>
 </form>
-<div class="card card-flush" style="overflow-x:auto">
+<div class="card" style="overflow-x:auto">
 <table class="table table-hover align-middle">
-  <thead><tr><th>Class</th><th>Students</th><th>Status</th><th>Actions</th><th></th></tr></thead><tbody>
+  <tr><th>Class</th><th>Students</th><th>Status</th><th>Actions</th><th></th></tr>
   {% for r in rows %}
   <tr>
-    <td><strong>{{ r.cls.name }}</strong></td>
+    <td>{{ r.cls.name }}</td>
     <td>{{ r.students }}</td>
-    <td><span class="badge wf-{{ r.status }}">{{ r.label }}</span>{% if r.pub and r.pub.last_reason %}<br><small class="muted">{{ r.pub.last_reason }}</small>{% endif %}
+    <td><strong>{{ r.label }}</strong>{% if r.pub and r.pub.last_reason %}<br><small class="muted">{{ r.pub.last_reason }}</small>{% endif %}
       {% if r.summary %}<br><small class="muted">Review: {{ r.summary.with_attendance }}/{{ r.summary.students }} attendance · {{ r.summary.with_teacher_comment }} teacher comments · {{ r.summary.with_principal_comment }} principal comments · {{ r.summary.with_domains }} domain ratings</small>{% endif %}</td>
     <td>
       {% for a in r.actions %}
@@ -34,6 +32,6 @@
         <a class="btn btn-sm btn-secondary" href="{{ url_for('class_results_list', class_id=r.cls.id, term_id=term.id) }}">Preview</a></td>
   </tr>
   {% else %}<tr><td colspan="5" class="muted">No classes available to you.</td></tr>{% endfor %}
-</tbody></table>
+</table>
 </div>
 {% endblock %}

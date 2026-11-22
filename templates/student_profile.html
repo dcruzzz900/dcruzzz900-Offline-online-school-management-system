@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Student Profile{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Student Profile</h1><p>Your account and contact details</p></div></div>
-<div class="m-narrow">
+<h1>Student Profile</h1>
 
 <div class="card">
     <h3>{{ student_full_name(student) }}</h3>
@@ -80,6 +79,5 @@
         <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Remove Login</button>
     </form>
     {% endif %}
-</div>
 </div>
 {% endblock %}
