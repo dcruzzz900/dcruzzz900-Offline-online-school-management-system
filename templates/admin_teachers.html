@@ -1,10 +1,63 @@
 {% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Teachers{% endblock %}
 {% block content %}
-<h1>Teachers</h1>
+{% set act = namespace(n=0) %}{% for t in teachers %}{% if t.is_active %}{% set act.n = act.n + 1 %}{% endif %}{% endfor %}
+<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">♙</span> Teachers &amp; Staff</h1><p>{{ teachers|length }} staff member{{ '' if teachers|length==1 else 's' }}</p></div><div class="page-actions"><a class="btn btn-secondary" href="{{ url_for('signup_codes') }}">Signup Codes</a><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Teacher</button></div></div>
+<div class="kpi-row stat-grid"><div class="stat-box"><div class="label">Total staff</div><div class="num">{{ teachers|length }}</div></div><div class="stat-box"><div class="label">Active</div><div class="num">{{ act.n }}</div></div><div class="stat-box"><div class="label">Deactivated</div><div class="num">{{ teachers|length - act.n }}</div></div></div>
+<div class="filters" role="search" aria-label="Filter staff"><input type="search" id="tchSearch" class="form-control" placeholder="Search teachers…" aria-label="Search teachers" autocomplete="off"><div class="filters-right"><select id="tchStatus" class="form-control" aria-label="Filter by status"><option value="">All Status</option><option value="1">Active</option><option value="0">Deactivated</option></select></div></div>
+<div class="card card-flush">
+    <div class="table-responsive"><table class="table table-hover align-middle" id="tchTable"><caption>Staff List</caption>
+        <thead><tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        {% for t in teachers %}
+        <tr data-act="{{ 1 if t.is_active else 0 }}">
+            <td><strong>{{ t|staff_name }}</strong><br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
+            <td>{{ t.username }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
+                      style="display:flex; gap:0.3rem; flex-wrap:wrap; align-items:center;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;" class="form-control">
+                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;" class="form-control">
+                    <button class="btn btn-primary btn-sm" type="submit">Save</button>
+                </form>
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
+                </form>
+            </td>
+            <td>
+                {% if t.is_active %}<span class="badge m-ok">Active</span>{% else %}<span class="badge m-bad">Deactivated</span>{% endif %}
+            </td>
+            <td class="row-actions">
+                <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
+                      {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and unable to sign in until you reactivate them.');"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm act" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
+                </form>
+                <form method="POST" action="{{ url_for('admin_reset_teacher_password', teacher_id=t.id) }}" class="inline"
+                      onsubmit="return confirm('Reset the password for {{ t.name }}? A new temporary password will be shown here once.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm act" type="submit">Reset Password</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_teacher', teacher_id=t.id) }}" class="inline"
+                      onsubmit="return confirm('Remove {{ t.name }}? Any classes/subjects they teach will become unassigned.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-sm act act-danger" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    <p id="tchNone" class="empty-state" hidden style="margin:1rem">No staff match these filters.</p>
+</div>
+<script>(function(){var q=document.getElementById('tchSearch'),s=document.getElementById('tchStatus'),rows=document.querySelectorAll('#tchTable tbody tr'),none=document.getElementById('tchNone');
+function run(){var t=(q.value||'').trim().toLowerCase(),n=0;rows.forEach(function(r){var ok=(!t||(r.cells[0].textContent+' '+r.cells[1].textContent).toLowerCase().indexOf(t)>-1)&&(!s.value||r.dataset.act===s.value);r.hidden=!ok;if(ok)n++;});if(none)none.hidden=n>0||!rows.length;}
+q.addEventListener('input',run);s.addEventListener('change',run);})();</script>
 
-<div class="card">
-    <h3>Add a Teacher</h3>
+<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Teacher</summary><div class="m-fold-body">
+    
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Full Name</label>
@@ -23,53 +76,6 @@
         <label>RBAC Role</label><select name="rbac_role" required class="form-select">{% for role in rbac_roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}</select>
         <button class="btn btn-primary" type="submit">Add Teacher</button>
     </form>
-</div>
-
-<div class="card">
-    <h3>All Teachers</h3>
-    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Staff List</caption>
-        <tr><th>Name</th><th>Username</th><th>Email / Phone</th><th>RBAC Role</th><th>Status</th><th>Actions</th></tr>
-        {% for t in teachers %}
-        <tr>
-            <td>{{ t|staff_name }}<br><a href="{{ url_for('staff_roles', user_id=t.id) }}" style="font-size:.8rem">Manage roles</a></td>
-            <td>{{ t.username }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('update_teacher_contact', teacher_id=t.id) }}"
-                      style="display:flex; gap:0.3rem; flex-wrap:wrap; align-items:center;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="email" name="email" value="{{ t.email or '' }}" placeholder="Email" style="width:9rem;" class="form-control">
-                    <input type="text" name="phone" value="{{ t.phone or '' }}" placeholder="Phone" style="width:7rem;" class="form-control">
-                    <button class="btn btn-primary btn-sm" type="submit">Save</button>
-                </form>
-            </td>
-            <td>
-                <form method="POST" action="{{ url_for('set_teacher_position', teacher_id=t.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="rbac_role" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">{% for role in rbac_roles %}<option value="{{ role }}" {% if (t.rbac_role or "Teacher") == role %}selected{% endif %}>{{ role }}</option>{% endfor %}</select>
-                </form>
-            </td>
-            <td>
-                {% if t.is_active %}<span style="color:#1a7f37;">Active</span>{% else %}<span style="color:#b3261e;">Deactivated</span>{% endif %}
-            </td>
-            <td style="white-space:nowrap;">
-                <form method="POST" action="{{ url_for('toggle_teacher_active', teacher_id=t.id) }}" class="inline"
-                      {% if t.is_active %}onsubmit="return confirm('Deactivate {{ t.name }}? They will be logged out and unable to sign in until you reactivate them.');"{% endif %}>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-primary btn-sm" type="submit">{{ 'Deactivate' if t.is_active else 'Reactivate' }}</button>
-                </form>
-                <form method="POST" action="{{ url_for('admin_reset_teacher_password', teacher_id=t.id) }}" class="inline"
-                      onsubmit="return confirm('Reset the password for {{ t.name }}? A new temporary password will be shown here once.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-primary btn-sm" type="submit">Reset Password</button>
-                </form>
-                <form method="POST" action="{{ url_for('delete_teacher', teacher_id=t.id) }}" class="inline"
-                      onsubmit="return confirm('Remove {{ t.name }}? Any classes/subjects they teach will become unassigned.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </table></div>
-</div>
+</div></details>
+<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}

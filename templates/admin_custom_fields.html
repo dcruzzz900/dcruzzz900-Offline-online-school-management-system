@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}Custom Fields{% endblock %}{% block content %}
-<div class="page-heading"><div><div class="eyebrow">ADMINISTRATION</div><h1>Custom Profile Fields</h1>
+<div class="page-heading"><div><div class="eyebrow">ADMINISTRATION</div><h1><span class="ni" aria-hidden="true">🧩</span> Custom Profile Fields</h1>
 <p>Add school-specific fields to Student and Staff profiles. Protected system fields cannot be replaced.</p></div>
 <a class="btn btn-primary" href="{{ url_for('admin_custom_field_new', applies_to=tab) }}">+ Add New Field</a></div>
 <div style="margin:10px 0"><a class="btn {{ '' if tab=='student' else 'btn-secondary' }}" href="{{ url_for('admin_custom_fields', tab='student') }}">Student Fields</a>
