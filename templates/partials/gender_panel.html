@@ -5,17 +5,17 @@
    `stats` = student_gender_stats() output (boys/girls/unspecified/total) or a dict with male/female. #}
 {% from "partials/ad_icons.html" import ico %}
 {% macro gender_panel(stats, scope='Students', title='Gender Distribution') %}{% set g = gender_panel_data(stats) %}
-<article class="gp" data-gender-panel data-total="{{ g.total }}" data-male="{{ g.male }}" data-female="{{ g.female }}">
-  <header>{{ ico('bars', 22) }}<h2>{{ title }}<span class="gp-sub"> ({{ scope }})</span></h2></header>
-  {% if g.has_data %}<div class="gp-body">
-    <svg viewBox="0 0 160 160" class="gp-donut" role="img" aria-label="{{ scope }}: {{ g.male_pct }}% male, {{ g.female_pct }}% female{% if g.unspecified %}, {{ g.unspecified_pct }}% not specified{% endif %}">
-      <circle class="gp-track" cx="80" cy="80" r="56" fill="none" stroke-width="22"/>
-      {% for a in g.arcs %}<circle class="gp-arc gp-{{ a.key }}" cx="80" cy="80" r="56" fill="none" stroke-width="22" stroke-dasharray="{{ a.len }} {{ a.gap }}" stroke-dashoffset="{{ a.offset }}" transform="rotate(-90 80 80)"/>{% endfor %}
-      <text x="80" y="78" text-anchor="middle" class="gp-pct">{{ g.male_pct }}%</text><text x="80" y="100" text-anchor="middle" class="gp-lbl">Male</text></svg>
-    <ul class="gp-legend">
-      <li><i class="gp-dot gp-male"></i><div><b>Male</b><span>{{ '{:,}'.format(g.male) }} ({{ g.male_pct }}%)</span></div></li>
-      <li><i class="gp-dot gp-female"></i><div><b>Female</b><span>{{ '{:,}'.format(g.female) }} ({{ g.female_pct }}%)</span></div></li>
-      {% if g.unspecified %}<li><i class="gp-dot gp-other"></i><div><b>Not specified</b><span>{{ '{:,}'.format(g.unspecified) }} ({{ g.unspecified_pct }}%)</span></div></li>{% endif %}
-    </ul>
-  </div>{% else %}<p class="gp-empty">No gender data recorded yet.</p>{% endif %}
+<article class="ad-panel gp-v106" data-gender-panel data-total="{{ g.total }}" data-male="{{ g.male }}" data-female="{{ g.female }}">
+  <header><h2><span class="ni">⚥</span> {{ title }}<span class="gp-sub" style="font-weight:500;color:var(--mut)"> ({{ scope }})</span></h2></header>
+  {% if g.has_data %}<div class="donut-wrap">
+    <svg viewBox="0 0 160 160" class="gp-donut" width="120" height="120" role="img" aria-label="{{ scope }}: {{ g.male_pct }}% male, {{ g.female_pct }}% female{% if g.unspecified %}, {{ g.unspecified_pct }}% not specified{% endif %}">
+      <circle class="gp-track" cx="80" cy="80" r="56" fill="none" stroke="#f1f5f9" stroke-width="22"/>
+      {% for a in g.arcs %}<circle class="gp-arc gp-{{ a.key }}" cx="80" cy="80" r="56" fill="none" stroke="{{ '#1a6fe8' if a.key == 'male' else ('#ec4899' if a.key == 'female' else '#94a3b8') }}" stroke-width="22" stroke-dasharray="{{ a.len }} {{ a.gap }}" stroke-dashoffset="{{ a.offset }}" transform="rotate(-90 80 80)"/>{% endfor %}
+      <text x="80" y="78" text-anchor="middle" font-size="26" font-weight="800" fill="#0a2a6b" class="gp-pct">{{ g.male_pct }}%</text><text x="80" y="100" text-anchor="middle" font-size="13" fill="#5b6b88" class="gp-lbl">Male</text></svg>
+    <div class="donut-legend">
+      <span><i class="dot-m"></i> Male — {{ '{:,}'.format(g.male) }} ({{ g.male_pct }}%)</span>
+      <span><i class="dot-f"></i> Female — {{ '{:,}'.format(g.female) }} ({{ g.female_pct }}%)</span>
+      {% if g.unspecified %}<span><i class="dot-m" style="background:#94a3b8"></i> Not specified — {{ '{:,}'.format(g.unspecified) }} ({{ g.unspecified_pct }}%)</span>{% endif %}
+    </div>
+  </div>{% else %}<p style="padding:16px;color:var(--mut);font-size:.85rem">No gender data recorded yet.</p>{% endif %}
 </article>{% endmacro %}
