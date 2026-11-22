@@ -462,3 +462,25 @@ html[data-bs-theme="dark"] .gs-bar{background:rgba(255,255,255,.08)}html[data-bs
 .notif-row .notif-dot{width:8px;height:8px;border-radius:50%;background:#2563eb;flex:none;margin-top:6px}
 html[data-bs-theme="dark"] .notif-row.unread{background:rgba(56,189,248,.08)}html[data-bs-theme="dark"] .notif-title{color:var(--text)}
 }
+@media screen{
+.badge.wf-draft{background:#f1f5f9;color:#475569}.badge.wf-submitted,.badge.wf-under_review{background:#ffedd5;color:#c2410c}
+.badge.wf-approved{background:#d1fae5;color:#065f46}.badge.wf-published{background:#dbeafe;color:#1e40af}.badge.wf-returned,.badge.wf-reopened{background:#fee2e2;color:#b91c1c}
+.filters .form-select{width:auto}
+}
+@media screen{
+.filters.filters-inline{align-items:flex-end}
+.filters.filters-inline .form-grid{display:flex;flex-wrap:wrap;gap:10px;flex:1}
+.filters.filters-inline label{margin:0;flex:1 1 160px;min-width:150px}
+.filters.filters-inline .form-select,.filters.filters-inline .form-control{width:100%}
+}
+@media screen{
+/* pages that use .dashboard-header instead of .page-head get the same v106 header */
+.dashboard-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 18px}
+.dashboard-header h1{font-size:1.35rem;font-weight:800;color:#0a2a6b;margin:0;line-height:1.45}
+.dashboard-header p{font-size:.9rem;color:#5b6b88;margin:2px 0 0}
+html[data-bs-theme="dark"] .dashboard-header h1{color:var(--text)}
+.kpi-row .stat-box .num{overflow-wrap:anywhere}
+:is(.app-main,.platform-shell,.parent-shell,.student-shell) .card h2{font-size:.95rem;font-weight:700;color:#0a2a6b;margin:0 0 12px}
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;font-size:.85rem}
+.dashboard-grid strong{font-size:.75rem;color:#5b6b88;font-weight:600;text-transform:none}
+}
