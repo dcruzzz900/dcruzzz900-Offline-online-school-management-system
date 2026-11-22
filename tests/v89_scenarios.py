@@ -121,8 +121,8 @@ TEACHER = staff("aokafor")
 print("=== 1) Teacher Dashboard: per-class Assessed/Passed/Failed/Avg for the current term ===")
 
 tdash = html(TEACHER.get("/dashboard"))
-check("class is fully assessed (3 of 3 students)", re.search(r"<td>3</td>\s*<td>0</td>", tdash) is not None, tdash)
-check("2 students passed", re.search(r"<td>2</td>\s*<td>1</td>", tdash) is not None, tdash)
+check("class is fully assessed (3 of 3 students) - Pass/Fail panel (V112)", "Not yet assessed — 0" in tdash and "Passed — 2" in tdash and "Failed — 1" in tdash, tdash)
+check("2 students passed", "Passed — 2" in tdash, tdash)
 check("average score around 58.3% shown ((95+20+60)/3)", "58.3%" in tdash, tdash)
 
 print("=== 2) Admin Dashboard: performance trend + High-Performing Classes ===")
@@ -141,9 +141,9 @@ run(
     "SELECT school_id, tenant_id, 'U-002', 'Bola', 'Hassan', 'M', class_id FROM students WHERE id=1"
 )
 tdash2 = html(TEACHER.get("/dashboard"))
-check("class now shows 3 assessed, 1 not-yet-assessed", re.search(r"<td>3</td>\s*<td>1</td>", tdash2) is not None, tdash2)
+check("class now shows 3 assessed, 1 not-yet-assessed", "Not yet assessed — 1" in tdash2, tdash2)
 check("passed/failed counts unchanged by the unassessed student (still 2 passed, 1 failed)",
-      re.search(r"<td>2</td>\s*<td>1</td>", tdash2) is not None, tdash2)
+      "Passed — 2" in tdash2 and "Failed — 1" in tdash2, tdash2)
 
 print("=== 4) A second, weaker class makes High-Performing / Needs-Improvement split meaningfully ===")
 

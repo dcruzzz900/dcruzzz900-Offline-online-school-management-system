@@ -59,8 +59,8 @@ run("UPDATE result_display_settings SET show_gender=0")
 check("...and drops it when OFF", "GENDER" not in pdf_text("/result/1/pdf"))
 run("UPDATE result_display_settings SET show_gender=1")
 
-print("=== 2) one shared gender panel on every dashboard that shows a gender split ===")
-for who, cl, url in (("admin", ADMIN, "/dashboard"), ("admin", ADMIN, "/admin/analytics"), ("admin", ADMIN, "/reports/analytics"), ("teacher", FT, "/dashboard")):
+print("=== 2) one shared gender panel on every dashboard that shows a gender split (V112: not the admin dashboard any more) ===")
+for who, cl, url in (("admin", ADMIN, "/admin/analytics"), ("admin", ADMIN, "/reports/analytics"), ("teacher", FT, "/dashboard")):
     d = html(cl.get(url))
     check(f"{who} {url}: exactly one shared gender panel", d.count("data-gender-panel") == 1, d.count("data-gender-panel"))
     check(f"{who} {url}: same figures (2 male / 1 female, 66.7%)", 'data-male="2" data-female="1"' in d and "66.7%" in d)

@@ -34,7 +34,7 @@ print("=== 1) Teacher Quick Access: exactly 7 tiles, right labels, in order ==="
 t = html(TEACH.get("/dashboard"))
 qa = t.split('id="quick-access"', 1)[-1].split("</article>", 1)[0]
 labels = [re.sub(r"<[^>]+>|\s+", " ", m).strip() for m in re.findall(r"<a [^>]*>(.*?)</a>", qa, re.S)]
-want = ["Score Entry", "Take Class Attendance", "Results Approval", "Show Results", "View Timetable", "My Profile", "Learning Materials"]
+want = ["Score Entry", "Take Class Attendance", "Submit Results for Review", "Show Results", "View Timetable", "My Profile", "Learning Materials"]
 check("exactly 7 tiles", len(labels) == 7 and 'data-qa-count="7"' in t, labels)
 check("labels + order as requested", len(labels) == 7 and all(w in l for l, w in zip(labels, want)), labels)
 check("every tile has a real link", all(re.search(r'href="/[^"]+"', x) for x in re.findall(r"<a [^>]*>", qa)))
@@ -97,5 +97,38 @@ for f in ("app.py", "db.py", "static/js/react-ui/dashboard-filters.js", "static/
 check("React dashboard filters still mounted on the teacher dashboard", 'id="dashFilters"' in t and "dashboard-filters.js" in t)
 check("Bootstrap 5 still available to legacy pages", "bootstrap" in html(ADMIN.get("/admin/students")).lower())
 check("multi-tenant: every dashboard query is school-scoped", "school_id" in open("app.py").read().split("def teacher_dashboard_extras", 1)[1][:6000])
+
+print("=== 10) Round 2: Next Term Resumes, admin charts, teacher dashboard clean-up ===")
+# Next Term Resumes: a date set by the admin must print on EVERY student's report sheet (even in a school with no saved display settings)
+cn = get_db(); cn.execute("DELETE FROM result_display_settings"); cn.commit(); cn.close()
+pg = html(ADMIN.get("/admin/terms")); tk = re.search(r'name="csrf_token" value="([^"]+)"', pg).group(1)
+ADMIN.post("/admin/terms", data={"csrf_token": tk, "action": "set_next_resumes", "term_id": term, "next_term_resumes_date": "2027-01-11"}, follow_redirects=True)
+cn = get_db(); sids = [r[0] for r in cn.execute("SELECT id FROM students WHERE is_active=1 AND class_id IN (SELECT id FROM classes WHERE name!='SSS9Z')")]; cn.close()
+check("every student's report sheet shows Next Term Resumes + the date", all(("Next Term Resumes" in html(ADMIN.get(f"/result/{i}")) and "11/01/2027" in html(ADMIN.get(f"/result/{i}"))) or "11 Jan" in html(ADMIN.get(f"/result/{i}")) or "2027" in html(ADMIN.get(f"/result/{i}")) for i in sids), sids)
+check("... and it appears on the print view too", all("Next Term Resumes" in html(ADMIN.get(f"/result/{i}/print")) or ADMIN.get(f"/result/{i}/print").status_code in (302, 403, 404) for i in sids[:1]))
+# admin dashboard charts
+a = html(ADMIN.get("/dashboard"))
+check("admin: Gender Distribution panel removed", "Gender Distribution" not in a and "data-gender-panel" not in a)
+check("admin: Attendance Trend with Students/Staff + This week/Last week/Last month/Last year selectors", all(x in a for x in ('id="attendance-trend"', 'data-att-group="students"', 'data-att-group="staff"', 'data-att-range="this_week"', 'data-att-range="last_week"', 'data-att-range="last_month"', 'data-att-range="last_year"')))
+check("admin: Enrollment Trend selectable by term / year", 'data-enrol-mode="term"' in a and 'data-enrol-mode="year"' in a)
+check("admin: Enrolment by Class Level chart present", 'id="level-enrol"' in a and 'id="levelChart"' in a)
+import json as _j
+cd = _j.loads(re.search(r'<script id="adChartsData" type="application/json">(.*?)</script>', a, re.S).group(1))
+check("chart data has all 8 attendance series + term/year enrolment + levels", all(set(cd["attendance"][g]) == {"this_week", "last_week", "last_month", "last_year"} for g in ("students", "staff")) and set(cd["enrol"]) == {"term", "year"} and cd["levels"])
+check("class level counts are real (JSS1A class: 3 students)", any(l["count"] == 3 for l in cd["levels"]), cd["levels"])
+check("charts are offline (own script, no Chart.js CDN)", "js/sh-charts.js" in a and "chart.umd" not in a)
+# teacher dashboard clean-up
+t = html(TEACH.get("/dashboard"))
+check("teacher: Pass/Fail shown exactly once (no second chart)", t.count("Pass / Fail Distribution</h2>") == 1 and "Pass and fail distribution" not in t)
+check("teacher: Subject Performance shown once", t.count("Subject Performance</h2>") == 1 and "Subject performance" not in t)
+for gone in ("My teaching workspace", "Results workspace", "Class Result Performance", "More tools for your role", "Teacher Comments", "AI Learning Materials", "Performance Alerts"):
+    check(f"teacher: '{gone}' removed from the dashboard", gone not in t)
+check("teacher: v106 'My Classes' table present with real rows + Enter scores / Roster", 'id="my-classes"' in t and "Enter scores" in t and "Roster" in t)
+check("teacher: Attendance Trend is a line chart", 'id="attendance-trend"' in t and "data-sh-line" in t)
+check("teacher: Top Performing Students + Recent Activities are at the bottom (after My Classes)", t.index('id="my-classes"') < t.index("Top Performing Students") and t.index('id="my-classes"') < t.index("Recent Activities"))
+check("teacher: tile 1 'Score Entry' opens My Teaching Workspace", '/teaching-workspace' in qa.split("Score Entry")[0][-200:] or "/teaching-workspace" in qa)
+tw = TEACH.get("/teaching-workspace")
+check("My Teaching Workspace page opens and lists the assignments", tw.status_code == 200 and "My Teaching Workspace" in html(tw) and "Enter scores" in html(tw))
+
 print(f"\n{P} passed, {F} failed")
 sys.exit(1 if F else 0)

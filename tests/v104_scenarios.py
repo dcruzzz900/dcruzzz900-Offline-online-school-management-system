@@ -169,7 +169,7 @@ d = html(ADMIN.get("/dashboard")); tdash = html(FT.get("/dashboard"))
 groups = re.findall(r'<div class="nav-group">([^<]+)</div>', d)
 check("menu is organised in categories for the admin", groups[:3] == ["Academics", "Attendance", "Teaching"] and "School Administration" in groups and "People" in groups, groups)
 check("a teacher does not see administrator categories or links", "School Administration" not in tdash and "People" not in re.findall(r'<div class="nav-group">([^<]+)</div>', tdash) and "Theme &amp; Branding" not in tdash)
-side = re.search(r'<aside class="app-sidebar".*?</aside>', d, re.S)[0]
+side = re.search(r'<aside class="sidebar app-sidebar".*?</aside>', d, re.S)[0]
 links = re.findall(r'<a [^>]*href="([^"]+)"', side)
 check("no menu link appears twice in the sidebar", len(links) == len(set(links)), [l for l in links if links.count(l) > 1])
 js = open(os.path.join(ROOT, "static/js/shell-ui.js"), encoding="utf-8").read()

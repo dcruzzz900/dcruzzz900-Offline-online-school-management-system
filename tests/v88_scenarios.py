@@ -118,8 +118,8 @@ dash = html(ADMIN.get("/admin/analytics"))
 check("admin dashboard has exactly one shared gender panel", dash.count('data-gender-panel') == 1, dash.count('data-gender-panel'))
 check("admin dashboard shows 2 boys", (gp(dash) or (None,))[0] == 2, gp(dash))
 check("admin dashboard shows 1 girl", (gp(dash) or (None, None))[1] == 1, gp(dash))
-check("Male label present", ">Male<" in dash)
-check("Female label present", ">Female<" in dash)
+check("Male label present (V112 v106 legend: 'Male — n (x%)')", "Male —" in dash)
+check("Female label present (V112 v106 legend)", "Female —" in dash)
 
 print("=== 2) Figures are tenant-scoped -- a second school's admin sees only its own ===")
 
@@ -159,7 +159,7 @@ print("=== 3) Teacher Dashboard: per-class Total/Boys/Girls, reconciling with an
 tdash = html(TEACHER.get("/dashboard"))
 check("teacher dashboard results workspace shows class JSS1A", "JSS1A" in tdash)
 check("teacher dashboard shows 3 total students for the class", re.search(r"<td>3</td>", tdash) is not None, tdash)
-check("teacher dashboard shows boys/girls figures for the class", "♂ 2" in tdash and "♀ 1" in tdash, tdash)
+check("teacher dashboard shows boys/girls figures for the class (V112: Gender Distribution panel)", 'data-male="2" data-female="1"' in tdash and "Male — 2" in tdash and "Female — 1" in tdash, tdash)
 
 # Add a 4th student to class 1 with gender left NULL (unspecified) -- must count toward
 # Total Students but be excluded from both Boys and Girls.
@@ -170,7 +170,7 @@ run(
 tdash2 = html(TEACHER.get("/dashboard"))
 check("after adding an unspecified-gender student, class total is now 4", re.search(r"<td>4</td>", tdash2) is not None, tdash2)
 check("boys/girls counts for the class are unchanged (unspecified excluded from both)",
-      "♂ 2" in tdash2 and "♀ 1" in tdash2, tdash2)
+      'data-male="2" data-female="1"' in tdash2, tdash2)
 
 adash_after = html(ADMIN.get("/admin/analytics"))
 check("admin card's boys/girls totals also unaffected by the unspecified-gender student",

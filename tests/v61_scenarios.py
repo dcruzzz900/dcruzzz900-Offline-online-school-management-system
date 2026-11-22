@@ -613,7 +613,7 @@ check("a teacher cannot publish (403/redirect)", post(staff("bmusa"), "/admin/te
 # ------------------------------------------------------------------ 9. passport on dashboard
 c, _ = student_login("chinedu")
 dash = html(c.get("/student/dashboard"))
-check("student without a photo sees a placeholder avatar that links to the profile", 'class="top-avatar top-avatar-link"' in dash and "/student/profile" in dash and "<img" not in dash.split('top-avatar-link')[1].split("</a>")[0])
+check("student without a photo sees a placeholder avatar that links to the profile", 'top-avatar top-avatar-link' in dash and "/student/profile" in dash and "<img" not in dash.split('top-avatar-link')[1].split("</a>")[0])
 import struct, zlib
 from PIL import Image
 buf = io.BytesIO(); Image.new("RGB", (60, 60), (10, 90, 200)).save(buf, "PNG")
@@ -770,7 +770,7 @@ for label in ("Dashboard", "Schools", "Subscriptions", "Users", "Reports", "Audi
 navb = nav.split('id="platformNav"')[1].split("</nav>")[0]
 check("Super Admin nav is short (7 items + logout) with no duplicates", navb.count("<a ") == 8, navb.count("<a "))
 check("active page is marked", 'aria-current="page"' in navb)
-check("mobile menu toggle present", "platform-nav-toggle" in nav)
+check("mobile menu toggle present (v106 hamburger)", 'class="hamburger"' in nav)
 for url in ("/platform/reports", "/platform/audit-logs", "/platform/settings", "/platform/subscription-manager", "/platform/schools", "/platform/users", "/platform/control-center", "/platform/audit-history"):
     check(f"nav target opens: {url}", root.get(url).status_code == 200, root.get(url).status_code)
 for href in re.findall(r'href="(/platform/[^"]+)"', navb):
