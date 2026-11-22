@@ -1,21 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Notifications{% endblock %}
 {% block content %}
-{% set unread = namespace(n=0) %}{% for n in notifications %}{% if n.id > (seen_before or 0) %}{% set unread.n = unread.n + 1 %}{% endif %}{% endfor %}
-<div class="page-head"><div><h1><span class="ni" aria-hidden="true">🔔</span> Notifications</h1><p>{% if unread.n %}{{ unread.n }} unread{% else %}You're all caught up{% endif %}</p></div>
-{% if session.get('role') in ['admin', 'sub_admin'] %}<div class="page-actions no-print"><a class="btn btn-primary" href="{{ url_for('notifications_compose') }}">Compose</a></div>{% endif %}</div>
+<h1>Notifications</h1>
+{% if session.get('role') in ['admin', 'sub_admin'] %}
+<div class="no-print" style="margin-bottom:1rem;">
+    <a class="btn btn-primary" href="{{ url_for('notifications_compose') }}">Compose Notification</a>
+</div>
+{% endif %}
 
-{% if notifications %}<div class="card card-flush notif-list">
-    {% for n in notifications %}{% set is_unread = n.id > (seen_before or 0) %}
-    <div class="notif-item notif-row {{ 'notif-unread unread' if is_unread else 'notif-read' }}">
-        <span class="notif-ico" aria-hidden="true">✉</span>
-        <div class="notif-body">
-            <div class="notif-title">{{ n.title }}</div>
-            <p class="notif-msg">{{ n.message }}</p>
-            <div class="notif-meta">{{ n.created_at|dmy }} • {{ n.sender_label }}{% if n.school_name %} — {{ n.school_name }}{% elif n.school_id is none %} — All Schools{% endif %}</div>
+<div class="card">
+    {% if notifications %}
+    {% for n in notifications %}
+    {% set is_unread = n.id > (seen_before or 0) %}
+    <div class="notif-item {{ 'notif-unread' if is_unread else 'notif-read' }}" style="padding:0.75rem; margin-bottom:.4rem; border-radius:8px; border:1px solid {{ '#2e7d32' if is_unread else 'var(--border)' }}; background:{{ '#e8f5e9' if is_unread else 'transparent' }}; color:#1b1b1b;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <h3 style="margin:0;">{% if is_unread %}<span class="notif-dot" style="display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:#d32f2f;margin-right:.4rem" title="Unread"></span>{% endif %}{{ n.title }}</h3>
+            <span style="font-size:0.8rem; color:#999;">{{ n.created_at|dmy }}</span>
         </div>
-        {% if is_unread %}<span class="notif-dot" title="Unread" aria-label="Unread"></span>{% endif %}
+        <p style="margin:0.3rem 0; white-space:pre-wrap;">{{ n.message }}</p>
+        <p style="font-size:0.8rem; color:#999; margin:0;">
+            From: {{ n.sender_label }}{% if n.school_name %} — {{ n.school_name }}{% elif n.school_id is none %} — All Schools{% endif %}
+        </p>
     </div>
     {% endfor %}
-</div>{% else %}<div class="card"><p class="muted" style="margin:0">No notifications yet.</p></div>{% endif %}
+    {% else %}
+    <p style="color:#999;">No notifications yet.</p>
+    {% endif %}
+</div>
 {% endblock %}

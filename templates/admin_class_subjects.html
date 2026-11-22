@@ -1,42 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Assign Subjects{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">◈</span> Assign Subjects to Classes</h1><p>Link subjects and teachers to each class · {{ assignments|length }} assignment{{ '' if assignments|length==1 else 's' }}</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ Assign</button></div></div>
-<div class="filters" role="search" aria-label="Filter assignments"><select id="asgClass" class="form-control" aria-label="Filter by class"><option value="">All Classes</option>{% for cn in assignments|map(attribute='class_name')|unique|list %}<option>{{ cn }}</option>{% endfor %}</select></div>
-<div class="card card-flush">
-    <div class="table-responsive"><table class="table table-hover align-middle" id="asgTable"><caption>Subject Assignments</caption>
-        <thead><tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Change Teacher</th><th>Actions</th></tr></thead><tbody>
-        {% for a in assignments %}
-        <tr data-class="{{ a.class_name }}">
-            <td><strong>{{ a.class_name }}</strong></td>
-            <td>{{ a.subject_name }}</td>
-            <td>{{ a.teacher_name or '—' }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">
-                        <option value="">-- unassigned --</option>
-                        {% for t in teachers %}
-                        <option value="{{ t.id }}" {% if t.id == a.teacher_id %}selected{% endif %}>{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td class="row-actions">
-                <form method="POST" action="{{ url_for('delete_class_subject', cs_id=a.id) }}"
-                      onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm act act-danger" type="submit">Remove</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody></table></div>
-</div>
-<script>(function(){var c=document.getElementById('asgClass'),rows=document.querySelectorAll('#asgTable tbody tr');c.addEventListener('change',function(){rows.forEach(function(r){r.hidden=!!c.value&&r.dataset['class']!==c.value;});});})();</script>
+<h1>Assign Subjects to Classes</h1>
 
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ New Assignment</summary><div class="m-fold-body">
-    
+<div class="card">
+    <h3>New Assignment</h3>
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Class</label>
@@ -54,6 +22,37 @@
         </select>
         <button class="btn btn-primary" type="submit">Assign</button>
     </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+</div>
+
+<div class="card">
+    <h3>Current Assignments</h3>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Subject Assignments</caption>
+        <tr><th>Class</th><th>Subject</th><th>Teacher</th><th>Change Teacher</th><th>Actions</th></tr>
+        {% for a in assignments %}
+        <tr>
+            <td>{{ a.class_name }}</td>
+            <td>{{ a.subject_name }}</td>
+            <td>{{ a.teacher_name or '—' }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('assign_teacher', cs_id=a.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">
+                        <option value="">-- unassigned --</option>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}" {% if t.id == a.teacher_id %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_class_subject', cs_id=a.id) }}"
+                      onsubmit="return confirm('Remove {{ a.subject_name }} from {{ a.class_name }}?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Remove</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table></div>
+</div>
 {% endblock %}

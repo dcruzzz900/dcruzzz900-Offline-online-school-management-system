@@ -1,37 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Subjects{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">■</span> Subjects</h1><p>{{ subjects|length }} subject{{ '' if subjects|length==1 else 's' }} in the curriculum</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Subject</button></div></div>
-<div class="card card-flush">
-    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Subject List</caption>
-        <thead><tr><th>Subject</th><th>Assigned Teachers</th><th>Classes</th><th>Actions</th></tr></thead><tbody>
-        {% for s in subjects %}
-        <tr>
-            <td><strong>{{ s.name }}</strong></td>
-            <td>{{ s.teacher_count or 0 }}</td>
-            <td>{{ s.class_count or 0 }}</td>
-            <td class="row-actions">
-                <form method="POST" action="{{ url_for('delete_subject', subject_id=s.id) }}"
-                      onsubmit="return confirm('Delete subject {{ s.name }}? This only works if it is not assigned to any class.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm act act-danger" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table></div>
-    {% if not subjects %}<p class="empty-state" style="margin:1rem">No subjects yet. Add the first one below.</p>{% endif %}
-</div>
+<h1>Subjects</h1>
 
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Subject</summary><div class="m-fold-body">
-    
+<div class="card">
+    <h3>Add a Subject</h3>
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Subject name (e.g. Mathematics)</label>
         <input type="text" name="name" required class="form-control">
         <button class="btn btn-primary" type="submit">Add Subject</button>
     </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+</div>
+
+<div class="card">
+    <h3>All Subjects</h3>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Subject List</caption>
+        <tr><th>Subject</th><th>Actions</th></tr>
+        {% for s in subjects %}
+        <tr>
+            <td>{{ s.name }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_subject', subject_id=s.id) }}"
+                      onsubmit="return confirm('Delete subject {{ s.name }}? This only works if it is not assigned to any class.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table></div>
+</div>
 {% endblock %}

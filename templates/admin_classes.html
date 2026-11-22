@@ -1,68 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Classes{% endblock %}
 {% block content %}
-{% set tot = namespace(students=0) %}{% for c in classes %}{% set tot.students = tot.students + (c.student_count or 0) %}{% endfor %}
-<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">▤</span> Classes</h1><p>Manage all classes and arms</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Class</button></div></div>
-<div class="kpi-row stat-grid">
-  <div class="stat-box"><div class="label">Total classes</div><div class="num">{{ classes|length }}</div></div>
-  {% for cat in categories %}{% set n = classes|selectattr('category','equalto',cat)|list|length %}{% if n %}<div class="stat-box"><div class="label">{{ cat }} classes</div><div class="num">{{ n }}</div></div>{% endif %}{% endfor %}
-  <div class="stat-box"><div class="label">Total students</div><div class="num">{{ tot.students }}</div></div>
-</div>
-<div class="filters" role="search" aria-label="Filter classes">
-  <input type="search" id="clsSearch" class="form-control" placeholder="Search classes…" aria-label="Search classes" autocomplete="off">
-  <div class="filters-right"><select id="clsCat" class="form-control" aria-label="Filter by category"><option value="">All Categories</option>{% for cat in categories %}<option>{{ cat }}</option>{% endfor %}</select></div>
-</div>
-<div class="card card-flush">
-    <div class="table-responsive"><table class="table table-hover align-middle" id="classTable"><caption>Class List</caption>
-        <thead><tr><th>Class</th><th>Category</th><th>Students</th><th>Class Teacher / Form Teacher</th><th>Subjects</th><th>Actions</th></tr></thead>
-        <tbody>
-        {% for c in classes %}
-        <tr data-cat="{{ c.category or '' }}">
-            <td><strong>{{ c.name }}</strong></td>
-            <td>
-                <form method="POST" action="{{ url_for('set_class_category', class_id=c.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="category" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select" aria-label="Category for {{ c.name }}">
-                        <option value="">-- none --</option>
-                        {% for cat in categories %}
-                        <option value="{{ cat }}" {% if cat == c.category %}selected{% endif %}>{{ cat }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td>{{ c.student_count or 0 }}</td>
-            <td>
-                <form method="POST" action="{{ url_for('set_form_teacher', class_id=c.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select" aria-label="Class teacher for {{ c.name }}">
-                        <option value="">-- none --</option>
-                        {% for t in teachers %}
-                        <option value="{{ t.id }}" {% if t.id == c.form_teacher_id %}selected{% endif %}>{{ t.name }}</option>
-                        {% endfor %}
-                    </select>
-                </form>
-            </td>
-            <td>{{ c.subject_count or 0 }}</td>
-            <td class="row-actions">
-                <a class="btn btn-sm act" href="{{ url_for('broadsheet', class_id=c.id) }}">Broadsheet</a>
-                <form method="POST" action="{{ url_for('delete_class', class_id=c.id) }}"
-                      onsubmit="return confirm('Delete class {{ c.name }}? This only works if it has no students in it.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm act act-danger" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table></div>
-    <p id="clsNone" class="empty-state" hidden style="margin:1rem">No classes match these filters.</p>
-</div>
-<script>(function(){var q=document.getElementById('clsSearch'),c=document.getElementById('clsCat'),rows=document.querySelectorAll('#classTable tbody tr'),none=document.getElementById('clsNone');
-function run(){var t=(q.value||'').trim().toLowerCase(),n=0;rows.forEach(function(r){var ok=(!t||r.cells[0].textContent.toLowerCase().indexOf(t)>-1)&&(!c.value||r.dataset.cat===c.value);r.hidden=!ok;if(ok)n++;});if(none)none.hidden=n>0||!rows.length;}
-q.addEventListener('input',run);c.addEventListener('change',run);})();</script>
+<h1>Classes</h1>
 
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Class</summary><div class="m-fold-body">
-    
+<div class="card">
+    <h3>Add a Class</h3>
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Class name (e.g. JSS1A, SS1 Science A) — or just the level, e.g. JSS 1, if you fill in arms below</label>
@@ -76,6 +18,47 @@ q.addEventListener('input',run);c.addEventListener('change',run);})();</script>
         </select>
         <button class="btn btn-primary" type="submit">Add Class</button>
     </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+</div>
+
+<div class="card">
+    <h3>All Classes</h3>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Class List</caption>
+        <tr><th>Class</th><th>Category</th><th>Class Teacher / Form Teacher</th><th>Set Class Teacher / Form Teacher</th><th>Actions</th></tr>
+        {% for c in classes %}
+        <tr>
+            <td>{{ c.name }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('set_class_category', class_id=c.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="category" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">
+                        <option value="">-- none --</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if cat == c.category %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </td>
+            <td>{{ c.teacher_name or '—' }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('set_form_teacher', class_id=c.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="teacher_id" style="width:auto; display:inline-block;" onchange="this.form.submit()" class="form-select">
+                        <option value="">-- none --</option>
+                        {% for t in teachers %}
+                        <option value="{{ t.id }}" {% if t.id == c.form_teacher_id %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('delete_class', class_id=c.id) }}"
+                      onsubmit="return confirm('Delete class {{ c.name }}? This only works if it has no students in it.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table></div>
+</div>
 {% endblock %}

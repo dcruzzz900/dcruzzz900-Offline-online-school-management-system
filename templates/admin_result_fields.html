@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block title %}Additional Result Fields{% endblock %}{% block content %}
-<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1><span class="ni" aria-hidden="true">☰</span> Additional Result Fields</h1>
+<div class="page-heading"><div><div class="eyebrow">RESULT SHEET</div><h1>Additional Result Fields</h1>
 <p>Add information or assessment fields that the default result sheet does not have (for example <i>Hobbies</i>, <i>Number of subjects offered</i>, <i>Conduct grade</i>). Teachers fill them in per student under <b>Update Result Details</b>; they print in an "Additional Information" block. For rated behaviour and skills (1&ndash;5) use <a href="{{ url_for('admin_domains') }}">Domain Ratings</a>.</p></div></div>
 <form method="POST" class="card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add"><h3>Add a field</h3>
 <div class="form-grid"><label>Field name<input name="label" maxlength="60" required placeholder="e.g. Hobbies" class="form-control"></label>

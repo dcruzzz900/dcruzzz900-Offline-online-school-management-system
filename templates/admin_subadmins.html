@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sub-Admins{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Sub-Admins</h1><p>{{ subadmins|length }} sub-admin{{ '' if subadmins|length==1 else 's' }} · Delegated administrators</p></div><div class="page-actions"><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Sub-Admin</button></div></div>
+<h1>Sub-Admins</h1>
 <details class="hlp"><summary class="hlp-t">What Sub-Admins can do</summary>
 <p class="muted hlp-b" style="font-size:0.9rem;">
     Sub-Admins can manage everything about this school — classes, subjects, teachers,
@@ -9,6 +9,20 @@
     they cannot create, edit, or remove other Sub-Admins, and they don't have any
     greater access than you do. Only you (the main Admin) can manage this page.
 </p></details>
+
+<div class="card">
+    <h3>Add a Sub-Admin</h3>
+    <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Full Name</label>
+        <input type="text" name="name" required class="form-control">
+        <label>Username</label>
+        <input type="text" name="username" required class="form-control">
+        <label>Password</label>
+        <input type="password" name="password" required minlength="6" class="form-control">
+        <button class="btn btn-primary" type="submit">Add Sub-Admin</button>
+    </form>
+</div>
 
 <div class="card">
     <h3>Current Sub-Admins</h3>
@@ -38,19 +52,4 @@
     <p style="color:#999;">No Sub-Admins yet.</p>
     {% endif %}
 </div>
-
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Sub-Admin</summary><div class="m-fold-body">
-    
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>Full Name</label>
-        <input type="text" name="name" required class="form-control">
-        <label>Username</label>
-        <input type="text" name="username" required class="form-control">
-        <label>Password</label>
-        <input type="password" name="password" required minlength="6" class="form-control">
-        <button class="btn btn-primary" type="submit">Add Sub-Admin</button>
-    </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
 {% endblock %}

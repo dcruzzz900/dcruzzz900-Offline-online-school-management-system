@@ -1,53 +1,33 @@
 {% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Students{% endblock %}
 {% block content %}
-{% set ns = namespace(m=0,f=0) %}{% for s in students %}{% set g=(s.gender or '')|lower %}{% if g[:1]=='m' %}{% set ns.m=ns.m+1 %}{% elif g[:1]=='f' %}{% set ns.f=ns.f+1 %}{% endif %}{% endfor %}
-<div class="page-heading"><div><h1><span class="ni" aria-hidden="true">◉</span> Students</h1><p>{{ students|length }} student{{ '' if students|length==1 else 's' }}{% if class_filter %} in the selected class{% else %} enrolled{% endif %}</p></div>
-<div class="page-actions"><button type="button" class="btn btn-secondary" data-open="bulkPanel">Bulk Upload CSV</button><button type="button" class="btn btn-primary" data-open="addPanel">+ Add Student</button></div></div>
-<div class="kpi-row stat-grid"><div class="stat-box"><div class="label">Total</div><div class="num">{{ students|length }}</div></div><div class="stat-box"><div class="label">Male</div><div class="num">{{ ns.m }}</div></div><div class="stat-box"><div class="label">Female</div><div class="num">{{ ns.f }}</div></div></div>
-<form method="GET" class="filters" id="studentFilters" role="search" aria-label="Filter students">
-    <input type="search" id="stuSearch" class="form-control" placeholder="Search by name or admission no…" aria-label="Search students" autocomplete="off">
-    <div class="filters-right">
-        <select id="classFilter" name="class_id" onchange="this.form.submit()" class="form-control" aria-label="Filter by class">
-            <option value="">All Classes</option>
-            {% for c in classes %}<option value="{{ c.id }}" {% if class_filter and class_filter|int == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
-        </select>
-        <select id="genderFilter" class="form-control" aria-label="Filter by gender"><option value="">All Gender</option><option value="m">Male</option><option value="f">Female</option></select>
-        <select id="statusFilter" class="form-control" aria-label="Filter by status"><option value="">All Status</option>{% for st in ['Active','Suspended','Withdrawn','Transferred','Graduated','Expelled'] %}<option>{{ st }}</option>{% endfor %}</select>
-    </div>
-</form>
-<div class="card card-flush">
-    <div class="table-responsive"><table class="table table-hover align-middle" id="studentTable"><caption>Student List</caption>
-        <thead><tr><th>Admission No. / Register No.</th><th>Name</th><th>Gender</th><th>Class</th><th>Status</th><th>Parent Email</th><th>Actions</th></tr></thead>
-        <tbody>
-        {% for s in students %}
-        <tr data-g="{{ (s.gender or '')[:1]|lower }}" data-st="{{ s.status or 'Active' }}">
-            <td>{{ s.admission_no }}</td>
-            <td><strong>{{ student_full_name(s) }}</strong></td>
-            <td>{{ s.gender }}</td>
-            <td>{{ s.class_name }}</td>
-            <td>{{ s.status|status_badge }}</td>
-            <td>{{ s.parent_email or '—' }}</td>
-            <td class="row-actions">
-                <a class="btn btn-sm act" href="{{ url_for('student_profile', student_id=s.id) }}">View</a>
-                <form method="POST" action="{{ url_for('delete_student', student_id=s.id) }}" class="inline"
-                      onsubmit="return confirm('Delete {{ student_full_name(s) }} and all their scores/records? This cannot be undone.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-sm act act-danger" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table></div>
-    <p id="stuNone" class="empty-state" hidden style="margin:1rem">No students match these filters.</p>
-</div>
-<script>(function(){var q=document.getElementById('stuSearch'),g=document.getElementById('genderFilter'),st=document.getElementById('statusFilter'),rows=document.querySelectorAll('#studentTable tbody tr'),none=document.getElementById('stuNone');
-function run(){var t=(q.value||'').trim().toLowerCase(),shown=0;rows.forEach(function(r){var ok=(!t||r.textContent.toLowerCase().indexOf(t)>-1)&&(!g.value||r.dataset.g===g.value)&&(!st.value||r.dataset.st===st.value);r.hidden=!ok;if(ok)shown++;});if(none)none.hidden=shown>0||!rows.length;}
-[q,g,st].forEach(function(e){e&&e.addEventListener('input',run);e&&e.addEventListener('change',run);});document.getElementById('studentFilters').addEventListener('submit',function(e){if(e.target.elements.class_id&&document.activeElement===q){e.preventDefault();}});})();</script>
+<h1>Students</h1>
 
-<details class="card m-fold" id="addPanel"{% if request.method == 'POST' %} open{% endif %}><summary>＋ Add a Student</summary><div class="m-fold-body">
-    
+<div class="card">
+    <h3>Bulk Upload Students (CSV)</h3>
+    <details class="hlp"><summary class="hlp-t">CSV format</summary>
+    <p class="muted hlp-b" style="font-size:0.9rem;">
+        Upload a CSV with columns: <code>admission_no, first_name, last_name,
+        other_names, gender, class_name, date_of_birth, religion, parent_name,
+        parent_address, parent_email, parent_phone, parent_relationship</code>.
+        Only admission_no, first_name, last_name, and class_name are required — the rest
+        can be left blank. The class must already exist (see Classes above) —
+        <code>class_name</code> should match it exactly (not case-sensitive).
+        <b>Admission No. / Register No.</b> only needs to be unique within the same class
+        (arm), so different arms of the same class (e.g. SS1 Science 1 and SS1 Science 2)
+        can reuse the same numbers for different students.
+    </p></details>
+    <a class="btn btn-primary btn-sm" href="{{ url_for('students_csv_template') }}">Download CSV Template</a>
+    <form method="POST" action="{{ url_for('students_bulk_upload') }}" enctype="multipart/form-data" style="margin-top:1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" required class="form-control">
+        <button class="btn btn-primary" type="submit">Upload &amp; Import</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Add a Student</h3>
     <form method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="grid-2">
@@ -93,29 +73,39 @@ function run(){var t=(q.value||'').trim().toLowerCase(),shown=0;rows.forEach(fun
         </div>
         <button class="btn btn-primary" type="submit">Add Student</button>
     </form>
-</div></details>
+</div>
 
-<details class="card m-fold" id="bulkPanel"><summary>⬆ Bulk Upload Students (CSV)</summary><div class="m-fold-body">
-    
-    <details class="hlp"><summary class="hlp-t">CSV format</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem;">
-        Upload a CSV with columns: <code>admission_no, first_name, last_name,
-        other_names, gender, class_name, date_of_birth, religion, parent_name,
-        parent_address, parent_email, parent_phone, parent_relationship</code>.
-        Only admission_no, first_name, last_name, and class_name are required — the rest
-        can be left blank. The class must already exist (see Classes above) —
-        <code>class_name</code> should match it exactly (not case-sensitive).
-        <b>Admission No. / Register No.</b> only needs to be unique within the same class
-        (arm), so different arms of the same class (e.g. SS1 Science 1 and SS1 Science 2)
-        can reuse the same numbers for different students.
-    </p></details>
-    <a class="btn btn-primary btn-sm" href="{{ url_for('students_csv_template') }}">Download CSV Template</a>
-    <form method="POST" action="{{ url_for('students_bulk_upload') }}" enctype="multipart/form-data" style="margin-top:1rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>CSV File</label>
-        <input type="file" name="csv_file" accept=".csv" required class="form-control">
-        <button class="btn btn-primary" type="submit">Upload &amp; Import</button>
+<div class="card">
+    <h3>All Students</h3>
+    <form method="GET" style="margin-bottom:1rem;">
+        <label>Filter by class</label>
+        <select name="class_id" onchange="this.form.submit()" class="form-select">
+            <option value="">-- all classes --</option>
+            {% for c in classes %}
+            <option value="{{ c.id }}" {% if class_filter and class_filter|int == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+        </select>
     </form>
-</div></details>
-<script>document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){var d=document.getElementById(b.getAttribute('data-open'));if(!d)return;d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'});var f=d.querySelector('input:not([type=hidden]),select');if(f)setTimeout(function(){f.focus({preventScroll:true})},300);});});</script>
+    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Student List</caption>
+        <tr><th>Admission No. / Register No.</th><th>Name</th><th>Gender</th><th>Class</th><th>Status</th><th>Parent Email</th><th>Actions</th></tr>
+        {% for s in students %}
+        <tr>
+            <td>{{ s.admission_no }}</td>
+            <td>{{ student_full_name(s) }}</td>
+            <td>{{ s.gender }}</td>
+            <td>{{ s.class_name }}</td>
+            <td>{{ s.status|status_badge }}</td>
+            <td>{{ s.parent_email or '—' }}</td>
+            <td style="white-space:nowrap;">
+                <a class="btn btn-primary btn-sm" href="{{ url_for('student_profile', student_id=s.id) }}">View</a>
+                <form method="POST" action="{{ url_for('delete_student', student_id=s.id) }}" class="inline"
+                      onsubmit="return confirm('Delete {{ student_full_name(s) }} and all their scores/records? This cannot be undone.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table></div>
+</div>
 {% endblock %}
