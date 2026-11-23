@@ -1,45 +1,90 @@
-{% extends "base.html" %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/dash_icons.html" import dicon %}{% block title %}Parent Dashboard · {{ school_name }}{% endblock %}{% block content %}
-{{ welcome_header('parent', session.get('name')) }}
-<div class="page-head"><div><span class="eyebrow">PARENT PORTAL</span><p>One place to follow your children's academic progress and school communication.</p></div><a class="btn btn-primary" href="{{ url_for('parent_children_page') }}">View My Children →</a></div>
-{% include "partials/quick_actions.html" %}
-<div class="stat-grid"><div class="stat-box"><div class="num">{{ children|length }}</div><div class="label">Children</div></div><div class="stat-box"><div class="num">{{ cards|length }}</div><div class="label">Child profiles</div></div><div class="stat-box"><div class="num">AI</div><div class="label">Insights available</div></div><div class="stat-box"><div class="num">●</div><div class="label">School communication</div></div></div>
-<div class="section-head" style="margin:22px 0 12px"><h2>My Children</h2><a href="{{ url_for('parent_children_page') }}">View all →</a></div>
-<div class="card-grid">{% for card in cards %}<article class="child-card"><div class="child-avatar">{{ card.student.first_name[0]|upper }}{{ card.student.last_name[0]|upper }}</div><h3>{{ card.student.first_name }} {{ card.student.last_name }}</h3><p>{{ card.student.class_name }} · {{ card.student.admission_no }}</p>{% if card.analysis %}<div class="child-insight"><span>Performance</span><strong>{{ card.analysis.average|round(1) }}%</strong><small>{{ card.analysis.trend_label or card.analysis.trend or 'Current term' }}</small></div>{% endif %}<div class="quick-links"><a href="{{ url_for('parent_child_detail',student_id=card.student.id) }}">Overview</a><a href="{{ url_for('parent_attendance',student_id=card.student.id) }}">Attendance</a><a href="{{ url_for('parent_timetable',student_id=card.student.id) }}">Timetable</a></div></article>{% else %}<div class="empty-state"><h3>No children linked yet</h3><p>Ask your school administrator to link your parent account to your child.</p></div>{% endfor %}</div>
-{% if cards %}{% set child = cards[0].student %}
-<div class="card" style="margin-top:18px"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('trend-up') }}</span>Academic Performance — {{ child.first_name }}</h3><p class="muted">By published term, with the class average for comparison.</p></div><a class="btn btn-primary btn-sm" href="{{ url_for('parent_child_detail',student_id=child.id) }}">Full Overview →</a></div>
-{% if performance and performance.trend %}<div class="chart-scroll"><div class="chart-wrap"><canvas id="chartAcademicTrend" role="img" aria-label="Academic performance trend"></canvas></div></div>
-{% if performance.trend|last and (performance.trend|last).subjects %}<h4 style="margin:18px 0 6px;font-size:0.8125rem">Subject scores — {{ (performance.trend|last).term.name }}</h4><div class="chart-scroll"><div class="chart-wrap chart-wrap-sm"><canvas id="chartSubjectScores" role="img" aria-label="Subject scores this term"></canvas></div></div>{% endif %}
-{% if performance.improving or performance.needs_attention %}<div class="grid-2" style="margin-top:16px">
-<div><h4 style="margin:0 0 6px;font-size:0.8125rem">Improving subjects</h4>{% if performance.improving %}<ul style="margin:0;padding-left:18px;font-size:0.8125rem">{% for s in performance.improving %}<li>{{ s.subject }}: +{{ s.delta }}</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:0.75rem">None yet.</p>{% endif %}</div>
-<div><h4 style="margin:0 0 6px;font-size:0.8125rem">Subjects needing attention</h4>{% if performance.needs_attention %}<ul style="margin:0;padding-left:18px;font-size:0.8125rem">{% for s in performance.needs_attention %}<li>{{ s.subject }}: {{ s.delta }}</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:0.75rem">None flagged.</p>{% endif %}</div>
-</div>{% endif %}
-{% else %}<p class="muted">Nothing to show yet — this appears once the school publishes a term's results.</p>{% endif %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% block title %}Parent Dashboard · {{ school_name }}{% endblock %}{% block content %}
+{% set child = cards[0].student if cards else none %}
+<div class="ad" style="max-width:960px;margin:0 auto">
+  {{ v106_banner('parent', session.get('name') or 'Parent', ((term_now.session_name ~ ' · ' ~ term_now.name ~ ' — ') if term_now else '') ~ "your children's overview.") }}
+
+  <!-- Children cards (select a child to see their detail below) -->
+  {% if summaries %}<div id="children" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px">
+    {% for c in summaries %}<a href="{{ url_for('parent_dashboard', child=c.id) }}" class="card" aria-current="{{ 'true' if c.selected else 'false' }}" style="padding:18px;display:flex;gap:14px;align-items:center;text-decoration:none;color:inherit;margin-bottom:0;{{ 'outline:2px solid var(--blue);' if c.selected else '' }}">
+      <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,{{ '#1a6fe8,#0a2a6b' if loop.index is odd else '#ec4899,#be185d' }});color:white;display:grid;place-items:center;font-weight:700;font-size:1.1rem;flex:none">{{ (c.first_name or '?')[0]|upper }}{{ (c.last_name or '?')[0]|upper }}</div>
+      <div style="flex:1;min-width:0"><h3 style="font-size:1rem;font-weight:700">{{ c.first_name }} {{ c.last_name }}</h3>
+        <p style="font-size:0.8rem;color:var(--mut)">{{ c.class_name }}{% if c.avg is not none %} · Avg {{ c.avg }}%{% endif %}{% if c.position and c.position != '-' %} · {{ c.position }}{% if c.size %} of {{ c.size }}{% endif %}{% endif %}</p></div>
+      <span style="color:var(--blue);font-weight:600;font-size:0.85rem">{{ 'Selected' if c.selected else 'View →' }}</span>
+    </a>{% endfor %}
+  </div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin:-6px 0 14px"><a class="btn btn-outline btn-sm" href="{{ url_for('parent_children_page') }}">All children</a><a class="btn btn-outline btn-sm" href="{{ url_for('parent_link_child') }}">Link a child</a></div>
+  {% else %}<div class="card" style="padding:24px;text-align:center"><h3>No children linked yet</h3><p class="muted">Ask your school administrator to link your parent account to your child, or <a href="{{ url_for('parent_link_child') }}">link a child</a> yourself.</p></div>{% endif %}
+
+  {% if child %}
+  <!-- Performance trend for the selected child -->
+  <div class="card" style="margin-bottom:16px" id="academic-trend">
+    <div class="panel-header"><h3>{{ child.first_name }} — Term Averages</h3><span style="font-size:0.8rem;color:var(--mut)">Academic Performance · <span style="color:#1a6fe8">●</span> {{ child.first_name }} · <span style="color:#94a3b8">- -</span> class average</span></div>
+    {% if performance and performance.trend %}<div class="chart-wrap" data-sh-line='{{ {"labels": performance.trend|map(attribute="term")|map(attribute="name")|list, "values": performance.trend|map(attribute="average")|list, "second": {"values": performance.trend|map(attribute="class_average")|list, "color": "#94a3b8"}, "max": 100, "suffix": "%", "label": child.first_name ~ "\'s average versus the class average by term", "empty": "No published terms yet."}|tojson }}'></div>
+    {% if performance.improving or performance.needs_attention %}<div class="grid-2" style="padding:0 16px 16px">
+      <div><h4 style="margin:0 0 6px;font-size:.9rem">Improving subjects</h4>{% if performance.improving %}<ul style="margin:0;padding-left:18px;font-size:.9rem">{% for s in performance.improving %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% (+{{ s.delta }})</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:.8rem">None yet.</p>{% endif %}</div>
+      <div><h4 style="margin:0 0 6px;font-size:.9rem">Subjects needing attention</h4>{% if performance.needs_attention %}<ul style="margin:0;padding-left:18px;font-size:.9rem">{% for s in performance.needs_attention %}<li>{{ s.subject }}: {{ s.previous }}% → {{ s.latest }}% ({{ s.delta }})</li>{% endfor %}</ul>{% else %}<p class="muted" style="font-size:.8rem">None flagged.</p>{% endif %}</div>
+    </div>{% endif %}
+    {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing to show yet — this appears once the school publishes a term's results.</p>{% endif %}
+  </div>
+
+  {% set _latest = performance.trend|last if performance and performance.trend else none %}
+  {% if _latest and _latest.subjects %}<div class="card" style="margin-bottom:16px" id="subject-scores">
+    <div class="panel-header"><h3>{{ child.first_name }} — Subject Scores</h3><span style="font-size:0.8rem;color:var(--mut)">{{ _latest.term.name }}</span></div>
+    <div class="chart-wrap" data-sh-bars='{{ {"labels": _latest.subjects|map(attribute="subject")|list, "values": _latest.subjects|map(attribute="total")|list, "label": "Subject scores, " ~ _latest.term.name, "empty": "No subject scores yet.", "scoreColors": true, "max": 100}|tojson }}'></div>
+  </div>{% endif %}
+
+  <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+    <!-- Attendance -->
+    <div class="card" id="attendance">
+      <div class="panel-header"><h3>Attendance</h3><a href="{{ url_for('parent_attendance', student_id=child.id) }}" style="font-size:0.8rem;font-weight:600">Details →</a></div>
+      {% if attendance and attendance.total %}<div class="kpi-row" style="padding:12px;margin:0">
+        <div class="kpi-mini" style="box-shadow:none;border:none;padding:8px"><div class="label">Present</div><div class="value t-ok" style="font-size:1.3rem">{{ attendance.counts.present }}</div></div>
+        <div class="kpi-mini" style="box-shadow:none;border:none;padding:8px"><div class="label">Absent</div><div class="value t-bad" style="font-size:1.3rem">{{ attendance.counts.absent }}</div></div>
+        <div class="kpi-mini" style="box-shadow:none;border:none;padding:8px"><div class="label">Late</div><div class="value t-warn" style="font-size:1.3rem">{{ attendance.counts.late }}</div></div>
+        <div class="kpi-mini" style="box-shadow:none;border:none;padding:8px"><div class="label">Rate</div><div class="value" style="font-size:1.3rem">{{ attendance.rate }}%</div></div>
+      </div>
+      {% if attendance_trend %}<div class="ch-note">Last week</div><div class="chart-wrap" data-sh-line='{{ {"labels": attendance_trend|map(attribute="label")|list, "values": attendance_trend|map(attribute="rate")|list, "max": 100, "suffix": "%", "label": "Attendance last week", "empty": "No attendance recorded last week."}|tojson }}'></div>{% endif %}
+      {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">No attendance recorded yet.</p>{% endif %}
+    </div>
+    <!-- Quick links -->
+    <div class="card">
+      <div class="panel-header"><h3>Quick Links</h3></div>
+      <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <a href="{{ url_for('parent_child_detail', student_id=child.id) }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">📄 Results</a>
+        <a href="{{ url_for('parent_timetable', student_id=child.id) }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">📅 Timetable</a>
+        <a href="{{ url_for('parent_attendance', student_id=child.id) }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">✅ Attendance</a>
+        <a href="{{ url_for('parent_contact_school') }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">✉️ Contact School</a>
+        <a href="{{ url_for('parent_notifications') }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">🔔 Notifications</a>
+        <a href="{{ url_for('parent_self_profile') }}" class="btn btn-outline btn-sm" style="justify-content:flex-start">👤 Profile</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subject scores snapshot -->
+  <div class="card table-wrap" style="margin-bottom:16px" id="subjects">
+    <div class="panel-header"><h3>{{ child.first_name }} — Current Subjects</h3><a href="{{ url_for('parent_child_detail', student_id=child.id) }}" style="font-size:0.8rem;font-weight:600">Full report →</a></div>
+    {% if subject_rows %}<table class="data"><thead><tr><th>Subject</th><th>Total</th><th>Grade</th><th>Remark</th></tr></thead><tbody>
+      {% for r in subject_rows %}<tr><td>{{ r.subject }}</td><td>{{ r.total }}</td><td><span class="badge {{ r.cls }}">{{ r.grade }}</span></td><td>{{ r.remark }}</td></tr>{% endfor %}
+    </tbody></table>{% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Published subject scores appear here once the school publishes a term's results.</p>{% endif %}
+  </div>
+  {% endif %}
+
+  {% set qa = quick_actions() %}{% if qa.actions %}
+  <article class="ad-panel" id="quick-access" style="margin-bottom:16px">
+    <header><h2><span class="ni">⚡</span> Quick Access</h2><span style="font-size:.8rem;color:var(--mut)">{{ qa.actions|length }} shortcuts</span></header>
+    <div class="ad-quick" data-qa-count="{{ qa.actions|length }}" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important">
+      {% for a in qa.actions %}<a href="{{ a.url }}" title="{{ a.hint or a.label }}"><span class="q-ico">{{ a.icon }}</span>{{ a.label }}{% if a.badge %} <em class="notif-badge">{{ a.badge }}</em>{% endif %}{% if a.state_label %}<small style="display:block;color:var(--mut);font-weight:500">{{ a.state_label }}</small>{% endif %}</a>{% endfor %}
+    </div>
+  </article>{% endif %}
+
+  {% if cards and cards[0].analysis %}<div class="card" style="margin-bottom:16px;padding:16px"><b>✦ AI insight — {{ child.first_name }}</b>
+    <p class="muted" style="margin:6px 0 0">Performance {{ cards[0].analysis.average|round(1) }}% · {{ cards[0].analysis.trend_label or cards[0].analysis.trend or 'Current term' }}</p></div>{% endif %}
+
+  {% if child %}<article class="ad-panel" style="margin-bottom:16px">
+    <header><h2><span class="ni">🕒</span> Recent Activities</h2><span style="font-size:.78rem;color:var(--mut)">{{ child.first_name }}'s results, attendance, class updates</span></header>
+    {% if activities %}<ul class="ad-acts">{% for a in activities %}<li><span class="a-ico a-blue">📄</span><div><b>{{ a.description }}</b><small>{{ a.ts }}</small></div></li>{% endfor %}</ul>
+    {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing recorded yet.</p>{% endif %}
+  </article>{% endif %}
 </div>
-<div class="grid-2" style="margin-top:18px">
-<div class="card"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('calendar-check') }}</span>Attendance — {{ child.first_name }}</h3></div><a class="btn btn-primary btn-sm" href="{{ url_for('parent_attendance',student_id=child.id) }}">Details →</a></div>
-{% if attendance and attendance.total %}<div class="stat-grid" style="margin-top:14px"><div class="stat-box"><div class="num">{{ attendance.rate }}%</div><div class="label">Attendance rate</div></div><div class="stat-box"><div class="num">{{ attendance.counts.present }}</div><div class="label">Present</div></div><div class="stat-box"><div class="num">{{ attendance.counts.late }}</div><div class="label">Late</div></div><div class="stat-box"><div class="num">{{ attendance.counts.absent }}</div><div class="label">Absent</div></div></div>{% if attendance_trend %}<h4 style="margin:18px 0 6px;font-size:0.8125rem">Last week</h4><div class="chart-wrap chart-wrap-sm"><canvas id="chartAttendance" role="img" aria-label="Attendance trend, last week"></canvas></div>{% endif %}{% else %}<p class="muted" style="margin-top:14px">No attendance recorded yet.</p>{% endif %}</div>
-<div class="card"><div class="section-title"><div><h3 class="icon-title"><span class="card-icon">{{ dicon('clock') }}</span>Recent Activities — {{ child.first_name }}</h3></div></div>
-{% if activities %}<div style="overflow:auto;margin-top:14px"><div class="table-responsive"><table class="table table-hover align-middle"><tr><th style="width:140px">When</th><th>What happened</th></tr>{% for a in activities %}<tr><td class="muted" style="font-size:0.75rem">{{ a.ts }}</td><td>{{ a.description }}</td></tr>{% endfor %}</table></div></div>{% else %}<p class="muted" style="margin-top:14px">Nothing recorded yet.</p>{% endif %}</div>
-</div>
-{% endif %}
-<div class="card" style="margin-top:18px"><div class="section-title"><div><h3>Need help from school?</h3><p class="muted">Use Parent Messages to contact an authorized teacher about your child's school work.</p></div></div><a class="btn btn-secondary" href="{{ url_for('parent_notifications') }}">Open Notifications →</a></div>
 {% endblock %}
-{% block extra_scripts %}
-{% if (performance and performance.trend) or attendance_trend %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="{{ url_for('static', filename='js/dashboard-charts.js') }}"></script>
-<script>
-(function(){
-  window.schoolHubDashboardCharts && window.schoolHubDashboardCharts({
-    academicLabels: {{ (performance.trend|map(attribute='term')|map(attribute='name')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    academicMine: {{ (performance.trend|map(attribute='average')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    academicClassAvg: {{ (performance.trend|map(attribute='class_average')|list)|tojson if performance and performance.trend else '[]'|safe }},
-    subjectLabels: {{ ((performance.trend|last).subjects|map(attribute='subject')|list)|tojson if performance and performance.trend and (performance.trend|last).subjects else '[]'|safe }},
-    subjectScores: {{ ((performance.trend|last).subjects|map(attribute='total')|list)|tojson if performance and performance.trend and (performance.trend|last).subjects else '[]'|safe }},
-    attendanceLabels: {{ (attendance_trend|map(attribute='label')|list)|tojson if attendance_trend else '[]'|safe }},
-    attendanceRate: {{ (attendance_trend|map(attribute='rate')|list)|tojson if attendance_trend else '[]'|safe }},
-  });
-})();
-</script>
-{% endif %}
-{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/sh-charts.js') }}"></script>{% endblock %}
