@@ -319,3 +319,25 @@ html[data-bs-theme=dark] :not(.btn):not(.badge)[style*="color:#1d7a4c"]{color:#4
 .ad-kpi-gender{flex-wrap:wrap}
 @media(max-width:420px){.ad-banner{flex-direction:column;align-items:flex-start;gap:12px}.ad-kpis{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}}
 html[data-font-scale="150"] .ad-kpi-gender{grid-template-columns:1fr}
+
+/* ---- V112: shared form pieces used inside v106 pages (they previously relied on Bootstrap/legacy CSS) ---- */
+.identity-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 14px}
+.identity-fields>[class*="col-"]{min-width:0;width:auto}
+@media(max-width:600px){.identity-fields{grid-template-columns:1fr}}
+.form-label{display:block;font-size:.8rem;font-weight:600;color:var(--mut);margin-bottom:6px}
+.form-select{display:block;width:100%;padding:10px 12px;border:1.5px solid #c5d0e6;border-radius:10px;font:inherit;font-size:.9rem;background:var(--card);color:var(--ink)}
+.invalid-feedback{display:none;color:#b3261e;font-size:.78rem;margin-top:4px}
+.is-invalid~.invalid-feedback,.was-validated :invalid~.invalid-feedback{display:block}
+.is-invalid{border-color:#b3261e!important}
+.text-danger{color:#e11d48}
+.form-text,.small{font-size:.8rem;color:var(--mut)}
+html[data-bs-theme=dark] .form-select{background:#1b2433;color:#dde3f0;border-color:#3a4558}
+html[data-bs-theme=dark] .invalid-feedback{color:#fca5a5}
+details.hlp>summary.hlp-t{cursor:pointer;color:var(--blue);font-weight:600;font-size:.85rem;padding:6px 0}
+details.hlp .hlp-b{margin:6px 0 0;color:var(--mut)}
+details.hlp code{background:#eef2fa;padding:1px 5px;border-radius:5px;font-size:.82em}
+html[data-bs-theme=dark] details.hlp code{background:#1e2a44;color:#dbe6fb}
+html[data-bs-theme=dark] .portal-tabs a.on{color:#7db3ff;border-bottom-color:#7db3ff}
+html[data-bs-theme=dark] :not(.btn)[style*="color:#1a6fe8"],html[data-bs-theme=dark] :not(.btn)[style*="color:var(--blue)"]{color:#7db3ff!important}
+html[data-bs-theme=dark] .portal-tabs a em{color:#fff}
+html[data-bs-theme=dark] .text-danger{color:#fb7185}
