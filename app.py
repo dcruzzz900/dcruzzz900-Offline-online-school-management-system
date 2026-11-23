@@ -2897,11 +2897,15 @@ def _att_rate(attended, total):
     return round(attended * 100.0 / total, 1) if total else None
 
 
-def admin_dashboard_charts(conn, school_id, term, today):
-    """V112: data for the admin dashboard's selectable charts (all school-scoped, real rows only; empty periods are None = a gap in the line).
-      attendance[group][range] -> {labels, values, note}   group: students|staff   range: this_week|last_week|last_month|last_year
-      enrol[mode]              -> {labels, values}          mode: term|year
-      levels                   -> [{label, count, boys, girls}]  active students per class level."""
+def _core_today_date(conn, school_id):
+    import v63_core as _c
+    return _c.school_now(conn, school_id).date()
+
+
+def _attendance_series(conn, school_id, today, class_ids=None, groups=("students", "staff")):
+    """V112: selectable attendance series shared by the admin AND teacher dashboards.
+    attendance[group][range] -> {labels, values, note}; range: this_week|last_week|last_month|last_year. class_ids limits STUDENT attendance
+    to those classes (a teacher sees only their own classes); staff attendance is school-wide (admin only)."""
     import calendar as _cal
     D = datetime.date
     # ---- raw per-day tallies ------------------------------------------------------------------------------------------------
@@ -2915,9 +2919,10 @@ def admin_dashboard_charts(conn, school_id, term, today):
                 b[0] += 1
         return out
     raw = {
-        "students": tally("SELECT date AS d, COALESCE(detail_status, status) AS st FROM attendance_records "
-                          "WHERE COALESCE(is_deleted,0)=0 AND class_id IN (SELECT id FROM classes WHERE school_id=?)", (school_id,)),
-        "staff": tally("SELECT date AS d, COALESCE(status,'') AS st FROM staff_attendance WHERE COALESCE(is_deleted,0)=0 AND school_id=?", (school_id,)),
+        "students": (tally("SELECT date AS d, COALESCE(detail_status, status) AS st FROM attendance_records "
+                           "WHERE COALESCE(is_deleted,0)=0 AND class_id IN (SELECT id FROM classes WHERE school_id=?)", (school_id,)) if class_ids is None else
+                     (tally("SELECT date AS d, COALESCE(detail_status, status) AS st FROM attendance_records WHERE COALESCE(is_deleted,0)=0 AND class_id IN (%s)" % ",".join("?" * len(class_ids)), tuple(class_ids)) if class_ids else {})),
+        "staff": tally("SELECT date AS d, COALESCE(status,'') AS st FROM staff_attendance WHERE COALESCE(is_deleted,0)=0 AND school_id=?", (school_id,)) if "staff" in groups else {},
     }
     def span(group, start, end):
         a = t = 0
@@ -2932,7 +2937,7 @@ def admin_dashboard_charts(conn, school_id, term, today):
     lm_end = today.replace(day=1) - datetime.timedelta(days=1); lm_start = lm_end.replace(day=1)
     ly = today.year - 1
     att = {}
-    for g in ("students", "staff"):
+    for g in groups:
         day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         tw = [span(g, mon + datetime.timedelta(days=i), mon + datetime.timedelta(days=i)) if mon + datetime.timedelta(days=i) <= today else None for i in range(7)]
         lwv = [span(g, lw + datetime.timedelta(days=i), lw + datetime.timedelta(days=i)) for i in range(7)]
@@ -2946,6 +2951,15 @@ def admin_dashboard_charts(conn, school_id, term, today):
             "last_month": {"labels": labels, "values": weeks, "note": lm_start.strftime("%B %Y") + " (by week)"},
             "last_year": {"labels": [_cal.month_abbr[m] for m in range(1, 13)], "values": months, "note": f"{ly} (by month)"},
         }
+    return att
+
+
+def admin_dashboard_charts(conn, school_id, term, today):
+    """V112: data for the admin dashboard's selectable charts (all school-scoped, real rows only; empty periods are None = a gap in the line).
+      attendance[group][range] -> {labels, values, note}   group: students|staff   range: this_week|last_week|last_month|last_year
+      enrol[mode]              -> {labels, values}          mode: term|year
+      levels                   -> [{label, count, boys, girls}]  active students per class level."""
+    att = _attendance_series(conn, school_id, today)
     # ---- enrolment by term / by year ------------------------------------------------------------------------------------------
     st_total = conn.execute("SELECT COUNT(*) FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1", (school_id,)).fetchone()[0]
     cur_sess = term["session_id"] if term else None
@@ -3030,6 +3044,22 @@ def admin_dashboard_extras(conn, school_id, term, ov):
     x["pass"] = {"rate": _pct(passed), "fail": _pct(failed), "fail_grade": fail, "monitor": _pct(dist.get(monitor_g, 0)) if monitor_g else 0,
                  "monitor_grade": monitor_g, "range": (f"{scale[0]}–{[g for g in scale if g != fail][-1]}" if scale and [g for g in scale if g != fail] else "")}
     x["top"] = top[:5]
+    # Classes needing improvement: assessed classes whose average is below 50% or where 30%+ of assessed students fail (same grading logic as the result sheets)
+    weak = []
+    if term:
+        for c in conn.execute("SELECT id, name FROM classes WHERE school_id=? ORDER BY name", (school_id,)).fetchall():
+            try:
+                st = class_term_result_stats(conn, school_id, c["id"], term["id"])
+            except Exception:
+                continue
+            if not st or not st.get("assessed"):
+                continue
+            fail_share = (st["failed"] or 0) * 100.0 / st["assessed"]
+            avg_ = st.get("avg_score")
+            if (avg_ is not None and avg_ < 50) or fail_share >= 30:
+                weak.append({"id": c["id"], "name": c["name"], "avg": avg_, "failed": st["failed"] or 0, "assessed": st["assessed"], "pass_rate": round(100 - fail_share)})
+        weak.sort(key=lambda w: (w["avg"] if w["avg"] is not None else 0))
+    x["weak_classes"] = weak[:5]
     # enrolment bars (SVG geometry; axis 0..nice max, 5 grid lines like v106)
     trend = (ov or {}).get("trend") or []
     vals = [t["students"] for t in trend]
@@ -3113,15 +3143,21 @@ def teacher_dashboard_extras(conn, school_id, term, class_ids, assignments, clas
     x["att_labels"] = [a["label"] for a in (attendance or [])]
     x["att_values"] = [a["rate"] if a["rate"] is not None else None for a in (attendance or [])]
     # score-level analytics for the visible classes
+    try:
+        _today = _core_today_date(conn, school_id)
+    except Exception:
+        _today = datetime.date.today()
+    x["attendance"] = _attendance_series(conn, school_id, _today, class_ids=list(class_ids or []), groups=("students",))
     sp, dist, per_student = {}, {}, {}
+    _stu = {}
     fail = _fail_grade(conn, school_id)
     scale = [r["grade"] for r in conn.execute("SELECT grade FROM grade_scale WHERE school_id=? ORDER BY min_score DESC", (school_id,)).fetchall()]
     dist = {g: 0 for g in scale}
     if term and class_ids:
         ph = ",".join("?" * len(class_ids))
         rows = conn.execute(
-            "SELECT sc.student_id, sub.name AS subject, sc.ca1, sc.ca2, sc.ca3, sc.exam FROM scores sc "
-            "JOIN students s ON s.id=sc.student_id AND s.is_active=1 "
+            "SELECT sc.student_id, s.first_name, s.last_name, cl.name AS class_name, sub.name AS subject, sc.ca1, sc.ca2, sc.ca3, sc.exam FROM scores sc "
+            "JOIN students s ON s.id=sc.student_id AND s.is_active=1 JOIN classes cl ON cl.id=s.class_id "
             "JOIN class_subjects cs ON cs.class_id=s.class_id AND cs.subject_id=sc.subject_id "
             "JOIN subjects sub ON sub.id=sc.subject_id "
             f"WHERE sc.term_id=? AND s.class_id IN ({ph}) AND s.school_id=?", (term["id"], *class_ids, school_id)).fetchall()
@@ -3131,6 +3167,7 @@ def teacher_dashboard_extras(conn, school_id, term, class_ids, assignments, clas
             g, _ = grade_for(tot, conn, school_id)
             if not fail or g != fail: e["pass"] += 1
             ps = per_student.setdefault(r["student_id"], [0.0, 0]); ps[0] += tot; ps[1] += 1
+            _s = _stu.setdefault(r["student_id"], {"name": f"{r['last_name']} {r['first_name']}".strip(), "class": r["class_name"], "subs": {}}); _s["subs"][r["subject"]] = tot
         for tot, n in per_student.values():
             g, _ = grade_for(tot / n, conn, school_id); dist[g] = dist.get(g, 0) + 1
     subj = sorted(({"name": k, "avg": round(v["sum"] / v["n"], 1), "pass": round(v["pass"] * 100.0 / v["n"]), "n": v["n"]} for k, v in sp.items()), key=lambda d: -d["avg"])
@@ -3138,6 +3175,16 @@ def teacher_dashboard_extras(conn, school_id, term, class_ids, assignments, clas
     n_assessed = len(per_student)
     x["grades"] = [{"grade": g, "pct": round(c * 100.0 / n_assessed) if n_assessed else 0, "cls": "g-" + g.lower() if len(g) == 1 and g.lower() in "abcdf" else "g-c"} for g, c in dist.items() if g != "-"]
     x["n_assessed"] = n_assessed
+    # Students needing improvement: overall average below 50% or in the failing grade; lists their weakest subject (real scores only)
+    needs = []
+    for sid, (tot, n) in per_student.items():
+        avg_ = tot / n
+        g, _ = grade_for(avg_, conn, school_id)
+        if avg_ < 50 or (fail and g == fail):
+            subs_ = _stu[sid]["subs"]; weakest = min(subs_.items(), key=lambda kv: kv[1]) if subs_ else (None, None)
+            needs.append({"name": _stu[sid]["name"], "class": _stu[sid]["class"], "avg": round(avg_, 1), "grade": g, "weak_subject": weakest[0], "weak_score": round(weakest[1], 1) if weakest[1] is not None else None})
+    needs.sort(key=lambda d: d["avg"])
+    x["needs_improvement"] = needs[:5]
     return x
 
 
@@ -3174,7 +3221,7 @@ def dashboard():
         conn.close()
         return render_template(
             "admin_dashboard.html", identity_gap_count=_identity_gap_count(), term=term, ov=ov, x=x, charts=charts, activities=activities, school=school, pending_reviews=pending_reviews,
-            now_local=now_local, plan_alerts=alerts, hide_banners=True,
+            now_local=now_local, plan_alerts=alerts,
             school_local_ms=int(now_local.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000) if now_local else 0,
         )
     else:
@@ -4560,7 +4607,13 @@ def admin_students():
     classes=conn.execute("SELECT * FROM classes WHERE school_id=? ORDER BY name",(school_id,)).fetchall(); class_filter=request.args.get("class_id",type=int)
     if class_filter: students=conn.execute("SELECT s.*,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE s.class_id=? AND c.school_id=? AND s.is_active=1 ORDER BY s.last_name",(class_filter,school_id)).fetchall()
     else: students=conn.execute("SELECT s.*,c.name class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 ORDER BY c.name,s.last_name",(school_id,)).fetchall()
-    conn.close(); return render_template("admin_students.html",classes=classes,students=students,class_filter=class_filter,student_full_name=student_full_name)
+    # V112 (v106 "New This Term" card): students admitted since the current term started (falls back to the last 90 days if the term has no start date)
+    _t = current_term(conn)
+    _start = (_t["start_date"] if _t and _t["start_date"] else (datetime.date.today() - datetime.timedelta(days=90)).isoformat())
+    new_this_term = conn.execute(
+        "SELECT COUNT(*) FROM students s JOIN classes c ON c.id=s.class_id WHERE c.school_id=? AND s.is_active=1 AND s.date_of_admission IS NOT NULL AND s.date_of_admission>=?",
+        (school_id, str(_start)[:10])).fetchone()[0]
+    conn.close(); return render_template("admin_students.html",classes=classes,students=students,class_filter=class_filter,student_full_name=student_full_name,new_this_term=new_this_term)
 
 
 @app.route("/admin/students/<int:student_id>/delete", methods=["POST"])
