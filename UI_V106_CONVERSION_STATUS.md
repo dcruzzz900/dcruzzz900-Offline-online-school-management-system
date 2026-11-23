@@ -2,28 +2,28 @@
 
 Goal: every screen uses the exact v106 markup/CSS (`modern.css`) with live v111 data and forms. A converted template sets `{% set v106_page = true %}`, which stops legacy v111 CSS loading on that page so nothing leaks in.
 
-**Screens: 91 in v106. Converted: 4. Remaining: 87.**
+**Screens: 91 in v106. Converted: 10 (plus Change Password restyled). Remaining: 80.**
 
 | v106 screen | v111 template | status |
 |---|---|---|
 | 00-role-menus | ? | styled via shared layer only – NOT yet converted |
 | 01-login | login | styled via shared layer only – NOT yet converted |
-| 02-admin-dashboard | admin_dashboard | EXACT v106 markup + live data (done) |
+| 02-admin-dashboard | admin_dashboard | EXACT v106 markup + live data + 8/18 Quick Access + selectable charts (done) |
 | 03-result-sheet | result / _result_sheet | styled via shared layer only – NOT yet converted |
-| 04-parent-dashboard | parent_dashboard | styled via shared layer only – NOT yet converted |
+| 04-parent-dashboard | parent_dashboard | EXACT v106 markup + live data (child cards, trend, subjects, attendance) + all v111 shortcuts (done) |
 | 05-teacher-score-entry | score_entry | styled via shared layer only – NOT yet converted |
 | 06-broadsheet | broadsheet | styled via shared layer only – NOT yet converted |
-| 07-classes | admin_classes | styled via shared layer only – NOT yet converted |
-| 08-students | admin_students | styled via shared layer only – NOT yet converted |
-| 09-teachers | admin_teachers | styled via shared layer only – NOT yet converted |
-| 10-subjects | admin_subjects | styled via shared layer only – NOT yet converted |
-| 11-parents | admin_parents | styled via shared layer only – NOT yet converted |
+| 07-classes | admin_classes | v106 markup + all v111 forms/actions + real counts (done) |
+| 08-students | admin_students | v106 markup + bulk upload + add form + filters (done) |
+| 09-teachers | admin_teachers | v106 markup + all v111 actions + real subjects/classes (done) |
+| 10-subjects | admin_subjects | v106 markup + all v111 actions + real counts (done) |
+| 11-parents | admin_parents | v106 markup + portal accounts + linked children (done) |
 | 12-timetable | timetable_hub | styled via shared layer only – NOT yet converted |
 | 13-grading | admin_grading | styled via shared layer only – NOT yet converted |
 | 14-promote | admin_promote | styled via shared layer only – NOT yet converted |
 | 15-analytics | admin_analytics | styled via shared layer only – NOT yet converted |
 | 16-teacher-dashboard | teacher_dashboard | EXACT v106 markup + live data + 7 Quick Access tiles + Subject/Pass-Fail/Top/Recent analytics (done)|
-| 17-student-dashboard | student_dashboard | styled via shared layer only – NOT yet converted |
+| 17-student-dashboard | student_dashboard | EXACT v106 markup + live data (average, position, scores, trend, attendance) + all v111 shortcuts (done) |
 | 18-result-workflow | result_workflow | styled via shared layer only – NOT yet converted |
 | 19-attendance | roll_call | styled via shared layer only – NOT yet converted |
 | 20-materials | materials | styled via shared layer only – NOT yet converted |
@@ -96,7 +96,7 @@ Goal: every screen uses the exact v106 markup/CSS (`modern.css`) with live v111 
 | 86-registrar-dashboard | registrar_dashboard | styled via shared layer only – NOT yet converted |
 | 87-parent-verification | admin_parent_links | styled via shared layer only – NOT yet converted |
 | 88-custom-school-info | admin_school_info | styled via shared layer only – NOT yet converted |
-| 89-school-fees | admin_school_fees  (NEW in v112) | v106-style page, summary data only (done, v111 has no invoice ledger) |
+| 89-school-fees | admin_school_fees  (NEW in v112) | v106-style page, summary data only (done; v111 has no invoice ledger) |
 
 ## v111 templates with no v106 screen (functionality to keep and restyle in v106 language)
 
