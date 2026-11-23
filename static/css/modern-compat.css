@@ -341,3 +341,92 @@ html[data-bs-theme=dark] .portal-tabs a.on{color:#7db3ff;border-bottom-color:#7d
 html[data-bs-theme=dark] :not(.btn)[style*="color:#1a6fe8"],html[data-bs-theme=dark] :not(.btn)[style*="color:var(--blue)"]{color:#7db3ff!important}
 html[data-bs-theme=dark] .portal-tabs a em{color:#fff}
 html[data-bs-theme=dark] .text-danger{color:#fb7185}
+
+/* ======================= V112 round 5: fixed header, gap-free panel rows, sliding announcements ======================= */
+/* 1) Fixed header: `overflow-x:hidden` on html/body silently disables position:sticky. `clip` hides sideways overflow WITHOUT that side effect. */
+html,body{overflow-x:clip}
+@supports not (overflow-x:clip){html,body{overflow-x:visible}}
+.topbar{position:sticky!important;top:0;z-index:55}
+.portal-shell>.topbar,.platform-shell .topbar{position:sticky!important;top:0}
+.portal-tabs{position:sticky;top:var(--topbar-h,58px);z-index:50}
+.page-header{scroll-margin-top:calc(var(--topbar-h,58px) + 8px)}
+[id]{scroll-margin-top:calc(var(--topbar-h,58px) + 12px)}
+
+/* 2) Panel rows never leave empty space: panels wrap and GROW to fill each row (flex), at any width / zoom / text size */
+.ad .ad-panels,.ad .ad-panels-2,.ad .ad-panels-bottom{display:flex!important;flex-wrap:wrap;gap:16px;grid-template-columns:none!important;align-items:stretch}
+.ad .ad-panels>*{flex:1 1 300px;min-width:0;margin-bottom:0}
+.ad .ad-panels-bottom>:nth-child(1){flex:2.2 1 340px}.ad .ad-panels-bottom>:nth-child(2){flex:1.25 1 260px}.ad .ad-panels-bottom>:nth-child(3){flex:1 1 220px}
+.ad .ad-panels>.ad-panel{height:auto}
+.ad .ad-two{display:flex!important;flex-wrap:wrap;gap:16px;align-items:stretch}
+.ad .ad-two>*{flex:1 1 320px;min-width:0}
+.ad .ad-panels{margin-bottom:16px}
+/* KPI cards: always whole rows (6 -> 3x2 -> 2x3), never an orphan */
+@media(max-width:1000px){.ad .ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:620px){.ad .ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+html[data-font-scale="130"] .ad .ad-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+html[data-font-scale="150"] .ad .ad-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.kpi-row{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:380px){.kpi-row{grid-template-columns:1fr}}
+
+/* 3) Announcements: a sliding strip at the top of every dashboard (one slide at a time; slides in; rotates when there are several) */
+.ann-wrap{position:relative;overflow:hidden;border-radius:14px;margin:0 0 14px;box-shadow:var(--shadow);animation:annIn .55s cubic-bezier(.2,.8,.2,1) both}
+.ann-track{display:flex;transition:transform .6s cubic-bezier(.65,.05,.25,1);will-change:transform}
+.ann{flex:0 0 100%;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:12px 16px;background:#e8f0fe;color:#0a2a6b;border-left:5px solid #1a6fe8;min-width:0}
+.ann-success{background:#e6f9ec;color:#0b5a2c;border-left-color:#27c25a}
+.ann-warning{background:#fff4d6;color:#7a4b00;border-left-color:#ffae1a}
+.ann-danger{background:#fde8ec;color:#8a1230;border-left-color:#e11d48}
+.ann-flag{font-size:1.25rem;flex:none}
+.ann-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ann-body b{font-size:.95rem}.ann-body span{font-size:.88rem;overflow-wrap:anywhere}
+.ann-pri{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:rgba(0,0,0,.12);padding:2px 7px;border-radius:999px;margin-left:6px}
+.ann form{margin:0;flex:none}.ann-x{border:0;background:rgba(0,0,0,.08);color:inherit;width:30px;height:30px;border-radius:50%;font-size:1.2rem;line-height:1;cursor:pointer}
+.ann-dots{position:absolute;right:12px;bottom:6px;display:flex;gap:6px}
+.ann-dots button{width:8px;height:8px;padding:0;border:0;border-radius:50%;background:rgba(10,42,107,.3);cursor:pointer}
+.ann-dots button[aria-current=true]{background:#0a2a6b;width:18px;border-radius:8px}
+@keyframes annIn{from{transform:translateX(60px);opacity:0}to{transform:none;opacity:1}}
+@media(prefers-reduced-motion:reduce){.ann-wrap{animation:none}.ann-track{transition:none}}
+html[data-bs-theme=dark] .ann{background:#16264a;color:#dbe6fb}
+html[data-bs-theme=dark] .ann-success{background:#10321d;color:#bbf7d0}
+html[data-bs-theme=dark] .ann-warning{background:#3a3217;color:#fde68a}
+html[data-bs-theme=dark] .ann-danger{background:#43161f;color:#fecaca}
+html[data-bs-theme=dark] .ann-dots button{background:rgba(255,255,255,.35)}html[data-bs-theme=dark] .ann-dots button[aria-current=true]{background:#fff}
+/* Announcements panel (dashboard card) */
+.ann-list{list-style:none;margin:0;padding:6px 0}
+.ann-list li{display:flex;gap:10px;padding:10px 16px;border-top:1px solid var(--border)}.ann-list li:first-child{border-top:0}
+.ann-list .ann-ico{font-size:1.15rem;flex:none}.ann-list b{display:block;font-size:.92rem;color:var(--navy)}.ann-list span{font-size:.82rem;color:var(--mut);overflow-wrap:anywhere}
+/* teacher: My roles + AI Assistant row */
+.roles-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;margin-bottom:16px}
+.roles-chips{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.roles-chips b{font-size:.95rem;color:var(--navy)}
+html[data-bs-theme=dark] .roles-chips b{color:#cfe0ff}
+/* collapsible add-forms */
+[data-collapsible][hidden]{display:none!important}
+.form-expanding{animation:formIn .28s ease both}
+@keyframes formIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.form-expanding{animation:none}}
+.form-close{margin-left:auto}
+/* phone: .main/.content must not become scroll containers (that disables the fixed header) */
+.main,.app-main,.content,main.content{overflow:visible!important;overflow-x:clip!important}
+@supports not (overflow-x:clip){.main,.app-main,.content,main.content{overflow-x:visible!important}}
+
+/* header must always fit the screen: the search box and school name shrink, the action buttons never get pushed off-screen */
+.topbar{flex-wrap:nowrap}
+.topbar>*{min-width:0}
+.topbar-search{flex:1 1 40px;min-width:0}
+.topbar-search input,.topbar-search input[type=search]{min-width:0;width:100%}
+.topbar-school{flex:0 1 auto;min-width:0}
+.topbar-school h1,.topbar-school p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.topbar-actions,.topbar .top-actions{flex:none}
+@media(max-width:480px){.topbar{gap:8px;padding-left:10px;padding-right:10px}.role-chip{font-size:.68rem;padding:4px 8px;white-space:nowrap}.topbar-search{flex-basis:0}}
+@media(max-width:380px){.topbar-search{display:none}.topbar-school{flex:1 1 auto}}
+@media(max-width:700px){html[data-font-scale="130"] .topbar-search,html[data-font-scale="150"] .topbar-search{display:none}html[data-font-scale="130"] .topbar-school,html[data-font-scale="150"] .topbar-school{flex:1 1 auto}}
+.topbar .top-search,.topbar .topbar-search{flex:1 1 40px!important;min-width:0!important;max-width:320px}
+.topbar-school.top-school{flex:1 1 auto;min-width:0}
+@media(max-width:520px){.topbar .top-search,.topbar .topbar-search{display:none!important}}
+/* big text / narrow panels: headers wrap instead of overflowing; long texts break */
+.ad-panel>header,.card .panel-header,.panel-header{flex-wrap:wrap;gap:4px 10px}
+.ad-panel>header h2,.panel-header h3{min-width:0;overflow-wrap:anywhere}
+.ad-ann-item,.ad-ann-item *,.ad-tip,.ad-tip *,.ann-list *{overflow-wrap:anywhere;min-width:0}
+p.badge,.badge{max-width:100%}
+p.badge{white-space:normal}
