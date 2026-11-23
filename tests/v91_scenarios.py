@@ -187,7 +187,7 @@ check("unpublished term 2 never appears in the performance trend", "2nd Term" no
 print("=== 2) Student Dashboard: Attendance ===")
 
 check("attendance rate (9 of 10 attended) shown", "90.0%" in sdash, sdash)
-check("present/late/absent counts shown correctly (8/1/1)", '<div class="num">8</div>' in sdash and sdash.count('<div class="num">1</div>') >= 2, sdash)
+check("present/late/absent counts shown correctly (8/1/1)", '<div class="value">8</div>' in sdash and sdash.count('<div class="value">1</div>') >= 2, sdash)
 
 print("=== 3) Student Dashboard: Recent Activities never leaks another student's event ===")
 

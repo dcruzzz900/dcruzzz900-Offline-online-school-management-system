@@ -130,5 +130,31 @@ check("teacher: tile 1 'Score Entry' opens My Teaching Workspace", '/teaching-wo
 tw = TEACH.get("/teaching-workspace")
 check("My Teaching Workspace page opens and lists the assignments", tw.status_code == 200 and "My Teaching Workspace" in html(tw) and "Enter scores" in html(tw))
 
+print("=== 11) Round 3: student + parent dashboards and admin list pages in v106 ===")
+cn = get_db()
+cn.execute("INSERT INTO parent_accounts (school_id, tenant_id, name, username, password_hash, is_active) SELECT id, tenant_id, 'Mrs Obi', 'mrsobi', ?, 1 FROM schools WHERE id=1", (pw,))
+pid_ = cn.execute("SELECT id FROM parent_accounts WHERE username='mrsobi'").fetchone()[0]
+cn.execute("INSERT INTO parent_students (parent_id, student_id, school_id, tenant_id, status) SELECT ?,1,school_id,tenant_id,'verified' FROM students WHERE id=1", (pid_,))
+cn.execute("UPDATE students SET username='chinedu', password_hash=?, first_login_completed_at=CURRENT_TIMESTAMP WHERE id=1", (pw,))
+cn.execute("UPDATE terms SET is_published=1 WHERE id=?", (term,))
+cn.execute("INSERT OR IGNORE INTO result_publication (school_id, tenant_id, term_id, class_id, status) SELECT school_id, tenant_id, ?, id, 'published' FROM classes WHERE name='JSS1A'", (term,))
+cn.commit(); cn.close()
+STUD, PAR = login("chinedu"), login("mrsobi")
+sd = html(STUD.get("/student/dashboard"))
+check("student dashboard: v106 banner, KPIs, subject scores + trend + attendance panels", all(x in sd for x in ('class="ad-banner"', 'class="kpi-row"', 'id="subject-scores"', 'id="academic-trend"', 'id="attendance"', 'id="results"')))
+check("student dashboard: real figures (avg 90.0%, 4 subjects, 1st position)", "90.0%" in sd and ">4<" in sd and "1st" in sd)
+check("student dashboard: every v111 shortcut kept (Quick Access) + View Result link", 'id="quick-access"' in sd and "View Result" in sd and "My Timetable" in sd and "Change Password" in sd)
+check("student dashboard: unscored subjects stay gaps, not zeros", '"values": [' in sd or '"values":[' in sd)
+pdh = html(PAR.get("/parent/dashboard"))
+check("parent dashboard: child card, term chart, subject chart + table, attendance, quick links", all(x in pdh for x in ('id="children"', 'id="academic-trend"', 'id="subject-scores"', 'id="subjects"', 'id="attendance"', "Quick Links")))
+check("parent dashboard: only the linked child is selectable (real data, scoped)", "Chinedu" in pdh and "Eze" not in pdh and "Bakare" not in pdh)
+for url, marks in (("/admin/classes", ("Add a Class", 'class="data"', "set_class_category" if False else "Class Teacher")), ("/admin/subjects", ("Add a Subject", 'class="data"', "Assigned Teachers")),
+                   ("/admin/teachers", ("Add a Teacher", 'class="data"', "Subjects / Classes")), ("/admin/students", ("Add a Student", "Bulk Upload Students", 'class="data"')), ("/admin/parents", ("Linked Children", 'class="data"', "Parents"))):
+    pg_ = html(ADMIN.get(url))
+    check(f"{url}: v106 page header + KPI/filters + data table, forms still have CSRF", all(m in pg_ for m in marks) and 'class="page-header"' in pg_ and ("csrf_token" in pg_ or url == "/admin/parents"), url)
+check("admin/classes shows real student + subject counts per class", "<td>3</td>" in html(ADMIN.get("/admin/classes")) and "<td>4</td>" in html(ADMIN.get("/admin/classes")))
+check("admin/teachers lists the teacher's real subjects and class", "Mathematics" in html(ADMIN.get("/admin/teachers")) and "JSS1A" in html(ADMIN.get("/admin/teachers")))
+check("v106 pages do not load the legacy stylesheets (no leakage)", "css/style.css" not in html(ADMIN.get("/admin/classes")) and "css/modern.css" in html(ADMIN.get("/admin/classes")))
+
 print(f"\n{P} passed, {F} failed")
 sys.exit(1 if F else 0)

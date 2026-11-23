@@ -89,12 +89,27 @@ def staff(u, pw="Pass1234"):
     return c
 
 
+
+import json as _json_sh
+_SH = {"academicLabels": ("academic-trend", "data-sh-line", "labels"), "academicMine": ("academic-trend", "data-sh-line", "values"),
+       "subjectLabels": ("subject-scores", "data-sh-bars", "labels"), "subjectScores": ("subject-scores", "data-sh-bars", "values"),
+       "attendanceLabels": ("attendance", "data-sh-line", "labels"), "attendanceRate": ("attendance", "data-sh-line", "values")}
+def _sh_chart(page, key_name):
+    """V112: student/parent dashboards draw offline SVG charts; their data sits in a data-sh-line / data-sh-bars attribute (same numbers as before)."""
+    if key_name not in _SH: return None
+    anchor, attr, k = _SH[key_name]
+    if 'id="%s"' % anchor not in page: return None
+    m = re.search(attr + r"='(\{.*?\})'", page.split('id="%s"' % anchor, 1)[-1], re.S)
+    return _json_sh.loads(m.group(1))[k] if m else None
+
 def js_array(page, key_name):
     """Pulls the value passed for one chart-data key (e.g. 'classLabels') back out of a
     rendered page's inline script and parses it as JSON -- the same JSON the browser's own
     Chart.js would consume. The admin dashboard assigns each value to an intermediate `var
     UPPER_CASE = [...]` first (so it can reuse them in the schoolHubDashboardCharts(...) call),
     while the other 3 dashboards pass the JSON literal directly inline -- this follows either."""
+    _v = _sh_chart(page, key_name)
+    if _v is not None: return _v
     m = re.search(re.escape(key_name) + r":\s*([A-Za-z_][A-Za-z0-9_]*|\[.*?\]|null)", page)
     if not m:
         return None
@@ -232,9 +247,9 @@ A._rate_limit_store.clear()
 SC = A.app.test_client()
 post(SC, "/student/login", {"identifier": "chinedu", "password": "Pass1234", "class_code": ""}, "/student/login")
 sdash = html(SC.get("/student/dashboard"))
-check("Academic Performance trend canvas present", 'id="chartAcademicTrend"' in sdash)
-check("Subject scores bar canvas present (this term's per-subject breakdown)", 'id="chartSubjectScores"' in sdash)
-check("Attendance Trend canvas present", 'id="chartAttendance"' in sdash)
+check("Academic Performance trend canvas present", 'id="academic-trend"' in sdash)
+check("Subject scores bar canvas present (this term's per-subject breakdown)", 'id="subject-scores"' in sdash)
+check("Attendance Trend canvas present", 'id="attendance"' in sdash)
 check("NO Gender Distribution chart on a single student's own dashboard (doesn't apply to one person)", 'id="chartGender"' not in sdash)
 check("NO Enrolment-by-class chart either (same reasoning)", 'id="chartEnrolment"' not in sdash)
 check("Student's Attendance sub-heading says 'Last week', never '8 weeks'", "Last week" in sdash and "8 weeks" not in sdash.lower(), sdash[:0] or "ok")
@@ -255,8 +270,8 @@ c.commit()
 c.close()
 PARENT = staff("testparent")  # parents sign in on the same unified /login form as staff
 pdash = html(PARENT.get("/parent/dashboard"))
-check("Parent's Academic Performance trend canvas present", 'id="chartAcademicTrend"' in pdash)
-check("Parent's Attendance Trend canvas present", 'id="chartAttendance"' in pdash)
+check("Parent's Academic Performance trend canvas present", 'id="academic-trend"' in pdash)
+check("Parent's Attendance Trend canvas present", 'id="attendance"' in pdash)
 check("Parent dashboard also has no Gender/Enrolment charts", 'id="chartGender"' not in pdash and 'id="chartEnrolment"' not in pdash)
 check("Parent's Attendance sub-heading says 'Last week', never '8 weeks'", "Last week" in pdash and "8 weeks" not in pdash.lower(), pdash[:0] or "ok")
 p_academic_labels = js_array(pdash, "academicLabels")

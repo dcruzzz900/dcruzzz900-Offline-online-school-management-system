@@ -388,13 +388,16 @@ __import__("wf_helper").publish(A, PTERM)
 run("INSERT INTO parent_students (parent_id, student_id, school_id, tenant_id, status) SELECT ?, 1, school_id, tenant_id, 'verified' FROM students WHERE id=1", PID)
 pd = html(PR.get("/parent/dashboard")); sd = html(ST.get("/student/dashboard"))
 def _arr(d, key):
+    # V112: offline SVG charts keep their data in data-sh-bars / data-sh-line attributes
+    if key == "subjectScores":
+        m = re.search(r"data-sh-bars='(\{.*?\})'", d.split('id="subject-scores"', 1)[-1], re.S); return json.loads(m.group(1))["values"] if m else None
     m = re.search(key + r":\s*(\[[^\]]*\])", d); return json.loads(m.group(1)) if m else None
-check("Student dashboard has academic trend and subject-score charts", all(x in sd for x in ('id="chartAcademicTrend"', 'id="chartSubjectScores"')))
-check("Parent dashboard has trend and subject-performance charts", all(x in pd for x in ('id="chartAcademicTrend"', 'id="chartSubjectScores"')))
+check("Student dashboard has academic trend and subject-score charts", all(x in sd for x in ('id="academic-trend"', 'id="subject-scores"')))
+check("Parent dashboard has trend and subject-performance charts", all(x in pd for x in ('id="academic-trend"', 'id="subject-scores"')))
 real = lambda d: [v for v in (_arr(d, "subjectScores") or []) if v is not None]
 check("...showing the SAME real figures the child sees (88 and 62); subjects with no score are gaps (null), never zeros", _arr(pd, "subjectScores") == _arr(sd, "subjectScores") and sorted(real(pd)) == [62, 88] and None in _arr(pd, "subjectScores"), (_arr(pd, "subjectScores"), _arr(sd, "subjectScores")))
-check("no attendance recorded -> no attendance chart is drawn (nothing invented)", 'id="chartAttendance"' not in pd and 'id="chartAttendance"' not in sd)
+check("no attendance recorded -> no attendance chart is drawn (nothing invented)", 'No attendance recorded yet.' in pd and 'No attendance recorded yet.' in sd)
 run("INSERT INTO attendance_records (student_id, class_id, term_id, date, status) SELECT 1, class_id, ?, date('now'), 'present' FROM students WHERE id=1", PTERM)
-check("once attendance is recorded, both dashboards chart it", 'id="chartAttendance"' in html(PR.get("/parent/dashboard")) and 'id="chartAttendance"' in html(ST.get("/student/dashboard")))
+check("once attendance is recorded, both dashboards chart it", 'data-sh-line' in html(PR.get("/parent/dashboard")).split('id="attendance"', 1)[-1] and 'data-sh-line' in html(ST.get("/student/dashboard")).split('id="attendance"', 1)[-1])
 
 print(f"\n{PASS} passed, {len(FAIL)} failed"); sys.exit(1 if FAIL else 0)
