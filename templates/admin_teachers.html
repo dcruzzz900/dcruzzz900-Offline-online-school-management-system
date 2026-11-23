@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% set v106_page = true %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Teachers{% endblock %}
 {% block content %}
+{% set _tc = namespace(n=0) %}{% for t in teachers %}{% if 'teacher' in ((t.rbac_role or 'Teacher')|lower) %}{% set _tc.n = _tc.n + 1 %}{% endif %}{% endfor %}
 {% set _m = teachers|selectattr('gender','equalto','Male')|list|length + teachers|selectattr('gender','equalto','M')|list|length %}{% set _f = teachers|selectattr('gender','equalto','Female')|list|length + teachers|selectattr('gender','equalto','F')|list|length %}
 <div class="page-header">
   <div><h2><span class="ni">♙</span> Teachers &amp; Staff</h2><p>{{ teachers|length }} staff member{{ '' if teachers|length == 1 else 's' }}</p></div>
@@ -8,6 +9,7 @@
 </div>
 <div class="kpi-row">
   <div class="kpi-mini"><div class="label">Total Staff</div><div class="value">{{ teachers|length }}</div></div>
+  <div class="kpi-mini" id="teachers-card"><div class="label">Teachers</div><div class="value">{{ _tc.n }}</div></div>
   <div class="kpi-mini"><div class="label">Active</div><div class="value">{{ teachers|selectattr('is_active')|list|length }}</div></div>
   <div class="kpi-mini"><div class="label">Male</div><div class="value">{{ _m }}</div></div>
   <div class="kpi-mini"><div class="label">Female</div><div class="value">{{ _f }}</div></div>

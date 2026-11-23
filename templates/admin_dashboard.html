@@ -122,8 +122,8 @@
     </article>
   </section>
 
-  <!-- Top Performing Students -->
-  <section class="ad-panels ad-panels-1">
+  <!-- Top Performing Students + Classes Needing Improvement -->
+  <section class="ad-panels">
     <article class="ad-panel">
       <header><h2><span class="ni">🏆</span> Top Performing Students</h2><span style="font-size:0.78rem;color:var(--mut)">{{ term.name if term else '' }}</span></header>
       <div class="table-wrap" style="border:0;box-shadow:none;border-radius:0">
@@ -135,6 +135,19 @@
           </tbody>
         </table>
       </div>
+    </article>
+    <article class="ad-panel" id="weak-classes">
+      <header><h2><span class="ni">⚠️</span> Classes Needing Improvement</h2><a href="{{ url_for('admin_analytics') }}">Analytics →</a></header>
+      <div class="table-wrap" style="border:0;box-shadow:none;border-radius:0">
+        <table class="data">
+          <thead><tr><th>Class</th><th>Avg %</th><th>Pass rate</th><th>Failing</th></tr></thead>
+          <tbody>
+            {% for w in x.weak_classes %}<tr><td><strong><a href="{{ url_for('broadsheet', class_id=w.id) }}">{{ w.name }}</a></strong></td><td><b>{{ w.avg }}%</b></td><td>{{ w.pass_rate }}%</td><td><span class="badge badge-red">{{ w.failed }} of {{ w.assessed }}</span></td></tr>
+            {% else %}<tr><td colspan="4" style="color:var(--mut)">{% if x.assessed %}✔ No class is below the target right now.{% else %}No scores recorded for this term yet.{% endif %}</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p style="padding:8px 16px 12px;margin:0;font-size:.75rem;color:var(--mut)">Shown when a class average is below 50% or 30%+ of assessed students fail.</p>
     </article>
   </section>
 
@@ -176,7 +189,7 @@
       </ul>
     </article>
 
-    <article class="ad-panel">
+    <article class="ad-panel" id="announcements-panel">
       <header><h2><span class="ni">📢</span> Announcements</h2><a href="{{ url_for('school_announcements') }}">View All →</a></header>
       <div>
         {% for a in (announcement_banners or [])[:2] %}<div class="ad-ann-item">

@@ -5,13 +5,14 @@
 {% set _act = students|selectattr('status','in',[none,'Active'])|list|length %}
 <div class="page-header">
   <div><h2><span class="ni">◉</span> Students</h2><p>{{ '{:,}'.format(students|length) }} student{{ '' if students|length == 1 else 's' }}{% if class_filter %} in this class{% else %} enrolled{% endif %}</p></div>
-  <div class="page-actions"><a class="btn btn-outline" href="#bulk-upload">Bulk Upload CSV</a><a class="btn btn-primary" href="#add-student">+ Add Student</a></div>
+  <div class="page-actions"><a class="btn btn-outline" href="#bulk-upload">Bulk Upload CSV</a><button type="button" class="btn btn-primary" data-toggle-form="#add-student" aria-expanded="false" aria-controls="add-student">+ Add Student</button></div>
 </div>
 <div class="kpi-row">
   <div class="kpi-mini"><div class="label">Total</div><div class="value">{{ '{:,}'.format(students|length) }}</div></div>
   <div class="kpi-mini"><div class="label">Male</div><div class="value">{{ '{:,}'.format(_m) }}</div></div>
   <div class="kpi-mini"><div class="label">Female</div><div class="value">{{ '{:,}'.format(_f) }}</div></div>
   <div class="kpi-mini"><div class="label">Active</div><div class="value">{{ '{:,}'.format(_act) }}</div></div>
+  <div class="kpi-mini" id="new-this-term"><div class="label">New This Term</div><div class="value">{{ '{:,}'.format(new_this_term) }}</div></div>
 </div>
 <form method="GET" class="filters" id="classFilterForm">
   <div class="search-box"><input class="form-control" type="search" placeholder="Search by name or admission no..." aria-label="Search students" data-filter-table="#studentTable"></div>
@@ -47,8 +48,8 @@
   </div>
 </div>
 
-<div class="card" id="add-student" style="margin-top:16px">
-  <div class="panel-header"><h3>Add a Student</h3></div>
+<div class="card" id="add-student" data-collapsible hidden style="margin-top:16px">
+  <div class="panel-header"><h3>Add a Student</h3><button type="button" class="btn btn-outline btn-sm form-close" data-toggle-form="#add-student" aria-controls="add-student">Close</button></div>
   <form method="POST" style="padding:0 16px 16px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="grid-2">
       <div>
@@ -74,4 +75,4 @@
   </form>
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script><script src="{{ url_for('static', filename='js/toggle-form.js') }}"></script>{% endblock %}

@@ -1,14 +1,18 @@
-{# V104/V107: THE shared announcement banner - used on every dashboard (Super Admin, School Admin, Teacher, Accountant, Registrar, Student, Parent,
-   other staff). Which announcements appear is decided on the server by audience / school / dates (announcements.py); the priority
-   (Information, Good news, Important, Urgent) sets the style; "auto-hide after N seconds" is set by the administrator. #}
+{# V104/V107 + V112: THE shared announcement banner for every dashboard. Which announcements appear is decided on the server by audience / school / dates
+   (announcements.py); priority (Information, Good news, Important, Urgent) sets the style; "auto-hide after N seconds" is set by the administrator.
+   V112: slides in on load, and rotates with a sliding transition when there are several (static/js/announcement-slider.js). #}
 {% if announcement_banners %}
-<div class="ann-wrap" role="region" aria-label="Announcements" data-announcement-banners>
+<div class="ann-wrap" role="region" aria-label="Announcements" aria-roledescription="carousel" data-announcement-banners data-count="{{ announcement_banners|length }}">
+<div class="ann-track">
 {% for a in announcement_banners %}
-  <div class="ann ann-{{ a.level }}" role="{{ 'alert' if a.level == 'danger' else 'status' }}" data-ann-seconds="{{ a['display_seconds'] or 0 }}">
-    <span class="ann-flag" aria-hidden="true">{{ {'danger':'⚠','warning':'❗','success':'✔'}.get(a.level, 'ℹ') }}</span>
+  <div class="ann ann-{{ a.level }}" role="{{ 'alert' if a.level == 'danger' else 'group' }}" aria-roledescription="slide" aria-label="{{ loop.index }} of {{ announcement_banners|length }}" data-ann-seconds="{{ a['display_seconds'] or 0 }}">
+    <span class="ann-flag" aria-hidden="true">{{ {'danger':'⚠','warning':'❗','success':'✔'}.get(a.level, '📢') }}</span>
     <div class="ann-body"><b>{{ a.title }}{% if a.level == 'danger' %} <span class="ann-pri">Urgent</span>{% elif a.level == 'warning' %} <span class="ann-pri">Important</span>{% endif %}</b><span>{{ a.message }}</span></div>
     {% if a.dismissible %}<form method="POST" action="{{ url_for('announcement_dismiss', ann_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="ann-x" type="submit" aria-label="Dismiss announcement" title="Dismiss">&times;</button></form>{% endif %}
   </div>
 {% endfor %}
 </div>
+{% if announcement_banners|length > 1 %}<div class="ann-dots" role="group" aria-label="Choose announcement">{% for a in announcement_banners %}<button type="button" data-ann-go="{{ loop.index0 }}" aria-label="Announcement {{ loop.index }}" aria-current="{{ 'true' if loop.first else 'false' }}"></button>{% endfor %}</div>{% endif %}
+</div>
+<script src="{{ url_for('static', filename='js/announcement-slider.js') }}" defer></script>
 {% endif %}

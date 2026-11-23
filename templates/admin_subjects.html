@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
   <div><h2><span class="ni">▦</span> Subjects</h2><p>{{ subjects|length }} subject{{ '' if subjects|length == 1 else 's' }} in the curriculum</p></div>
-  <div class="page-actions"><a class="btn btn-primary" href="#add-subject">+ Add Subject</a></div>
+  <div class="page-actions"><button type="button" class="btn btn-primary" data-toggle-form="#add-subject" aria-expanded="false" aria-controls="add-subject">+ Add Subject</button></div>
 </div>
 <div class="filters"><div class="search-box"><input class="form-control" type="search" placeholder="Search subjects..." aria-label="Search subjects" data-filter-table="#subjectTable"></div></div>
 <div class="card table-wrap">
@@ -18,12 +18,12 @@
     </tbody>
   </table>
 </div>
-<div class="card" id="add-subject" style="margin-top:16px">
-  <div class="panel-header"><h3>Add a Subject</h3></div>
+<div class="card" id="add-subject" data-collapsible hidden style="margin-top:16px">
+  <div class="panel-header"><h3>Add a Subject</h3><button type="button" class="btn btn-outline btn-sm form-close" data-toggle-form="#add-subject" aria-controls="add-subject">Close</button></div>
   <form method="POST" style="padding:0 16px 16px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group"><label>Subject name (e.g. Mathematics)</label><input type="text" name="name" required class="form-control"></div>
     <button class="btn btn-primary" type="submit">Add Subject</button>
   </form>
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script><script src="{{ url_for('static', filename='js/toggle-form.js') }}"></script>{% endblock %}

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
   <div><h2><span class="ni">▤</span> Classes</h2><p>Manage all classes and arms</p></div>
-  <div class="page-actions"><a class="btn btn-primary" href="#add-class">+ Add Class</a></div>
+  <div class="page-actions"><button type="button" class="btn btn-primary" data-toggle-form="#add-class" aria-expanded="false" aria-controls="add-class">+ Add Class</button></div>
 </div>
 <div class="kpi-row">
   <div class="kpi-mini"><div class="label">Total Classes</div><div class="value">{{ classes|length }}</div></div>
@@ -35,8 +35,8 @@
   </table>
 </div>
 
-<div class="card" id="add-class" style="margin-top:16px">
-  <div class="panel-header"><h3>Add a Class</h3></div>
+<div class="card" id="add-class" data-collapsible hidden style="margin-top:16px">
+  <div class="panel-header"><h3>Add a Class</h3><button type="button" class="btn btn-outline btn-sm form-close" data-toggle-form="#add-class" aria-controls="add-class">Close</button></div>
   <form method="POST" style="padding:0 16px 16px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group"><label>Class name (e.g. JSS1A, SS1 Science A) — or just the level, e.g. JSS 1, if you fill in arms below</label><input type="text" name="name" required class="form-control"></div>
     <div class="form-group"><label>Arms (optional) — e.g. <i>A, B, C</i> creates JSS 1 A, JSS 1 B and JSS 1 C in one go</label><input type="text" name="arms" placeholder="A, B, C" class="form-control"></div>
@@ -45,4 +45,4 @@
   </form>
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script><script src="{{ url_for('static', filename='js/toggle-form.js') }}"></script>{% endblock %}
