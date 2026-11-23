@@ -4199,7 +4199,10 @@ def admin_classes():
                 conn.rollback()
                 flash("That class already exists.", "error")
     classes = conn.execute(
-        "SELECT c.*, u.name as teacher_name FROM classes c LEFT JOIN users u ON u.id=c.form_teacher_id "
+        "SELECT c.*, u.name as teacher_name, "
+        "(SELECT COUNT(*) FROM students s WHERE s.class_id=c.id AND s.is_active=1) AS student_count, "
+        "(SELECT COUNT(*) FROM class_subjects cs WHERE cs.class_id=c.id) AS subject_count "
+        "FROM classes c LEFT JOIN users u ON u.id=c.form_teacher_id "
         "WHERE c.school_id=? ORDER BY c.name", (school_id,)
     ).fetchall()
     teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (school_id,)).fetchall()
@@ -4307,7 +4310,9 @@ def admin_subjects():
             except sqlite3.IntegrityError:
                 conn.rollback()
                 flash("That subject already exists.", "error")
-    subjects = conn.execute("SELECT * FROM subjects WHERE school_id=? ORDER BY name", (school_id,)).fetchall()
+    subjects = conn.execute(
+        "SELECT sub.*, (SELECT COUNT(DISTINCT cs.teacher_id) FROM class_subjects cs WHERE cs.subject_id=sub.id AND cs.teacher_id IS NOT NULL) AS teacher_count, "
+        "(SELECT COUNT(*) FROM class_subjects cs WHERE cs.subject_id=sub.id) AS class_count FROM subjects sub WHERE sub.school_id=? ORDER BY sub.name", (school_id,)).fetchall()
     conn.close()
     return render_template("admin_subjects.html", subjects=subjects)
 
@@ -4641,11 +4646,13 @@ def admin_parents():
     guardians = []
     for r in rows:
         key = r["parent_phone"] or r["parent_email"] or (r["parent_name"] or f"student-{r['id']}")
+        _kid = conn.execute("SELECT s.first_name, s.last_name, c.name AS class_name FROM students s JOIN classes c ON c.id=s.class_id WHERE s.id=?", (r["id"],)).fetchone()
+        _label = f"{_kid['first_name']} ({_kid['class_name']})" if _kid else ""
         if key in seen:
-            continue
-        seen[key] = True
+            seen[key]["children"].append(_label); continue
+        seen[key] = {"children": [_label]}
         account = conn.execute("SELECT id,username,is_active,photo_filename FROM parent_accounts WHERE school_id=? AND ((phone IS NOT NULL AND phone=?) OR (email IS NOT NULL AND LOWER(email)=LOWER(?))) LIMIT 1", (school_id,r["parent_phone"],r["parent_email"])).fetchone()
-        guardians.append(dict(r, account=account))
+        guardians.append(dict(r, account=account, children=seen[key]["children"]))
     conn.close()
     return render_template("admin_parents.html", guardians=guardians)
 
@@ -4805,9 +4812,37 @@ def parent_dashboard():
         attendance = student_attendance_stats(conn, selected_child["id"])
         attendance_trend = student_attendance_trend(conn, selected_child["id"])
         activities = student_recent_activities(conn, school_id, selected_child)
+    # V112 (v106 dashboard): a card per linked child (latest published average + class position), and the selected child's current subjects with grade/remark.
+    summaries, subject_rows, term_now = [], [], None
+    try:
+        term_now = current_term(conn)
+    except Exception:
+        pass
+    for ch in children:
+        item = {"id": ch["id"], "first_name": ch["first_name"], "last_name": ch["last_name"], "class_name": ch["class_name"], "avg": None, "position": None, "size": None, "selected": ch["id"] == _sel}
+        try:
+            _pt = conn.execute(
+                "SELECT t.id FROM terms t JOIN sessions s ON s.id=t.session_id WHERE s.school_id=? AND t.is_published=1 AND EXISTS (SELECT 1 FROM result_publication rp WHERE rp.school_id=s.school_id AND rp.term_id=t.id AND rp.status='published' "
+                "AND rp.class_id=COALESCE((SELECT e.class_id FROM enrollments e WHERE e.student_id=? AND e.session_id=t.session_id),(SELECT class_id FROM students WHERE id=?))) ORDER BY t.id DESC LIMIT 1",
+                (school_id, ch["id"], ch["id"])).fetchone()
+            if _pt:
+                _rd = build_result_data(conn, ch["id"], _pt["id"]); item["position"] = _rd.get("position_text"); item["size"] = _rd.get("class_size")
+                _pf = student_academic_performance(conn, school_id, ch["id"], conn.execute("SELECT t.*, s.name session_name FROM terms t JOIN sessions s ON s.id=t.session_id WHERE t.id=?", (_pt["id"],)).fetchall())
+                item["avg"] = _pf["trend"][-1]["average"] if _pf.get("trend") else None
+        except Exception:
+            pass
+        summaries.append(item)
+    if performance and performance.get("trend") and performance["trend"][-1].get("subjects"):
+        for sj in performance["trend"][-1]["subjects"]:
+            tot = sj["total"]
+            if tot is None:   # not scored yet: show a dash, never crash
+                subject_rows.append({"subject": sj["subject"], "total": "—", "grade": "-", "remark": "-", "cls": "badge-gray"}); continue
+            g, rm = grade_for(float(tot), conn, school_id)
+            subject_rows.append({"subject": sj["subject"], "total": tot, "grade": g, "remark": rm,
+                                 "cls": "badge-green" if tot >= 70 else "badge-blue" if tot >= 55 else "badge-orange" if tot >= 40 else "badge-red"})
     conn.close()
     return render_template(
-        "parent_dashboard.html", children=children, cards=cards,
+        "parent_dashboard.html", children=children, cards=cards, summaries=summaries, subject_rows=subject_rows, term_now=term_now, selected_id=_sel,
         performance=performance, attendance=attendance, attendance_trend=attendance_trend, activities=activities,
     )
 
@@ -5261,8 +5296,16 @@ def admin_teachers():
                 app.logger.exception("Teacher creation failed")
                 flash("The teacher account could not be saved. Please check the details and try again.", "error")
     teachers = conn.execute("SELECT * FROM users WHERE role='teacher' AND school_id=? ORDER BY name", (school_id,)).fetchall()
+    # V112 (v106 page): "Subjects / Classes" per staff member, from the real class_subjects / form-teacher assignments
+    assign = {}
+    for r in conn.execute("SELECT cs.teacher_id, sub.name AS subject, c.name AS class_name FROM class_subjects cs JOIN subjects sub ON sub.id=cs.subject_id JOIN classes c ON c.id=cs.class_id WHERE c.school_id=? AND cs.teacher_id IS NOT NULL ORDER BY sub.name, c.name", (school_id,)).fetchall():
+        e = assign.setdefault(r["teacher_id"], {"subjects": [], "classes": []})
+        if r["subject"] not in e["subjects"]: e["subjects"].append(r["subject"])
+        if r["class_name"] not in e["classes"]: e["classes"].append(r["class_name"])
+    for r in conn.execute("SELECT form_teacher_id, name FROM classes WHERE school_id=? AND form_teacher_id IS NOT NULL", (school_id,)).fetchall():
+        e = assign.setdefault(r["form_teacher_id"], {"subjects": [], "classes": []}); e.setdefault("form", []).append(r["name"])
     conn.close()
-    return render_template("admin_teachers.html", teachers=teachers, rbac_roles=assignable_roles(), position_labels=POSITION_LABELS)
+    return render_template("admin_teachers.html", teachers=teachers, assign=assign, rbac_roles=assignable_roles(), position_labels=POSITION_LABELS)
 
 
 @app.route("/admin/teachers/<int:teacher_id>/contact", methods=["POST"])
@@ -9654,9 +9697,19 @@ def student_dashboard():
     attendance = student_attendance_stats(conn, student["id"])
     attendance_trend = student_attendance_trend(conn, student["id"])
     activities = student_recent_activities(conn, school_id, student)
+    # V112 (v106 dashboard): latest published term's class position / size, from the same builder the result sheet uses
+    sd = {"term": published_terms[0] if published_terms else None, "position": None, "class_size": None, "avg": None}
+    if published_terms:
+        try:
+            _rd = build_result_data(conn, student["id"], published_terms[0]["id"])
+            sd["position"] = _rd.get("position_text"); sd["class_size"] = _rd.get("class_size")
+        except Exception:
+            pass
+    if performance.get("trend"):
+        sd["avg"] = performance["trend"][-1]["average"]
     conn.close()
     return render_template(
-        "student_dashboard.html", student=student, class_row=class_row,
+        "student_dashboard.html", sd=sd, student=student, class_row=class_row,
         published_terms=published_terms, student_full_name=student_full_name,
         performance=performance, attendance=attendance, attendance_trend=attendance_trend,
         activities=activities,
