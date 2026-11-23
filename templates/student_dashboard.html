@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% block title %}Student Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel %}{% block title %}Student Dashboard{% endblock %}{% block content %}
 {% set _latest = performance.trend|last if performance.trend else none %}
 <div class="ad" style="max-width:900px;margin:0 auto">
   {{ v106_banner('student', student.first_name or student_full_name(student), class_row.name ~ ' · ' ~ student.admission_no ~ ((' · ' ~ sd.term.name) if sd.term else '')) }}
@@ -13,7 +13,7 @@
 
   <!-- My Subject Scores (latest published term) -->
   <div class="card" style="margin-bottom:16px" id="subject-scores">
-    <div class="panel-header"><h3><span class="ni">📊</span> My Subject Scores</h3>{% if published_terms %}<a href="{{ url_for('student_result', term_id=published_terms[0].id) }}" style="font-size:0.8rem;font-weight:600">Full result →</a>{% endif %}</div>
+    <div class="panel-header"><h3><span class="ni">📊</span> My Subject Scores</h3></div>
     {% if _latest and _latest.subjects %}<div class="chart-wrap" data-sh-bars='{{ {"labels": _latest.subjects|map(attribute="subject")|list, "values": _latest.subjects|map(attribute="total")|list, "label": "Subject scores, " ~ _latest.term.name, "empty": "No subject scores yet.", "scoreColors": true, "max": 100}|tojson }}'></div>
     {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing to show yet — this appears once your school publishes a term's results.</p>{% endif %}
   </div>
@@ -29,13 +29,6 @@
     {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing to show yet — this appears once your school publishes a term's results.</p>{% endif %}
   </div>
 
-  <!-- Quick links: the 4 v106 cards, then every other v111 shortcut -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px" class="ad-two">
-    <a href="{{ url_for('student_dashboard') }}#results" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📄</div><h3 style="font-size:0.95rem;font-weight:700">My Results</h3><p style="font-size:0.8rem;color:var(--mut)">Terminal report card</p></a>
-    <a href="{{ url_for('student_timetable') }}" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📅</div><h3 style="font-size:0.95rem;font-weight:700">Timetable</h3><p style="font-size:0.8rem;color:var(--mut)">Weekly schedule</p></a>
-    <a href="{{ url_for('student_materials') }}" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">📚</div><h3 style="font-size:0.95rem;font-weight:700">Materials</h3><p style="font-size:0.8rem;color:var(--mut)">Notes &amp; resources</p></a>
-    <a href="{{ url_for('student_ai_tutor') }}" class="card" style="padding:16px;text-decoration:none;color:inherit"><div style="font-size:1.4rem;margin-bottom:6px">🤖</div><h3 style="font-size:0.95rem;font-weight:700">AI Tutor</h3><p style="font-size:0.8rem;color:var(--mut)">Ask questions in any subject</p></a>
-  </div>
   {% set qa = quick_actions() %}{% if qa.actions %}
   <article class="ad-panel" id="quick-access" style="margin-bottom:16px">
     <header><h2><span class="ni">⚡</span> Quick Access</h2><span style="font-size:.8rem;color:var(--mut)">{{ qa.actions|length }} shortcuts</span></header>
@@ -52,12 +45,11 @@
     </tbody></table>{% else %}<p style="padding:16px;color:var(--mut)">No results have been published yet.</p>{% endif %}
   </div>
 
-  <!-- Attendance + Recent Activities -->
-  <section class="ad-panels ad-panels-2" style="margin-bottom:16px">
+  <!-- Attendance + Recent Activities + Announcements -->
+  <section class="ad-panels" style="margin-bottom:16px">
     <article class="ad-panel" id="attendance">
       <header><h2><span class="ni">📅</span> Attendance</h2><span style="font-size:.78rem;color:var(--mut)">Across every recorded day</span></header>
       {% if attendance.total %}<div class="kpi-row" style="padding:12px 16px 0;margin:0">
-        <div class="kpi-mini"><div class="label">Rate</div><div class="value">{{ attendance.rate }}%</div></div>
         <div class="kpi-mini"><div class="label">Present</div><div class="value">{{ attendance.counts.present }}</div></div>
         <div class="kpi-mini"><div class="label">Late</div><div class="value">{{ attendance.counts.late }}</div></div>
         <div class="kpi-mini"><div class="label">Absent</div><div class="value">{{ attendance.counts.absent }}</div></div>
@@ -70,11 +62,9 @@
       {% if activities %}<ul class="ad-acts">{% for a in activities %}<li><span class="a-ico a-blue">📄</span><div><b>{{ a.description }}</b><small>{{ a.ts }}</small></div></li>{% endfor %}</ul>
       {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing recorded yet.</p>{% endif %}
     </article>
+    {{ ann_panel(url_for("student_notifications")) }}
   </section>
 
-  <div class="card" style="margin-bottom:16px"><div class="panel-header"><h3><span class="ni">🙂</span> My academic profile</h3></div>
-    <div style="padding:0 16px 16px"><p><b>Class:</b> {{ class_row.name }}</p><p><b>Admission No.:</b> {{ student.admission_no }}</p>
-    <a class="btn btn-primary" href="{{ url_for('student_self_profile') }}">My Profile</a> <a class="btn btn-outline" href="{{ url_for('student_materials') }}">Open Learning Materials</a></div></div>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script src="{{ url_for('static', filename='js/sh-charts.js') }}"></script>{% endblock %}

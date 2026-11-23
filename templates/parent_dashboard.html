@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% block title %}Parent Dashboard · {{ school_name }}{% endblock %}{% block content %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel %}{% block title %}Parent Dashboard · {{ school_name }}{% endblock %}{% block content %}
 {% set child = cards[0].student if cards else none %}
 <div class="ad" style="max-width:960px;margin:0 auto">
   {{ v106_banner('parent', session.get('name') or 'Parent', ((term_now.session_name ~ ' · ' ~ term_now.name ~ ' — ') if term_now else '') ~ "your children's overview.") }}
@@ -80,11 +80,14 @@
   {% if cards and cards[0].analysis %}<div class="card" style="margin-bottom:16px;padding:16px"><b>✦ AI insight — {{ child.first_name }}</b>
     <p class="muted" style="margin:6px 0 0">Performance {{ cards[0].analysis.average|round(1) }}% · {{ cards[0].analysis.trend_label or cards[0].analysis.trend or 'Current term' }}</p></div>{% endif %}
 
-  {% if child %}<article class="ad-panel" style="margin-bottom:16px">
+  <section class="ad-panels" style="margin-bottom:16px">
+    {% if child %}<article class="ad-panel">
     <header><h2><span class="ni">🕒</span> Recent Activities</h2><span style="font-size:.78rem;color:var(--mut)">{{ child.first_name }}'s results, attendance, class updates</span></header>
     {% if activities %}<ul class="ad-acts">{% for a in activities %}<li><span class="a-ico a-blue">📄</span><div><b>{{ a.description }}</b><small>{{ a.ts }}</small></div></li>{% endfor %}</ul>
     {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing recorded yet.</p>{% endif %}
   </article>{% endif %}
+    {{ ann_panel(url_for("parent_notifications")) }}
+  </section>
 </div>
 {% endblock %}
 {% block extra_scripts %}<script src="{{ url_for('static', filename='js/sh-charts.js') }}"></script>{% endblock %}

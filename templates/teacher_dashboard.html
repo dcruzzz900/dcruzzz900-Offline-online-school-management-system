@@ -1,14 +1,14 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% from "partials/v106_banner.html" import v106_banner %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
 {% set _r = my_roles or [] %}{% set _kind = 'accountant' if 'Bursar / Accountant' in _r else ('registrar' if 'Registrar / Admissions Officer' in _r else ('staff' if (_r and 'Teacher' not in _r) else 'teacher')) %}
 {% set pf = tx.pass_fail %}{% set pf_total = pf.passed + pf.failed + pf.not_assessed %}
 <div class="ad">
   {% set _nm %}{% set _p = (session.get('name') or '').split() %}{% if _p and _p|length > 1 and _p[0].rstrip('.')|lower in ['mr','mrs','ms','miss','dr','prof','engr','chief','sir','madam','pastor','rev'] %}{{ _p[0] }} {{ _p[-1] }}{% else %}{{ _p[0] if _p else 'Teacher' }}{% endif %}{% endset %}
   {% if _kind == 'teacher' %}{{ v106_banner('teacher', _nm|trim, (position_label ~ ' · ' if position_label else '') ~ ((term.session_name ~ ' · ' ~ term.name ~ ' — ') if term else '') ~ 'your teaching overview.') }}{% else %}{{ v106_banner(_kind) }}{% endif %}
   <div id="dashFilters" data-config='{{ filter_cfg|tojson }}'></div>
-  {% if my_roles %}<div class="card" style="padding:10px 16px;margin-bottom:16px"><b>My roles:</b> {% for r in my_roles %}<span class="badge badge-blue" style="margin:0 4px">{{ r }}</span>{% endfor %} <a class="btn btn-primary" style="float:right;padding:6px 14px" href="{{ url_for('ai_command_center') }}">✦ AI Assistant</a></div>{% endif %}
+  {% if my_roles %}<div class="roles-row card"><div class="roles-chips"><b>My roles:</b>{% for r in my_roles %}<span class="badge badge-blue">{{ r }}</span>{% endfor %}</div><a class="btn btn-primary btn-sm" href="{{ url_for('ai_command_center') }}">✦ AI Assistant</a></div>{% endif %}
 
   <div class="kpi-row">
-    <div class="kpi-mini"><div class="label">Assignments</div><div class="value">{{ assignments|length }}</div></div>
+    <div class="kpi-mini"><div class="label">Subject Assignments</div><div class="value">{{ assignments|length }}</div></div>
     <div class="kpi-mini"><div class="label">Classes</div><div class="value">{{ result_classes|length }}</div></div>
     <div class="kpi-mini"><div class="label">Students</div><div class="value">{{ '{:,}'.format(tx.students) }}</div></div>
     <div class="kpi-mini"><div class="label">Scores Pending</div><div class="value" style="color:#d97706">{{ '{:,}'.format(tx.scores_pending) }}</div></div>
@@ -36,11 +36,17 @@
 
   <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
     <div data-slot="gender">{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}{{ gender_panel(gender_stats, 'Your classes') }}{% else %}<article class="ad-panel"><header><h2><span class="ni">⚥</span> Gender Distribution</h2></header><p style="padding:16px;color:var(--mut);font-size:.85rem">No gender data recorded yet.</p></article>{% endif %}</div>
-    <!-- Attendance Trend: line chart (last 7 recorded school days for the classes you can see) -->
-    <div class="card" id="attendance-trend">
-      <div class="panel-header"><h3><span class="ni">📅</span> Attendance Trend (Last Week)</h3></div>
-      <div class="chart-wrap" data-sh-line='{{ {"labels": tx.att_labels, "values": tx.att_values, "max": 100, "suffix": "%", "label": "Attendance trend, last week", "empty": "No attendance recorded in the last week."}|tojson }}'></div>
-    </div>
+    <!-- Attendance Trend: same selectable chart as the admin dashboard, scoped to the classes you can see -->
+    <article class="ad-panel" id="attendance-trend">
+      <header><h2><span class="ni">📅</span> Attendance Trend</h2><a href="{{ url_for('student_attendance_hub') }}">Details →</a></header>
+      <div class="ch-controls"><div class="seg" role="group" aria-label="Period">
+        <button type="button" data-att-range="this_week" aria-pressed="true">This week</button>
+        <button type="button" data-att-range="last_week" aria-pressed="false">Last week</button>
+        <button type="button" data-att-range="last_month" aria-pressed="false">Last month</button>
+        <button type="button" data-att-range="last_year" aria-pressed="false">Last year</button></div></div>
+      <div class="ch-note" id="attNote"></div>
+      <div class="chart-wrap" id="attChart"><p class="shc-empty">Loading chart…</p></div>
+    </article>
   </div>
 
   <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
@@ -79,13 +85,19 @@
   </div>
 
   <!-- Grade Distribution -->
-  <article class="ad-panel" style="margin-bottom:16px">
+  <section class="ad-panels">
+    <article class="ad-panel">
     <header><h2><span class="ni">◫</span> Grade Distribution</h2><span style="font-size:0.8rem;color:var(--mut)">Your classes · this term</span></header>
     <div class="grade-dist">
       {% for g in tx.grades %}<div class="grade-row"><div class="grade-row-top"><b>{{ g.grade }}</b><span>{{ g.pct }}%</span></div><div class="grade-bar {{ g.cls }}"><i style="width:{{ g.pct }}%"></i></div></div>
       {% else %}<p style="padding:16px;color:var(--mut);font-size:.85rem">No scores recorded yet.</p>{% endfor %}
     </div>
   </article>
+    {% if enrolment %}<article class="ad-panel" id="enrolment-by-class">
+      <header><h2><span class="ni">🏫</span> Enrolment by Class</h2><span style="font-size:0.78rem;color:var(--mut)">Active students per class</span></header>
+      <div class="chart-wrap" data-sh-bars='{{ {"labels": enrolment|map(attribute="class_name")|list, "values": enrolment|map(attribute="count")|list, "label": "Enrolment by class", "empty": "No students enrolled yet."}|tojson }}'></div>
+    </article>{% endif %}
+  </section>
 
   <!-- My Classes (v106) -->
   <div class="card table-wrap" id="my-classes" style="margin-bottom:16px">
@@ -94,17 +106,28 @@
       <thead><tr><th>Class</th><th>Subject</th><th>Students</th><th>Scores</th><th>Avg</th><th>Actions</th></tr></thead>
       <tbody>
         {% for m in tx.my_classes %}<tr><td><strong>{{ m.class_name }}</strong></td><td>{{ m.subject_name }}</td><td>{{ m.students }}</td><td>{{ m.done }}/{{ m.students }}</td><td>{{ (m.avg ~ '%') if m.avg is not none else '—' }}</td>
-          <td><a href="{{ url_for('score_entry', class_id=m.class_id, subject_id=m.subject_id) }}">Enter scores</a> · <a href="{{ url_for('my_class_roster', class_id=m.class_id) }}">Roster</a></td></tr>{% endfor %}
+          <td><a href="{{ url_for('score_entry', class_id=m.class_id, subject_id=m.subject_id) }}">Enter scores</a> · <a href="{{ url_for('roll_call', class_id=m.class_id) }}">Roll Call</a></td></tr>{% endfor %}
       </tbody></table>{% else %}<p style="padding:16px;color:var(--mut);font-size:.85rem">No subject assignments yet.</p>{% endif %}
   </div>
 
-  {% if enrolment %}<div class="card" id="enrolment-by-class" style="margin-bottom:16px"><div class="panel-header"><h3><span class="ni">🏫</span> Enrolment by Class</h3><span style="font-size:0.8rem;color:var(--mut)">Active students per class you can see</span></div><div class="chart-wrap" data-sh-bars='{{ {"labels": enrolment|map(attribute="class_name")|list, "values": enrolment|map(attribute="count")|list, "label": "Enrolment by class", "empty": "No students enrolled yet."}|tojson }}'></div></div>{% endif %}
-  <!-- Top Performing Students + Recent Activities (moved to the bottom) -->
-  <section class="ad-panels ad-panels-2" style="margin-bottom:16px">
+
+  <!-- Top Performing | Students Needing Improvement -->
+  <section class="ad-panels">
     <article class="ad-panel">
       <header><h2><span class="ni">🏆</span> Top Performing Students</h2><span style="font-size:0.78rem;color:var(--mut)">{{ term.name if term else '' }}</span></header>
       <div data-slot="top-students">{{ top_students_table(top_students) }}</div>
     </article>
+    <article class="ad-panel" id="needs-improvement">
+      <header><h2><span class="ni">⚠️</span> Students Needing Improvement</h2><span style="font-size:0.78rem;color:var(--mut)">{{ term.name if term else '' }}</span></header>
+      <div class="table-wrap" style="border:0;box-shadow:none;border-radius:0"><table class="data">
+        <thead><tr><th>Student</th><th>Class</th><th>Avg %</th><th>Weakest subject</th></tr></thead>
+        <tbody>{% for s in tx.needs_improvement %}<tr><td><strong>{{ s.name }}</strong></td><td>{{ s.class }}</td><td><span class="badge badge-red">{{ s.avg }}%</span></td><td>{{ s.weak_subject or '—' }}{% if s.weak_score is not none %} <small>({{ s.weak_score }}%)</small>{% endif %}</td></tr>
+        {% else %}<tr><td colspan="4" style="color:var(--mut)">{% if tx.n_assessed %}✔ No student is below the target right now.{% else %}No scores recorded for this term yet.{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+      <p style="padding:8px 16px 12px;margin:0;font-size:.75rem;color:var(--mut)">Shown when a student's overall average is below 50% or in the failing grade.</p>
+    </article>
+  </section>
+  <!-- Recent Activities | Announcements -->
+  <section class="ad-panels">
     <article class="ad-panel">
       <header><h2><span class="ni">🕒</span> Recent Activities</h2><a href="{{ url_for('view_all_activities') }}">View All →</a></header>
       <ul class="ad-acts">
@@ -113,8 +136,10 @@
         {% else %}<li><div><b>No activities recorded yet for your classes.</b></div></li>{% endfor %}
       </ul>
     </article>
+    {{ ann_panel(url_for('notifications_inbox')) }}
   </section>
 </div>
+<script id="adChartsData" type="application/json">{{ {"attendance": tx.attendance}|tojson }}</script>
 {% endblock %}
 {% block extra_scripts %}<script src="{{ url_for('static', filename='js/sh-charts.js') }}"></script><script src="{{ url_for('static', filename='js/teacher-panels.js') }}"></script>{% include "partials/react_cdn.html" %}
 
