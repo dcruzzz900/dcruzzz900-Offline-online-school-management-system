@@ -1,111 +1,77 @@
-{% extends "base.html" %}{% from "partials/identity_fields.html" import identity_fields %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Students{% endblock %}
 {% block content %}
-<h1>Students</h1>
+{% set _m = students|selectattr('gender','in',['M','Male','male'])|list|length %}{% set _f = students|selectattr('gender','in',['F','Female','female'])|list|length %}
+{% set _act = students|selectattr('status','in',[none,'Active'])|list|length %}
+<div class="page-header">
+  <div><h2><span class="ni">◉</span> Students</h2><p>{{ '{:,}'.format(students|length) }} student{{ '' if students|length == 1 else 's' }}{% if class_filter %} in this class{% else %} enrolled{% endif %}</p></div>
+  <div class="page-actions"><a class="btn btn-outline" href="#bulk-upload">Bulk Upload CSV</a><a class="btn btn-primary" href="#add-student">+ Add Student</a></div>
+</div>
+<div class="kpi-row">
+  <div class="kpi-mini"><div class="label">Total</div><div class="value">{{ '{:,}'.format(students|length) }}</div></div>
+  <div class="kpi-mini"><div class="label">Male</div><div class="value">{{ '{:,}'.format(_m) }}</div></div>
+  <div class="kpi-mini"><div class="label">Female</div><div class="value">{{ '{:,}'.format(_f) }}</div></div>
+  <div class="kpi-mini"><div class="label">Active</div><div class="value">{{ '{:,}'.format(_act) }}</div></div>
+</div>
+<form method="GET" class="filters" id="classFilterForm">
+  <div class="search-box"><input class="form-control" type="search" placeholder="Search by name or admission no..." aria-label="Search students" data-filter-table="#studentTable"></div>
+  <select name="class_id" class="form-control" aria-label="Filter by class" onchange="this.form.submit()"><option value="">All Classes</option>{% for c in classes %}<option value="{{ c.id }}" {% if class_filter and class_filter|int == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+  <select class="form-control" aria-label="Filter by gender" data-filter-table="#studentTable" data-filter-attr="gender"><option value="">All Gender</option><option value="Male">Male</option><option value="Female">Female</option></select>
+  <select class="form-control" aria-label="Filter by status" data-filter-table="#studentTable" data-filter-attr="status"><option value="">All Status</option><option>Active</option><option>Graduated</option><option>Transferred</option><option>Withdrawn</option><option>Suspended</option></select>
+</form>
+<div class="card table-wrap">
+  <table class="data" id="studentTable"><caption>Student List</caption>
+    <thead><tr><th>Adm No</th><th>Full Name</th><th>Gender</th><th>Class</th><th>Parent</th><th>Status</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for s in students %}<tr data-gender="{{ 'Male' if s.gender in ('M','Male','male') else 'Female' if s.gender in ('F','Female','female') else '' }}" data-status="{{ s.status or 'Active' }}">
+        <td>{{ s.admission_no }}</td><td><strong>{{ student_full_name(s) }}</strong></td>
+        <td>{{ 'Male' if s.gender in ('M','Male','male') else 'Female' if s.gender in ('F','Female','female') else (s.gender or '—') }}</td><td>{{ s.class_name }}</td>
+        <td>{{ s.parent_name or '—' }}{% if s.parent_email %}<br><small>{{ s.parent_email }}</small>{% endif %}</td>
+        <td>{{ s.status|status_badge }}</td>
+        <td style="white-space:nowrap"><a href="{{ url_for('student_profile', student_id=s.id) }}">View</a> ·
+          <form method="POST" action="{{ url_for('delete_student', student_id=s.id) }}" class="inline" style="display:inline" onsubmit="return confirm('Delete {{ student_full_name(s) }} and all their scores/records? This cannot be undone.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm" style="background:#b3261e;color:#fff" type="submit">Delete</button></form></td>
+      </tr>{% else %}<tr data-empty-row><td colspan="7" style="color:var(--mut)">No students yet — add one below or upload a CSV.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
 
-<div class="card">
-    <h3>Bulk Upload Students (CSV)</h3>
+<div class="card" id="bulk-upload" style="margin-top:16px">
+  <div class="panel-header"><h3>Bulk Upload Students (CSV)</h3><a class="btn btn-outline btn-sm" href="{{ url_for('students_csv_template') }}">Download CSV Template</a></div>
+  <div style="padding:0 16px 16px">
     <details class="hlp"><summary class="hlp-t">CSV format</summary>
-    <p class="muted hlp-b" style="font-size:0.9rem;">
-        Upload a CSV with columns: <code>admission_no, first_name, last_name,
-        other_names, gender, class_name, date_of_birth, religion, parent_name,
-        parent_address, parent_email, parent_phone, parent_relationship</code>.
-        Only admission_no, first_name, last_name, and class_name are required — the rest
-        can be left blank. The class must already exist (see Classes above) —
-        <code>class_name</code> should match it exactly (not case-sensitive).
-        <b>Admission No. / Register No.</b> only needs to be unique within the same class
-        (arm), so different arms of the same class (e.g. SS1 Science 1 and SS1 Science 2)
-        can reuse the same numbers for different students.
-    </p></details>
-    <a class="btn btn-primary btn-sm" href="{{ url_for('students_csv_template') }}">Download CSV Template</a>
-    <form method="POST" action="{{ url_for('students_bulk_upload') }}" enctype="multipart/form-data" style="margin-top:1rem;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label>CSV File</label>
-        <input type="file" name="csv_file" accept=".csv" required class="form-control">
-        <button class="btn btn-primary" type="submit">Upload &amp; Import</button>
+      <p class="muted hlp-b" style="font-size:0.9rem">Upload a CSV with columns: <code>admission_no, first_name, last_name, other_names, gender, class_name, date_of_birth, religion, parent_name, parent_address, parent_email, parent_phone, parent_relationship</code>. Only admission_no, first_name, last_name, and class_name are required — the rest can be left blank. The class must already exist (see Classes) — <code>class_name</code> should match it exactly (not case-sensitive). <b>Admission No. / Register No.</b> only needs to be unique within the same class (arm), so different arms of the same class (e.g. SS1 Science 1 and SS1 Science 2) can reuse the same numbers for different students.</p></details>
+    <form method="POST" action="{{ url_for('students_bulk_upload') }}" enctype="multipart/form-data" style="margin-top:12px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="form-group"><label>CSV File</label><input type="file" name="csv_file" accept=".csv" required class="form-control"></div>
+      <button class="btn btn-primary" type="submit">Upload &amp; Import</button>
     </form>
+  </div>
 </div>
 
-<div class="card">
-    <h3>Add a Student</h3>
-    <form method="POST">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="grid-2">
-            <div>
-                <label>Admission No. / Register No. (unique within this class)</label>
-                <input type="text" name="admission_no" required class="form-control">
-                <label>First Name</label>
-                <input type="text" name="first_name" required class="form-control">
-                <label>Last Name</label>
-                <input type="text" name="last_name" required class="form-control">
-                <label>Other Names</label>
-                <input type="text" name="other_names" class="form-control">
-                <label>Class / Arm</label>
-                <select name="class_id" required class="form-select">
-                    {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
-                </select>
-                {{ identity_fields(min_age=1, who='student', uid='as') }}
-                <label>Religion</label>
-                <input type="text" name="religion" class="form-control">
-                <label>Student's Own Contact Number (optional)</label>
-                <input type="text" name="phone" class="form-control">
-                <label>Student Status</label>
-                <select name="status" class="form-select">
-                    <option value="Active" selected>Active</option>
-                    <option value="Graduated">Graduated</option>
-                    <option value="Transferred">Transferred</option>
-                    <option value="Withdrawn">Withdrawn</option>
-                    <option value="Suspended">Suspended</option>
-                </select>
-            </div>
-            <div>
-                <label>Parent/Guardian Name</label>
-                <input type="text" name="parent_name" class="form-control">
-                <label>Parent/Guardian Address</label>
-                <input type="text" name="parent_address" class="form-control">
-                <label>Parent/Guardian Email (for result notifications)</label>
-                <input type="email" name="parent_email" class="form-control">
-                <label>Parent/Guardian Phone</label>
-                <input type="text" name="parent_phone" class="form-control">
-                <label>Relationship to Student</label>
-                <input type="text" name="parent_relationship" placeholder="e.g. Mother, Father, Uncle" class="form-control">
-            </div>
-        </div>
-        <button class="btn btn-primary" type="submit">Add Student</button>
-    </form>
-</div>
-
-<div class="card">
-    <h3>All Students</h3>
-    <form method="GET" style="margin-bottom:1rem;">
-        <label>Filter by class</label>
-        <select name="class_id" onchange="this.form.submit()" class="form-select">
-            <option value="">-- all classes --</option>
-            {% for c in classes %}
-            <option value="{{ c.id }}" {% if class_filter and class_filter|int == c.id %}selected{% endif %}>{{ c.name }}</option>
-            {% endfor %}
-        </select>
-    </form>
-    <div class="table-responsive"><table class="table table-hover align-middle"><caption>Student List</caption>
-        <tr><th>Admission No. / Register No.</th><th>Name</th><th>Gender</th><th>Class</th><th>Status</th><th>Parent Email</th><th>Actions</th></tr>
-        {% for s in students %}
-        <tr>
-            <td>{{ s.admission_no }}</td>
-            <td>{{ student_full_name(s) }}</td>
-            <td>{{ s.gender }}</td>
-            <td>{{ s.class_name }}</td>
-            <td>{{ s.status|status_badge }}</td>
-            <td>{{ s.parent_email or '—' }}</td>
-            <td style="white-space:nowrap;">
-                <a class="btn btn-primary btn-sm" href="{{ url_for('student_profile', student_id=s.id) }}">View</a>
-                <form method="POST" action="{{ url_for('delete_student', student_id=s.id) }}" class="inline"
-                      onsubmit="return confirm('Delete {{ student_full_name(s) }} and all their scores/records? This cannot be undone.');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button class="btn btn-primary btn-sm" style="background:#b3261e;" type="submit">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </table></div>
+<div class="card" id="add-student" style="margin-top:16px">
+  <div class="panel-header"><h3>Add a Student</h3></div>
+  <form method="POST" style="padding:0 16px 16px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="grid-2">
+      <div>
+        <div class="form-group"><label>Admission No. / Register No. (unique within this class)</label><input type="text" name="admission_no" required class="form-control"></div>
+        <div class="form-group"><label>First Name</label><input type="text" name="first_name" required class="form-control"></div>
+        <div class="form-group"><label>Last Name</label><input type="text" name="last_name" required class="form-control"></div>
+        <div class="form-group"><label>Other Names</label><input type="text" name="other_names" class="form-control"></div>
+        <div class="form-group"><label>Class / Arm</label><select name="class_id" required class="form-control">{% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+        {{ identity_fields(min_age=1, who='student', uid='as') }}
+        <div class="form-group"><label>Religion</label><input type="text" name="religion" class="form-control"></div>
+        <div class="form-group"><label>Student's Own Contact Number (optional)</label><input type="text" name="phone" class="form-control"></div>
+        <div class="form-group"><label>Student Status</label><select name="status" class="form-control"><option value="Active" selected>Active</option><option value="Graduated">Graduated</option><option value="Transferred">Transferred</option><option value="Withdrawn">Withdrawn</option><option value="Suspended">Suspended</option></select></div>
+      </div>
+      <div>
+        <div class="form-group"><label>Parent/Guardian Name</label><input type="text" name="parent_name" class="form-control"></div>
+        <div class="form-group"><label>Parent/Guardian Address</label><input type="text" name="parent_address" class="form-control"></div>
+        <div class="form-group"><label>Parent/Guardian Email (for result notifications)</label><input type="email" name="parent_email" class="form-control"></div>
+        <div class="form-group"><label>Parent/Guardian Phone</label><input type="text" name="parent_phone" class="form-control"></div>
+        <div class="form-group"><label>Relationship to Student</label><input type="text" name="parent_relationship" placeholder="e.g. Mother, Father, Uncle" class="form-control"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" type="submit">Add Student</button>
+  </form>
 </div>
 {% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>{% endblock %}
