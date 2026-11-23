@@ -82,3 +82,10 @@
   var h = qs('.hamburger');
   if (h) h.addEventListener('click', function () { setTimeout(function () { if (best && best.scrollIntoView) best.scrollIntoView({block: 'nearest'}); }, 280); });
 })();
+
+// ---- V112: measure the fixed header so anything stuck beneath it (portal tab strip, anchors) sits exactly under it -------------
+(function () {
+  function set() { var t = document.querySelector('.topbar'); if (t) document.documentElement.style.setProperty('--topbar-h', t.offsetHeight + 'px'); }
+  set(); window.addEventListener('resize', set); window.addEventListener('load', set);
+  if (window.ResizeObserver) { var t = document.querySelector('.topbar'); if (t) new ResizeObserver(set).observe(t); }
+})();
