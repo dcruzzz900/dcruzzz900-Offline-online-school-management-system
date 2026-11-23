@@ -59,7 +59,7 @@ check("Gender Distribution is no longer on the admin dashboard (V112); the Stude
 check("Result Compilation shows 'N of M students have full scores', a percentage and a progress bar", "2 of 3 students have full subject scores" in d and "67%" in d and 'role="progressbar"' in d and 'aria-valuenow="67"' in d)
 check("Enrollment Trend chart is present, selectable by term/year (V112)", "Enrollment Trend" in d and 'id="enrolChart"' in d and 'data-enrol-mode="year"' in d)
 check("Recent Activities and Announcements panels, with the published announcement", "Recent Activities" in d and "Announcements" in d and "Result Release Soon" in d and "Tip:" in d)
-check("the announcement is shown in its panel, not duplicated as a top banner", d.count("Result Release Soon") == 1)
+check("the announcement appears in the sliding strip at the top AND in the Announcements panel (V112)", d.count("Result Release Soon") == 2 and d.count("data-announcement-banners") == 1)
 
 # ---- quick access
 tiles = ["My Profile", "Assign Subject", "Result", "Broadsheet", "Score History", "Session &amp; Terms", "Register New Student", "Promote Students", "Staff Attendance", "Themes &amp; Branding", "Learning Materials", "Timetable", "Result Approval", "Billings"]
@@ -71,7 +71,7 @@ check("phone: bottom tab bar with Home / Reports / Notifications / More for staf
 sql_ = get_db(); sql_.execute("UPDATE schools SET name='Government Secondary School Goni-Gora', school_address='No 10 wake Street, Goni-Gora, Bauchi State' WHERE id=1"); sql_.commit(); sql_.close()
 d_ = html(ADMIN.get("/dashboard"))
 check("top bar shows the school name and address", 'class="topbar-school top-school"><h1>Government Secondary School Goni-Gora</h1><p>No 10 wake Street, Goni-Gora, Bauchi State</p>' in d_, re.findall(r'class="topbar-school.{0,200}', d_)[:1])
-check("one live school-timezone clock in the v106 banner (V112: tz + UTC anchor in data-config)", d.count('data-welcome-header') == 1 and '"tz"' in d and '"utc_ms"' in d)
+check("one live school-timezone clock in the v106 banner (V112: tz + UTC anchor in data-config)", d.count('data-v106-banner') == 1 and '"tz"' in d and '"utc_ms"' in d)
 css = open(os.path.join(ROOT, "static/css/admin-dashboard.css")).read()
 check("phone/tablet CSS exists (breakpoints 1280 / 700 / 560)", all(x in css for x in ("max-width:1280px", "max-width:700px", "max-width:560px")))
 check("the approved colours are used (blue/green/purple/cyan/orange gradients)", all(x in css for x in ("#1d78f2", "#27c25a", "#a259f0", "#1ec3f7", "#ffae1a", "#3ed45e")))

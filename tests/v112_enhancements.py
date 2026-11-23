@@ -123,8 +123,8 @@ check("teacher: Pass/Fail shown exactly once (no second chart)", t.count("Pass /
 check("teacher: Subject Performance shown once", t.count("Subject Performance</h2>") == 1 and "Subject performance" not in t)
 for gone in ("My teaching workspace", "Results workspace", "Class Result Performance", "More tools for your role", "Teacher Comments", "AI Learning Materials", "Performance Alerts"):
     check(f"teacher: '{gone}' removed from the dashboard", gone not in t)
-check("teacher: v106 'My Classes' table present with real rows + Enter scores / Roster", 'id="my-classes"' in t and "Enter scores" in t and "Roster" in t)
-check("teacher: Attendance Trend is a line chart", 'id="attendance-trend"' in t and "data-sh-line" in t)
+check("teacher: v106 'My Classes' table present with real rows + Enter scores / Roll Call", 'id="my-classes"' in t and "Enter scores" in t and "Roll Call" in t)
+check("teacher: Attendance Trend is a line chart (drawn by sh-charts.js)", 'id="attendance-trend"' in t and 'id="attChart"' in t and "js/sh-charts.js" in t)
 check("teacher: Top Performing Students + Recent Activities are at the bottom (after My Classes)", t.index('id="my-classes"') < t.index("Top Performing Students") and t.index('id="my-classes"') < t.index("Recent Activities"))
 check("teacher: tile 1 'Score Entry' opens My Teaching Workspace", '/teaching-workspace' in qa.split("Score Entry")[0][-200:] or "/teaching-workspace" in qa)
 tw = TEACH.get("/teaching-workspace")
@@ -155,6 +155,43 @@ for url, marks in (("/admin/classes", ("Add a Class", 'class="data"', "set_class
 check("admin/classes shows real student + subject counts per class", "<td>3</td>" in html(ADMIN.get("/admin/classes")) and "<td>4</td>" in html(ADMIN.get("/admin/classes")))
 check("admin/teachers lists the teacher's real subjects and class", "Mathematics" in html(ADMIN.get("/admin/teachers")) and "JSS1A" in html(ADMIN.get("/admin/teachers")))
 check("v106 pages do not load the legacy stylesheets (no leakage)", "css/style.css" not in html(ADMIN.get("/admin/classes")) and "css/modern.css" in html(ADMIN.get("/admin/classes")))
+
+print("=== 12) Round 5: banner, menus, teacher/admin dashboard changes, collapsible forms ===")
+cn = get_db()
+cn.execute("INSERT INTO announcements (school_id,title,message,audience,level,dismissible,is_active,created_at) VALUES (1,'R5 Notice','Round five notice.','all','info',1,1,CURRENT_TIMESTAMP)"); cn.commit(); cn.close()
+adm, tch, stu, par = html(ADMIN.get("/dashboard")), html(TEACH.get("/dashboard")), html(STUD.get("/student/dashboard")), html(PAR.get("/parent/dashboard"))
+for nm, pg_ in (("admin", adm), ("teacher", tch), ("student", stu), ("parent", par)):
+    check(f"{nm}: welcome banner uses its own marker (the old React header script can no longer replace it and drop its colour)", 'class="ad-banner"' in pg_ and "data-v106-banner" in pg_ and "data-welcome-header" not in pg_)
+    check(f"{nm}: sliding announcement strip at the top + Announcements panel", pg_.count("data-announcement-banners") == 1 and 'id="announcements-panel"' in pg_ and "R5 Notice" in pg_, nm)
+    check(f"{nm}: 'Online / Panel' status block removed from the menu", "sidebar-status" not in pg_ and "Teacher Panel" not in pg_ and "Admin Panel" not in pg_)
+css = open("static/css/modern-compat.css").read()
+check("fixed header: html/body use overflow-x:clip (hidden would disable sticky); .main never a scroll container", "html,body{overflow-x:clip}" in css and ".main,.app-main,.content,main.content{overflow:visible!important" in css)
+check("announcement strip slides (CSS keyframes + slider script)", "@keyframes annIn" in css and "js/announcement-slider.js" in html(ADMIN.get("/dashboard")) and os.path.exists("static/js/announcement-slider.js"))
+check("panel rows are flex-wrap so they never leave empty space at any zoom", ".ad .ad-panels,.ad .ad-panels-2,.ad .ad-panels-bottom{display:flex!important;flex-wrap:wrap" in css)
+# teacher dashboard
+check("teacher: 'Subject Assignments' label", "Subject Assignments" in tch and ">Assignments<" not in tch)
+check("teacher: My roles + AI Assistant sit in one aligned row", 'class="roles-row card"' in tch and "AI Assistant" in tch)
+check("teacher: Enrolment by Class sits right next to Grade Distribution (before My Classes)", 0 < tch.index('id="enrolment-by-class"') - tch.index("Grade Distribution</h2>") < 2500 and tch.index('id="enrolment-by-class"') < tch.index('id="my-classes"'))
+check("teacher: My Classes 'Roll Call' link (no Roster)", "Roll Call" in tch.split('id="my-classes"')[1].split("</table>")[0] and "Roster" not in tch.split('id="my-classes"')[1].split("</table>")[0] and "/roll-call" in tch)
+check("teacher: Attendance Trend inherited from admin (selectable ranges, students only)", all(x in tch for x in ('data-att-range="this_week"', 'data-att-range="last_year"', 'id="attChart"')) and 'data-att-group' not in tch)
+ni = tch.split('id="needs-improvement"', 1)[-1].split("</article>", 1)[0]
+check("teacher: Students Needing Improvement lists the real weak student + weakest subject (15% avg), not the strong ones", "15.0%" in ni and "Obi" not in ni and "Eze" not in ni, re.sub(r"<[^>]+>", " ", ni)[:200])
+check("teacher: Top Performing + Needing Improvement + Recent Activities + Announcements are at the bottom", tch.index('id="my-classes"') < tch.index("Top Performing Students") < tch.index('id="needs-improvement"') < tch.index("Recent Activities") < tch.index('id="announcements-panel"'))
+tw = html(TEACH.get("/teaching-workspace"))
+_twm = tw.split("My Teaching Workspace</h2>", 1)[-1].split("</main>", 1)[0].lower()
+check("My Teaching Workspace: no attendance on the page body (menu excluded), Roll Call link", "attendance" not in _twm and "roll call" in _twm)
+# admin dashboard
+wc = adm.split('id="weak-classes"', 1)[-1].split("</article>", 1)[0]
+check("admin: Classes Needing Improvement lists JSS1A (33% fail share) with real avg/failing figures", "JSS1A" in wc and "1 of 3" in wc, re.sub(r"<[^>]+>", " ", wc)[:200])
+# student dashboard de-duplication
+check("student: repeated blocks removed (4 quick cards, 'My academic profile', 'Full result' link, duplicate Rate tile)", all(x not in stu for x in ("My academic profile", "Terminal report card", "Weekly schedule", "Notes &amp; resources", "Full result")))
+check("student: nothing important lost (quick access, results, attendance, announcements)", all(x in stu for x in ('id="quick-access"', "View Result", 'id="attendance"', 'id="announcements-panel"')))
+# list pages
+stp, clp, sbp, tp = html(ADMIN.get("/admin/students")), html(ADMIN.get("/admin/classes")), html(ADMIN.get("/admin/subjects")), html(ADMIN.get("/admin/teachers"))
+for nm, pg_, fid in (("students", stp, "add-student"), ("classes", clp, "add-class"), ("subjects", sbp, "add-subject")):
+    check(f"{nm}: add form is collapsed by default and opened by the + Add button (still a real form with CSRF)", f'id="{fid}" data-collapsible hidden' in pg_ and f'data-toggle-form="#{fid}"' in pg_ and "toggle-form.js" in pg_ and "csrf_token" in pg_.split(f'id="{fid}"')[1])
+check("students: New This Term card (real count)", 'id="new-this-term"' in stp and "New This Term" in stp)
+check("teachers: Teachers card", 'id="teachers-card"' in tp and ">Teachers<" in tp)
 
 print(f"\n{P} passed, {F} failed")
 sys.exit(1 if F else 0)

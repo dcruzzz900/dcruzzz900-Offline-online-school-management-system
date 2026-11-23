@@ -238,7 +238,7 @@ check("Teacher's chart includes their own class (JSS1A)", t_class_labels and "JS
 check("...but never the second class (JSS2B) they have no assignment in", not t_class_labels or "JSS2B" not in t_class_labels, t_class_labels)
 t_enr_labels = js_array(tdash, "enrolmentLabels")
 check("Teacher's enrolment chart is scoped the same way (no JSS2B)", not t_enr_labels or "JSS2B" not in t_enr_labels, t_enr_labels)
-check("Teacher heading also says 'Last Week', not 'Last 8 Weeks'", "Attendance Trend (Last Week)" in tdash and "Last 8 Weeks" not in tdash, tdash[:0] or "ok")
+check("Teacher Attendance Trend is the selectable chart (This week / Last week / ...), never 'Last 8 Weeks' (V112)", "Attendance Trend" in tdash and 'data-att-range="last_week"' in tdash and "Last 8 Weeks" not in tdash, "ok")
 
 print("=== 4) Student Dashboard: Academic Performance trend + subject bar + Attendance Trend -- no gender/enrolment charts (they make no sense for one student) ===")
 

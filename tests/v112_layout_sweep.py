@@ -15,17 +15,19 @@ for back in range(0,400):
     if d.weekday()>4: continue
     for sid in studs: c.execute("INSERT INTO attendance_records (student_id,class_id,term_id,date,status) VALUES (?,?,?,?,?)",(sid,cls,term,d.isoformat(),'present' if random.random()<.88 else 'absent'))
     c.execute("INSERT INTO staff_attendance (school_id,user_id,date,status) VALUES (?,?,?,?)",(sch,uid,d.isoformat(),'Present'))
+for ttl,lvl in (('Mid-term break','info'),('PTA meeting','warning'),('Fees reminder','success')):
+    c.execute("INSERT INTO announcements (school_id,title,message,audience,level,dismissible,is_active,created_at) VALUES (1,?,?,'all',?,1,1,CURRENT_TIMESTAMP)",(ttl,ttl+' notice for everyone, with a longer message to test wrapping at small sizes.',lvl))
 c.commit(); c.close()
 from werkzeug.serving import make_server
 srv=make_server('127.0.0.1',5084,A.app,threaded=True); threading.Thread(target=srv.serve_forever,daemon=True).start()
 from playwright.sync_api import sync_playwright
-PAGES={'admin':['/dashboard','/admin/students','/result/1','/broadsheet/1','/reports/analytics','/timetable','/admin/theme','/admin/classes'],'aokafor':['/dashboard','/teaching-workspace','/scores/1/1','/result/1']}
+PAGES={'admin':['/dashboard','/admin/students','/admin/teachers','/admin/classes','/admin/subjects','/admin/parents','/result/1','/reports/analytics'],'aokafor':['/dashboard','/teaching-workspace','/scores/1/1']}
 WIDTHS=[1280,1024,820,568,390,320]; SCALES=[90,100,150]
 JS="""(()=>{const w=innerWidth;const doc=document.documentElement;const sw=doc.scrollWidth;
-const clipped=[...document.querySelectorAll('main *, .topbar *')].filter(e=>{const r=e.getBoundingClientRect();if(r.width<1||r.height<1)return false;const cs=getComputedStyle(e);if(cs.position==='fixed')return false;if(r.right<=w+2&&r.left>=-2)return false;let a=e.parentElement;while(a&&a!==document.body){const o=getComputedStyle(a).overflowX;if(o==='auto'||o==='scroll'||o==='hidden')return false;a=a.parentElement}return true}).length;
-const hid=[...document.querySelectorAll('main *, .topbar *, .portal-tabs *')].filter(e=>{const cs=getComputedStyle(e);if(cs.overflowX!=='hidden'&&cs.overflow!=='hidden')return false;if(e.scrollWidth<=e.clientWidth+2||e.clientWidth<4)return false;if(cs.textOverflow==='ellipsis')return false;return true}).map(e=>(e.className&&e.className.baseVal!==undefined?e.className.baseVal:e.className)||e.tagName).slice(0,4);
+const clippedEls=[...document.querySelectorAll('main *, .topbar *')].filter(e=>{const r=e.getBoundingClientRect();if(r.width<1||r.height<1)return false;const cs=getComputedStyle(e);if(cs.position==='fixed'||e.closest('.ann-wrap'))return false;if(r.right<=w+2&&r.left>=-2)return false;let a=e.parentElement;while(a&&a!==document.body){const o=getComputedStyle(a).overflowX;if(o==='auto'||o==='scroll'||o==='hidden')return false;a=a.parentElement}return true});const clipped=clippedEls.length;const cn=clippedEls.slice(0,3).map(e=>e.tagName+'.'+String(e.className&&e.className.baseVal!==undefined?e.className.baseVal:e.className).slice(0,30));
+const hid=[...document.querySelectorAll('main *, .topbar *, .portal-tabs *')].filter(e=>{const cs=getComputedStyle(e);if(cs.overflowX!=='hidden'&&cs.overflow!=='hidden')return false;if(e.scrollWidth<=e.clientWidth+2||e.clientWidth<4)return false;if(cs.textOverflow==='ellipsis')return false;if(e.closest('.ann-wrap'))return false;return true}).map(e=>(e.className&&e.className.baseVal!==undefined?e.className.baseVal:e.className)||e.tagName).slice(0,4);
 const f=document.getElementById('shFabBtn').getBoundingClientRect();
-return {sw,w,clipped,hid,fab:f.left>=0&&f.right<=w&&f.top>=0&&f.bottom<=innerHeight}})()"""
+return {sw,w,clipped,cn,hid,fab:f.left>=0&&f.right<=w&&f.top>=0&&f.bottom<=innerHeight}})()"""
 with sync_playwright() as p:
     b=p.chromium.launch(); bad=[]; n=0
     for user,pages in PAGES.items():

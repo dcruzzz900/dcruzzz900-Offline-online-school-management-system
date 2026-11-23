@@ -205,7 +205,7 @@ with A.app.test_request_context():
     check("Super Admin copy", welcome_header_data("platform")["heading"] == "Welcome, Super Administrator!" and "all registered schools" in welcome_header_data("platform")["description"])
     check("Student / Parent / other staff use the person's name", welcome_header_data("student", "Ada Obi")["heading"] == "Welcome, Ada Obi!" and welcome_header_data("parent", "Mr Obi")["heading"] == "Welcome, Mr Obi!" and welcome_header_data("staff", "Sam")["description"] == "Here is an overview of your assigned duties and activities.")
     check("Accountant copy", welcome_header_data("accountant")["description"] == "Here is an overview of school fees, payments and financial activities.")
-    check("a name cannot inject markup into the header (escaped by Jinja)", "<script>" not in html(FT.get("/dashboard")).replace("<script>(function", "").split('data-welcome-header')[1][:400])
+    check("a name cannot inject markup into the header (escaped by Jinja)", "<script>" not in html(FT.get("/dashboard")).replace("<script>(function", "").split('data-v106-banner')[1][:400])
 check("one reusable React component file drives every header", os.path.exists("static/js/react-ui/welcome-header.js") and "DashboardWelcomeHeader" in open("static/js/react-ui/welcome-header.js").read())
 check("welcome header is branded (uses the school's colours) and works in dark mode", "--theme-secondary" in open("static/css/welcome-header.css").read())
 
@@ -315,7 +315,7 @@ check("a person can dismiss a banner and it stays dismissed for them only", "inf
 check("the ONE shared banner partial is included by the base layout, so every dashboard shows it", '_announcement_banners.html' in open("templates/base.html").read())
 check("...and no dashboard template adds a second copy", not any("_announcement_banners.html" in open(f"templates/{n}").read() for n in ("teacher_dashboard.html", "student_dashboard.html", "parent_dashboard.html", "platform_dashboard.html", "registrar_dashboard.html")))
 run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (1,'BN-once','m','all','info',1,?,'t')", exp)
-check("each banner is rendered exactly once on every dashboard", all(html(c).count("BN-once") == 1 for c in (ADMIN.get("/dashboard"), FT.get("/dashboard"), ACC.get("/dashboard"), REG.get("/registrar"), ST.get("/student/dashboard"), PR.get("/parent/dashboard"))))
+check("each dashboard has exactly ONE sliding strip (V112); the banner text appears once there, plus once more in the dashboard's Announcements panel where it has one", all(html(c).count("data-announcement-banners") == 1 and html(c).count("BN-once") in (1, 2) for c in (ADMIN.get("/dashboard"), FT.get("/dashboard"), ACC.get("/dashboard"), REG.get("/registrar"), ST.get("/student/dashboard"), PR.get("/parent/dashboard"))))
 
 print("=== 12) role-based dashboard charts (real records only) ===")
 import role_charts as RC
