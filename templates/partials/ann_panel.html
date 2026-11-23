@@ -1,0 +1,8 @@
+{# V112: the Announcements card shown on every dashboard (same data as the sliding strip at the top). #}
+{% macro ann_panel(view_all_url='') %}<article class="ad-panel" id="announcements-panel">
+  <header><h2><span class="ni">📢</span> Announcements</h2>{% if view_all_url %}<a href="{{ view_all_url }}">View All →</a>{% endif %}</header>
+  <ul class="ann-list">
+    {% for a in (announcement_banners or [])[:4] %}<li><span class="ann-ico">{{ {'danger':'⚠️','warning':'❗','success':'✅'}.get(a.level, 'ℹ️') }}</span><div><b>{{ a.title }}</b><span>{{ a.message }}</span>{% if a.expires_at %}<br><small style="color:var(--mut)">Until {{ a.expires_at[:10] }}</small>{% endif %}</div></li>
+    {% else %}<li><span class="ann-ico">ℹ️</span><div><b>No announcements</b><span>Announcements from your school appear here and at the top of the page.</span></div></li>{% endfor %}
+  </ul>
+</article>{% endmacro %}
