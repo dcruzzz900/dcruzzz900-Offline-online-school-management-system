@@ -43,3 +43,15 @@ Converted to the exact v106 markup with live v111 data (legacy CSS no longer loa
 * Admin lists gain the v106 KPI row, search/filters (`static/js/table-filter.js`) and real counts (students/subjects per class, teachers/classes per subject, linked children per parent, subjects/classes per staff member).
 * Shared pieces restyled for v106 pages: identity fields (DOB/gender), form labels/selects, help toggles. Dark-mode audit: 0 failures on admin, teacher, platform and both portals; layout sweep: 0 problems.
 * Tracker: `UI_V106_CONVERSION_STATUS.md`.
+
+## Round 5 (header, banner, announcements, teacher/admin/student changes)
+* **Welcome banner colour fixed:** v111's React `welcome-header.js` runs on every page and replaces any `[data-welcome-header]` element with unstyled markup (online only — React comes from a CDN, so it never happened in the offline test environment). The v106 banner now uses its own marker `data-v106-banner`; the school-timezone clock still works (own script).
+* **Header fixed on every screen:** `overflow-x:hidden` on html/body and on `.main` (phone) was silently disabling `position:sticky`; replaced with `overflow-x:clip`. The portal tab strip now sticks directly under the header (`--topbar-h` measured by `modern-shell.js`). The header also now always fits: the search box shrinks/hides on narrow screens (a **Search** link was added to the menu) — at 390px the avatar had been pushed off-screen.
+* **No empty gaps (90–115% zoom etc.):** panel rows are flex-wrap, so panels grow to fill each row at any width; KPI cards always form whole rows (6→3×2→2×3); the odd panel out stretches instead of leaving blank space.
+* **Announcements:** one shared sliding strip at the top of every dashboard (slides in; rotates with a sliding transition when several; dots, swipe, pause on hover; urgent/important/good-news styles) + an Announcements card on admin, teacher, student and parent dashboards.
+* **"Online / Teacher Panel" status block removed** from every menu.
+* **Admin:** Classes Needing Improvement (average < 50% or 30%+ failing); Gender chart already replaced by Attendance Trend.
+* **Teacher:** My roles + AI Assistant row aligned; "Subject Assignments"; Enrolment by Class next to Grade Distribution; My Classes → **Roll Call**; Attendance Trend inherited from admin (selectable, students of your classes); Students Needing Improvement (average < 50% or failing grade, with weakest subject); Top Performing / Needing Improvement / Recent Activities / Announcements at the bottom. My Teaching Workspace has no attendance.
+* **Student:** repeated blocks removed (the four quick-link cards, "My academic profile", "Full result" link, duplicate attendance Rate tile).
+* **Add forms** on Students, Classes and Subjects start collapsed; the + Add button expands them (focus moves into the form; Close collapses; `#add-student` etc. open automatically). Teachers & Staff gets a **Teachers** card; Students gets **New This Term** (admitted since the current term started).
+* Tests: 117 enhancement checks, 38 browser checks, all scenario suites; dark-mode audit and layout sweeps (`tests/v112_*`) report 0 problems.
