@@ -512,11 +512,11 @@ check("pages link the manifest, the favicon and the iPhone icon, and carry the a
 sw = cli.get("/service-worker.js")
 check("the service worker is served for the whole site", code(sw) == 200 and sw.headers.get("Service-Worker-Allowed") == "/" and "javascript" in sw.headers.get("Content-Type", ""))
 swt = sw.get_data(as_text=True)
-check("it has a fetch handler (installable) but caches nothing", "addEventListener('fetch'" in swt and "cache.put" not in swt and "addAll" not in swt and "caches.open" not in swt)
+check("V113: it has a fetch handler (installable) and caches only the shell and the signed-in user's pages", "addEventListener('fetch'" in swt and "cache.put" in swt and "NEVER_CACHE" in swt)
 check("it removes caches left by older offline builds", "caches.delete" in swt)
-oj = cli.get("/static/js/online-only.js").get_data(as_text=True)
+oj = cli.get("/static/js/offline/offline-ui.js").get_data(as_text=True)
 _l = ADMIN.get("/?source=pwa"); check("opening the installed app while signed in goes to the dashboard, not the login page", code(_l) == 302 and "login" not in _l.headers["Location"], _l.headers.get("Location"))
-check("the page script registers the worker (and no longer unregisters it)", 'register("/service-worker.js"' in oj)
+check("the page script registers the worker (and no longer unregisters it)", 'register("/service-worker.js"' in oj and "unregister" not in oj)
 
 # ======================================================== 5. password show/hide
 for path in ("/login", "/student/login"):

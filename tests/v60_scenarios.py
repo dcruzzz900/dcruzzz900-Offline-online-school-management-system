@@ -606,12 +606,12 @@ conn = db(); conn.execute("UPDATE role_assignments SET status='revoked' WHERE us
 check("revoked registrar assignment loses access immediately (403)", reg_c.get(f"/students/{out_id}/profile/edit").status_code == 403)
 
 # ------------------------------------------------------------------------------------ 6. online only
-for path in ["/app", "/offline", "/offline-app", "/csrf-token", "/api/offline/verify", "/api/sync/push", "/admin/sync-conflicts", "/api/offline/confirm_password"]:
+for path in ["/app", "/offline-app", "/csrf-token", "/api/offline/verify", "/api/sync/push", "/admin/sync-conflicts", "/api/offline/confirm_password"]:
     check(f"offline route gone: {path}", A.app.test_client().get(path).status_code in (404, 405, 302) and A.app.test_client().get(path).status_code != 200)
 sw = A.app.test_client().get("/service-worker.js")
-check("service worker is network-only: no cache is ever written or read, old caches are deleted", b"caches.delete" in sw.data and b"cache.put" not in sw.data and b"addAll" not in sw.data and b"caches.open" not in sw.data and b"caches.match" not in sw.data)
+check("V113: service worker caches the shell and per-user pages, never /api, login or platform pages, and still prunes old caches", b"caches.delete" in sw.data and b"cache.put" in sw.data and b"NEVER_CACHE" in sw.data and b"X-SH-User" in sw.data)
 static_js = os.listdir(os.path.join(ROOT, "static", "js"))
-check("offline JS files removed", not [f for f in static_js if re.search(r"offline|sync|connectivity", f)], static_js)
+check("V113: the new offline scripts exist; the retired sync_api.py/sync_rules.py stay gone", all(os.path.exists(os.path.join(ROOT, "static/js/offline", f)) for f in ("offline-core.js", "offline-ui.js")), static_js)
 bad_text = []
 for folder in ("templates",):
     for fn in os.listdir(os.path.join(ROOT, folder)):
@@ -625,7 +625,7 @@ check("no sync blueprint / offline modules remain", not os.path.exists(os.path.j
 src = open(os.path.join(ROOT, "app.py")).read()
 check("no offline helpers left in app.py", "offline_sync_" not in src and "is_offline_sync_request" not in src and "device_credentials" not in src.split("def _student_login_post")[0].replace("device_credentials", "device_credentials") or "revoke_device_credentials" not in src)
 check("no offline queue markers in any served static asset", not [f for f in os.listdir(os.path.join(ROOT, "static")) if "offline" in f.lower()])
-check("connection-error script present and loaded", "online-only.js" in html(A.app.test_client().get("/login")) and "Cannot reach the server" in open(os.path.join(ROOT, "static/js/online-only.js")).read())
+check("V113: offline scripts are loaded on every page (they replace online-only.js)", "offline-core.js" in html(A.app.test_client().get("/login")) and "online-only.js" not in html(A.app.test_client().get("/login")))
 mf = json.load(open(os.path.join(ROOT, "static/manifest.json")))
 check("manifest no longer starts an offline shell (it opens the normal site root)", mf.get("start_url", "").split("?")[0] in ("/", "/dashboard"))
 check("device credentials purged by migration", db().execute("SELECT COUNT(*) FROM device_credentials").fetchone()[0] == 0)
