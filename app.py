@@ -12408,7 +12408,7 @@ app.config["OFFLINE_WINDOW_DAYS"] = int(os.environ.get("OFFLINE_WINDOW_DAYS", "7
 import offline_sync as _offline_sync
 app.jinja_env.globals["sh_user_fingerprint"] = _offline_sync.user_fingerprint
 _offline_sync.init_offline_sync(app, login_required=login_required, current_term=current_term, get_csrf_token=get_csrf_token,
-                                compute_total=compute_total, grade_for=grade_for)
+                                compute_total=compute_total, grade_for=grade_for, student_full_name=student_full_name)
 
 
 if __name__ == "__main__":

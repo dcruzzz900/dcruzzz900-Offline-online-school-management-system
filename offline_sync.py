@@ -52,10 +52,10 @@ def user_fingerprint():
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def init_offline_sync(app, *, login_required, current_term, get_csrf_token, compute_total, grade_for):
+def init_offline_sync(app, *, login_required, current_term, get_csrf_token, compute_total, grade_for, student_full_name=None):
     """Wire the blueprint and the request hooks into the Flask app (called once from app.py)."""
     _hooks.update(login_required=login_required, current_term=current_term, get_csrf_token=get_csrf_token,
-                  compute_total=compute_total, grade_for=grade_for)
+                  compute_total=compute_total, grade_for=grade_for, student_full_name=student_full_name)
     _register_routes()
     app.register_blueprint(sync_bp)
     app.before_request(_sync_before)
@@ -327,24 +327,16 @@ def _register_routes():
         sid = session.get("school_id")
         is_admin = session.get("role") in ("admin", "sub_admin")
         try:
-            log = conn.execute("SELECT * FROM sync_log WHERE school_id=? ORDER BY id DESC LIMIT 15", (sid,)).fetchall()
-            conflicts = conn.execute("SELECT * FROM sync_conflicts WHERE school_id=? ORDER BY resolved, id DESC LIMIT 100", (sid,)).fetchall() if is_admin else []
+            log = conn.execute("SELECT * FROM sync_log WHERE school_id=? ORDER BY id DESC LIMIT 15", (sid,)).fetchall() if is_admin else []
             changes = conn.execute("SELECT * FROM sync_changes WHERE school_id=? ORDER BY id DESC LIMIT 25", (sid,)).fetchall() if is_admin else []
+            shaped = _conflict_rows(conn, sid, None if is_admin else session.get("user_id"))
         finally:
             conn.close()
-        shaped = []
-        for c in conflicts:
-            d = dict(c)
-            for k in ("client_payload", "server_payload"):
-                try:
-                    d[k] = json.loads(d[k] or "{}")
-                except Exception:
-                    d[k] = {}
-            shaped.append(d)
-        return render_template("sync_center.html", log=log, conflicts=shaped, changes=changes, is_admin=is_admin)
+        return render_template("sync_center.html", log=log, conflicts=shaped, changes=changes, is_admin=is_admin,
+                               open_conflicts=sum(1 for c in shaped if not c["resolved"]))
 
     @sync_bp.route("/api/sync/conflicts/<int:conflict_id>/resolve", methods=["POST"])
-    @login_required("admin", "sub_admin")
+    @login_required()
     def sync_resolve(conflict_id):
         b = request.get_json(silent=True) or request.form
         choice = (b.get("resolution") or "").strip()
@@ -353,25 +345,98 @@ def _register_routes():
         conn = get_db()
         try:
             c = conn.execute("SELECT * FROM sync_conflicts WHERE id=? AND school_id=?", (conflict_id, session.get("school_id"))).fetchone()
-            if not c:
+            if not c or not _may_resolve(conn, c):
                 return jsonify({"ok": False, "error": "Conflict not found."}), 404
             if c["resolved"]:
                 return jsonify({"ok": False, "error": "Already resolved."}), 409
-            note = ""
-            if choice == "apply_offline":
-                if c["kind"] != "score":
-                    return jsonify({"ok": False, "error": "Only score conflicts can be applied; review attendance manually, then dismiss."}), 400
-                ok, note = _apply_score(conn, c)
-                if not ok:
-                    return jsonify({"ok": False, "error": note}), 409
-            conn.execute("UPDATE sync_conflicts SET resolved=1, resolved_at=?, resolution=?, resolved_by=? WHERE id=?",
-                         (_now(), choice, session.get("name") or str(session.get("user_id")), conflict_id))
-            log_audit(conn, session.get("role"), session.get("name"), "offline_conflict_resolved",
-                      f"{c['kind']} {c['entity_key']}: {choice}. {note}", school_id=session.get("school_id"))
+            ok, note = _resolve_one(conn, c, choice)
+            if not ok:
+                return jsonify({"ok": False, "error": note}), 409
             conn.commit()
         finally:
             conn.close()
         return jsonify({"ok": True, "resolution": choice, "note": note})
+
+    @sync_bp.route("/api/sync/conflicts/resolve-all", methods=["POST"])
+    @login_required()
+    def sync_resolve_all():
+        """One click for many conflicts: 'keep_server' or 'apply_offline' for every open conflict the person may resolve."""
+        b = request.get_json(silent=True) or {}
+        choice = (b.get("resolution") or "").strip()
+        if choice not in ("keep_server", "apply_offline"):
+            return jsonify({"ok": False, "error": "Choose keep_server or apply_offline."}), 400
+        conn = get_db()
+        done, failed = 0, []
+        try:
+            admin = session.get("role") in ("admin", "sub_admin")
+            for c in [r for r in _conflict_rows(conn, session.get("school_id"), None if admin else session.get("user_id")) if not r["resolved"]]:
+                row = conn.execute("SELECT * FROM sync_conflicts WHERE id=?", (c["id"],)).fetchone()
+                if choice == "apply_offline" and row["kind"] != "score":
+                    continue
+                ok, note = _resolve_one(conn, row, choice)
+                conn.commit()
+                if ok:
+                    done += 1
+                else:
+                    failed.append({"id": c["id"], "student": c["student"], "error": note})
+        finally:
+            conn.close()
+        return jsonify({"ok": True, "resolved": done, "failed": failed})
+
+
+def _conflict_rows(conn, school_id, only_user_id):
+    """Conflicts of this school (administrators see all; a teacher sees only the ones from their own offline entries),
+    with the student / subject / person shown in plain words."""
+    sql = ("SELECT c.*, ch.user_id AS entered_by_id, u.name AS entered_by FROM sync_conflicts c "
+           "LEFT JOIN sync_changes ch ON ch.change_id=c.change_id AND ch.school_id=c.school_id "
+           "LEFT JOIN users u ON u.id=ch.user_id WHERE c.school_id=?")
+    args = [school_id]
+    if only_user_id is not None:
+        sql += " AND ch.user_id=?"
+        args.append(only_user_id)
+    rows = conn.execute(sql + " ORDER BY c.resolved, c.id DESC LIMIT 200", args).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        for k in ("client_payload", "server_payload"):
+            try:
+                d[k] = json.loads(d[k] or "{}")
+            except Exception:
+                d[k] = {}
+        d["student"] = d["subject"] = ""
+        if d["kind"] == "score":
+            sp = d["server_payload"]
+            st = conn.execute("SELECT * FROM students WHERE id=? AND school_id=?", (sp.get("student_id"), school_id)).fetchone()
+            sub = conn.execute("SELECT name FROM subjects WHERE id=?", (sp.get("subject_id"),)).fetchone()
+            fn = _hooks.get("student_full_name")
+            d["student"] = (fn(st) if (fn and st) else (st["admission_no"] if st else "")) or ""
+            d["subject"] = sub["name"] if sub else ""
+        out.append(d)
+    return out
+
+
+def _may_resolve(conn, c):
+    """Administrators resolve any conflict of their school. A teacher resolves the conflicts of THEIR OWN offline entries only
+    (the replay of 'apply mine' still runs through the real score route, so class/subject assignment and result locks apply)."""
+    if session.get("role") in ("admin", "sub_admin"):
+        return True
+    ch = conn.execute("SELECT user_id FROM sync_changes WHERE school_id=? AND change_id=?", (c["school_id"], c["change_id"])).fetchone()
+    return bool(ch and ch["user_id"] == session.get("user_id"))
+
+
+def _resolve_one(conn, c, choice):
+    note = ""
+    if choice == "apply_offline":
+        if c["kind"] != "score":
+            return False, "Only score conflicts can be applied; review attendance manually, then dismiss."
+        ok, note = _apply_score(conn, c)
+        if not ok:
+            return False, note
+    conn.execute("UPDATE sync_conflicts SET resolved=1, resolved_at=?, resolution=?, resolved_by=? WHERE id=?",
+                 (_now(), choice, session.get("name") or str(session.get("user_id")), c["id"]))
+    log_audit(conn, session.get("role"), session.get("name"), "offline_conflict_resolved",
+              f"{c['kind']} {c['entity_key']}: {choice}. {note}", school_id=session.get("school_id"))
+    return True, note
 
 
 def _apply_score(conn, c):
