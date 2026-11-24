@@ -20,25 +20,32 @@
     navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(function () {});
   }
 
-  /* ---------- status pill ---------- */
-  var pill;
-  function ensurePill() {
-    if (pill || !signedIn) return pill;
-    pill = document.createElement("a");
-    pill.id = "shSyncPill"; pill.href = "/sync"; pill.setAttribute("role", "status"); pill.setAttribute("aria-live", "polite");
-    pill.className = "sh-sync-pill no-print";
-    document.body.appendChild(pill);
-    return pill;
+  /* ---------- connection indicator in the header: green Online / red Offline ---------- */
+  var prep = { state: "idle", done: 0, total: 0 };       // idle | working | ready | unsupported
+  var chip;
+  function ensureChip() {
+    chip = chip || document.getElementById("shConn");
+    if (!chip && signedIn) {                                // pages without the header slot: small floating chip
+      chip = document.createElement("a"); chip.id = "shConn"; chip.className = "sh-conn no-print"; chip.href = "/sync";
+      chip.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:9990";
+      chip.innerHTML = "<i></i><span class='sh-conn-text'></span><small class='sh-conn-sub'></small>"; document.body.appendChild(chip);
+    }
+    return chip;
   }
   function render(s) {
     if (!signedIn) return;
-    ensurePill();
+    ensureChip(); if (!chip) return;
     var st = s.status, text = LABEL[st] || "Online";
     if (st === "syncing" && s.progress && s.progress.total) text += " " + s.progress.done + "/" + s.progress.total;
-    if (s.pending && st !== "syncing") text += " · " + s.pending + " pending";
-    if (s.conflicts) text += " · " + s.conflicts + " need review";
-    pill.textContent = text; pill.setAttribute("data-state", st);
-    pill.title = s.error || ("Last sync: " + (s.lastSync ? new Date(s.lastSync).toLocaleString() : "never"));
+    var sub = [];
+    if (s.pending && st !== "syncing") sub.push(s.pending + " pending");
+    if (s.conflicts) sub.push(s.conflicts + " need review");
+    if (prep.state === "working") sub.push("preparing offline " + prep.done + "/" + prep.total);
+    else if (prep.state === "ready" && s.online) sub.push("offline ready");
+    chip.setAttribute("data-state", st);
+    chip.querySelector(".sh-conn-text").textContent = text;
+    chip.querySelector(".sh-conn-sub").textContent = sub.length ? "· " + sub.join(" · ") : "";
+    chip.title = (s.error || (s.online ? "Connected to the school server" : "No connection to the school server")) + (prep.state === "unsupported" ? " — offline pages need HTTPS or localhost" : "") + " | Last sync: " + (s.lastSync ? new Date(s.lastSync).toLocaleString() : "never");
     document.documentElement.setAttribute("data-sh-connection", s.online ? "online" : "offline");
     var sc = document.querySelector("[data-sync-center]"); if (sc) renderCenter(s);
   }
@@ -54,7 +61,8 @@
   }
   window.addEventListener("online", connectionTick);
   window.addEventListener("offline", function () { wasOffline = true; core.checkConnection(); });
-  setInterval(connectionTick, 20000);
+  setInterval(connectionTick, 10000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) connectionTick(); });
 
   /* ---------- offline gate: access only for a limited time after the last online sign-in check ---------- */
   function gate() {
@@ -77,20 +85,26 @@
     var form = ev.target;
     if (!signedIn || !form || form.tagName !== "FORM" || ev.defaultPrevented) return;
     if (String(form.method).toLowerCase() !== "post" || form.hasAttribute("data-no-offline")) return;
-    if (navigator.onLine !== false && core.state().online) return;                      // online: normal submit
     var action; try { action = new URL(form.getAttribute("action") || location.pathname, location.href); } catch (e) { return; }
     if (action.origin !== location.origin || !core.canQueuePath(action.pathname)) return; // login, billing, etc. need the server
+    if (form.__shChecked) { form.__shChecked = false; return; }                           // second pass: the server answered, submit normally
     ev.preventDefault(); ev.stopImmediatePropagation();
-    var fd = new FormData(form), fields = [], files = [], jobs = [];
-    fd.forEach(function (v, k) {
-      if (v instanceof File) { if (v.size) jobs.push(v.arrayBuffer().then(function (buf) { files.push({ field: k, name: v.name, type: v.type, buffer: buf }); })); }
-      else fields.push([k, v]);
-    });
-    Promise.all(jobs).then(function () {
-      return core.enqueue({ method: "POST", url: action.pathname + action.search, kind: "form", body: fields, files: files, label: (document.title || "Form") });
-    }).then(function () {
-      toast("Saved on this device. It will be sent automatically when the connection returns.");
-      var btn = form.querySelector('[type="submit"]'); if (btn) { btn.disabled = false; }
+    var submitter = ev.submitter;
+    /* Never trust "the browser says online": confirm the school server answers right now, otherwise keep the data on this device. */
+    (navigator.onLine === false ? Promise.resolve(false) : core.checkConnection()).then(function (up) {
+      if (up) { form.__shChecked = true; if (form.requestSubmit) form.requestSubmit(submitter || undefined); else form.submit(); return; }
+      var fd = new FormData(form), fields = [], files = [], jobs = [];
+      fd.forEach(function (v, k) {
+        if (v instanceof File) { if (v.size) jobs.push(v.arrayBuffer().then(function (buf) { files.push({ field: k, name: v.name, type: v.type, buffer: buf }); })); }
+        else fields.push([k, v]);
+      });
+      if (submitter && submitter.name) fields.push([submitter.name, submitter.value]);
+      return Promise.all(jobs).then(function () {
+        return core.enqueue({ method: "POST", url: action.pathname + action.search, kind: "form", body: fields, files: files, label: (document.title || "Form"),
+          entityKey: /\/roll-call$/.test(action.pathname) ? "attendance:" + action.pathname : "" });
+      }).then(function () {
+        toast("Saved on this device. It will be sent automatically when the connection returns.");
+      });
     }).catch(function (err) { toast(err && err.message ? err.message : "This could not be saved offline."); });
   }, true);
 
@@ -101,6 +115,7 @@
     var s = core.state(), n = s.pending + s.failed + s.conflicts;
     if (n && !window.confirm("You have " + n + " change(s) that have not reached the server. They stay safely on this device and will sync the next time you sign in with a connection. Sign out now?")) { ev.preventDefault(); return; }
     swSend({ type: "PURGE_PAGES" });
+    try { localStorage.removeItem("sh-ready-" + fingerprint); } catch (e) {}   // next sign-in prepares offline pages again
   }, true);
 
   /* ---------- Sync Center: "this device" panel ---------- */
@@ -141,6 +156,49 @@
     }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) location.reload(); else alert(j.error || "Could not resolve."); });
   });
 
+  /* ---------- offline preparation: right after sign-in, in the background ---------- */
+  var swMsg = null;
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", function (ev) { if (swMsg) swMsg(ev.data || {}); });
+  var READY_KEY = "sh-ready-" + fingerprint;
+  function menuUrls() {
+    var urls = {}; urls[location.pathname + location.search] = 1; urls["/dashboard"] = 1; urls["/sync"] = 1;
+    document.querySelectorAll("a.nav-item[href], .mobile-tabs a[href], .app-sidebar a[href]").forEach(function (a) {
+      try { var u = new URL(a.href); if (u.origin === location.origin && !/logout|^\/platform|^\/api\//.test(u.pathname)) urls[u.pathname + u.search] = 1; } catch (e) {}
+    });
+    return Object.keys(urls);
+  }
+  function overlay() {
+    var d = document.createElement("div"); d.className = "sh-prep"; d.setAttribute("role", "alertdialog"); d.setAttribute("aria-live", "polite");
+    d.innerHTML = "<div class='box'><h2 style='font-size:1.25rem'>Getting your school ready for offline use</h2><p>Downloading your pages in the background. This takes a few seconds and only happens after you sign in.</p><div class='bar'><b></b></div><div class='cnt'>Starting…</div><button type='button' hidden>Continue anyway</button></div>";
+    document.body.appendChild(d); var btn = d.querySelector("button"); btn.onclick = function () { d.remove(); };
+    setTimeout(function () { btn.hidden = false; }, 25000);
+    return d;
+  }
+  function prepareOffline(blocking) {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext) { prep.state = "unsupported"; render(core.state()); return Promise.resolve(false); }
+    var ov = blocking ? overlay() : null;
+    prep = { state: "working", done: 0, total: 0 }; render(core.state());
+    return new Promise(function (resolve) {
+      var finished = false;
+      function finish(ok) {
+        if (finished) return; finished = true; swMsg = null;
+        prep.state = ok ? "ready" : "idle"; if (ok) { try { localStorage.setItem(READY_KEY, String(Date.now())); } catch (e) {} }
+        if (ov) ov.remove(); render(core.state()); resolve(ok);
+      }
+      swMsg = function (m) {
+        if (m.type === "PREPARE_PROGRESS") {
+          prep.done = m.done; prep.total = m.total; render(core.state());
+          if (ov) { ov.querySelector(".bar b").style.width = Math.min(100, Math.round(100 * m.done / Math.max(1, m.total))) + "%"; ov.querySelector(".cnt").textContent = m.done + " of " + m.total + " pages"; }
+        } else if (m.type === "PREPARE_DONE") finish(m.cached > 0);
+      };
+      navigator.serviceWorker.ready.then(function (reg) {
+        (navigator.serviceWorker.controller || reg.active).postMessage({ type: "PREPARE", fingerprint: fingerprint, urls: menuUrls() });
+      }).catch(function () { finish(false); });
+      setTimeout(function () { finish(false); }, 120000);
+    });
+  }
+  window.shPrepareOffline = prepareOffline;
+
   /* ---------- start ---------- */
   core.ready.then(function () {
     render(core.state());
@@ -151,15 +209,9 @@
       core.sessionInfo().then(function () {
         core.seedScoreVersions();
         if (core.state().pending) core.syncNow();
-        /* fetch the main screens once so they open offline */
-        var urls = {}; urls[location.pathname + location.search] = 1;
-        document.querySelectorAll("a.nav-item[href], .mobile-tabs a[href]").forEach(function (a) { try { var u = new URL(a.href); if (u.origin === location.origin && !/logout|^\/platform|^\/api\//.test(u.pathname)) urls[u.pathname + u.search] = 1; } catch (e) {} });
-        var key = "sh-warm-" + fingerprint, last = 0;
-        try { last = parseInt(localStorage.getItem(key), 10) || 0; } catch (e) {}
-        if (Date.now() - last > 3600000) {                                   // once an hour per user, not on every page load
-          try { localStorage.setItem(key, String(Date.now())); } catch (e) {}
-          setTimeout(function () { swSend({ type: "WARM", urls: Object.keys(urls) }); }, 3000);
-        }
+        var last = 0; try { last = parseInt(localStorage.getItem(READY_KEY), 10) || 0; } catch (e) {}
+        if (!last) prepareOffline(true);                                  // first sign-in on this device: do it NOW, before the user browses
+        else { prep.state = "ready"; render(core.state()); if (Date.now() - last > 3600000) prepareOffline(false); }   // later: refresh quietly once an hour
       }).catch(function () {});
     });
   });
