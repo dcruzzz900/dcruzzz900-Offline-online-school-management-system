@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Sync Center{% endblock %}{% block content %}
+<h1>Sync Center</h1>
+<p class="muted">Works offline: changes made without a connection wait on this device and are sent automatically when the school server can be reached again.</p>
+<div data-sync-center>
+  <div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
+      <div><strong data-k="status">Online</strong><div class="small text-muted" data-k="connection"></div></div>
+      <button class="btn btn-primary" type="button" data-sync-now>Sync now</button>
+    </div>
+    <div class="progress my-3" style="height:10px"><div class="progress-bar" role="progressbar" data-k="bar" style="width:0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
+    <div class="row text-center g-2">
+      <div class="col-6 col-md-3"><div class="fs-3 fw-bold" data-k="pending">0</div><small>Pending on this device</small></div>
+      <div class="col-6 col-md-3"><div class="fs-3 fw-bold" data-k="synced">0</div><small>Synchronized this session</small></div>
+      <div class="col-6 col-md-3"><div class="fs-3 fw-bold" data-k="failed">0</div><small>Failed</small></div>
+      <div class="col-6 col-md-3"><div class="fs-3 fw-bold" data-k="conflicts">0</div><small>Need administrator review</small></div>
+    </div>
+    <dl class="row mt-3 mb-0 small"><dt class="col-sm-3">Last synchronization</dt><dd class="col-sm-9" data-k="last">Never</dd>
+      <dt class="col-sm-3">Last error</dt><dd class="col-sm-9" data-k="error">None</dd>
+      <dt class="col-sm-3">Local protection</dt><dd class="col-sm-9" data-k="enc"></dd></dl>
+  </div>
+  <div class="card p-3 mb-3"><h2 class="h5">Waiting on this device</h2>
+    <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Change</th><th>Made</th><th>State</th><th>Message</th><th></th></tr></thead><tbody data-k="queue"></tbody></table></div></div>
+</div>
+{% if is_admin %}
+<div class="card p-3 mb-3"><h2 class="h5">Conflicts for administrator approval</h2>
+{% if conflicts %}<div class="table-responsive"><table class="table align-middle"><thead><tr><th>#</th><th>Type</th><th>What happened</th><th>Server value</th><th>Offline value</th><th></th></tr></thead><tbody>
+{% for c in conflicts %}<tr><td>{{ c.id }}</td><td>{{ c.kind }}{% if c.sensitive %} <span class="badge text-bg-warning">sensitive</span>{% endif %}</td><td>{{ c.reason }}<br><small>{{ c.detected_at }}</small></td>
+<td><small>{% if c.kind == 'score' %}CA1 {{ c.server_payload.ca1 }} · CA2 {{ c.server_payload.ca2 }} · CA3 {{ c.server_payload.ca3 }} · Exam {{ c.server_payload.exam }}{% else %}{{ c.server_payload }}{% endif %}</small></td>
+<td><small>{% if c.kind == 'score' %}CA1 {{ c.client_payload.body.ca1 }} · CA2 {{ c.client_payload.body.ca2 }} · CA3 {{ c.client_payload.body.ca3 }} · Exam {{ c.client_payload.body.exam }}{% else %}{{ c.client_payload.captured_school_date }}{% endif %}</small></td>
+<td>{% if c.resolved %}<span class="badge text-bg-secondary">{{ c.resolution }} by {{ c.resolved_by }}</span>{% else %}
+<button class="btn btn-sm btn-outline-primary" data-resolve="keep_server" data-conflict="{{ c.id }}">Keep server</button>
+{% if c.kind == 'score' %}<button class="btn btn-sm btn-primary" data-resolve="apply_offline" data-conflict="{{ c.id }}">Apply offline</button>{% else %}<button class="btn btn-sm btn-outline-secondary" data-resolve="dismiss" data-conflict="{{ c.id }}">Dismiss</button>{% endif %}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="text-muted mb-0">No conflicts. Every offline change has been applied cleanly.</p>{% endif %}</div>
+<div class="card p-3 mb-3"><h2 class="h5">Recent changes received from devices</h2>
+{% if changes %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Received</th><th>Device</th><th>Change</th><th>Result</th><th>Tries</th></tr></thead><tbody>{% for r in changes %}<tr><td>{{ r.received_at }}</td><td>{{ r.device_id or '—' }}</td><td>{{ r.entity }} <small class="text-muted">{{ r.path }}</small></td><td>{{ r.state }} ({{ r.status_code }})</td><td>{{ r.attempts }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nothing yet.</p>{% endif %}</div>
+<div class="card p-3"><h2 class="h5">Device sync runs</h2>
+{% if log %}<table class="table table-sm mb-0"><thead><tr><th>Time</th><th>Device</th><th>Synced</th><th>Conflicts</th><th>Failed</th></tr></thead><tbody>{% for r in log %}<tr><td>{{ r.created_at }}</td><td>{{ r.device_id }}</td><td>{{ r.record_count }}</td><td>{{ r.conflict_count }}</td><td>{{ r.error_count }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="text-muted mb-0">No sync runs yet.</p>{% endif %}</div>
+{% endif %}
+{% endblock %}
