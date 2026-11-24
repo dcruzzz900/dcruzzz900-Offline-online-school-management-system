@@ -1,4 +1,16 @@
-.sh-sync-pill{position:fixed;left:12px;bottom:12px;z-index:9990;padding:6px 12px;border-radius:999px;font:600 .78rem/1.2 system-ui,Arial,sans-serif;color:#fff;background:#1b7f4b;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.25);max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sh-sync-pill[data-state=offline]{background:#6b7280}.sh-sync-pill[data-state=syncing]{background:#2f7bff}.sh-sync-pill[data-state=failed]{background:#b3261e}.sh-sync-pill[data-state=completed]{background:#0f766e}
-@media (max-width:991px){.sh-sync-pill{bottom:72px}}
+/* Connection indicator in the header: green = online, red = offline */
+.sh-conn{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .7rem;border-radius:999px;font:700 .78rem/1.2 system-ui,Arial,sans-serif;text-decoration:none;color:#0b5d33;background:#e3f6ea;border:1px solid #1b9c55;white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+.sh-conn i{width:.65rem;height:.65rem;border-radius:50%;background:#1fb35f;flex:none;box-shadow:0 0 0 3px rgba(31,179,95,.22)}
+.sh-conn small{font-weight:600;opacity:.8}
+.sh-conn[data-state=offline]{color:#8a1111;background:#fde8e8;border-color:#d32f2f}
+.sh-conn[data-state=offline] i{background:#d32f2f;box-shadow:0 0 0 3px rgba(211,47,47,.22)}
+.sh-conn[data-state=syncing]{color:#0b3f8f;background:#e4eeff;border-color:#2f7bff}
+.sh-conn[data-state=syncing] i{background:#2f7bff;animation:shpulse 1s infinite}
+.sh-conn[data-state=failed]{color:#8a4b00;background:#fff3de;border-color:#e08a00}
+.sh-conn[data-state=failed] i{background:#e08a00}
+@keyframes shpulse{50%{opacity:.35}}
+@media (max-width:640px){.sh-conn small{display:none}.sh-conn{padding:.28rem .5rem}}
 .sh-offline-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;z-index:99990;background:#111827;color:#fff;padding:10px 16px;border-radius:12px;max-width:90vw;font:600 .9rem system-ui,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+.sh-prep{position:fixed;inset:0;z-index:100000;background:rgba(0,19,91,.94);color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:system-ui,Arial,sans-serif}
+.sh-prep .box{max-width:380px;width:100%}.sh-prep .bar{height:10px;border-radius:99px;background:rgba(255,255,255,.2);overflow:hidden;margin:16px 0}.sh-prep .bar b{display:block;height:100%;width:0;background:#38d27a;transition:width .25s}
+.sh-prep button{margin-top:8px;padding:10px 18px;border:0;border-radius:10px;background:#2f7bff;color:#fff;font-weight:700;cursor:pointer}
