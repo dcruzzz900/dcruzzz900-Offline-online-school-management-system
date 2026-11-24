@@ -1205,9 +1205,8 @@ def require_cumulative_enabled(conn):
 
 @app.route("/service-worker.js")
 def service_worker():
-    """Online-only but installable: this worker caches nothing and answers every page load from the network
-    (a plain "no connection" page if the server is unreachable). Devices that still hold an older offline-capable
-    worker pick this file up on their next visit, and it deletes every cache that worker created."""
+    """Offline-capable worker (V113): caches the app shell and the pages a signed-in user has opened, and shows
+    a friendly offline page otherwise. Writes made offline are queued by the page scripts, not by this worker."""
     resp = send_from_directory("static", "service-worker.js", mimetype="application/javascript")
     resp.headers["Service-Worker-Allowed"] = "/"
     resp.headers["Cache-Control"] = "no-store"
@@ -7001,7 +7000,8 @@ def _score_boot(class_row, subject_row, config, students, existing, grade_bands,
     rows = []
     for st in students:
         ex = existing.get(st["id"])
-        rec = {"id": st["id"], "adm": st["admission_no"], "name": student_full_name(st), "has_row": ex is not None}
+        rec = {"id": st["id"], "adm": st["admission_no"], "name": student_full_name(st), "has_row": ex is not None,
+               "v": ((ex["updated_at"] if "updated_at" in ex.keys() else "") or "") if ex is not None else ""}
         for f in fields:
             rec[f["key"]] = (ex[f["key"]] if ex is not None else None)
         rows.append(rec)
@@ -7164,8 +7164,10 @@ def api_score_row(class_id, subject_id):
     conn.commit()
     total = compute_total(vals["ca1"], vals["ca2"], vals["exam"], vals["ca3"])
     grade, remark = grade_for(total, conn, current_school_id())
+    _ver = conn.execute("SELECT updated_at FROM scores WHERE student_id=? AND subject_id=? AND term_id=?", (sid, subject_id, term["id"])).fetchone()
     conn.close()
     return jsonify({"ok": True, "student_id": sid, "total": total, "grade": grade, "remark": remark,
+                    "updated_at": (_ver["updated_at"] if _ver else "") or "",
                     "saved_at": datetime.datetime.now().strftime("%H:%M:%S")})
 
 
@@ -12399,6 +12401,14 @@ def admin_school_fees():
     pct = round(collected * 100 / expected, 1) if expected else 0.0
     return render_template("admin_school_fees.html", cur=cur, rows=rows, expected=expected, collected=collected,
                            outstanding=max(0.0, expected - collected), pct=pct)
+
+
+# ---------- V113: offline-first sync (idempotent replay, conflict detection, Sync Center) ----------
+app.config["OFFLINE_WINDOW_DAYS"] = int(os.environ.get("OFFLINE_WINDOW_DAYS", "7"))
+import offline_sync as _offline_sync
+app.jinja_env.globals["sh_user_fingerprint"] = _offline_sync.user_fingerprint
+_offline_sync.init_offline_sync(app, login_required=login_required, current_term=current_term, get_csrf_token=get_csrf_token,
+                                compute_total=compute_total, grade_for=grade_for)
 
 
 if __name__ == "__main__":

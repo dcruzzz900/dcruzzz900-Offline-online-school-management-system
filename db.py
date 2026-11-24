@@ -4394,3 +4394,42 @@ def migration_088_v107_announcement_duration(conn):
 
 STEPS.append(("announcement_duration_v107", migration_088_v107_announcement_duration))
 
+
+
+def migration_089_offline_sync_v113(conn):
+    """V113: offline-first support (additive; SQLite stays the primary database).
+
+    sync_changes  - one row per change a device replayed from its offline queue. change_id (a UUID made on the device) is the
+                    idempotency key: replaying the same change twice can never create a duplicate record.
+    sync_conflicts- (table from migration_024) gains the columns the review screen needs.
+    No PostgreSQL-specific SQL is used; every column is plain TEXT/INTEGER so the same schema ports unchanged later."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sync_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            change_id TEXT NOT NULL,
+            school_id INTEGER NOT NULL,
+            tenant_id TEXT,
+            user_id INTEGER,
+            device_id TEXT,
+            method TEXT,
+            path TEXT,
+            entity TEXT,
+            entity_key TEXT,
+            base_version TEXT,
+            captured_at TEXT,
+            received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            state TEXT NOT NULL DEFAULT 'applied',   -- applied | conflict | failed
+            status_code INTEGER,
+            response_body TEXT,
+            attempts INTEGER DEFAULT 1,
+            UNIQUE(school_id, change_id)
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_changes_school ON sync_changes(school_id, received_at)")
+    for col, ddl in (("change_id", "TEXT"), ("kind", "TEXT"), ("sensitive", "INTEGER DEFAULT 0"), ("reason", "TEXT"),
+                     ("entity_key", "TEXT"), ("resolved_by", "TEXT"), ("tenant_id", "TEXT"), ("method", "TEXT"), ("path", "TEXT")):
+        ensure_column(conn, "sync_conflicts", col, ddl)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_conflicts_change ON sync_conflicts(school_id, change_id)")
+
+
+STEPS.append(("offline_sync_v113", migration_089_offline_sync_v113))
