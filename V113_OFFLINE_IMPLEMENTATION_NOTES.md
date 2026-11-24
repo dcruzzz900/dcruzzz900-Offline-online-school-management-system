@@ -46,3 +46,12 @@ The change log (`sync_changes`), conflict table and `client_uuid`/`updated_at` r
 * Browsers offer service workers, install-as-app and encryption only on HTTPS or `localhost`; plain `http://192.168.x.x` gets none of them.
 * Offline pages work only for screens opened while online at least once (the app pre-fetches the main menu pages once an hour).
 * Queued file uploads are limited to 5 MB per change. File inputs on forms replay as multipart.
+
+## Update: automatic offline preparation, header indicator, attendance sync fix
+* **Offline preparation at sign-in.** On the first sign-in on a device, a short "Getting your school ready for offline use" screen appears while the service worker downloads the user's menu pages, the pages they link to (class lists, score entry, roll calls …) and the CSS/JS they need. Nothing has to be clicked. It refreshes quietly once an hour afterwards and again after the next sign-in following a logout. Links that look like actions (delete, approve, export, logout …) are never fetched. In the end-to-end test a teacher login cached 33 pages.
+* **Header indicator** (`#shConn` in the top bar): green *Online*, red *Offline*; blue *Synchronizing n/m*, amber *Sync Failed*; with "· n pending", "· preparing offline n/m" and "· offline ready". Clicking it opens the Sync Center.
+* **Attendance could not synchronize — cause and fix.** A replayed form follows the server's redirect, so the device never saw the server's confirmation and treated the save as unconfirmed; validation errors (flash + redirect) were also invisible. Replayed forms now get a JSON outcome: 200 on success, 422 with the route's own message when the form is rejected (e.g. "already recorded today"). Saving the roll call twice offline keeps one queued record.
+* **Offline detection at submit time.** Before any queueable form is submitted, the page checks the school server answers; if not, the data is queued instead of being lost to a browser error page (this covers "Wi-Fi is up but the school server is down").
+* New end-to-end browser test `tests/v113_offline_e2e.py` (27 checks): login → auto-preparation → server stopped → red indicator, cached pages open → attendance and a score saved offline → server restarted → synced, no duplicates.
+
+Still true: pages are only available offline if they were reachable from the menu in the first two link levels; a page deeper than that opens offline only if it was visited before. Server-generated downloads (PDF/Excel exports, new report cards) need the server.

@@ -22,7 +22,7 @@ import hashlib
 import json
 import re
 
-from flask import Blueprint, current_app, g, jsonify, make_response, redirect, render_template, request, session, url_for, flash
+from flask import Blueprint, current_app, g, get_flashed_messages, jsonify, make_response, redirect, render_template, request, session, url_for, flash
 
 import v63_core
 from db import get_db, log_audit
@@ -120,6 +120,8 @@ def _sync_after(response):
         response.headers["X-Sync-Ack"] = cid
     if not ch or getattr(g, "sync_recorded", False):
         return response
+    if ch["replay"] and 300 <= response.status_code < 400:
+        response = _replay_outcome(response, cid)
     try:
         code = response.status_code
         state = "applied" if code < 400 else "failed"
@@ -145,6 +147,21 @@ def _sync_after(response):
     except Exception:  # recording must never break the real response
         current_app.logger.exception("sync_changes record failed")
     return response
+
+
+def _replay_outcome(response, cid):
+    """A browser form post answers 'redirect + flash message'. For a replay from the offline queue the device needs the actual
+    outcome, not the page it redirects to: success -> 200 JSON; a rejected form (the route flashed an error) -> 422 JSON with
+    the message the user would have seen online. The route itself is untouched."""
+    msgs = get_flashed_messages(with_categories=True)
+    bad = [m for c, m in msgs if c in ("error", "danger", "warning")]
+    if bad:
+        out = jsonify({"ok": False, "error": bad[0], "messages": [m for _c, m in msgs]})
+        out.status_code = 422
+    else:
+        out = jsonify({"ok": True, "messages": [m for _c, m in msgs], "location": response.headers.get("Location", "/")})
+    out.headers["X-Sync-Ack"] = cid
+    return out
 
 
 def _entity_of(path):
