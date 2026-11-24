@@ -334,11 +334,21 @@
     };
 
     /* remember the version of each score row the grid shows (unless a change for that row is still waiting to sync) */
-    core.seedScoreVersions = function () {
+    /* Remember the version of each score row the grid shows, so a later offline edit can say "I changed version X".
+       Online: the page is fresh, so it always wins (unless that row still has a change waiting to sync).
+       Offline (page came from the prepared cache): only fill in rows we have no version for - a missing base version is what
+       used to make every offline edit of an existing score look like a conflict. */
+    core.seedScoreVersions = function (onlyIfAbsent) {
       var host = document.getElementById("scoreApp"); if (!host) return;
       try {
         var cfg = JSON.parse(host.getAttribute("data-config")), path = sameOriginPath(cfg.save_url);
-        cfg.students.forEach(function (s) { var key = entityKeyFor(path, { student_id: s.id }); core.hasPending(key).then(function (p) { if (!p) core.setVersion(key, s.v || ""); }); });
+        cfg.students.forEach(function (s) {
+          var key = entityKeyFor(path, { student_id: s.id });
+          core.hasPending(key).then(function (p) {
+            if (p) return;
+            return core.getVersion(key).then(function (cur) { if (!onlyIfAbsent || cur === null) return core.setVersion(key, s.v || ""); });
+          });
+        });
       } catch (e) {}
     };
     core.canQueuePath = function (path) { return !NEVER_QUEUE.test(path); };

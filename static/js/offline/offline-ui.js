@@ -40,8 +40,6 @@
     var sub = [];
     if (s.pending && st !== "syncing") sub.push(s.pending + " pending");
     if (s.conflicts) sub.push(s.conflicts + " need review");
-    if (prep.state === "working") sub.push("preparing offline " + prep.done + "/" + prep.total);
-    else if (prep.state === "ready" && s.online) sub.push("offline ready");
     chip.setAttribute("data-state", st);
     chip.querySelector(".sh-conn-text").textContent = text;
     chip.querySelector(".sh-conn-sub").textContent = sub.length ? "· " + sub.join(" · ") : "";
@@ -150,10 +148,25 @@
     if (!b) return;
     ev.preventDefault();
     var id = b.getAttribute("data-conflict"), choice = b.getAttribute("data-resolve");
-    if (choice === "apply_offline" && !confirm("Apply the offline version? It replaces the value currently on the server and is recorded in the audit trail.")) return;
+    if (choice === "apply_offline" && !confirm("Use the score you typed offline? It replaces the value currently on the server and is recorded in the audit trail.")) return;
     core.sessionInfo().then(function (info) {
       return fetch("/api/sync/conflicts/" + id + "/resolve", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-CSRF-Token": info.csrf }, body: JSON.stringify({ resolution: choice }) });
     }).then(function (r) { return r.json(); }).then(function (j) { if (j.ok) location.reload(); else alert(j.error || "Could not resolve."); });
+  });
+
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("[data-resolve-all]");
+    if (!b) return;
+    ev.preventDefault();
+    var choice = b.getAttribute("data-resolve-all");
+    if (!confirm(choice === "apply_offline" ? "Use the scores you typed offline for ALL listed conflicts? They replace the values on the server and are recorded in the audit trail." : "Keep the server's scores for ALL listed conflicts? Your offline entries will be discarded.")) return;
+    b.disabled = true;
+    core.sessionInfo().then(function (info) {
+      return fetch("/api/sync/conflicts/resolve-all", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-CSRF-Token": info.csrf }, body: JSON.stringify({ resolution: choice }) });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.failed && j.failed.length) alert(j.resolved + " resolved. " + j.failed.length + " could not be applied:\n" + j.failed.map(function (f) { return (f.student || ("#" + f.id)) + ": " + f.error; }).join("\n"));
+      location.reload();
+    });
   });
 
   /* ---------- offline preparation: right after sign-in, in the background ---------- */
@@ -176,18 +189,18 @@
   }
   function prepareOffline(blocking) {
     if (!("serviceWorker" in navigator) || !window.isSecureContext) { prep.state = "unsupported"; render(core.state()); return Promise.resolve(false); }
-    var ov = blocking ? overlay() : null;
-    prep = { state: "working", done: 0, total: 0 }; render(core.state());
+    var ov = null;                                              // preparation is silent: nothing is shown to the user
+    prep = { state: "working", done: 0, total: 0 };
     return new Promise(function (resolve) {
       var finished = false;
       function finish(ok) {
         if (finished) return; finished = true; swMsg = null;
         prep.state = ok ? "ready" : "idle"; if (ok) { try { localStorage.setItem(READY_KEY, String(Date.now())); } catch (e) {} }
-        if (ov) ov.remove(); render(core.state()); resolve(ok);
+        render(core.state()); resolve(ok);
       }
       swMsg = function (m) {
         if (m.type === "PREPARE_PROGRESS") {
-          prep.done = m.done; prep.total = m.total; render(core.state());
+          prep.done = m.done; prep.total = m.total;
           if (ov) { ov.querySelector(".bar b").style.width = Math.min(100, Math.round(100 * m.done / Math.max(1, m.total))) + "%"; ov.querySelector(".cnt").textContent = m.done + " of " + m.total + " pages"; }
         } else if (m.type === "PREPARE_DONE") finish(m.cached > 0);
       };
@@ -203,14 +216,15 @@
   core.ready.then(function () {
     render(core.state());
     if (!signedIn) return;
+    core.seedScoreVersions(true);                                         // also when this page came from the offline cache
     swSend({ type: "SET_USER", fingerprint: fingerprint });
     core.checkConnection().then(function (up) {
       if (!up) { wasOffline = true; gate(); return; }
       core.sessionInfo().then(function () {
-        core.seedScoreVersions();
+        core.seedScoreVersions(false);
         if (core.state().pending) core.syncNow();
         var last = 0; try { last = parseInt(localStorage.getItem(READY_KEY), 10) || 0; } catch (e) {}
-        if (!last) prepareOffline(true);                                  // first sign-in on this device: do it NOW, before the user browses
+        if (!last) prepareOffline(false);                                 // first sign-in on this device: start NOW, silently in the background
         else { prep.state = "ready"; render(core.state()); if (Date.now() - last > 3600000) prepareOffline(false); }   // later: refresh quietly once an hour
       }).catch(function () {});
     });
