@@ -21,7 +21,7 @@ const SHELL = [
   '/static/js/react-ui/lib.js', '/static/js/react-ui/forms.js', '/static/js/react-ui/score-entry.js'
 ];
 // Third-party files are fetched in the background (never awaited), so a slow or blocked CDN cannot delay installation.
-const EXTERNAL = ['https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js'];
+const EXTERNAL = ['https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css'];
 const NEVER_CACHE = /^\/(api\/|login|logout|platform|student\/logout|parent\/logout|service-worker\.js)/;
 
 self.addEventListener('install', (event) => {
@@ -67,6 +67,8 @@ self.addEventListener('message', (event) => {
       await setActiveUser(d.fingerprint || '');
     } else if (d.type === 'PURGE_PAGES') {
       await purgePages(); await setActiveUser('');
+    } else if (d.type === 'PREPARE' && Array.isArray(d.urls)) {
+      await prepare(d.urls, d.fingerprint || '');
     } else if (d.type === 'WARM' && Array.isArray(d.urls)) {
       const cache = await caches.open(PAGE_CACHE);
       const user = await activeUser();
@@ -85,6 +87,56 @@ function fetchT(req, ms, opts) {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
   return fetch(req, Object.assign({ signal: ctl.signal }, opts || {})).finally(() => clearTimeout(t));
 }
+/* ---- PREPARE: right after login, download every page the user needs offline, without the user clicking anything.
+   Starts from the menu pages, follows their links one level (class lists, score-entry pages, roll calls, ...) and also stores
+   the CSS/JS those pages use. Pages are rendered per user by the server, so each role gets exactly its own pages.
+   Links that look like actions (delete, approve, export, logout ...) are never fetched. */
+const SKIP_LINK = /(logout|delete|remove|approve|publish|activate|reset|export|download|print|backup|restore|impersonate|toggle|lock|send|clear|purge|\.(pdf|xlsx?|csv|zip|docx?)(\?|$))/i;
+const BLOCK_PATH = /^\/(api\/|login|logout|platform|static\/|student\/|parent\/|school-logo|manifest|service-worker)/;
+const MAX_PAGES = 150, CONCURRENCY = 4;
+async function broadcast(msg) { for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage(msg); }
+async function prepare(seed, fp) {
+  const prev = await activeUser();
+  if (prev && prev !== fp) await purgePages();
+  await setActiveUser(fp);
+  const pages = await caches.open(PAGE_CACHE), stat = await caches.open(STATIC_CACHE);
+  const norm = (u) => { try { const x = new URL(u, self.location.origin); return x.origin === self.location.origin ? x.pathname + x.search : null; } catch (e) { return null; } };
+  const todo = [], seen = new Set(), assets = new Set();
+  const add = (u, depth) => { const n = norm(u); if (n && !seen.has(n) && seen.size < MAX_PAGES && !BLOCK_PATH.test(n)) { seen.add(n); todo.push({ u: n, depth }); } };
+  seed.forEach((u) => { const n = norm(u); if (n && !seen.has(n) && !BLOCK_PATH.test(n)) { seen.add(n); todo.push({ u: n, depth: 0 }); } });
+  let done = 0, cached = 0, failed = 0, last = 0;
+  async function worker() {
+    for (let job; (job = todo.shift());) {
+      try {
+        const res = await fetchT(job.u, 20000, { credentials: 'same-origin' });
+        if (res.ok && !res.redirected && res.headers.get('X-SH-User') === fp) {
+          await pages.put(job.u, res.clone()); cached++;
+          const html = await res.text();
+          for (const m of html.matchAll(/(?:href|src)="([^"#]+)"/g)) {
+            const h = m[1];
+            if (/^\/static\//.test(h) || /^https:\/\/(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com)\//.test(h)) assets.add(h);
+            else if (job.depth < 1 && h.startsWith('/') && !h.startsWith('//') && !SKIP_LINK.test(h)) add(h, job.depth + 1);
+          }
+        } else failed++;
+      } catch (e) { failed++; }
+      done++;
+      if (Date.now() - last > 250) { last = Date.now(); await broadcast({ type: 'PREPARE_PROGRESS', done, total: done + todo.length }); }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  const list = [...assets];
+  for (let i = 0; i < list.length; i += 6) {
+    await Promise.all(list.slice(i, i + 6).map(async (a) => {
+      try {
+        if (await stat.match(a)) return;
+        const r = await fetchT(a.startsWith('http') ? new Request(a, { mode: 'no-cors' }) : a, 8000);
+        if (r && (r.ok || r.type === 'opaque')) await stat.put(a, r);
+      } catch (e) { /* offline or blocked host: runtime caching fills it in later */ }
+    }));
+  }
+  await broadcast({ type: 'PREPARE_DONE', cached, failed, assets: list.length });
+}
+
 function timeout(ms) { return new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)); }
 
 async function handleNavigation(request) {
