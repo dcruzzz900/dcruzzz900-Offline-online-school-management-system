@@ -25,17 +25,25 @@ def stop():
     srv.shutdown(); srv.server_close()
 def q(sql, *a):
     c = get_db(); r = c.execute(sql, a).fetchone(); c.close(); return r[0] if r else None
+# an existing score for student 3 (typed online earlier), so an offline edit has a real "version I started from"
+import re as _re
+_cl = A.app.test_client(); _cl.post("/login", data={"username": "admin", "password": "Pass1234", "csrf_token": _re.search(r'name="csrf_token" value="([^"]+)"', _cl.get("/login").get_data(as_text=True)).group(1)})
+_cl.get("/dashboard")
+with _cl.session_transaction() as _s: _tok = _s["_csrf_token"]
+assert _cl.post("/api/scores/1/1/row", json={"student_id": 3, "ca1": "5", "ca2": "5", "exam": "20"}, headers={"X-CSRF-Token": _tok}).json["ok"]
 start()
 cls = q("SELECT class_id FROM students WHERE id=1")
 n_att = q("SELECT COUNT(*) FROM attendance_records")
 with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(); page = ctx.new_page()
+    ctx.add_init_script("new MutationObserver(() => { if (document.querySelector('.sh-prep')) sessionStorage.setItem('prepSeen', '1'); }).observe(document, {childList: true, subtree: true});")
     page.goto(f"{BASE}/login"); page.fill('input[name="username"]', "aokafor"); page.fill('input[name="password"]', "Pass1234"); page.click('button[type="submit"]')
     page.wait_for_selector("#shConn", timeout=15000)
     print("signed in; waiting for background preparation")
     page.wait_for_function("() => localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('sh-ready-')) || 'x')", timeout=90000)
     check("offline preparation finished by itself, with no page clicks", True)
-    check("the preparation overlay is gone", page.locator(".sh-prep").count() == 0)
+    check("the preparation screen was NEVER shown to the user (silent, in the background)", page.evaluate("() => sessionStorage.getItem('prepSeen')") is None and page.locator(".sh-prep").count() == 0)
+    check("the header does not announce 'preparing offline' either", "preparing" not in page.locator("#shConn").inner_text().lower())
     keys = page.evaluate("async () => (await (await caches.open('sh-pages-v113')).keys()).map(r => new URL(r.url).pathname)")
     print("cached pages:", len(keys))
     check("dashboard cached", "/dashboard" in keys, keys)
@@ -49,7 +57,6 @@ with sync_playwright() as p:
     rgb = [int(x) for x in re.findall(r"\d+", i_bg)[:3]]
     check("online indicator is GREEN", rgb[1] > rgb[0] and rgb[1] > rgb[2], i_bg)
     check("it sits inside the header", page.evaluate("() => !!document.querySelector('header.topbar #shConn')"))
-    check("it says offline ready", "offline ready" in chip.inner_text().lower(), chip.inner_text())
 
     print("--- the school server goes down ---")
     stop()
@@ -80,6 +87,21 @@ with sync_playwright() as p:
     check("server logged the replay as applied", q("SELECT state FROM sync_changes WHERE entity='attendance' ORDER BY id DESC LIMIT 1") == "applied")
     page.goto(f"{BASE}/sync"); page.wait_for_selector("[data-sync-center]")
     check("Sync Center shows nothing waiting", page.locator("[data-k=pending]").inner_text() == "0")
+
+    print("--- editing an EXISTING score offline, on a page opened from the prepared cache (used to cause a false conflict) ---")
+    score_url = page.evaluate("""async () => { const c = await caches.open('sh-pages-v113'); for (const r of await c.keys()) { const t = await (await c.match(r)).text(); if (t.includes('id="scoreApp"')) return new URL(r.url).pathname + new URL(r.url).search; } return null; }""")
+    check("a score-entry page is among the prepared pages", bool(score_url), score_url)
+    n_conf = q("SELECT COUNT(*) FROM sync_conflicts")
+    stop(); page.goto(f"{BASE}/dashboard") if False else None
+    page.wait_for_timeout(500)
+    page.goto(f"{BASE}{score_url}"); page.wait_for_selector("#scoreApp", state="attached", timeout=15000); page.wait_for_timeout(800)
+    page.wait_for_function("() => document.getElementById('shConn').dataset.state === 'offline'", timeout=30000)
+    res = page.evaluate("""async () => { const r = await fetch('/api/scores/1/1/row', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({student_id:3, ca1:'7', ca2:'7', exam:'7'})}); return [r.status, await r.json()]; }""")
+    check("the offline edit of an existing score is queued", res[0] == 202 and res[1]["queued"], res)
+    start()
+    page.wait_for_function("() => !/pending/.test(document.getElementById('shConn').innerText) && /^(Online|Sync Completed)/.test(document.getElementById('shConn').innerText)", timeout=60000)
+    check("NO conflict was raised: the teacher's own edit simply applied", q("SELECT COUNT(*) FROM sync_conflicts") == n_conf, q("SELECT reason FROM sync_conflicts ORDER BY id DESC LIMIT 1"))
+    check("the new score is on the server", q("SELECT ca1 FROM scores WHERE student_id=3 AND subject_id=1 AND term_id=(SELECT id FROM terms WHERE is_active=1)") == 7)
 
     print("--- a score typed while the server is down ---")
     ctx.add_init_script("")  # no-op, keeps context alive
