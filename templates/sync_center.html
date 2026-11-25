@@ -20,7 +20,12 @@
   </div>
   <div class="card p-3 mb-3"><h2 class="h5">Waiting on this device</h2>
     <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Change</th><th>Made</th><th>State</th><th>Message</th><th></th></tr></thead><tbody data-k="queue"></tbody></table></div></div>
+  <div class="card p-3 mb-3"><h2 class="h5">People who can sign in offline on this device</h2>
+    <p class="small text-muted mb-2">Each person's offline data is encrypted with a key that only their own password can open. Pages are downloaded once per person; they stay up to date as you browse online.</p>
+    <div class="table-responsive"><table class="table align-middle mb-2"><thead><tr><th>Person</th><th>Added</th><th></th></tr></thead><tbody data-k="users"></tbody></table></div>
+    <button class="btn btn-outline-primary btn-sm" type="button" data-refresh-offline>Refresh offline pages now</button></div>
 </div>
+
 <div class="card p-3 mb-3" id="conflicts"><h2 class="h5">Scores to review{% if open_conflicts %} <span class="badge text-bg-warning">{{ open_conflicts }}</span>{% endif %}</h2>
 <p class="small text-muted">These scores were typed offline, but the same score was changed by someone else before they reached the server, so nothing was overwritten. For each one choose <strong>Keep server</strong> (the value already on the server) or <strong>Use mine</strong> (the value typed offline).{% if not is_admin %} You can only resolve your own entries.{% endif %}</p>
 {% if open_conflicts > 1 %}<div class="d-flex flex-wrap gap-2 mb-3"><button class="btn btn-primary btn-sm" type="button" data-resolve-all="apply_offline">Use mine for all</button><button class="btn btn-outline-primary btn-sm" type="button" data-resolve-all="keep_server">Keep server for all</button></div>{% endif %}
@@ -32,8 +37,7 @@
 <td>{% if c.resolved %}<span class="badge text-bg-secondary">{{ 'kept server' if c.resolution == 'keep_server' else ('used mine' if c.resolution == 'apply_offline' else 'dismissed') }}{% if c.resolved_by %} · {{ c.resolved_by }}{% endif %}</span>{% else %}
 <button class="btn btn-sm btn-outline-primary" data-resolve="keep_server" data-conflict="{{ c.id }}">Keep server</button>
 {% if c.kind == 'score' %}<button class="btn btn-sm btn-primary" data-resolve="apply_offline" data-conflict="{{ c.id }}">Use mine</button>{% else %}<button class="btn btn-sm btn-outline-secondary" data-resolve="dismiss" data-conflict="{{ c.id }}">Dismiss</button>{% endif %}{% endif %}</td></tr>{% endfor %}
-</tbody></table></div>{% else %}<p class="text-muted mb-0">Nothing to review. Every offline entry was applied cleanly.</p>{% endif %}</div>
-{% if is_admin %}
+</tbody></table></div>{% else %}<p class="text-muted mb-0">Nothing to review. Every offline entry was applied cleanly.</p>{% endif %}{% if is_admin %}
 <div class="card p-3 mb-3"><h2 class="h5">Recent changes received from devices</h2>
 {% if changes %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Received</th><th>Device</th><th>Change</th><th>Result</th><th>Tries</th></tr></thead><tbody>{% for r in changes %}<tr><td>{{ r.received_at }}</td><td>{{ r.device_id or '—' }}</td><td>{{ r.entity }} <small class="text-muted">{{ r.path }}</small></td><td>{{ r.state }} ({{ r.status_code }})</td><td>{{ r.attempts }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="text-muted mb-0">Nothing yet.</p>{% endif %}</div>
 <div class="card p-3"><h2 class="h5">Device sync runs</h2>
