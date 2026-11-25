@@ -25,52 +25,98 @@
   function b64(buf) { var s = "", u = new Uint8Array(buf); for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); }
   function unb64(str) { var s = atob(str), u = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
 
-  /* ---------- encryption (AES-GCM, non-extractable key kept in IndexedDB; only where WebCrypto exists) ---------- */
-  function makeCrypto(subtle, store) {
-    if (!subtle) return { enabled: false, enc: async function (t) { return t; }, dec: async function (t) { return t; }, encBuf: async function (b) { return b; }, decBuf: async function (b) { return b; } };
-    var keyP = null;
-    function key() {
-      if (!keyP) keyP = (async function () {
-        var k = await store.keyGet();
-        if (!k) { k = await subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]); await store.keyPut(k); }
-        return k;
-      })();
-      return keyP;
+  /* ---------- per-user encryption ----------
+     Every person who signs in on a device gets their OWN random data key (AES-GCM). That key is stored only "wrapped" by a key
+     derived from the person's password (PBKDF2). Nothing of theirs can be read until they sign in with their password:
+       - sign in (online or offline)  -> the wrapped key is opened and kept as a NON-extractable key while they are signed in
+       - sign out / idle lock         -> that key is deleted again; the wrapped copy and the encrypted data stay
+     The same mechanism checks the password for offline sign-in (a wrong password cannot open the wrapped key).
+     Where WebCrypto is missing (plain http on a LAN) nothing can be encrypted, so offline sign-in is refused. */
+  function makeCrypto(subtle, store, opts) {
+    opts = opts || {};
+    var ITER = opts.iterations || 250000;
+    if (!subtle) return { enabled: false, enc: async function (t) { return t; }, dec: async function (t) { return t; }, encBuf: async function (b) { return b; }, decBuf: async function (b) { return b; },
+      enroll: async function () { return false; }, unlock: async function () { return false; }, lock: async function () {}, isUnlocked: async function () { return false; },
+      findUser: async function () { return null; }, addAliases: async function () {}, removeUser: async function () {}, listUsers: async function () { return []; } };
+    var rnd = function (n) { return (root.crypto || globalThis.crypto).getRandomValues(new Uint8Array(n)); };
+    async function keyFor(fp, legacy) {
+      var k = await store.keyGet(legacy ? "device" : "unlocked:" + fp);
+      if (!k) throw new Error(legacy ? "Older offline data cannot be opened on this device." : "This device is locked. Enter your password to continue.");
+      return k;
     }
-    async function encBuf(buf) {
-      var iv = (root.crypto || globalThis.crypto).getRandomValues(new Uint8Array(12));
-      var ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: iv }, await key(), buf));
+    async function encBuf(buf, fp) {
+      var iv = rnd(12), ct = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: iv }, await keyFor(fp), buf));
       var out = new Uint8Array(12 + ct.length); out.set(iv, 0); out.set(ct, 12); return out.buffer;
     }
-    async function decBuf(buf) {
+    async function decBuf(buf, fp, legacy) {
       var u = new Uint8Array(buf);
-      return subtle.decrypt({ name: "AES-GCM", iv: u.slice(0, 12) }, await key(), u.slice(12));
+      return subtle.decrypt({ name: "AES-GCM", iv: u.slice(0, 12) }, await keyFor(fp, legacy), u.slice(12));
+    }
+    async function kek(password, salt, iter) {
+      var base = await subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+      return subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["wrapKey", "unwrapKey"]);
+    }
+    async function unlock(fp, password) {
+      var rec = await store.userGet("user:" + fp); if (!rec) return false;
+      try {
+        var key = await subtle.unwrapKey("raw", unb64(rec.wrapped), await kek(password, unb64(rec.salt), rec.iter), { name: "AES-GCM", iv: unb64(rec.iv) },
+          { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+        await store.keyPut("unlocked:" + fp, key); return true;
+      } catch (e) { return false; }
+    }
+    async function enroll(fp, aliases, password) {
+      var salt = rnd(16), iv = rnd(12), dek = await subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+      var wrapped = await subtle.wrapKey("raw", dek, await kek(password, salt, ITER), { name: "AES-GCM", iv: iv });
+      await store.userPut("user:" + fp, { fp: fp, salt: b64(salt), iter: ITER, iv: b64(iv), wrapped: b64(wrapped), aliases: aliases.slice(), created: Date.now() });
+      for (var i = 0; i < aliases.length; i++) await store.userPut("alias:" + aliases[i], fp);
+      return unlock(fp, password);
     }
     return {
-      enabled: true, encBuf: encBuf, decBuf: decBuf,
-      enc: async function (t) { return b64(await encBuf(new TextEncoder().encode(t))); },
-      dec: async function (t) { return new TextDecoder().decode(await decBuf(unb64(t))); }
+      enabled: true, encBuf: encBuf, decBuf: decBuf, enroll: enroll, unlock: unlock,
+      enc: async function (t, fp) { return b64(await encBuf(new TextEncoder().encode(t), fp)); },
+      dec: async function (t, fp, legacy) { return new TextDecoder().decode(await decBuf(unb64(t), fp, legacy)); },
+      lock: async function (fp) { await store.keyDel("unlocked:" + fp); },
+      isUnlocked: async function (fp) { return !!(fp && await store.keyGet("unlocked:" + fp)); },
+      findUser: async function (alias) { var f = await store.userGet("alias:" + alias); return f || null; },
+      addAliases: async function (fp, aliases) {
+        var rec = await store.userGet("user:" + fp); if (!rec) return;
+        for (var i = 0; i < aliases.length; i++) { if (rec.aliases.indexOf(aliases[i]) < 0) rec.aliases.push(aliases[i]); await store.userPut("alias:" + aliases[i], fp); }
+        await store.userPut("user:" + fp, rec);
+      },
+      removeUser: async function (fp) {
+        var rec = await store.userGet("user:" + fp);
+        if (rec) for (var i = 0; i < rec.aliases.length; i++) await store.userDel("alias:" + rec.aliases[i]);
+        await store.userDel("user:" + fp); await store.keyDel("unlocked:" + fp);
+      },
+      listUsers: async function () { return (await store.userAll()).filter(function (r) { return r && r.fp && r.wrapped; }).map(function (r) { return { fp: r.fp, aliases: r.aliases, created: r.created }; }); }
     };
   }
 
   /* ---------- in-memory store (tests, and the fallback when IndexedDB is unavailable) ---------- */
   function memoryStore() {
-    var q = {}, meta = {}, key = null;
+    var q = {}, meta = {}, keys = {}, users = {};
     return {
       all: async function () { return Object.keys(q).map(function (k) { return q[k]; }).sort(function (a, b) { return a.seq - b.seq; }); },
       put: async function (e) { q[e.id] = JSON.parse(JSON.stringify(e, function (k, v) { return v instanceof ArrayBuffer ? { __ab: b64(v) } : v; }), function (k, v) { return v && v.__ab ? unb64(v.__ab).buffer : v; }); },
       del: async function (id) { delete q[id]; },
       metaGet: async function (k) { return meta[k]; }, metaSet: async function (k, v) { meta[k] = v; },
-      keyGet: async function () { return key; }, keyPut: async function (k) { key = k; }
+      keyGet: async function (id) { return keys[id]; }, keyPut: async function (id, k) { keys[id] = k; }, keyDel: async function (id) { delete keys[id]; },
+      userGet: async function (id) { return users[id] ? JSON.parse(JSON.stringify(users[id])) : (id.indexOf("alias:") === 0 ? undefined : undefined); },
+      userPut: async function (id, v) { users[id] = JSON.parse(JSON.stringify(v)); }, userDel: async function (id) { delete users[id]; },
+      userAll: async function () { return Object.keys(users).filter(function (k) { return k.indexOf("user:") === 0; }).map(function (k) { return JSON.parse(JSON.stringify(users[k])); }); }
     };
   }
 
-  /* ---------- IndexedDB store ---------- */
+  /* ---------- IndexedDB store (v2 adds the per-user records; v1 data is kept) ---------- */
   function idbStore(idb) {
     var dbP = new Promise(function (res, rej) {
-      var r = idb.open("sh-offline-v1", 1);
-      r.onupgradeneeded = function () { var d = r.result; d.createObjectStore("queue", { keyPath: "id" }); d.createObjectStore("meta"); d.createObjectStore("keys"); };
-      r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
+      var r = idb.open("sh-offline-v1", 2);
+      r.onupgradeneeded = function () {
+        var d = r.result;
+        if (!d.objectStoreNames.contains("queue")) d.createObjectStore("queue", { keyPath: "id" });
+        ["meta", "keys", "users"].forEach(function (n) { if (!d.objectStoreNames.contains(n)) d.createObjectStore(n); });
+      };
+      r.onsuccess = function () { r.result.onversionchange = function () { r.result.close(); }; res(r.result); }; r.onerror = function () { rej(r.error); };
     });
     function tx(store, mode, fn) {
       return dbP.then(function (db) { return new Promise(function (res, rej) {
@@ -84,8 +130,13 @@
       del: function (id) { return tx("queue", "readwrite", function (s) { s.delete(id); }); },
       metaGet: function (k) { return tx("meta", "readonly", function (s) { return s.get(k); }); },
       metaSet: function (k, v) { return tx("meta", "readwrite", function (s) { s.put(v, k); }); },
-      keyGet: function () { return tx("keys", "readonly", function (s) { return s.get("device"); }); },
-      keyPut: function (k) { return tx("keys", "readwrite", function (s) { s.put(k, "device"); }); }
+      keyGet: function (id) { return tx("keys", "readonly", function (s) { return s.get(id); }); },
+      keyPut: function (id, k) { return tx("keys", "readwrite", function (s) { s.put(k, id); }); },
+      keyDel: function (id) { return tx("keys", "readwrite", function (s) { s.delete(id); }); },
+      userGet: function (id) { return tx("users", "readonly", function (s) { return s.get(id); }); },
+      userPut: function (id, v) { return tx("users", "readwrite", function (s) { s.put(v, id); }); },
+      userDel: function (id) { return tx("users", "readwrite", function (s) { s.delete(id); }); },
+      userAll: function () { return tx("users", "readonly", function (s) { return s.getAll(); }); }
     };
   }
 
@@ -117,6 +168,12 @@
       return snapshot();
     }
 
+    /* the person using this page right now (the page tells us; each user has their own queue, cache and key) */
+    async function setUser(fp) {
+      S.fingerprint = fp || ""; await store.metaSet("fingerprint", S.fingerprint); await refreshCounts();
+      return snapshot();
+    }
+
     /* reachability of OUR server (what matters for syncing), not "the internet" in general */
     async function ping() {
       var ctl = env.AbortController ? new env.AbortController() : null, t = ctl ? setTimeout(function () { ctl.abort(); }, PING_TIMEOUT) : null;
@@ -141,16 +198,55 @@
       var j = await r.json();
       if (j.authenticated) {
         S.fingerprint = j.fingerprint; await store.metaSet("fingerprint", j.fingerprint);
-        await store.metaSet("verifiedAt", now()); await store.metaSet("windowDays", j.offline_window_days || 7);
+        await store.metaSet("verifiedAt:" + j.fingerprint, now()); await store.metaSet("windowDays", j.offline_window_days || 7);
       }
       return j;
     }
 
-    /* offline access is only allowed for a limited time after the last online verification */
-    async function offlineAllowed() {
-      var v = await store.metaGet("verifiedAt"), d = (await store.metaGet("windowDays")) || 7;
+    /* offline access is only allowed for a limited time after that person's last online verification */
+    async function offlineAllowed(fp) {
+      fp = fp || S.fingerprint;
+      var v = await store.metaGet("verifiedAt:" + fp), d = (await store.metaGet("windowDays")) || 7;
       if (!v) return false;
       return now() - v <= d * 86400000;
+    }
+
+    /* ---------- offline sign-in (password checked locally against the key wrapped on first online sign-in) ---------- */
+    function aliasOf(identifier, school) { return String(identifier || "").trim().toLowerCase() + "|" + String(school || "").trim().toLowerCase(); }
+    function waitText(ms) { var m = Math.ceil(ms / 60000); return m <= 1 ? "a minute" : m + " minutes"; }
+    async function offlineLogin(identifier, school, password) {
+      if (!crypto.enabled) return { ok: false, error: "Offline sign-in needs HTTPS or localhost on this device." };
+      var alias = aliasOf(identifier, school), fail = (await store.metaGet("fail:" + alias)) || { n: 0, until: 0 };
+      if (fail.until > now()) return { ok: false, error: "Too many attempts. Try again in " + waitText(fail.until - now()) + "." };
+      var generic = { ok: false, error: "Wrong username or password, or this person has not signed in on this device while online yet." };
+      var fp = await crypto.findUser(alias), ok = false;
+      if (fp) ok = await crypto.unlock(fp, password);
+      if (!ok) {
+        fail.n += 1; if (fail.n >= 5) fail.until = now() + Math.min(900000, 30000 * Math.pow(2, fail.n - 5));
+        await store.metaSet("fail:" + alias, fail); return generic;
+      }
+      if (!(await offlineAllowed(fp))) { await crypto.lock(fp); return { ok: false, error: "Offline access has expired for this account. Connect to the internet and sign in." }; }
+      await store.metaSet("fail:" + alias, { n: 0, until: 0 });
+      await setUser(fp); await store.metaSet("lastActive", now());
+      return { ok: true, fingerprint: fp };
+    }
+
+    /* A person who signed in OFFLINE has no server session yet. With their password we sign them in to the server in the background
+       (the normal /login form), so their waiting changes can be sent. */
+    async function serverLogin(identifier, school, password) {
+      var j0 = await (await fetchFn("/api/sync/session", { cache: "no-store", credentials: "same-origin" })).json();
+      var fd = new env.FormData(); fd.append("csrf_token", j0.csrf); fd.append("username", identifier); fd.append("password", password); if (school) fd.append("school_code", school);
+      try { await fetchFn("/login", { method: "POST", body: fd, credentials: "same-origin" }); } catch (e) { return false; }
+      var j = await (await fetchFn("/api/sync/session", { cache: "no-store", credentials: "same-origin" })).json();
+      return !!(j.authenticated && j.fingerprint === S.fingerprint);
+    }
+
+    /* enroll (first online sign-in on this device) or re-open (later online sign-ins) the person's encrypted storage */
+    async function enrollOrUnlock(fp, aliases, password) {
+      if (!crypto.enabled) return false;
+      var rec = await store.userGet("user:" + fp);
+      if (rec && await crypto.unlock(fp, password)) { await crypto.addAliases(fp, aliases); return true; }
+      return crypto.enroll(fp, aliases, password);          // new person, or the password was changed since: start a fresh key
     }
 
     /* ---------- queue ---------- */
@@ -171,10 +267,11 @@
         capturedAt: prior ? prior.capturedAt : new Date(now()).toISOString(), state: "pending", attempts: 0, error: "", nextAt: 0,
         enc: !!crypto.enabled, label: spec.label || ""
       };
-      entry.payload = await crypto.enc(JSON.stringify(spec.body === undefined ? null : spec.body));
+      entry.kid = "u";
+      entry.payload = await crypto.enc(JSON.stringify(spec.body === undefined ? null : spec.body), S.fingerprint);
       entry.files = [];
       for (var i = 0; i < (spec.files || []).length; i++) {
-        var f = spec.files[i]; entry.files.push({ field: f.field, name: f.name, type: f.type, buf: await crypto.encBuf(f.buffer) });
+        var f = spec.files[i]; entry.files.push({ field: f.field, name: f.name, type: f.type, buf: await crypto.encBuf(f.buffer, S.fingerprint) });
       }
       if (prior) { entry.id = prior.id; }
       await store.put(entry);
@@ -194,7 +291,7 @@
     }
 
     async function buildRequest(e, csrf) {
-      var body = JSON.parse(await crypto.dec(e.payload)), headers = {
+      var body = JSON.parse(await crypto.dec(e.payload, e.userFp, !e.kid)), headers = {
         "X-CSRF-Token": csrf, "X-Change-Id": e.id, "X-Offline-Replay": "1", "X-Captured-At": e.capturedAt, "X-Device-Id": S.deviceId, "Accept": "application/json"
       };
       if (e.baseVersion !== null && e.baseVersion !== undefined) headers["X-Base-Version"] = e.baseVersion;
@@ -205,7 +302,7 @@
         (body || []).forEach(function (kv) { if (kv[0] === "csrf_token") { fd.append("csrf_token", csrf); seen = true; } else fd.append(kv[0], kv[1]); });
         if (!seen) fd.append("csrf_token", csrf);
         for (var i = 0; i < e.files.length; i++) {
-          var f = e.files[i], data = await crypto.decBuf(f.buf);
+          var f = e.files[i], data = await crypto.decBuf(f.buf, e.userFp, !e.kid);
           fd.append(f.field, new env.Blob([data], { type: f.type }), f.name);
         }
         init.body = fd;
@@ -216,8 +313,10 @@
     function permanent(status) { return status >= 400 && status < 500 && status !== 408 && status !== 429; }
 
     async function sendOne(e, csrf) {
-      var r;
-      try { r = await fetchFn(e.url, await buildRequest(e, csrf)); }
+      var r, init;
+      try { init = await buildRequest(e, csrf); }
+      catch (err) { return { kind: "failed", error: "This waiting change can no longer be opened on this device (the password was changed or the data is damaged). Discard it and enter it again." }; }
+      try { r = await fetchFn(e.url, init); }
       catch (err) { return { kind: "retry", error: "Network error" }; }
       if (r.redirected && /\/login/.test(r.url || "")) return { kind: "retry", error: "Your session expired - sign in again to finish syncing" };
       var ack = r.headers && r.headers.get ? r.headers.get("X-Sync-Ack") : null;
@@ -239,7 +338,9 @@
         if (!(await checkConnection())) return snapshot();
         var info;
         try { info = await sessionInfo(); } catch (e) { setStatus("failed", { error: "Could not reach the server session." }); return snapshot(); }
-        if (!info.authenticated) { setStatus("failed", { error: "Please sign in again to finish syncing. Your changes are safe on this device." }); return snapshot(); }
+        if (!info.authenticated) { setStatus("failed", { needsLogin: true, error: "Enter your password to send your waiting changes. They are safe on this device." }); return snapshot(); }
+        S.needsLogin = false;
+        if (crypto.enabled && !(await crypto.isUnlocked(S.fingerprint))) { setStatus("failed", { error: "Enter your password to unlock this device so waiting changes can be sent." }); return snapshot(); }
         var all = await refreshCounts();
         var due = all.filter(function (e) { return e.userFp === S.fingerprint && e.state === "pending" && (opts.manual || e.nextAt <= now()); });
         if (!due.length) { setStatus(S.failed || S.conflicts ? "failed" : "online", { error: S.failed ? "Some changes failed - see the Sync Center." : (S.conflicts ? "Some changes need administrator review." : "") }); return snapshot(); }
@@ -281,7 +382,7 @@
     async function setVersion(key, v) { await store.metaSet("ver:" + key, v); }
     async function hasPending(key) { return (await store.all()).some(function (e) { return e.entityKey === key && e.state === "pending"; }); }
 
-    return { init: init, on: on, state: snapshot, ping: ping, checkConnection: checkConnection, sessionInfo: sessionInfo, offlineAllowed: offlineAllowed,
+    return { init: init, metaGet: function (k) { return store.metaGet(k); }, metaSet: function (k, v) { return store.metaSet(k, v); }, queueAll: function () { return store.all(); }, queueDelete: function (id) { return store.del(id); }, setUser: setUser, serverLogin: serverLogin, offlineLogin: offlineLogin, enrollOrUnlock: enrollOrUnlock, crypto: crypto, aliasOf: aliasOf, on: on, state: snapshot, ping: ping, checkConnection: checkConnection, sessionInfo: sessionInfo, offlineAllowed: offlineAllowed,
              enqueue: enqueue, listQueue: listQueue, remove: remove, retry: retry, syncNow: syncNow, schedule: schedule, refreshCounts: refreshCounts,
              getVersion: getVersion, setVersion: setVersion, hasPending: hasPending, _store: store };
   }

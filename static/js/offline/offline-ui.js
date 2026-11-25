@@ -6,9 +6,22 @@
   if (!window.SHOffline) return;
   var core = SHOffline.boot();
   window.shOffline = core;
+  var OFFLINE_VERSION = "v114";            // bump when the set of prepared pages changes: everyone prepares once more after an upgrade
   var meta = document.querySelector('meta[name="sh-user"]');
   var fingerprint = meta ? meta.getAttribute("content") : "";
   var signedIn = !!fingerprint;
+  /* Sign-in page: remember what was typed for ONE page load so the next page can set up this person's encrypted offline storage
+     (their password is only needed once per device; it is never sent anywhere else and is removed as soon as it has been used). */
+  var loginForm = document.getElementById("unifiedLoginForm");
+  if (loginForm) {
+    try { sessionStorage.removeItem("sh-login"); } catch (e) {}
+    loginForm.addEventListener("submit", function () {
+      try { sessionStorage.setItem("sh-login", JSON.stringify({ u: loginForm.elements.username.value, s: loginForm.elements.school_code ? loginForm.elements.school_code.value : "", p: loginForm.elements.password.value, t: Date.now() })); } catch (e) {}
+    });
+  }
+  function takeHandoff() {
+    try { var raw = sessionStorage.getItem("sh-login"); sessionStorage.removeItem("sh-login"); var h = raw && JSON.parse(raw); return h && Date.now() - h.t < 120000 ? h : null; } catch (e) { return null; }
+  }
   var LABEL = { online: "Online", offline: "Offline", syncing: "Synchronizing…", completed: "Sync Completed", failed: "Sync Failed" };
 
   /* ---------- service worker ---------- */
@@ -47,6 +60,28 @@
     document.documentElement.setAttribute("data-sh-connection", s.online ? "online" : "offline");
     var sc = document.querySelector("[data-sync-center]"); if (sc) renderCenter(s);
   }
+  /* a person who signed in offline has no server session yet: ask for the password once to send their waiting changes */
+  var loginPrompt = false;
+  function promptServerLogin() {
+    if (loginPrompt || !signedIn) return; loginPrompt = true;
+    core.crypto.listUsers().then(function (us) {
+      var me = us.filter(function (u) { return u.fp === fingerprint; })[0], parts = me ? (me.aliases[0] || "|").split("|") : ["", ""];
+      var d = document.createElement("div"); d.className = "sh-prep no-print"; d.setAttribute("role", "dialog");
+      d.innerHTML = "<div class='box'><h2 style='font-size:1.15rem'>You are back online</h2><p>Enter your password to send the changes you made offline.</p><input type='password' autocomplete='current-password' placeholder='Your password' style='width:100%;padding:10px;border-radius:10px;border:0;margin:6px 0'><div class='msg' style='min-height:1.4em;color:#ffb4b4'></div><button type='button' class='go'>Send my changes</button> <button type='button' class='later' style='background:#475569'>Later</button></div>";
+      document.body.appendChild(d);
+      var inp = d.querySelector("input"), msg = d.querySelector(".msg"); inp.focus();
+      d.querySelector(".later").onclick = function () { d.remove(); setTimeout(function () { loginPrompt = false; }, 120000); };
+      function go() {
+        msg.textContent = "";
+        core.serverLogin(parts[0], parts[1], inp.value).then(function (ok) {
+          if (!ok) { msg.textContent = "Could not sign in. Check your password."; return; }
+          d.remove(); loginPrompt = false; core.syncNow({ manual: true });
+        }).catch(function () { msg.textContent = "Could not reach the server."; });
+      }
+      d.querySelector(".go").onclick = go; inp.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    });
+  }
+  core.on("status", function (s) { if (s.needsLogin && s.online) promptServerLogin(); });
   core.on("status", render);
 
   /* ---------- connectivity + automatic sync ---------- */
@@ -106,15 +141,33 @@
     }).catch(function (err) { toast(err && err.message ? err.message : "This could not be saved offline."); });
   }, true);
 
-  /* ---------- logout: never throw away queued work silently; always forget cached pages ---------- */
+  /* ---------- sign out / lock: the person's key is removed from this device; their encrypted pages and waiting changes stay ---------- */
+  function lockNow(thenGo) {
+    core.crypto.lock(fingerprint).then(function () {
+      if (!("serviceWorker" in navigator)) return;
+      return navigator.serviceWorker.ready.then(function (reg) {
+        return new Promise(function (resolve) {
+          var ch = new MessageChannel(); ch.port1.onmessage = function () { resolve(); }; setTimeout(resolve, 3000);
+          if (reg.active) reg.active.postMessage({ type: "LOCK" }, [ch.port2]); else resolve();
+        });
+      });
+    }).catch(function () {}).then(function () { if (thenGo) location.href = thenGo; });
+  }
   document.addEventListener("click", function (ev) {
     var a = ev.target.closest && ev.target.closest('a[href$="/logout"]');
     if (!a || !signedIn) return;
     var s = core.state(), n = s.pending + s.failed + s.conflicts;
-    if (n && !window.confirm("You have " + n + " change(s) that have not reached the server. They stay safely on this device and will sync the next time you sign in with a connection. Sign out now?")) { ev.preventDefault(); return; }
-    swSend({ type: "PURGE_PAGES" });
-    try { localStorage.removeItem("sh-ready-" + fingerprint); } catch (e) {}   // next sign-in prepares offline pages again
+    if (n && !window.confirm("You have " + n + " change(s) that have not reached the server. They stay safely (encrypted) on this device and will sync the next time you sign in with a connection. Sign out now?")) { ev.preventDefault(); return; }
+    ev.preventDefault();
+    lockNow(s.online ? a.href : "/offline");                  // offline: no server to tell; the offline sign-in page is shown
   }, true);
+
+  /* ---------- offline idle lock: after 30 minutes without use while offline, the password is needed again ---------- */
+  var IDLE_MS = 30 * 60 * 1000, lastTouch = 0;
+  function touch() { var t = Date.now(); if (t - lastTouch > 20000) { lastTouch = t; try { localStorage.setItem("sh-last-active", String(t)); } catch (e) {} } }
+  ["click", "keydown", "touchstart", "scroll"].forEach(function (n) { document.addEventListener(n, touch, { passive: true, capture: true }); });
+  function idleExpired() { var t = 0; try { t = parseInt(localStorage.getItem("sh-last-active"), 10) || 0; } catch (e) {} return t && Date.now() - t > IDLE_MS; }
+  setInterval(function () { if (signedIn && !core.state().online && idleExpired()) lockNow("/offline"); }, 60000);
 
   /* ---------- Sync Center: "this device" panel ---------- */
   function renderCenter(s) {
@@ -125,6 +178,17 @@
     set("last", s.lastSync ? new Date(s.lastSync).toLocaleString() : "Never"); set("error", s.error || "None");
     set("enc", s.encrypted ? "Queued changes are encrypted on this device" : "This browser cannot encrypt local data (use HTTPS or localhost)");
     var bar = root.querySelector("[data-k=bar]"); if (bar) { var p = s.progress && s.progress.total ? Math.round(100 * s.progress.done / s.progress.total) : (s.status === "completed" ? 100 : 0); bar.style.width = p + "%"; bar.setAttribute("aria-valuenow", p); }
+    var ub = root.querySelector("[data-k=users]");
+    if (ub) core.crypto.listUsers().then(function (us) {
+      ub.textContent = "";
+      if (!us.length) { var r0 = document.createElement("tr"), c0 = document.createElement("td"); c0.colSpan = 3; c0.textContent = core.state().encrypted ? "Nobody yet." : "Offline sign-in is not available here (needs HTTPS or localhost)."; r0.appendChild(c0); ub.appendChild(r0); return; }
+      us.forEach(function (u) {
+        var tr = document.createElement("tr"), t1 = document.createElement("td"), t2 = document.createElement("td"), t3 = document.createElement("td");
+        t1.textContent = (u.aliases[0] || "").split("|")[0] + (u.fp === fingerprint ? "  (you)" : ""); t2.textContent = new Date(u.created).toLocaleDateString();
+        var b = document.createElement("button"); b.className = "btn btn-sm btn-outline-danger"; b.textContent = "Remove from this device";
+        b.onclick = function () { removePerson(u); }; t3.appendChild(b); tr.appendChild(t1); tr.appendChild(t2); tr.appendChild(t3); ub.appendChild(tr);
+      });
+    });
     core.listQueue().then(function (rows) {
       var tb = root.querySelector("[data-k=queue]"); if (!tb) return;
       tb.textContent = "";
@@ -139,6 +203,19 @@
       });
     });
   }
+  function removePerson(u) {
+    core.queueAll().then(function (all) {
+      var mine = all.filter(function (e) { return e.userFp === u.fp; });
+      if (!window.confirm("Remove " + (u.aliases[0] || "this person").split("|")[0] + " from this device? Their offline pages and " + mine.length + " unsent change(s) on this device will be deleted. They can sign in online again later to set it up again.")) return;
+      return Promise.all(mine.map(function (e) { return core.queueDelete(e.id); })).then(function () { return core.crypto.removeUser(u.fp); })
+        .then(function () { return core.metaSet("prepared:" + u.fp, ""); })
+        .then(function () { swSend({ type: "PURGE_USER", fingerprint: u.fp }); if (u.fp === fingerprint) lockNow("/offline"); else { core.refreshCounts().then(function () { renderCenter(core.state()); }); } });
+    });
+  }
+  document.addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("[data-refresh-offline]");
+    if (b) { ev.preventDefault(); b.disabled = true; prepareOffline().then(function (ok) { b.disabled = false; toast(ok ? "Offline pages refreshed." : "Could not refresh offline pages right now."); }); }
+  });
   document.addEventListener("click", function (ev) {
     var b = ev.target.closest && ev.target.closest("[data-sync-now]");
     if (b) { ev.preventDefault(); core.syncNow({ manual: true }); }
@@ -169,10 +246,9 @@
     });
   });
 
-  /* ---------- offline preparation: right after sign-in, in the background ---------- */
+  /* ---------- offline preparation: ONCE per person per device, silently, right after their first online sign-in ---------- */
   var swMsg = null;
   if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", function (ev) { if (swMsg) swMsg(ev.data || {}); });
-  var READY_KEY = "sh-ready-" + fingerprint;
   function menuUrls() {
     var urls = {}; urls[location.pathname + location.search] = 1; urls["/dashboard"] = 1; urls["/sync"] = 1;
     document.querySelectorAll("a.nav-item[href], .mobile-tabs a[href], .app-sidebar a[href]").forEach(function (a) {
@@ -180,53 +256,81 @@
     });
     return Object.keys(urls);
   }
-  function overlay() {
-    var d = document.createElement("div"); d.className = "sh-prep"; d.setAttribute("role", "alertdialog"); d.setAttribute("aria-live", "polite");
-    d.innerHTML = "<div class='box'><h2 style='font-size:1.25rem'>Getting your school ready for offline use</h2><p>Downloading your pages in the background. This takes a few seconds and only happens after you sign in.</p><div class='bar'><b></b></div><div class='cnt'>Starting…</div><button type='button' hidden>Continue anyway</button></div>";
-    document.body.appendChild(d); var btn = d.querySelector("button"); btn.onclick = function () { d.remove(); };
-    setTimeout(function () { btn.hidden = false; }, 25000);
-    return d;
-  }
-  function prepareOffline(blocking) {
+  function prepareOffline() {
     if (!("serviceWorker" in navigator) || !window.isSecureContext) { prep.state = "unsupported"; render(core.state()); return Promise.resolve(false); }
-    var ov = null;                                              // preparation is silent: nothing is shown to the user
     prep = { state: "working", done: 0, total: 0 };
     return new Promise(function (resolve) {
       var finished = false;
       function finish(ok) {
         if (finished) return; finished = true; swMsg = null;
-        prep.state = ok ? "ready" : "idle"; if (ok) { try { localStorage.setItem(READY_KEY, String(Date.now())); } catch (e) {} }
-        render(core.state()); resolve(ok);
+        prep.state = ok ? "ready" : "idle";
+        (ok ? core.metaSet("prepared:" + fingerprint, OFFLINE_VERSION) : Promise.resolve()).then(function () { render(core.state()); resolve(ok); });
       }
       swMsg = function (m) {
-        if (m.type === "PREPARE_PROGRESS") {
-          prep.done = m.done; prep.total = m.total;
-          if (ov) { ov.querySelector(".bar b").style.width = Math.min(100, Math.round(100 * m.done / Math.max(1, m.total))) + "%"; ov.querySelector(".cnt").textContent = m.done + " of " + m.total + " pages"; }
-        } else if (m.type === "PREPARE_DONE") finish(m.cached > 0);
+        if (m.type === "PREPARE_PROGRESS") { prep.done = m.done; prep.total = m.total; }
+        else if (m.type === "PREPARE_DONE") finish(m.cached > 0);
       };
       navigator.serviceWorker.ready.then(function (reg) {
         (navigator.serviceWorker.controller || reg.active).postMessage({ type: "PREPARE", fingerprint: fingerprint, urls: menuUrls() });
       }).catch(function () { finish(false); });
-      setTimeout(function () { finish(false); }, 120000);
+      setTimeout(function () { finish(false); }, 300000);
     });
   }
   window.shPrepareOffline = prepareOffline;
+
+  /* ---------- unlock prompt: only when somebody is already signed in online but their offline storage is locked ---------- */
+  function promptUnlock(info) {
+    try { if (sessionStorage.getItem("sh-unlock-later")) return; } catch (e) {}
+    var d = document.createElement("div"); d.className = "sh-prep no-print"; d.setAttribute("role", "dialog");
+    d.innerHTML = "<div class='box'><h2 style='font-size:1.15rem'>Turn on offline mode on this device</h2><p>Enter your password once so your school data can be kept safely (encrypted) on this device and used without internet.</p><input type='password' autocomplete='current-password' placeholder='Your password' style='width:100%;padding:10px;border-radius:10px;border:0;margin:6px 0'><div class='msg' style='min-height:1.4em;color:#ffb4b4'></div><button type='button' class='go'>Turn on</button> <button type='button' class='later' style='background:#475569'>Not now</button></div>";
+    document.body.appendChild(d);
+    var inp = d.querySelector("input"), msg = d.querySelector(".msg"); inp.focus();
+    d.querySelector(".later").onclick = function () { try { sessionStorage.setItem("sh-unlock-later", "1"); } catch (e) {} d.remove(); };
+    function go() {
+      msg.textContent = "";
+      core.sessionInfo().then(function (i) {
+        return fetch("/api/sync/verify-password", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-CSRF-Token": i.csrf }, body: JSON.stringify({ password: inp.value }) });
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.ok) { msg.textContent = j.error || "That password is not correct."; return; }
+        return core.enrollOrUnlock(fingerprint, [core.aliasOf(info.username, "")], inp.value).then(function (ok) { if (ok) { d.remove(); afterUnlocked(); } else msg.textContent = "Could not unlock this device."; });
+      }).catch(function () { msg.textContent = "Could not reach the server."; });
+    }
+    d.querySelector(".go").onclick = go; inp.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+  }
+
+  function afterUnlocked() {
+    swSend({ type: "SET_USER", fingerprint: fingerprint });
+    core.seedScoreVersions(false);
+    if (core.state().pending) core.syncNow();
+    core.metaGet("prepared:" + fingerprint).then(function (v) {
+      if (v !== OFFLINE_VERSION) prepareOffline();             // first time for this person on this device (or after an upgrade): no repeats on later sign-ins
+      else { prep.state = "ready"; render(core.state()); }
+    });
+  }
 
   /* ---------- start ---------- */
   core.ready.then(function () {
     render(core.state());
     if (!signedIn) return;
-    core.seedScoreVersions(true);                                         // also when this page came from the offline cache
-    swSend({ type: "SET_USER", fingerprint: fingerprint });
-    core.checkConnection().then(function (up) {
-      if (!up) { wasOffline = true; gate(); return; }
-      core.sessionInfo().then(function () {
-        core.seedScoreVersions(false);
-        if (core.state().pending) core.syncNow();
-        var last = 0; try { last = parseInt(localStorage.getItem(READY_KEY), 10) || 0; } catch (e) {}
-        if (!last) prepareOffline(false);                                 // first sign-in on this device: start NOW, silently in the background
-        else { prep.state = "ready"; render(core.state()); if (Date.now() - last > 3600000) prepareOffline(false); }   // later: refresh quietly once an hour
-      }).catch(function () {});
-    });
+    core.setUser(fingerprint).then(function () {
+      core.seedScoreVersions(true);                                         // also when this page came from the offline cache
+      var handoff = takeHandoff();
+      return core.checkConnection().then(function (up) {
+        if (!up) {
+          wasOffline = true; swSend({ type: "SET_USER", fingerprint: fingerprint });
+          if (idleExpired()) { lockNow("/offline"); return; }
+          gate(); return;
+        }
+        return core.sessionInfo().then(function (info) {
+          if (!info.authenticated) return;
+          var aliases = handoff ? [core.aliasOf(handoff.u, handoff.s), core.aliasOf(info.username, handoff.s)] : [];
+          var step = handoff ? core.enrollOrUnlock(fingerprint, aliases, handoff.p) : Promise.resolve();
+          return step.then(function () { return core.crypto.enabled ? core.crypto.isUnlocked(fingerprint) : true; }).then(function (ok) {
+            if (core.crypto.enabled && !ok) { swSend({ type: "SET_USER", fingerprint: fingerprint }); promptUnlock(info); return; }
+            afterUnlocked();
+          });
+        });
+      });
+    }).catch(function () {});
   });
 })();
