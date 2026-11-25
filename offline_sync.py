@@ -21,7 +21,9 @@ import datetime
 import hashlib
 import json
 import re
+import time
 
+from werkzeug.security import check_password_hash
 from flask import Blueprint, current_app, g, get_flashed_messages, jsonify, make_response, redirect, render_template, request, session, url_for, flash
 
 import v63_core
@@ -37,6 +39,7 @@ SCORE_FIELDS = ("ca1", "ca2", "ca3", "exam")
 MAX_STORED_BODY = 20000
 
 _hooks = {}
+_pw_fail = {}          # user id -> [attempt times]; slows down password guessing on the offline-unlock endpoint
 
 
 def _now():
@@ -283,12 +286,42 @@ def _register_routes():
     @sync_bp.route("/api/sync/session")
     def sync_session():
         """Tells the browser who is signed in (so it can namespace its local data) and hands it a fresh CSRF token."""
-        resp = jsonify({"authenticated": bool(session.get("user_id")), "fingerprint": user_fingerprint(),
+        uname = ""
+        if session.get("user_id"):
+            conn = get_db()
+            try:
+                r = conn.execute("SELECT username FROM users WHERE id=?", (session.get("user_id"),)).fetchone()
+                uname = (r["username"] if r else "") or ""
+            finally:
+                conn.close()
+        resp = jsonify({"authenticated": bool(session.get("user_id")), "fingerprint": user_fingerprint(), "username": uname,
                         "role": session.get("role"), "school_id": session.get("school_id"),
-                        "csrf": _hooks["get_csrf_token"]() if session.get("user_id") else "",
+                        "csrf": _hooks["get_csrf_token"](),
                         "verified_at": _now(), "offline_window_days": int(current_app.config.get("OFFLINE_WINDOW_DAYS", 7))})
         resp.headers["Cache-Control"] = "no-store"
         return resp
+
+    @sync_bp.route("/api/sync/verify-password", methods=["POST"])
+    @login_required()
+    def sync_verify_password():
+        """Lets a person who is ALREADY signed in re-open their encrypted offline storage on this device (for example after an
+        idle lock) without signing out. The password is checked here, then used in the browser only to unwrap their key."""
+        uid = session.get("user_id")
+        now = time.time()
+        recent = [t for t in _pw_fail.get(uid, []) if now - t < 600]
+        if len(recent) >= 5:
+            return jsonify({"ok": False, "error": "Too many attempts. Try again in a few minutes."}), 429
+        pw = (request.get_json(silent=True) or {}).get("password") or ""
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT password_hash FROM users WHERE id=?", (uid,)).fetchone()
+        finally:
+            conn.close()
+        if not row or not pw or not check_password_hash(row["password_hash"], pw):
+            _pw_fail[uid] = recent + [now]
+            return jsonify({"ok": False, "error": "That password is not correct."}), 403
+        _pw_fail.pop(uid, None)
+        return jsonify({"ok": True})
 
     @sync_bp.route("/api/sync/status")
     @login_required()
