@@ -1,6 +1,26 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline — My School Hub</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#00135b;color:#fff;font-family:Arial,Helvetica,sans-serif;text-align:center;padding:24px}
-.box{max-width:400px}img{border-radius:22px}p{line-height:1.55;color:#cfe0ff}a,button{display:inline-block;margin:6px;padding:12px 20px;border:0;border-radius:12px;background:#2f7bff;color:#fff;font-size:1rem;font-weight:700;text-decoration:none;cursor:pointer}</style></head>
-<body><div class="box"><img src="/static/icons/icon-192.png?v=3" width="88" height="88" alt=""><h1 style="font-size:1.3rem">You're offline</h1>
-<p>This page has not been opened on this device yet, so it is not available offline. Pages you have already visited while signed in still work, and anything you save is kept on this device and sent automatically when the connection returns.</p>
-<button onclick="location.reload()">Try again</button><a href="/dashboard">Open dashboard</a></div></body></html>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#00135b;color:#fff;font-family:system-ui,Arial,Helvetica,sans-serif;text-align:center;padding:24px}
+.box{max-width:400px;width:100%}img{border-radius:22px}h1{font-size:1.3rem}p{line-height:1.55;color:#cfe0ff}
+input{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:0;margin:6px 0;font-size:1rem}
+button,a.btn{display:inline-block;margin:6px;padding:12px 20px;border:0;border-radius:12px;background:#2f7bff;color:#fff;font-size:1rem;font-weight:700;text-decoration:none;cursor:pointer}
+button.alt{background:#475569}.msg{min-height:1.4em;color:#ffb4b4;font-weight:600}details{margin:4px 0;color:#cfe0ff;text-align:left}[hidden]{display:none!important}</style></head>
+<body><div class="box"><img src="/static/icons/icon-192.png?v=3" width="88" height="88" alt="">
+<h1 id="title">You're offline</h1>
+<section id="signin" hidden>
+  <p>Sign in with the same username and password you use online. This works for people who have already signed in on this device while online.</p>
+  <form id="offForm" autocomplete="on">
+    <input name="username" placeholder="Username, email, phone or admission no." autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <details><summary>School ID / Tenant ID (only if you type one when signing in online)</summary><input name="school_code" placeholder="School ID" autocapitalize="none"></details>
+    <div class="msg" id="msg" role="alert"></div>
+    <button type="submit">Sign in offline</button>
+  </form>
+</section>
+<section id="signedin" hidden>
+  <p>This page has not been opened on this device yet, so it is not available offline. Everything else you have already used is.</p>
+  <a class="btn" href="/dashboard">Open dashboard</a><button class="alt" id="switch" type="button">Sign out</button>
+</section>
+<section id="online" hidden><p>You are back online.</p><a class="btn" href="/login">Sign in</a></section>
+<noscript><p>JavaScript is needed for offline sign-in.</p></noscript>
+</div>
+<script src="/static/js/offline/offline-core.js"></script><script src="/static/js/offline/offline-login.js"></script></body></html>
