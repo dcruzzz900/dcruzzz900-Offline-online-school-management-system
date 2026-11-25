@@ -52,7 +52,7 @@ for t in ("sync_changes", "sync_conflicts", "sync_log"):
 anon = A.app.test_client()
 r = anon.get("/api/sync/ping"); check("ping is public, JSON and never cached", r.status_code == 200 and r.json["ok"] and "no-store" in r.headers["Cache-Control"])
 check("ping answers HEAD too", anon.head("/api/sync/ping").status_code == 200)
-check("session endpoint says 'not authenticated' to strangers and hands out no token", anon.get("/api/sync/session").json == {**anon.get("/api/sync/session").json, "authenticated": False, "csrf": ""})
+check("session endpoint says 'not authenticated' to strangers (and gives only the same sign-in token the login page has)", anon.get("/api/sync/session").json["authenticated"] is False and len(anon.get("/api/sync/session").json["csrf"]) > 20 and anon.get("/api/sync/session").json["username"] == "")
 s = FT.get("/api/sync/session").json
 check("session endpoint gives a signed-in user a fingerprint + csrf", s["authenticated"] and len(s["fingerprint"]) == 16 and len(s["csrf"]) > 20, s)
 page = FT.get("/dashboard")
@@ -209,6 +209,18 @@ st = FT.get("/api/sync/status").json
 check("status counts applied / failed / conflicts for my school only", st["ok"] and st["applied"] >= 3 and st["conflicts"] >= 2 and st["failed"] >= 1, st)
 r = FT.post("/api/sync/report", json={"device_id": "dev-test", "synced": 3, "failed": 1, "conflicts": 2}, headers={"X-CSRF-Token": csrf(FT)})
 check("device sync reports are stored for administrators", r.json["ok"] and one("SELECT record_count FROM sync_log WHERE device_id='dev-test'") == 3)
+
+print("=== 12) multi-user offline support (V114) ===")
+check("session endpoint returns the real username (used for offline sign-in aliases)", FT.get("/api/sync/session").json["username"] == "aokafor" and ADMIN.get("/api/sync/session").json["username"] == "admin")
+check("the offline page offers offline sign-in", b'id="offForm"' in anon.get("/offline").data and b"offline-login.js" in anon.get("/offline").data)
+check("verify-password needs a signed-in user", anon.post("/api/sync/verify-password", json={"password": "Pass1234"}).status_code in (302, 401, 403))
+r = FT.post("/api/sync/verify-password", json={"password": "Pass1234"}, headers={"X-CSRF-Token": csrf(FT)})
+check("the right password is accepted", r.status_code == 200 and r.json["ok"])
+for i in range(5): bad = FT.post("/api/sync/verify-password", json={"password": f"wrong{i}"}, headers={"X-CSRF-Token": csrf(FT)})
+check("wrong passwords are refused, and after 5 tries the endpoint slows guessing down (429)", bad.status_code == 403 and FT.post("/api/sync/verify-password", json={"password": "Pass1234"}, headers={"X-CSRF-Token": csrf(FT)}).status_code == 429)
+check("one person's failed tries do not lock another person out", ADMIN.post("/api/sync/verify-password", json={"password": "Pass1234"}, headers={"X-CSRF-Token": csrf(ADMIN)}).json["ok"])
+check("Sync Center has the people-on-this-device panel", 'data-k="users"' in html(FT.get("/sync")) and "data-refresh-offline" in html(FT.get("/sync")))
+check("service worker keeps one encrypted cache per person", b"PAGE_PREFIX + fp" in anon.get("/service-worker.js").data and b"AES-GCM" in anon.get("/service-worker.js").data)
 
 print(f"\nPASSED {PASS}   FAILED {len(FAIL)}")
 if FAIL: print("FAILED:", FAIL); sys.exit(1)
