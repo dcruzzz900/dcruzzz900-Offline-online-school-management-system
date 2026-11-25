@@ -10,7 +10,7 @@ function fakeServer() {
   s.fetch = async (url, init = {}) => {
     if (!s.online) throw new TypeError("network down");
     if (url === "/api/sync/ping") return res(200, { ok: true });
-    if (url === "/api/sync/session") return res(200, { authenticated: s.authed, fingerprint: "fp-teacher", csrf: "tok-1", offline_window_days: 7 });
+    if (url === "/api/sync/session") return res(200, { authenticated: s.authed, fingerprint: s.fp || "fp-teacher", username: "aokafor", csrf: "tok-1", offline_window_days: 7 });
     if (url === "/api/sync/report") return res(200, { ok: true });
     const id = init.headers["X-Change-Id"]; s.log.push({ url, id, headers: init.headers, body: init.body });
     if (s.mode[id]) return s.mode[id](id);
@@ -20,13 +20,17 @@ function fakeServer() {
   };
   return s;
 }
+const SUB = globalThis.crypto.subtle, FAST = { iterations: 1000 };      // few PBKDF2 rounds only to keep the tests quick
 async function make(server, opts = {}) {
-  const store = memoryStore(); let now = server.clock;
-  const core = createCore({ store, crypto: opts.plain ? makeCrypto(null, store) : makeCrypto(globalThis.crypto.subtle, store), fetch: server.fetch, now: () => now, uuid: (() => { let n = 0; return () => "uuid-" + (++n).toString().padStart(8, "0"); })(),
+  const store = opts.store || memoryStore(); let now = server.clock;
+  const crypto = opts.plain ? makeCrypto(null, store) : makeCrypto(SUB, store, FAST);
+  const core = createCore({ store, crypto, fetch: server.fetch, now: () => now, uuid: (() => { let n = 0; return () => "uuid-" + (++n).toString().padStart(8, "0"); })(),
     FormData: class { constructor() { this.p = []; } append(k, v) { this.p.push([k, v]); } }, Blob: class { constructor(p, o) { this.parts = p; this.type = o.type; } } });
-  await core.init(); await store._x; await store.metaSet("fingerprint", "fp-teacher"); await core.init();
+  await core.init();
+  if (!opts.plain && !opts.noEnroll) await crypto.enroll("fp-teacher", ["aokafor|"], "pw-teacher");
+  await core.setUser("fp-teacher");
   core.tick = (ms) => { now += ms; };
-  return { core, store };
+  return { core, store, crypto };
 }
 const score = (n, ca1) => ({ method: "POST", url: "/api/scores/1/1/row", kind: "json", body: { student_id: n, ca1: String(ca1) }, entityKey: "score:" + n, baseVersion: "v0" });
 
@@ -70,7 +74,7 @@ const score = (n, ca1) => ({ method: "POST", url: "/api/scores/1/1/row", kind: "
     const sv = fakeServer(), { core } = await make(sv); await core.enqueue(score(1, 1)); await core.enqueue(score(2, 2));
     let calls = 0; const orig = sv.fetch;
     sv.fetch = async (u, i) => { if (/scores/.test(u) && ++calls === 1) throw new TypeError("dropped"); return orig(u, i); };
-    const c2 = createCore({ store: core._store, crypto: makeCrypto(globalThis.crypto.subtle, core._store), fetch: (u, i) => sv.fetch(u, i), now: () => sv.clock, uuid: () => "x" + Math.random().toString(16).slice(2, 12) });
+    const c2 = createCore({ store: core._store, crypto: makeCrypto(SUB, core._store, FAST), fetch: (u, i) => sv.fetch(u, i), now: () => sv.clock, uuid: () => "x" + Math.random().toString(16).slice(2, 12) });
     await c2.init(); await c2.syncNow();
     assert.strictEqual(c2.state().pending, 2, "nothing lost"); assert.strictEqual(c2.state().status, "failed");
     sv.clock += 3000; await c2.syncNow(); assert.strictEqual(c2.state().pending, 0, "recovered once the back-off passed"); assert.strictEqual(c2.state().status, "completed");
@@ -102,13 +106,14 @@ const score = (n, ca1) => ({ method: "POST", url: "/api/scores/1/1/row", kind: "
   });
   await t("signed-out device keeps the queue and reports 'Sync Failed' with a clear message", async () => {
     const sv = fakeServer(), { core } = await make(sv); await core.enqueue(score(1, 1)); sv.authed = false; await core.syncNow();
-    assert.strictEqual(core.state().pending, 1); assert.strictEqual(core.state().status, "failed"); assert.ok(/sign in/i.test(core.state().error));
+    assert.strictEqual(core.state().pending, 1); assert.strictEqual(core.state().status, "failed"); assert.ok(/password/i.test(core.state().error)); assert.strictEqual(core.state().needsLogin, true);
   });
   await t("changes belong to their user: another user on the same device never replays them", async () => {
     const sv = fakeServer(), { core, store } = await make(sv); await core.enqueue(score(1, 1));
-    await store.metaSet("fingerprint", "fp-other"); const orig = sv.fetch;
-    sv.fetch = async (u, i) => { const r = await orig(u, i); if (u === "/api/sync/session") r.json = async () => ({ authenticated: true, fingerprint: "fp-other", csrf: "t", offline_window_days: 7 }); return r; };
-    const c2 = createCore({ store, crypto: makeCrypto(globalThis.crypto.subtle, store), fetch: (u, i) => sv.fetch(u, i), now: () => sv.clock, uuid: () => "y1234567" });
+    await store.metaSet("fingerprint", "fp-other"); sv.fp = "fp-other"; const orig = sv.fetch;
+    sv.fetch = async (u, i) => { const r = await orig(u, i); if (u === "/api/sync/session") return r; };
+    const cr2 = makeCrypto(SUB, store, FAST); await cr2.enroll("fp-other", ["other|"], "pw-other");
+    const c2 = createCore({ store, crypto: cr2, fetch: (u, i) => sv.fetch(u, i), now: () => sv.clock, uuid: () => "y1234567" });
     await c2.init(); await c2.syncNow();
     assert.strictEqual(sv.log.length, 0, "nothing sent"); assert.strictEqual((await c2.listQueue())[0].mine, false); assert.strictEqual(c2.state().otherUsers, 1);
   });
@@ -137,6 +142,92 @@ const score = (n, ca1) => ({ method: "POST", url: "/api/scores/1/1/row", kind: "
   await t("not signed in: nothing can be queued", async () => {
     const sv = fakeServer(), store = memoryStore(), core = createCore({ store, crypto: makeCrypto(null, store), fetch: sv.fetch });
     await core.init(); let err; try { await core.enqueue(score(1, 1)); } catch (e) { err = e; } assert.ok(err);
+  });
+
+  /* ---------------- V114: several people on one device, offline sign-in, per-person encryption ---------------- */
+  const mkUsers = async (sv) => {
+    const store = memoryStore(), crypto = makeCrypto(SUB, store, FAST), now = () => sv.clock;
+    const core = createCore({ store, crypto, fetch: sv.fetch, now, uuid: (() => { let n = 0; return () => "mu-" + (++n).toString().padStart(8, "0"); })() });
+    await core.init();
+    await crypto.enroll("fp-A", ["ada|"], "pw-A"); await crypto.enroll("fp-B", ["ben|", "ben@school.ng|"], "pw-B");
+    return { core, store, crypto };
+  };
+  await t("two people on one device: each one's queued data is encrypted with their own key", async () => {
+    const sv = fakeServer(), { core, store, crypto } = await mkUsers(sv);
+    await core.setUser("fp-A"); await core.enqueue({ ...score(1, 10), body: { student_id: 1, note: "ADA-SECRET" } });
+    await core.setUser("fp-B"); await core.enqueue({ ...score(2, 20), body: { student_id: 2, note: "BEN-SECRET" } });
+    const raw = JSON.stringify(await store.all()); assert.ok(!raw.includes("ADA-SECRET") && !raw.includes("BEN-SECRET"));
+    const [a, b] = await store.all(); assert.strictEqual(a.userFp, "fp-A"); assert.strictEqual(b.userFp, "fp-B");
+    assert.ok((await crypto.dec(a.payload, "fp-A")).includes("ADA-SECRET"));
+    await crypto.lock("fp-A");
+    await assert.rejects(() => crypto.dec(a.payload, "fp-A"), /locked/);
+    await assert.rejects(() => crypto.dec(a.payload, "fp-B"), "B's key cannot open A's data");
+  });
+  await t("signing out locks a person's data; the right password re-opens it, a wrong one never does", async () => {
+    const sv = fakeServer(), { crypto } = await mkUsers(sv);
+    assert.strictEqual(await crypto.isUnlocked("fp-A"), true); await crypto.lock("fp-A"); assert.strictEqual(await crypto.isUnlocked("fp-A"), false);
+    assert.strictEqual(await crypto.unlock("fp-A", "wrong"), false); assert.strictEqual(await crypto.isUnlocked("fp-A"), false);
+    assert.strictEqual(await crypto.unlock("fp-A", "pw-B"), false, "another person's password does not open it");
+    assert.strictEqual(await crypto.unlock("fp-A", "pw-A"), true); assert.strictEqual(await crypto.isUnlocked("fp-A"), true);
+  });
+  await t("offline sign-in: right password signs in, wrong/unknown are refused with the same message", async () => {
+    const sv = fakeServer(), { core, crypto } = await mkUsers(sv);
+    await core.sessionInfo(); sv.fp = "fp-A"; await core.sessionInfo();                         // online verification stamps fp-A
+    await crypto.lock("fp-A");
+    const bad = await core.offlineLogin("ada", "", "nope"), unknown = await core.offlineLogin("nobody", "", "pw-A");
+    assert.strictEqual(bad.ok, false); assert.strictEqual(unknown.ok, false); assert.strictEqual(bad.error, unknown.error, "no hint whether the username exists");
+    assert.strictEqual(await crypto.isUnlocked("fp-A"), false);
+    const ok = await core.offlineLogin("  ADA ", "", "pw-A");
+    assert.deepStrictEqual([ok.ok, ok.fingerprint], [true, "fp-A"]); assert.strictEqual(await crypto.isUnlocked("fp-A"), true); assert.strictEqual(core.state().fingerprint, "fp-A");
+  });
+  await t("offline sign-in works with any identifier the person used online (email, username, school id)", async () => {
+    const sv = fakeServer(), { core, crypto } = await mkUsers(sv); sv.fp = "fp-B"; await core.sessionInfo();
+    await crypto.lock("fp-B");
+    assert.strictEqual((await core.offlineLogin("Ben@School.ng", "", "pw-B")).ok, true);
+    await crypto.lock("fp-B"); await crypto.enroll("fp-B", ["ben|gss01"], "pw-B");
+    assert.strictEqual((await core.offlineLogin("ben", "GSS01", "pw-B")).ok, true, "school id is part of the identity");
+    assert.strictEqual((await core.offlineLogin("ben", "other-school", "pw-B")).ok, false);
+  });
+  await t("password guessing is slowed down: 5 wrong tries lock that account for a while", async () => {
+    const sv = fakeServer(), { core, crypto } = await mkUsers(sv); sv.fp = "fp-A"; await core.sessionInfo(); await crypto.lock("fp-A");
+    for (let i = 0; i < 5; i++) assert.strictEqual((await core.offlineLogin("ada", "", "bad" + i)).ok, false);
+    const r = await core.offlineLogin("ada", "", "pw-A");
+    assert.strictEqual(r.ok, false); assert.ok(/Too many attempts/.test(r.error), "even the RIGHT password is refused during the lock-out");
+    core.tick = null; sv.clock += 40000; const r2 = await core.offlineLogin("ada", "", "pw-A"); assert.strictEqual(r2.ok, true, "works again after the wait");
+  });
+  await t("offline sign-in is refused once the offline window (7 days since last online sign-in) has passed", async () => {
+    const sv = fakeServer(), { core, crypto } = await mkUsers(sv); sv.fp = "fp-A"; await core.sessionInfo(); await crypto.lock("fp-A");
+    sv.clock += 8 * 86400000; const r = await core.offlineLogin("ada", "", "pw-A");
+    assert.strictEqual(r.ok, false); assert.ok(/expired/.test(r.error)); assert.strictEqual(await crypto.isUnlocked("fp-A"), false, "key is not left open");
+  });
+  await t("each person's waiting changes are sent only when THEY are signed in, with their own key", async () => {
+    const sv = fakeServer(), { core, store, crypto } = await mkUsers(sv);
+    await core.setUser("fp-A"); await core.enqueue(score(1, 10)); await core.setUser("fp-B"); await core.enqueue(score(2, 20));
+    sv.fp = "fp-B"; await core.syncNow();
+    assert.deepStrictEqual(sv.log.map((l) => JSON.parse(l.body).student_id), [2], "only Ben's change was sent");
+    assert.strictEqual((await store.all()).length, 1, "Ada's change is still waiting, untouched");
+    await crypto.lock("fp-A"); sv.fp = "fp-A"; await core.setUser("fp-A"); await core.syncNow();
+    assert.strictEqual(sv.log.length, 1, "Ada is locked: nothing sent, and a clear message is shown"); assert.ok(/password/.test(core.state().error));
+    assert.strictEqual((await core.offlineLogin("ada", "", "pw-A")).ok, true, "Ada signs in again with her password");
+    await core.syncNow();
+    assert.deepStrictEqual(sv.log.map((l) => JSON.parse(l.body).student_id), [2, 1]); assert.strictEqual((await store.all()).length, 0);
+  });
+  await t("enrolling again after a password change starts a fresh key; old waiting data is reported, not retried forever", async () => {
+    const sv = fakeServer(), { core, store } = await mkUsers(sv); await core.setUser("fp-A"); await core.enqueue(score(1, 10));
+    assert.strictEqual(await core.enrollOrUnlock("fp-A", ["ada|"], "pw-A"), true, "same password: simply re-opens");
+    assert.strictEqual(await core.enrollOrUnlock("fp-A", ["ada|"], "NEW-pw"), true, "new password: new key");
+    sv.fp = "fp-A"; await core.syncNow(); const q = await core.listQueue();
+    assert.strictEqual(q[0].state, "failed"); assert.ok(/can no longer be opened/.test(q[0].error)); assert.strictEqual(sv.log.length, 0);
+  });
+  await t("a person can be removed from the device: their key, aliases and sign-in are gone", async () => {
+    const sv = fakeServer(), { core, crypto } = await mkUsers(sv); sv.fp = "fp-B"; await core.sessionInfo();
+    assert.strictEqual((await crypto.listUsers()).length, 2); await crypto.removeUser("fp-B");
+    assert.deepStrictEqual((await crypto.listUsers()).map((u) => u.fp), ["fp-A"]); assert.strictEqual(await crypto.isUnlocked("fp-B"), false);
+    assert.strictEqual((await core.offlineLogin("ben", "", "pw-B")).ok, false);
+  });
+  await t("without WebCrypto (plain http) offline sign-in is refused instead of pretending to be secure", async () => {
+    const sv = fakeServer(), store = memoryStore(), core = createCore({ store, crypto: makeCrypto(null, store), fetch: sv.fetch }); await core.init();
+    const r = await core.offlineLogin("ada", "", "x"); assert.strictEqual(r.ok, false); assert.ok(/HTTPS or localhost/.test(r.error));
   });
   console.log(`JS PASSED ${pass}`);
 })();
