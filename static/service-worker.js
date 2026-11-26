@@ -8,7 +8,7 @@
      with nobody signed in (locked) the offline sign-in page is shown instead;
    - writes are NOT handled here: the page scripts keep a queue in IndexedDB (encrypted per person) and replay it.
    Never cached: /api/, /login, /logout, /platform (Super Admin stays online-only). */
-const VERSION = 'v114';
+const VERSION = 'v115';
 const STATIC_CACHE = 'sh-static-' + VERSION;
 const PAGE_PREFIX = 'sh-pages-' + VERSION + '-';
 const META_CACHE = 'sh-meta';
@@ -17,10 +17,10 @@ const NAV_TIMEOUT_MS = 4000;
 const SHELL = [
   '/offline', '/manifest.json',
   '/static/icons/icon-192.png?v=3', '/static/icons/icon-512.png?v=3',
-  '/static/css/modern.css', '/static/css/modern-compat.css', '/static/css/theme.css', '/static/css/responsive-ui.css', '/static/css/offline.css',
+  '/static/css/modern.css', '/static/css/modern-compat.css', '/static/css/v115-layout.css', '/static/css/theme.css', '/static/css/responsive-ui.css', '/static/css/offline.css',
   '/static/js/offline/offline-core.js', '/static/js/offline/offline-ui.js', '/static/js/offline/offline-login.js',
   '/static/js/shell-ui.js', '/static/js/modern-shell.js', '/static/js/theme-toggle.js', '/static/js/top-search.js',
-  '/static/js/floating-settings.js', '/static/js/password-toggle.js', '/static/js/table-filter.js',
+  '/static/js/floating-settings.js', '/static/js/student-more.js', '/static/js/password-toggle.js', '/static/js/table-filter.js',
   '/static/js/react-ui/lib.js', '/static/js/react-ui/forms.js', '/static/js/react-ui/score-entry.js'
 ];
 // Third-party files are fetched in the background (never awaited), so a slow or blocked CDN cannot delay installation.
