@@ -311,7 +311,11 @@ post(ADMIN, "/admin/announcements", {"title": "Silly", "message": "m", "audience
 check("...within sensible limits (max 600 s)", one("SELECT display_seconds FROM announcements WHERE title='Silly'") == 600)
 did = one("SELECT id FROM announcements WHERE title='BN-info'")
 FT.post(f"/announcements/{did}/dismiss", data={"csrf_token": csrf(FT)})
-check("a person can dismiss a banner and it stays dismissed for them only", "info" not in seen(FT, "/dashboard") and "BN-info" not in html(ACC.get("/dashboard")))
+# V115: dismissing hides the banner from the sliding strip (everything before the Announcements card in the page); the CARD still lists every announcement addressed to the person
+def _strip(c, url):
+    d = html(c.get(url)); return d.split('id="announcements-panel"')[0]
+check("a person can dismiss a banner and it stays dismissed for them only", "BN-info" not in _strip(FT, "/dashboard") and "BN-info" not in html(ACC.get("/dashboard")))
+check("V115: ...but the Announcements card on the dashboard still lists the dismissed announcement", "BN-info" in html(FT.get("/dashboard")).split('id="announcements-panel"')[-1])
 check("the ONE shared banner partial is included by the base layout, so every dashboard shows it", '_announcement_banners.html' in open("templates/base.html").read())
 check("...and no dashboard template adds a second copy", not any("_announcement_banners.html" in open(f"templates/{n}").read() for n in ("teacher_dashboard.html", "student_dashboard.html", "parent_dashboard.html", "platform_dashboard.html", "registrar_dashboard.html")))
 run("INSERT INTO announcements(school_id,title,message,audience,level,dismissible,expires_at,created_by_label) VALUES (1,'BN-once','m','all','info',1,?,'t')", exp)

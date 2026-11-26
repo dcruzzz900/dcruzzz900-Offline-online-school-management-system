@@ -71,7 +71,10 @@ check("an announcement for teachers only is hidden from the admin dashboard", "S
 check("a non-dismissible announcement has no dismiss button", "Staff only" in html(FT.get("/dashboard")) and html(FT.get("/dashboard")).count('class="ann-x"') == 1)   # only the dismissible one has a button
 aid = one("SELECT id FROM announcements WHERE title='Mid-term break'")
 post(FT, f"/announcements/{aid}/dismiss", {}, "/dashboard")
-check("a user can dismiss a dismissible announcement", "Mid-term break" not in html(FT.get("/dashboard")))
+# V115: dismissing removes it from the sliding strip; the Announcements card still lists it
+_d = html(FT.get("/dashboard"))
+check("a user can dismiss a dismissible announcement", "Mid-term break" not in _d.split('id="announcements-panel"')[0])
+check("V115: the Announcements card still lists a dismissed announcement", "Mid-term break" in _d.split('id="announcements-panel"')[-1])
 check("...and it is still shown to other users", "Mid-term break" in html(ADMIN.get("/dashboard")))
 sid_staff = one("SELECT id FROM announcements WHERE title='Staff only'")
 post(FT, f"/announcements/{sid_staff}/dismiss", {}, "/dashboard")
