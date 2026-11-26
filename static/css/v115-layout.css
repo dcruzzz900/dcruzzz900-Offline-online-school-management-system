@@ -1,0 +1,189 @@
+/* =====================================================================================================================
+   V115 layout layer — loaded LAST on every page (see base.html), so it only needs normal specificity to win.
+   1. v106 headers on every screen (page headings + dashboard banners)
+   2. Panels placed properly on desktop / tablet / phone, and reflowing with the A- / A+ text size (rem-based, not px-based)
+   3. Tables stay readable on phones (scroll sideways instead of crushing columns)
+   4. Announcements card (all announcements, scrolls inside the card)
+   5. Student mobile bottom menu (same bar staff get)
+   ===================================================================================================================== */
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   1. v106 HEADERS ON EVERY SCREEN
+   The v106 page header is .page-header: one title (h2, 1.35rem / 800 / navy), a muted line under it, actions on the right.
+   Older screens build the same thing with .page-heading / .page-head / .dashboard-header or a bare <h1>; map them to the same look.
+   --------------------------------------------------------------------------------------------------------------------- */
+main.content .page-heading,
+main.content .page-head,
+main.content .dashboard-header{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:0 0 18px;padding:0;border:0;background:none;box-shadow:none;border-radius:0;min-height:0;color:inherit;
+}
+main.content .page-heading>*,main.content .page-head>*,main.content .dashboard-header>*{min-width:0}
+main.content .page-heading h1,main.content .page-head h1,main.content .dashboard-header h1,main.content .dashboard-header>div>h2:first-child,
+main.content > h1{
+  font-size:1.35rem;font-weight:800;line-height:1.25;letter-spacing:0;color:var(--navy);margin:0;text-shadow:none;overflow-wrap:anywhere;
+}
+main.content .page-heading p,main.content .page-head p,main.content .dashboard-header p,main.content > h1 + p{
+  color:var(--mut);font-size:.9rem;margin:2px 0 0;overflow-wrap:anywhere;
+}
+/* a bare <h1> has no wrapper to give it spacing: 16px below it, less when a subtitle follows */
+main.content > h1{margin-bottom:16px}
+main.content > h1 + p{margin-top:-10px;margin-bottom:16px}
+/* v106 has no small-caps kicker above the title */
+main.content .page-heading .eyebrow,main.content .page-head .eyebrow,main.content .dashboard-header .eyebrow{display:none}
+main.content .page-heading .badge,main.content .page-head .badge,main.content .dashboard-header .badge{white-space:normal}
+@media(max-width:1100px){
+  main.content .page-heading h1,main.content .page-head h1,main.content .dashboard-header h1,main.content .dashboard-header>div>h2:first-child,main.content > h1{font-size:1.2rem}
+}
+@media(max-width:700px){
+  main.content .page-heading,main.content .page-head,main.content .dashboard-header{flex-direction:column;align-items:stretch;gap:10px}
+  main.content .page-heading h1,main.content .page-head h1,main.content .dashboard-header h1,main.content .dashboard-header>div>h2:first-child,main.content > h1{font-size:1.15rem}
+}
+html[data-bs-theme=dark] main.content .page-heading h1,html[data-bs-theme=dark] main.content .page-head h1,html[data-bs-theme=dark] main.content .dashboard-header h1,
+html[data-bs-theme=dark] main.content .dashboard-header>div>h2:first-child,html[data-bs-theme=dark] main.content > h1{color:#cfe0ff}
+html[data-bs-theme=dark] main.content .page-heading p,html[data-bs-theme=dark] main.content .page-head p,html[data-bs-theme=dark] main.content .dashboard-header p,html[data-bs-theme=dark] main.content > h1 + p{color:#a9b5c6}
+/* the v106 welcome banner (dashboards) must read the same on every dashboard, in every text size */
+.ad-banner,.ad-banner *{min-width:0}
+.ad-banner{margin-bottom:16px}
+.ad-banner h1,.ad-banner p{color:#fff}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   2. PANELS: placed properly on desktop / tablet / phone, and font-size proof
+   Breakpoints in px do not know about the A- / A+ text size; sizes in rem do. A panel row therefore asks for a minimum width in
+   rem: bigger text -> wider minimum -> panels stack earlier, automatically, instead of squeezing text.
+   --------------------------------------------------------------------------------------------------------------------- */
+.ad .ad-panels>*{flex:1 1 min(100%,19rem)}
+.ad .ad-two>*{flex:1 1 min(100%,20rem)}
+.ad .ad-panels-2>*{flex:1 1 min(100%,22rem)}
+/* every card in a row is the same height; its content fills it (no half-empty cards) */
+.ad .ad-panel{display:flex;flex-direction:column;min-width:0}
+.ad .ad-panel>header{flex:none}
+.ad .ad-panel>.chart-wrap,.ad .ad-panel>.donut-wrap,.ad .ad-panel>[data-rc-body],.ad .ad-panel>.grade-dist,.ad .ad-panel>.table-wrap,.ad .ad-panel>.ad-acts,.ad .ad-panel>.ann-list{flex:1 1 auto}
+.ad .ad-panel>.donut-wrap,.ad .ad-panel>[data-rc-body]>.donut-wrap,.ad .ad-panel>.gp-wrap,.ad .ad-panel>.gp-body{margin-block:auto}
+.ad .ad-panel>.chart-wrap{display:flex;flex-direction:column;justify-content:center}
+.ad .ad-panel>.chart-wrap>svg{margin-block:auto}
+.ad .ad-two>[data-slot]{display:flex;flex-direction:column;min-width:0}
+.ad .ad-two>[data-slot]>.ad-panel{flex:1 1 auto}
+.ad .card{min-width:0}
+/* A- / A+ : charts and tiles never overflow their card, long words wrap */
+.ad .ad-panel,.ad .card,.ad .kpi-mini,.ad .ad-quick a{overflow-wrap:anywhere}
+.ad .chart-wrap{max-width:100%;overflow-x:auto}
+.ad .chart-wrap svg{max-width:100%;height:auto}
+/* donut + legend: legend wraps under the ring when the card is narrow or the text is large */
+.donut-wrap{justify-content:center;gap:12px 20px}
+.donut-legend{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:.85rem}
+.donut-legend span{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere}
+/* Attendance range selector: equal-width buttons that wrap into a tidy grid, never a ragged second line */
+.ch-controls .seg{display:grid;grid-template-columns:repeat(auto-fit,minmax(5.2rem,1fr));width:100%;border-radius:14px}
+.ch-controls .seg button{white-space:normal;padding:8px 6px;text-align:center;line-height:1.2}
+@media(max-width:600px){.ch-controls .seg{border:0;gap:6px}.ch-controls .seg button,.ch-controls .seg button+button{border:1px solid #c5d0e6;border-radius:999px}}
+/* KPI tiles: rem-based columns so large text drops to fewer, wider tiles rather than squeezing */
+.kpi-row{grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr))}
+.kpi-mini{min-width:0}
+.kpi-mini .label{overflow-wrap:anywhere}
+.kpi-mini .value{overflow-wrap:anywhere}
+/* Quick Access: tiles fill whole rows (the last tile stretches instead of leaving a hole) */
+.ad-quick.qa7{grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr))!important}
+.ad-quick.qa7 a{min-width:0}
+@media(min-width:1000px){
+  .ad-quick.qa7{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  .ad-quick.qa7>a:last-child:nth-child(4n+1){grid-column:span 4}
+  .ad-quick.qa7>a:last-child:nth-child(4n+2){grid-column:span 3}
+  .ad-quick.qa7>a:last-child:nth-child(4n+3){grid-column:span 2}
+}
+@media(min-width:561px) and (max-width:999px){
+  .ad-quick.qa7{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  .ad-quick.qa7>a:last-child:nth-child(3n+1){grid-column:span 3}
+  .ad-quick.qa7>a:last-child:nth-child(3n+2){grid-column:span 2}
+}
+@media(max-width:560px){
+  .ad-quick.qa7{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .ad-quick.qa7>a:last-child:nth-child(2n+1){grid-column:span 2}
+}
+html[data-font-scale="130"] .ad-quick.qa7,html[data-font-scale="150"] .ad-quick.qa7{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+html[data-font-scale="130"] .ad-quick.qa7>a:last-child,html[data-font-scale="150"] .ad-quick.qa7>a:last-child{grid-column:auto}
+html[data-font-scale="130"] .ad-quick.qa7>a:last-child:nth-child(2n+1),html[data-font-scale="150"] .ad-quick.qa7>a:last-child:nth-child(2n+1){grid-column:span 2}
+/* teacher "My roles" row */
+.roles-row .btn{white-space:normal}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   3. TABLES ON PHONES: wide tables (5+ columns) keep a readable width and scroll sideways inside their card
+   --------------------------------------------------------------------------------------------------------------------- */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:700px){
+  .table-wrap>table.data:has(thead th:nth-child(5)),
+  .table-wrap>table.data:has(tr > :nth-child(5)){min-width:34rem}
+  .table-wrap>table.data:has(thead th:nth-child(4)){min-width:26rem}
+  table.data td,table.data th{vertical-align:top}
+  table.data td:last-child a{white-space:nowrap}
+}
+html[data-font-scale="130"] .table-wrap>table.data:has(thead th:nth-child(4)),html[data-font-scale="150"] .table-wrap>table.data:has(thead th:nth-child(4)){min-width:30rem}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   4. ANNOUNCEMENTS CARD — shows ALL announcements; long lists scroll inside the card
+   --------------------------------------------------------------------------------------------------------------------- */
+.ann-card .ann-list{max-height:min(26rem,60vh);overflow-y:auto;overscroll-behavior:contain;padding:0}
+.ann-card .ann-list:focus-visible{outline:2px solid #93c5fd;outline-offset:-2px}
+.ann-card .ann-list li{align-items:flex-start}
+.ann-card .ann-list li>div{min-width:0;flex:1}
+.ann-card .ann-list b{line-height:1.3}
+.ann-card .ann-list span{display:block;margin-top:2px;line-height:1.4}
+.ann-card .ann-meta{display:block;margin-top:4px;font-size:.72rem;color:var(--mut)}
+.ann-count{display:inline-grid;place-items:center;min-width:1.5em;height:1.5em;padding:0 .4em;border-radius:999px;background:var(--blue);color:#fff;font-size:.7rem;font-weight:700;vertical-align:middle;line-height:1}
+.ann-card .ann-pri{font-style:normal;font-size:.62rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;white-space:nowrap}
+.ann-pri-urgent{background:#fde8ec;color:#8a1230}.ann-pri-important{background:#fff4d6;color:#7a4b00}
+.ann-item-danger{background:rgba(225,29,72,.05)}
+html[data-bs-theme=dark] .ann-card .ann-list b{color:#e6ecf8}
+html[data-bs-theme=dark] .ann-pri-urgent{background:#43161f;color:#fecaca}html[data-bs-theme=dark] .ann-pri-important{background:#3a3217;color:#fde68a}
+html[data-bs-theme=dark] .ann-item-danger{background:rgba(251,113,133,.08)}
+html[data-bs-theme=dark] .ann-count{background:#2f6fe0}
+.ann-card .ad-tip{flex:none}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   5. STUDENT MOBILE BOTTOM MENU (the same pill bar staff get; the top tab strip is hidden on phones to avoid two menus)
+   --------------------------------------------------------------------------------------------------------------------- */
+.student-more{display:none}
+@media(max-width:700px){
+  .student-shell .portal-tabs{display:none}
+  .student-shell>main.content{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+  .student-tabs{bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .student-tabs a .notif-badge{position:absolute;top:0;right:22%}
+  .student-tabs a#studentMore.open{color:#1a4fd0}
+  .student-more{position:fixed;left:8px;right:8px;bottom:calc(8px + 66px + env(safe-area-inset-bottom,0px));z-index:41;display:grid;gap:2px;padding:8px;background:#fff;border:1px solid var(--border);border-radius:18px;box-shadow:0 -6px 24px rgba(20,40,90,.28)}
+  .student-more[hidden]{display:none}
+  .student-more a{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;color:var(--ink);font-size:.95rem;font-weight:600;text-decoration:none;min-height:44px}
+  .student-more a .ni{width:1.4em;text-align:center;flex:none}
+  .student-more a:hover,.student-more a:focus-visible,.student-more a.on{background:#e8f0fe;color:#1a4fd0;outline:none}
+  html[data-bs-theme=dark] .student-more{background:#151c28;border-color:#2c3646}
+  html[data-bs-theme=dark] .student-more a{color:#dde3f0}
+  html[data-bs-theme=dark] .student-more a:hover,html[data-bs-theme=dark] .student-more a:focus-visible,html[data-bs-theme=dark] .student-more a.on{background:#1e2a44;color:#7db3ff}
+  html[data-bs-theme=dark] .student-tabs a#studentMore.open{color:#95ace4}
+}
+@media print{.student-tabs,.student-more{display:none!important}}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   6. Hero banners on non-dashboard screens (AI Command Center) use the v106 banner look, not their own bigger style
+   --------------------------------------------------------------------------------------------------------------------- */
+main.content .ai-hero{
+  background:linear-gradient(100deg,#0b4fd0 0%,#1469e6 45%,#0a2a6b 100%);border-radius:16px;padding:16px 26px;min-height:120px;
+  box-shadow:0 6px 18px rgba(16,60,140,.25);margin-bottom:16px;gap:12px 20px;
+}
+main.content .ai-hero h1{margin:0;font-size:clamp(1.3rem,2.4vw,2rem);font-weight:800;line-height:1.15;color:#fff}
+main.content .ai-hero p{margin:4px 0 0;font-size:.95rem;line-height:1.45;color:#e8f0ff}
+main.content .ai-hero .eyebrow{display:none}
+@media(max-width:700px){main.content .ai-hero{padding:16px 18px;min-height:0}main.content .ai-hero h1{font-size:1.25rem}}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   7. Top bar at large text sizes on phones: the avatar must never be pushed off-screen
+   --------------------------------------------------------------------------------------------------------------------- */
+@media(max-width:700px){
+  .topbar-actions,.top-actions{min-width:0;flex-wrap:nowrap}
+  .topbar-actions .role-chip,.top-actions .role-chip{max-width:6.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-actions .top-avatar,.top-actions .top-avatar{flex:none}
+  html[data-font-scale="130"] .topbar-actions .sh-conn,html[data-font-scale="150"] .topbar-actions .sh-conn{display:none}
+}
+
+/* Attendance range buttons: 4 across when there is room, otherwise a tidy 2 x 2 (never 3 + 1) */
+.ch-controls .seg{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(min-width:701px) and (max-width:1199px){.ch-controls .seg{grid-template-columns:repeat(2,minmax(0,1fr))}}
+html[data-font-scale="130"] .ch-controls .seg,html[data-font-scale="150"] .ch-controls .seg{grid-template-columns:repeat(2,minmax(0,1fr))}
