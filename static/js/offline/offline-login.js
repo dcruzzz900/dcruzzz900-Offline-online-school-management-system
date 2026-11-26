@@ -14,14 +14,22 @@
     }).catch(function () {});
   }
   function show(which) { ["signin", "signedin", "online"].forEach(function (n) { $(n).hidden = n !== which; }); $("title").textContent = which === "online" ? "Connected" : "You're offline"; }
+  /* V116: there is ONE sign-in page. Hand over to the cached /login (it signs in offline by itself); this form stays only as a fallback. */
+  function toSignIn() {
+    var has = window.caches ? caches.match("/login", { ignoreSearch: true }) : Promise.resolve(null);
+    return has.then(function (hit) { if (hit) location.replace("/login"); else show("signin"); }).catch(function () { show("signin"); });
+  }
   core.ready.then(function () { return core.checkConnection(); }).then(function (up) {
     if (up) return show("online");
     return core.metaGet("fingerprint").then(function (fp) {
-      return core.crypto.isUnlocked(fp).then(function (open) { show(open ? "signedin" : "signin"); });
+      return core.crypto.isUnlocked(fp).then(function (open) {
+        if (open) return show("signedin");
+        return toSignIn();
+      });
     });
   });
   $("switch").addEventListener("click", function () {
-    core.metaGet("fingerprint").then(function (fp) { return core.crypto.lock(fp); }).then(function () { return swPost({ type: "LOCK" }); }).then(function () { show("signin"); });
+    core.metaGet("fingerprint").then(function (fp) { return core.crypto.lock(fp); }).then(function () { return swPost({ type: "LOCK" }); }).then(function () { return toSignIn(); });
   });
   $("offForm").addEventListener("submit", function (ev) {
     ev.preventDefault();

@@ -6,7 +6,8 @@
   if (!window.SHOffline) return;
   var core = SHOffline.boot();
   window.shOffline = core;
-  var OFFLINE_VERSION = "v114";            // bump when the set of prepared pages changes: everyone prepares once more after an upgrade
+  var OFFLINE_VERSION = "v117";            // bump when the set of prepared pages changes: everyone prepares once more after an upgrade
+  var REFRESH_MS = 60 * 60 * 1000;         // V117: the prepared pages are refreshed in the background whenever they are older than this and the school server is reachable
   var meta = document.querySelector('meta[name="sh-user"]');
   var fingerprint = meta ? meta.getAttribute("content") : "";
   var signedIn = !!fingerprint;
@@ -46,8 +47,7 @@
     return chip;
   }
   function render(s) {
-    if (!signedIn) return;
-    ensureChip(); if (!chip) return;
+    ensureChip(); if (!chip) return;                       // V117: every header has the chip (student, parent, Super Admin too), signed in for offline use or not
     var st = s.status, text = LABEL[st] || "Online";
     if (st === "syncing" && s.progress && s.progress.total) text += " " + s.progress.done + "/" + s.progress.total;
     var sub = [];
@@ -88,7 +88,7 @@
   var wasOffline = false;
   function connectionTick() {
     return core.checkConnection().then(function (up) {
-      if (up && (wasOffline || core.state().pending)) { wasOffline = false; return core.syncNow(); }
+      if (up && (wasOffline || core.state().pending)) { var back = wasOffline; wasOffline = false; if (back) maybePrepare(false); return core.syncNow(); }
       if (!up) wasOffline = true;
     });
   }
@@ -264,7 +264,7 @@
       function finish(ok) {
         if (finished) return; finished = true; swMsg = null;
         prep.state = ok ? "ready" : "idle";
-        (ok ? core.metaSet("prepared:" + fingerprint, OFFLINE_VERSION) : Promise.resolve()).then(function () { render(core.state()); resolve(ok); });
+        (ok ? core.metaSet("prepared:" + fingerprint, OFFLINE_VERSION).then(function () { return core.metaSet("preparedAt:" + fingerprint, Date.now()); }) : Promise.resolve()).then(function () { render(core.state()); resolve(ok); });
       }
       swMsg = function (m) {
         if (m.type === "PREPARE_PROGRESS") { prep.done = m.done; prep.total = m.total; }
@@ -277,6 +277,20 @@
     });
   }
   window.shPrepareOffline = prepareOffline;
+  /* V117: offline pages never wait for somebody to open them once. The set of pages is downloaded right after sign-in (see afterUnlocked) and
+     then kept fresh: whenever the school server is reachable and the last download is older than REFRESH_MS (page start, connection
+     coming back, and every 10 minutes while the page is open) it runs again silently, so new classes, students and subjects are
+     available offline without visiting them. */
+  function maybePrepare(force) {
+    if (!signedIn || !core.state().online || prep.state === "working") return Promise.resolve(false);
+    return Promise.all([core.metaGet("prepared:" + fingerprint), core.metaGet("preparedAt:" + fingerprint)]).then(function (r) {
+      var stale = r[0] !== OFFLINE_VERSION || !r[1] || Date.now() - r[1] > REFRESH_MS;
+      if (!force && !stale) { prep.state = "ready"; render(core.state()); return false; }
+      return core.crypto.isUnlocked(fingerprint).then(function (ok) { return (core.crypto.enabled && !ok) ? false : prepareOffline(); });
+    }).catch(function () { return false; });
+  }
+  window.shMaybePrepareOffline = maybePrepare;
+  setInterval(function () { maybePrepare(false); }, 10 * 60 * 1000);
 
   /* ---------- unlock prompt: only when somebody is already signed in online but their offline storage is locked ---------- */
   function promptUnlock(info) {
@@ -302,16 +316,13 @@
     swSend({ type: "SET_USER", fingerprint: fingerprint });
     core.seedScoreVersions(false);
     if (core.state().pending) core.syncNow();
-    core.metaGet("prepared:" + fingerprint).then(function (v) {
-      if (v !== OFFLINE_VERSION) prepareOffline();             // first time for this person on this device (or after an upgrade): no repeats on later sign-ins
-      else { prep.state = "ready"; render(core.state()); }
-    });
+    maybePrepare(false);                                       // first time for this person on this device, after an upgrade, or when the saved pages are getting old
   }
 
   /* ---------- start ---------- */
   core.ready.then(function () {
     render(core.state());
-    if (!signedIn) return;
+    if (!signedIn) { core.checkConnection(); return; }          // student / parent / Super Admin / sign-in page: the chip still shows Online / Offline
     core.setUser(fingerprint).then(function () {
       core.seedScoreVersions(true);                                         // also when this page came from the offline cache
       var handoff = takeHandoff();
