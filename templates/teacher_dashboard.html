@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel with context %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
 {% set _r = my_roles or [] %}{% set _kind = 'accountant' if 'Bursar / Accountant' in _r else ('registrar' if 'Registrar / Admissions Officer' in _r else ('staff' if (_r and 'Teacher' not in _r) else 'teacher')) %}
 {% set pf = tx.pass_fail %}{% set pf_total = pf.passed + pf.failed + pf.not_assessed %}
 <div class="ad">

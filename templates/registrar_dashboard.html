@@ -1,8 +1,9 @@
-{% extends "base.html" %}{% from "partials/role_charts.html" import render_role_charts %}{% from "partials/welcome_header.html" import welcome_header %}{% from "partials/identity_fields.html" import identity_fields %}
+{% extends "base.html" %}{% from "partials/role_charts.html" import render_role_charts %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel with context %}{% from "partials/identity_fields.html" import identity_fields %}
 {% block title %}Registrar &amp; Admissions{% endblock %}
 {% block content %}
-{{ welcome_header('registrar') }}
-<h2 class="h4">Registrar &amp; Admissions</h2>
+{{ v106_banner('registrar') }}
+<div class="page-header"><div><h2><span class="ni">✎</span> Registrar &amp; Admissions</h2><p>Admit students, change their status and review recent changes.</p></div></div>
+<section class="ad-panels ad-panels-1" style="grid-template-columns:1fr">{{ ann_panel() }}</section>
 <div class="card"><h3>Students by status</h3>
 {% for c in counts %}<span style="margin-right:.6rem">{{ c.status|status_badge }} <b>{{ c.c }}</b></span>{% else %}<span class="muted">No students yet.</span>{% endfor %}</div>
 <div class="card"><h3>Register a new student</h3>

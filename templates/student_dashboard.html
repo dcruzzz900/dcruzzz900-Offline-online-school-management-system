@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel %}{% block title %}Student Dashboard{% endblock %}{% block content %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel with context %}{% block title %}Student Dashboard{% endblock %}{% block content %}
 {% set _latest = performance.trend|last if performance.trend else none %}
 <div class="ad" style="max-width:900px;margin:0 auto">
   {{ v106_banner('student', student.first_name or student_full_name(student), class_row.name ~ ' · ' ~ student.admission_no ~ ((' · ' ~ sd.term.name) if sd.term else '')) }}
@@ -29,6 +29,18 @@
     {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">Nothing to show yet — this appears once your school publishes a term's results.</p>{% endif %}
   </div>
 
+  <!-- Attendance: directly under Academic Performance -->
+  <article class="ad-panel" id="attendance" style="margin-bottom:16px">
+    <header><h2><span class="ni">📅</span> Attendance</h2><span style="font-size:.78rem;color:var(--mut)">Across every recorded day</span></header>
+    {% if attendance.total %}<div class="kpi-row" style="padding:12px 16px 0;margin:0">
+      <div class="kpi-mini"><div class="label">Present</div><div class="value">{{ attendance.counts.present }}</div></div>
+      <div class="kpi-mini"><div class="label">Late</div><div class="value">{{ attendance.counts.late }}</div></div>
+      <div class="kpi-mini"><div class="label">Absent</div><div class="value">{{ attendance.counts.absent }}</div></div>
+    </div>
+    {% if attendance_trend %}<div class="ch-note">Last week</div><div class="chart-wrap" data-sh-line='{{ {"labels": attendance_trend|map(attribute="label")|list, "values": attendance_trend|map(attribute="rate")|list, "max": 100, "suffix": "%", "label": "Your attendance last week", "empty": "No attendance recorded last week."}|tojson }}'></div>{% endif %}
+    {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">No attendance recorded yet.</p>{% endif %}
+  </article>
+
   {% set qa = quick_actions() %}{% if qa.actions %}
   <article class="ad-panel" id="quick-access" style="margin-bottom:16px">
     <header><h2><span class="ni">⚡</span> Quick Access</h2><span style="font-size:.8rem;color:var(--mut)">{{ qa.actions|length }} shortcuts</span></header>
@@ -45,18 +57,8 @@
     </tbody></table>{% else %}<p style="padding:16px;color:var(--mut)">No results have been published yet.</p>{% endif %}
   </div>
 
-  <!-- Attendance + Recent Activities + Announcements -->
-  <section class="ad-panels" style="margin-bottom:16px">
-    <article class="ad-panel" id="attendance">
-      <header><h2><span class="ni">📅</span> Attendance</h2><span style="font-size:.78rem;color:var(--mut)">Across every recorded day</span></header>
-      {% if attendance.total %}<div class="kpi-row" style="padding:12px 16px 0;margin:0">
-        <div class="kpi-mini"><div class="label">Present</div><div class="value">{{ attendance.counts.present }}</div></div>
-        <div class="kpi-mini"><div class="label">Late</div><div class="value">{{ attendance.counts.late }}</div></div>
-        <div class="kpi-mini"><div class="label">Absent</div><div class="value">{{ attendance.counts.absent }}</div></div>
-      </div>
-      {% if attendance_trend %}<div class="ch-note">Last week</div><div class="chart-wrap" data-sh-line='{{ {"labels": attendance_trend|map(attribute="label")|list, "values": attendance_trend|map(attribute="rate")|list, "max": 100, "suffix": "%", "label": "Your attendance last week", "empty": "No attendance recorded last week."}|tojson }}'></div>{% endif %}
-      {% else %}<p style="padding:16px;color:var(--mut);font-size:.9rem">No attendance recorded yet.</p>{% endif %}
-    </article>
+  <!-- Recent Activities + Announcements -->
+  <section class="ad-panels ad-panels-2" style="margin-bottom:16px">
     <article class="ad-panel">
       <header><h2><span class="ni">🕒</span> Recent Activities</h2><span style="font-size:.78rem;color:var(--mut)">Results, attendance, class updates</span></header>
       {% if activities %}<ul class="ad-acts">{% for a in activities %}<li><span class="a-ico a-blue">📄</span><div><b>{{ a.description }}</b><small>{{ a.ts }}</small></div></li>{% endfor %}</ul>
