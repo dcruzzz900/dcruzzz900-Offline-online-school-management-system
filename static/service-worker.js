@@ -5,12 +5,18 @@
      pages of a person who is signed out - or of anybody else - cannot be read from the device;
    - /static files and the shell are shared (they hold no school data) and answered from the cache first;
    - page navigations: network first; if the network is down or slow, the signed-in person's last copy is decrypted and shown;
-     with nobody signed in (locked) the offline sign-in page is shown instead;
+     with nobody signed in (locked) the ONE sign-in page (/login) is shown from a cached, anonymous copy - it detects the connection
+     itself and signs in through the server (online) or on this device (offline, only for people who signed in here before);
    - writes are NOT handled here: the page scripts keep a queue in IndexedDB (encrypted per person) and replay it.
-   Never cached: /api/, /login, /logout, /platform (Super Admin stays online-only). */
-const VERSION = 'v115';
+   Never cached as a person's page: /api/, /login, /logout, /platform (Super Admin stays online-only). The login page is kept
+   separately as an ANONYMOUS copy (fetched without cookies, so it holds no session, flash message or person's data). */
+const VERSION = 'v117';
 const STATIC_CACHE = 'sh-static-' + VERSION;
-const PAGE_PREFIX = 'sh-pages-' + VERSION + '-';
+// People's cached pages are named by the page-cache FORMAT, not by the worker version: a worker update (new CSS/JS) must never throw
+// away the pages a person already has for offline use. Change PAGES_VERSION only if the stored format changes.
+const PAGES_VERSION = 'v114';
+const PAGE_PREFIX = 'sh-pages-' + PAGES_VERSION + '-';
+const LOGIN_PATH = '/login';
 const META_CACHE = 'sh-meta';
 const USER_KEY = '/__sh_active_user';
 const NAV_TIMEOUT_MS = 4000;
@@ -18,7 +24,7 @@ const SHELL = [
   '/offline', '/manifest.json',
   '/static/icons/icon-192.png?v=3', '/static/icons/icon-512.png?v=3',
   '/static/css/modern.css', '/static/css/modern-compat.css', '/static/css/v115-layout.css', '/static/css/theme.css', '/static/css/responsive-ui.css', '/static/css/offline.css',
-  '/static/js/offline/offline-core.js', '/static/js/offline/offline-ui.js', '/static/js/offline/offline-login.js',
+  '/static/js/offline/offline-core.js', '/static/js/offline/offline-ui.js', '/static/js/offline/offline-login.js', '/static/js/offline/unified-login.js',
   '/static/js/shell-ui.js', '/static/js/modern-shell.js', '/static/js/theme-toggle.js', '/static/js/top-search.js',
   '/static/js/floating-settings.js', '/static/js/student-more.js', '/static/js/password-toggle.js', '/static/js/table-filter.js',
   '/static/js/react-ui/lib.js', '/static/js/react-ui/forms.js', '/static/js/react-ui/score-entry.js'
@@ -28,7 +34,9 @@ const EXTERNAL = [
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
   'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
   'https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js',
-  'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js'
+  'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js',
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js',
+  'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
 ];
 const NEVER_CACHE = /^\/(api\/|login|logout|platform|student\/logout|parent\/logout|service-worker\.js)/;
 const EXTERNAL_HOSTS = /^https:\/\/(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
@@ -36,7 +44,9 @@ const EXTERNAL_HOSTS = /^https:\/\/(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|un
 // fetch that gives up (and releases the connection) after ms, so a blocked host never leaves requests hanging
 function fetchT(req, ms, opts) {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
-  return fetch(req, Object.assign({ signal: ctl.signal }, opts || {})).finally(() => clearTimeout(t));
+  const ext = opts && opts.signal;                                   // an outside signal (e.g. "the person is signing out") cancels this request too
+  if (ext) { if (ext.aborted) ctl.abort(); else ext.addEventListener('abort', () => ctl.abort(), { once: true }); }
+  return fetch(req, Object.assign({}, opts || {}, { signal: ctl.signal })).finally(() => clearTimeout(t));
 }
 function timeout(ms) { return new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms)); }
 // Third-party assets are fetched in CORS mode (the pages ask for them with crossorigin="anonymous"); no-cors only as a fallback
@@ -45,13 +55,53 @@ async function fetchExternal(u, ms) {
   const r = await fetchT(new Request(u, { mode: 'no-cors' }), ms); return r.type === 'opaque' ? r : null;
 }
 
+
+/* ---- the ONE login page, kept for offline use ----
+   An anonymous copy of /login (no cookies are sent, so it holds no session, flash message or person's data) is stored in the shared
+   static cache, together with the /static files it needs. It is shown when the server cannot be reached; the page's own script
+   (unified-login.js) then signs the person in on this device. Refreshed whenever the login page is reached online. */
+let loginShellAt = 0;
+async function refreshLoginShell(force) {
+  if (!force && Date.now() - loginShellAt < 10 * 60 * 1000) return;
+  try {
+    const res = await fetchT(new Request(LOGIN_PATH, { credentials: 'omit', cache: 'no-store' }), 8000);
+    const type = res.headers.get('Content-Type') || '';
+    if (!res.ok || res.redirected || !/text\/html/i.test(type)) return;
+    const cache = await caches.open(STATIC_CACHE), html = await res.clone().text();
+    await cache.put(LOGIN_PATH, res);
+    loginShellAt = Date.now();
+    const assets = [...new Set([...html.matchAll(/(?:href|src)="(\/static\/[^"#]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&')))].slice(0, 60);
+    for (let i = 0; i < assets.length; i += 6) {
+      await Promise.all(assets.slice(i, i + 6).map(async (u) => {
+        try { if (await cache.match(u, { ignoreVary: true })) return; const r = await fetchT(new Request(u, { credentials: 'same-origin' }), 8000); if (r && r.ok) await cache.put(u, r); } catch (e) { /* runtime caching fills it in */ }
+      }));
+    }
+  } catch (e) { /* offline or blocked: keep the copy we already have */ }
+}
+async function loginShell() {
+  const hit = await (await caches.open(STATIC_CACHE)).match(LOGIN_PATH, { ignoreVary: true });
+  return hit ? new Response(await hit.clone().blob(), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } }) : null;
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(STATIC_CACHE);
     await Promise.all(SHELL.map(async (u) => {                // one missing file must not fail the whole install
       try { const res = await fetch(new Request(u, { credentials: 'same-origin' })); if (res && res.ok) await cache.put(u, res); } catch (e) { /* filled in later */ }
     }));
-    EXTERNAL.forEach((u) => { fetchExternal(u, 8000).then((r) => r && cache.put(u, r)).catch(() => {}); });
+    // V117: ALL static files, not just the short list above, so a page that was never opened still has its CSS / JS / charts offline.
+    // (Static files hold no school data. Failures are ignored: a file that could not be fetched now is cached the first time it is used.)
+    try {
+      const m = await fetchT(new Request('/api/sync/static-manifest', { credentials: 'omit', cache: 'no-store' }), 8000);
+      const files = m.ok ? ((await m.json()).files || []) : [];
+      for (let i = 0; i < files.length; i += 8) {
+        await Promise.all(files.slice(i, i + 8).map(async (u) => {
+          try { if (await cache.match(u)) return; const r = await fetchT(new Request(u, { credentials: 'same-origin' }), 10000); if (r && r.ok) await cache.put(u, r); } catch (e) { /* filled in later */ }
+        }));
+      }
+    } catch (e) { /* offline during install: the short list above and runtime caching still apply */ }
+    EXTERNAL.forEach((u) => { fetchAsset(u, cache).catch(() => {}); });     // third-party files (and the font files named in the font stylesheet) in the background
+    await refreshLoginShell(true);
     await self.skipWaiting();
   })());
 });
@@ -116,7 +166,12 @@ self.addEventListener('message', (event) => {
   const d = event.data || {};
   event.waitUntil((async () => {
     if (d.type === 'SET_USER') await setActiveUser(d.fingerprint || '');                      // does NOT delete anyone's cache
-    else if (d.type === 'LOCK') await setActiveUser('');                                        // signed out: cache stays, but is unreadable
+    else if (d.type === 'LOCK') {                                                               // signed out: cache stays, but is unreadable
+      // Stop the silent page download NOW. A page requested with the old session cookie that answers after /logout has cleared it would
+      // hand the old session back to the browser and the person would still be signed in.
+      if (prepCtl) { try { prepCtl.abort(); } catch (e) { /* already done */ } }
+      await setActiveUser('');
+    }
     else if (d.type === 'PURGE_USER' && d.fingerprint) {                                        // "remove this person from this device"
       await caches.delete(PAGE_PREFIX + d.fingerprint);
       if ((await activeUser()) === d.fingerprint) await setActiveUser('');
@@ -153,10 +208,12 @@ async function fetchAsset(a, stat) {
   } catch (e) { /* offline or blocked host: runtime caching fills it in later */ }
 }
 
+let prepCtl = null;                                                             // aborted when the person signs out mid-download
 async function prepare(seed, fp) {
   const key = await unlockedKey(fp);
   if (!fp || !key) { await broadcast({ type: 'PREPARE_DONE', cached: 0, failed: 0, error: 'locked' }); return; }
   await setActiveUser(fp);
+  prepCtl = new AbortController(); const sig = prepCtl.signal;
   const stat = await caches.open(STATIC_CACHE);
   const norm = (u) => { try { const x = new URL(u, self.location.origin); return x.origin === self.location.origin ? x.pathname + x.search : null; } catch (e) { return null; } };
   const todo = [], seen = new Set(), assets = new Set();
@@ -164,9 +221,9 @@ async function prepare(seed, fp) {
   seed.forEach((u) => add(u, 0));
   let done = 0, cached = 0, failed = 0, last = 0;
   async function worker() {
-    for (let job; (job = todo.shift());) {
+    for (let job; !sig.aborted && (job = todo.shift());) {
       try {
-        const res = await fetchT(job.u, 20000, { credentials: 'same-origin' });
+        const res = await fetchT(job.u, 20000, { credentials: 'same-origin', signal: sig });
         if (res.ok && !res.redirected && res.headers.get('X-SH-User') === fp) {
           await putPage(fp, key, job.u, res.clone()); cached++;
           const html = await res.text();
@@ -184,15 +241,17 @@ async function prepare(seed, fp) {
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   const list = [...assets];
-  for (let i = 0; i < list.length; i += 6) await Promise.all(list.slice(i, i + 6).map((a) => fetchAsset(a, stat)));
+  for (let i = 0; i < list.length && !sig.aborted; i += 6) await Promise.all(list.slice(i, i + 6).map((a) => fetchAsset(a, stat)));
   await broadcast({ type: 'PREPARE_DONE', cached, failed, assets: list.length });
 }
 
 async function handleNavigation(request) {
   const url = new URL(request.url), path = url.pathname + url.search;
   const cacheable = !NEVER_CACHE.test(url.pathname);
+  const isLogin = url.pathname === LOGIN_PATH;
   try {
     const res = await Promise.race([fetch(request), timeout(NAV_TIMEOUT_MS)]);
+    if (isLogin && res.status < 500) refreshLoginShell(false);                 // the server answered: keep the anonymous copy fresh
     if (cacheable && res.ok && !res.redirected) {
       const tag = res.headers.get('X-SH-User'), user = await activeUser();
       if (tag && user && tag === user) {
@@ -202,10 +261,14 @@ async function handleNavigation(request) {
     }
     return res;
   } catch (err) {
+    let user = '', key = null;
     if (cacheable) {
-      const user = await activeUser(), key = await unlockedKey(user);
+      user = await activeUser(); key = await unlockedKey(user);
       if (user && key) { const page = await getPage(user, key, path); if (page) return page; }
     }
+    // Nobody is signed in on this device (or the person is on the login page itself): show the ONE login page, which signs in offline
+    // when the connection is down. A signed-in person asking for a page that was never saved gets the "not available offline" page.
+    if (isLogin || !(user && key)) { const lg = await loginShell(); if (lg) return lg; }
     const shell = await (await caches.open(STATIC_CACHE)).match('/offline');
     return shell || new Response('You are offline.', { status: 503, headers: { 'Content-Type': 'text/plain' } });
   }
@@ -213,8 +276,9 @@ async function handleNavigation(request) {
 
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(STATIC_CACHE);
-  const hit = await cache.match(request, { ignoreVary: true });
+  let hit = await cache.match(request, { ignoreVary: true });
   const same = new URL(request.url).origin === self.location.origin;
+  if (!hit && same) hit = await cache.match(request, { ignoreVary: true, ignoreSearch: true });   // V117: same file, different ?v= cache-buster
   const net = fetchT(request, same ? 15000 : 3000).then((res) => { if (res && (res.ok || res.type === 'opaque')) cache.put(request, res.clone()); return res; }).catch(() => null);
   if (hit) return hit;
   const res = await Promise.race([net, new Promise((r) => setTimeout(() => r(null), same ? 15000 : 2500))]);   // never hang a page on a blocked host
