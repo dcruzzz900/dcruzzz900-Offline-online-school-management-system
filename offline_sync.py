@@ -276,6 +276,31 @@ def _register_routes():
         resp.headers["Cache-Control"] = "no-store"
         return resp
 
+    @sync_bp.route("/api/sync/static-manifest")
+    def static_manifest():
+        """V117: every public /static file the app can ask for (CSS, JS, icons, images). The service worker downloads ALL of them when it
+        is installed - on the very first visit, even on the sign-in page - so no screen ever has to be opened once online before its
+        styles, scripts and charts work offline. Static files hold no school data, so this list is public (no sign-in needed)."""
+        import os
+        root = current_app.static_folder or ""
+        urls = []
+        for base, _dirs, files in os.walk(root):
+            for name in sorted(files):
+                ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+                if ext not in ("css", "js", "png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "woff", "woff2", "ttf", "json"):
+                    continue
+                full = os.path.join(base, name)
+                try:
+                    if os.path.getsize(full) > 3 * 1024 * 1024:
+                        continue
+                except OSError:
+                    continue
+                rel = os.path.relpath(full, root).replace(os.sep, "/")
+                urls.append("/static/" + rel)
+        resp = jsonify({"files": sorted(urls)})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
     @sync_bp.route("/offline")
     def offline_page():
         """Shown by the service worker when a page was never opened on this device before the connection dropped."""
