@@ -71,7 +71,7 @@ for who, c, path in (("admin", ADMIN, "/dashboard"), ("admin", ADMIN, "/admin/st
     check(f"{who} {path}: v115 layout stylesheet is loaded last", "css/v115-layout.css" in html(c.get(path)))
 for who, c, path in (("registrar", ADMIN, "/registrar"),):
     d = html(c.get(path)); check("Registrar dashboard uses the v106 banner + announcements card", 'class="ad-banner' in d and 'id="announcements-panel"' in d)
-check("service worker cache version bumped so phones fetch the new CSS", "const VERSION = 'v115'" in open("static/service-worker.js").read())
+check("service worker cache version bumped so phones fetch the new CSS", re.search(r"const VERSION = 'v(11[5-9]|1[2-9]\d)'", open("static/service-worker.js").read()) is not None)
 
 print(f"\n{PASS} passed, {len(FAIL)} failed")
 if FAIL: print("Failures:", FAIL); sys.exit(1)

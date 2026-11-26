@@ -57,7 +57,9 @@ def unlocked(page, fp): return page.evaluate("(fp) => new Promise(res => { const
 def logout(page): page.evaluate("() => document.querySelector('a[href$=\"/logout\"]').click()")
 def chip(page): return page.locator("#shConn")
 def offline_login(page, user, pw):
-    page.fill('#offForm input[name="username"]', user); page.fill('#offForm input[name="password"]', pw); page.click('#offForm button[type="submit"]')
+    # V116: there is ONE sign-in page; offline it signs in on the device by itself
+    page.wait_for_selector('#unifiedLoginForm[data-mode="offline"]', timeout=20000)
+    page.fill('#unifiedLoginForm input[name="username"]', user); page.fill('#unifiedLoginForm input[name="password"]', pw); page.click('#unifiedLoginForm button[type="submit"]')
 
 with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(); page = ctx.new_page(); page.on("dialog", lambda d: d.accept())
@@ -97,12 +99,11 @@ with sync_playwright() as p:
     print("=== 4. the school server goes down ===")
     stop()
     page.goto(f"{BASE}/dashboard")
-    check("nobody signed in: cached pages are NOT shown, the offline sign-in is", page.locator("#offForm").count() == 1 and "Welcome" not in page.content())
-    page.wait_for_function("() => document.getElementById('signin') && !document.getElementById('signin').hidden", timeout=10000)
-    offline_login(page, "aokafor", "WrongPassword!"); page.wait_for_function("() => document.getElementById('msg').textContent.length > 0")
-    check("a wrong password is refused with a neutral message", "Wrong username or password" in page.locator("#msg").inner_text() and page.locator("#offForm").count() == 1)
-    offline_login(page, "nosuchperson", "Pass1234"); page.wait_for_timeout(600)
-    check("an unknown username gets the same message", "Wrong username or password" in page.locator("#msg").inner_text())
+    check("nobody signed in: cached pages are NOT shown, the offline sign-in is", page.locator("#unifiedLoginForm").count() == 1 and page.locator("#offForm").count() == 0 and "Okafor" not in page.content())
+    offline_login(page, "aokafor", "WrongPassword!"); page.wait_for_function("() => document.getElementById('loginOfflineMsg') && document.getElementById('loginOfflineMsg').textContent.length > 0")
+    check("a wrong password is refused with a neutral message", "Wrong username or password" in page.locator("#loginOfflineMsg").inner_text() and page.locator("#unifiedLoginForm").count() == 1)
+    offline_login(page, "nosuchperson", "Pass1234"); page.wait_for_function("() => { const m = document.getElementById('loginOfflineMsg'); return m && !m.hidden && m.textContent.length > 0 }", timeout=10000)
+    check("an unknown username gets the same message", "Wrong username or password" in page.locator("#loginOfflineMsg").inner_text())
     offline_login(page, "aokafor", "Pass1234"); page.wait_for_url("**/dashboard", timeout=15000); page.wait_for_selector("#shConn")
     check("the teacher signs in OFFLINE with her normal password and gets HER dashboard", page.evaluate("() => document.querySelector('meta[name=sh-user]').content") == fpA and "Okafor" in page.content())
     page.wait_for_function("() => document.getElementById('shConn').dataset.state === 'offline'", timeout=30000)
@@ -121,8 +122,7 @@ with sync_playwright() as p:
     check("the teacher's waiting changes are encrypted in the browser database", "TEACHER-PRIVATE" not in q_raw and "csrf_token" not in q_raw and '"kid":"u"' in q_raw)
 
     print("=== 6. the administrator signs in offline on the same device ===")
-    logout(page); page.wait_for_url("**/offline", timeout=15000)
-    page.wait_for_function("() => !document.getElementById('signin').hidden", timeout=10000)
+    logout(page); page.wait_for_selector("#unifiedLoginForm", timeout=15000)
     offline_login(page, "admin", "Pass1234"); page.wait_for_url("**/dashboard", timeout=15000); page.wait_for_selector("#shConn")
     check("the administrator gets HIS pages (different person, different cache)", page.evaluate("() => document.querySelector('meta[name=sh-user]').content") == fpB)
     check("the teacher's waiting changes are NOT counted or shown for the administrator", "pending" not in chip(page).inner_text())
@@ -134,7 +134,7 @@ with sync_playwright() as p:
     page.click("#switch")
 
     print("=== 7. the server comes back; the teacher's changes are sent ===")
-    page.wait_for_function("() => !document.getElementById('signin').hidden", timeout=10000)
+    page.wait_for_selector("#unifiedLoginForm", timeout=15000)
     offline_login(page, "aokafor", "Pass1234"); page.wait_for_url("**/dashboard", timeout=15000); page.wait_for_selector("#shConn")
     check("her waiting changes are still there for her", "2 pending" in chip(page).inner_text(), chip(page).inner_text())
     start()
