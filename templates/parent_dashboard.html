@@ -33,7 +33,7 @@
     <div class="chart-wrap" data-sh-bars='{{ {"labels": _latest.subjects|map(attribute="subject")|list, "values": _latest.subjects|map(attribute="total")|list, "label": "Subject scores, " ~ _latest.term.name, "empty": "No subject scores yet.", "scoreColors": true, "max": 100}|tojson }}'></div>
   </div>{% endif %}
 
-  <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div class="ad-two">
     <!-- Attendance -->
     <div class="card" id="attendance">
       <div class="panel-header"><h3>Attendance</h3><a href="{{ url_for('parent_attendance', student_id=child.id) }}" style="font-size:0.8rem;font-weight:600">Details →</a></div>

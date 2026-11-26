@@ -12,6 +12,7 @@
       </div>
     </div>
     <div class="hub-content">
+      <div id="loginConn" class="login-conn" data-state="checking" role="status" aria-live="polite">Checking your connection…</div>
       <form method="POST" action="{{ url_for('login') }}" id="unifiedLoginForm" class="unified-login-form" autocomplete="on">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label>Username, Email, Phone, Admission No. or Register No.<input name="username" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false" value="{{ request.form.get('username', '') }}"></label>
@@ -41,3 +42,4 @@
   </section>
 </div>
 {% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/offline/unified-login.js') }}?v=116" defer></script>{% endblock %}
