@@ -180,10 +180,68 @@ main.content .ai-hero .eyebrow{display:none}
   .topbar-actions,.top-actions{min-width:0;flex-wrap:nowrap}
   .topbar-actions .role-chip,.top-actions .role-chip{max-width:6.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topbar-actions .top-avatar,.top-actions .top-avatar{flex:none}
-  html[data-font-scale="130"] .topbar-actions .sh-conn,html[data-font-scale="150"] .topbar-actions .sh-conn{display:none}
+  /* V117: the indicator is never hidden, whatever the text size: it shrinks to its coloured dot (the tooltip and screen readers still say Online / Offline) */
+  html[data-font-scale="130"] .topbar-actions .sh-conn,html[data-font-scale="150"] .topbar-actions .sh-conn{padding:.35rem;gap:0}
+  html[data-font-scale="130"] .topbar-actions .sh-conn .sh-conn-text,html[data-font-scale="150"] .topbar-actions .sh-conn .sh-conn-text,
+  html[data-font-scale="130"] .topbar-actions .sh-conn small,html[data-font-scale="150"] .topbar-actions .sh-conn small{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 }
 
 /* Attendance range buttons: 4 across when there is room, otherwise a tidy 2 x 2 (never 3 + 1) */
 .ch-controls .seg{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media(min-width:701px) and (max-width:1199px){.ch-controls .seg{grid-template-columns:repeat(2,minmax(0,1fr))}}
 html[data-font-scale="130"] .ch-controls .seg,html[data-font-scale="150"] .ch-controls .seg{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   8. ONE login page, online and offline (V116): connection status + offline messages
+   --------------------------------------------------------------------------------------------------------------------- */
+.login-conn{display:flex;align-items:center;gap:.6rem;margin:0 0 14px;padding:.55rem .85rem;border-radius:12px;font-size:.88rem;font-weight:600;line-height:1.35;background:#eef2fb;color:#2b3f6b;border:1px solid #d5ddf2;overflow-wrap:anywhere}
+.login-conn::before{content:"";flex:none;width:.65rem;height:.65rem;border-radius:50%;background:#94a3b8}
+.login-conn[data-state=online]{background:#e8f8ee;color:#14532d;border-color:#bfe8cd}.login-conn[data-state=online]::before{background:#16a34a}
+.login-conn[data-state^=offline]{background:#fff4e0;color:#7a4b00;border-color:#f3d9a4}.login-conn[data-state^=offline]::before{background:#d97706}
+.login-conn[data-state=offline_new],.login-conn[data-state=offline_https]{background:#fdeaea;color:#8a1230;border-color:#f3c4cb}.login-conn[data-state=offline_new]::before,.login-conn[data-state=offline_https]::before{background:#dc2626}
+.login-offline-msg{margin:4px 0 10px;padding:.6rem .85rem;border-radius:10px;background:#fdeaea;color:#8a1230;font-weight:600;font-size:.9rem;line-height:1.4;overflow-wrap:anywhere}
+.login-offline-msg[hidden]{display:none}
+html[data-bs-theme=dark] .login-conn{background:#1a2438;color:#c9d6f2;border-color:#2c3a58}
+html[data-bs-theme=dark] .login-conn[data-state=online]{background:#12301e;color:#bbf7d0;border-color:#1f5a35}
+html[data-bs-theme=dark] .login-conn[data-state^=offline]{background:#3a2e12;color:#fde68a;border-color:#5c4a1c}
+html[data-bs-theme=dark] .login-conn[data-state=offline_new],html[data-bs-theme=dark] .login-conn[data-state=offline_https],html[data-bs-theme=dark] .login-offline-msg{background:#43161f;color:#fecaca;border-color:#6b2431}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+   9. V117 — DASHBOARD PANEL ROWS THAT NEVER OVERLAP OR DISTORT (teacher + parent dashboards, any width, zoom or text size)
+   Cause of the old distortion: modern-compat.css gave every panel in an .ad-two row  height:100%  while the row itself was a
+   WRAPPING flex box. Once the row wrapped (phone, tablet, A+ text, browser zoom) every panel became as tall as the WHOLE row, so
+   panels overlapped the next row and left large empty areas. A grid row has no such problem: each row's height comes from its
+   tallest panel and the panels in it stretch to match.
+   --------------------------------------------------------------------------------------------------------------------- */
+.ad .ad-two{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,21rem),1fr))!important;gap:16px;align-items:stretch;margin-bottom:16px}
+.ad .ad-two>*{min-width:0;flex:none;margin-bottom:0}
+.ad .ad-two>.ad-panel,.ad .ad-two>.card,.ad .ad-two>div>.ad-panel{height:auto}
+.ad .ad-two>[data-slot]{display:flex;flex-direction:column}
+.ad .ad-two>[data-slot]>.ad-panel,.ad .ad-two>[data-slot]>.gp{flex:1 1 auto}
+/* A+ / browser zoom: the old rule forced ONE column at 130%/150%; the rem-based grid above already does that exactly when the row is too narrow */
+html[data-font-scale="130"] .ad .ad-two,html[data-font-scale="150"] .ad .ad-two{grid-template-columns:repeat(auto-fit,minmax(min(100%,21rem),1fr))!important}
+/* panel rows of the .ad-panels kind: heights come from content, panels in one row match each other */
+.ad .ad-panels{margin-bottom:16px}
+.ad .ad-panels>.ad-panel,.ad .ad-panels>article{height:auto}
+/* nothing inside a panel may push the panel wider than the screen: charts shrink, tables scroll inside their own box */
+.ad .ad-panel,.ad .card{max-width:100%}
+.ad .ad-panel .table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Gender panel + attendance legend keep their shape inside narrow cards */
+.ad .ad-panel .gp-wrap,.ad .ad-panel .gp-body{max-width:100%}
+.ad .ad-panel>header{min-width:0}
+@media(max-width:560px){
+  .ad .ad-two,.ad .ad-panels{gap:12px;margin-bottom:12px}
+  .ad .chart-wrap{padding:12px 10px}
+}
+/* the dashboard column itself may never be wider than the screen: an "auto" track grows to the widest child's minimum size (the cause
+   of panels running off the right edge at large text sizes / zoom). minmax(0,1fr) lets every child shrink to the screen instead. */
+.ad{grid-template-columns:minmax(0,1fr)}
+.ad>*{min-width:0;max-width:100%}
+/* Large text on a phone: a panel title and its small caption share a row only when both fit; otherwise the caption drops under the
+   title. Words are broken only when a single word is wider than the whole line (never "Subject Performanc / e"). */
+.ad .ad-panel,.ad .card{overflow-wrap:break-word}
+.ad .ad-panel>header h2,.ad .panel-header h3{flex:1 1 auto;min-width:0;overflow-wrap:break-word;word-break:normal}
+.ad .ad-panel>header>span,.ad .panel-header>span{flex:0 1 auto;min-width:0}
+.ad .grade-row-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px}
+.ad .grade-row-top b{min-width:0;overflow-wrap:break-word}
+.ad .grade-row-top span{flex:0 1 auto;margin-left:auto;text-align:right}
