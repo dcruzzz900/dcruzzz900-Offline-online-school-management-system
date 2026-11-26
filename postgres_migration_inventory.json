@@ -1,0 +1,1304 @@
+{
+  "source": "db.py",
+  "scope_warning": "Static inventory only. Entries are not PostgreSQL migrations and must not be executed against PostgreSQL.",
+  "registry_counts": {
+    "MIGRATIONS": 23,
+    "STEPS": 76
+  },
+  "duplicate_step_keys": [],
+  "duplicate_step_functions": [],
+  "feature_occurrences_by_registry_entry": {
+    "ensure_column": 155,
+    "executescript": 1,
+    "lastrowid": 2,
+    "pragma": 8,
+    "rowid": 10,
+    "sqlite_catalog": 1,
+    "sqlite_date_functions": 15,
+    "sqlite_upsert": 16,
+    "table_rebuild": 3,
+    "trigger_ddl": 36
+  },
+  "entries": [
+    {
+      "registry": "MIGRATIONS",
+      "order": 1,
+      "key": "version_001",
+      "function": "migration_001_baseline",
+      "line_start": 98,
+      "line_end": 100,
+      "docstring": "",
+      "features": {
+        "executescript": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 2,
+      "key": "version_002",
+      "function": "migration_002_multi_school",
+      "line_start": 103,
+      "line_end": 136,
+      "docstring": "",
+      "features": {
+        "lastrowid": 1,
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 3,
+      "key": "version_003",
+      "function": "migration_003_student_fields",
+      "line_start": 139,
+      "line_end": 146,
+      "docstring": "",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 4,
+      "key": "version_004",
+      "function": "migration_004_school_email_and_logo_settings",
+      "line_start": 151,
+      "line_end": 162,
+      "docstring": "",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 5,
+      "key": "version_005",
+      "function": "migration_005_expand_user_roles",
+      "line_start": 165,
+      "line_end": 194,
+      "docstring": "Add a 'sub_admin' role who can manage everything about their own\nschool except promoting/managing other admins or sub-admins.",
+      "features": {
+        "table_rebuild": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 6,
+      "key": "version_006",
+      "function": "migration_006_merge_admission_register",
+      "line_start": 197,
+      "line_end": 242,
+      "docstring": "Merge the separate Register No. field into Admission No. (shown as\n\"Admission No. / Register No.\" throughout), unique only within a class\n(arm) rather than school-wide — so two arms of the same class (e.g. SS1\nScience 1 and SS1 Science 2) can reuse the same numbers for different\nstudents. Also adds religion and parent address fields.",
+      "features": {
+        "table_rebuild": 1,
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 7,
+      "key": "version_007",
+      "function": "migration_007_terms_publish_flag",
+      "line_start": 245,
+      "line_end": 249,
+      "docstring": "Terms must be explicitly 'published' before results can be emailed\nto parents, so parents are only notified once a final result is ready\n— not on every CA/score update.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 8,
+      "key": "version_008",
+      "function": "migration_008_more_skill_traits",
+      "line_start": 252,
+      "line_end": 260,
+      "docstring": "",
+      "features": {
+        "sqlite_upsert": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 9,
+      "key": "version_009",
+      "function": "migration_009_signature_dates",
+      "line_start": 263,
+      "line_end": 265,
+      "docstring": "",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 10,
+      "key": "version_010",
+      "function": "migration_010_enrollments",
+      "line_start": 268,
+      "line_end": 302,
+      "docstring": "Track which class a student was in during each academic session, so\npromoting a student to a new class doesn't rewrite their history —\npast terms' broadsheets/results still reflect the class they were\nactually in at the time.",
+      "features": {
+        "sqlite_upsert": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 11,
+      "key": "version_011",
+      "function": "migration_011_student_login",
+      "line_start": 305,
+      "line_end": 314,
+      "docstring": "Optional student login: a student can be given a username/password\n(set by admin/sub-admin/form teacher) to view their own published\nresults.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 12,
+      "key": "version_012",
+      "function": "migration_012_platform_tier",
+      "line_start": 317,
+      "line_end": 343,
+      "docstring": "Adds the Super Admin / platform-level tier: platform_admins (a login\ncompletely separate from school staff/students), a per-school suspend\nflag, and a basic audit log for platform-level moderation actions.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 13,
+      "key": "version_013",
+      "function": "migration_013_notifications",
+      "line_start": 346,
+      "line_end": 363,
+      "docstring": "In-app notifications: sent by Super Admin (platform-wide or to one\nschool) or by a School Admin/Sub-Admin (to their own school), targeted\nat a role. Read/unread is tracked via a simple 'last seen' id.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 14,
+      "key": "version_014",
+      "function": "migration_014_attendance_records",
+      "line_start": 366,
+      "line_end": 392,
+      "docstring": "Daily roll call: one row per student per date per term, marked\n'present' or 'absent' by the Form Teacher. Days Open/Present/Absent and\nthe attendance percentage shown on results are derived from these rows\n(see recompute_attendance below) rather than typed in by hand, so an\n\"impossible\" attendance value can no longer be entered.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 15,
+      "key": "version_015",
+      "function": "migration_015_auto_comments",
+      "line_start": 395,
+      "line_end": 401,
+      "docstring": "Per-school toggles: when on, the teacher's/principal's comment on a\nterminal result is generated from the student's grade for that term\ninstead of relying on a manually typed comment — useful when scores\ncome in via offline CSV and nobody types a comment at all.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 16,
+      "key": "version_016",
+      "function": "migration_016_cumulative_results",
+      "line_start": 404,
+      "line_end": 409,
+      "docstring": "Per-school 'Enable Cumulative Result' toggle. When on, an\nAnnual/Cumulative Result averages each subject across every term in a\nsession (1st/2nd/3rd Term) that has a score recorded. When off, terms\nkeep operating completely independently, exactly as before.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 17,
+      "key": "version_017",
+      "function": "migration_017_class_category",
+      "line_start": 412,
+      "line_end": 418,
+      "docstring": "Science/Arts/Commercial as a real, structured field on a class (a\nspecific arm like 'SS1 Science A') instead of something only implied by\ntyping it into the free-text class name — so it can be shown reliably\non results/broadsheets and used later to scope Learning Materials by\ncategory, without changing how classes are identified elsewhere.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 18,
+      "key": "version_018",
+      "function": "migration_018_learning_materials",
+      "line_start": 421,
+      "line_end": 451,
+      "docstring": "Learning Materials module: a material is uploaded (or linked, for\nthings like a YouTube video) against one specific session + class +\nsubject. Since a class already carries its own arm and Science/Arts/\nCommercial category, scoping by class_id automatically scopes by\narm/category too — a student only ever sees materials for their own\nclass, so Science/Arts/Commercial students naturally only see their\nown materials without any extra filtering logic.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 19,
+      "key": "version_019",
+      "function": "migration_019_staff_attendance",
+      "line_start": 454,
+      "line_end": 474,
+      "docstring": "Staff Attendance: Present/Absent/Late/Leave per staff member per\nday, recorded by an admin/sub_admin. Separate from the student roll\ncall — staff aren't tied to a single class, so this is scoped to the\nwhole school rather than one Form Teacher's classroom.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 20,
+      "key": "version_020",
+      "function": "migration_020_font_customization",
+      "line_start": 477,
+      "line_end": 483,
+      "docstring": "Per-school font customization: `web_font` picks the app's UI\ntypeface (a curated Google Font, or the system default), and\n`pdf_font` picks which of reportlab's base font families the printed\nresult sheets, broadsheets and reports use.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 21,
+      "key": "version_021",
+      "function": "migration_021_school_subdomain",
+      "line_start": 486,
+      "line_end": 494,
+      "docstring": "Each school can claim a unique subdomain slug (e.g. 'greenwood').\nThis column, plus the app's own host-header check, is the whole of\nwhat the application layer can do here — actually routing traffic\nlike greenwood.yourdomain.com to this app is a DNS/hosting-level\nsetup outside anything a database migration can configure; see the\nCustom Subdomain section on Setup → School Profile for what's needed.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 22,
+      "key": "version_022",
+      "function": "migration_022_result_date_toggle",
+      "line_start": 497,
+      "line_end": 503,
+      "docstring": "Per-school 'Show Automatic Date on Result' toggle: when on, the\ncurrent date (in the system's DD/MM/YYYY format) is stamped on the\nprinted/downloaded result. When off, no automatic date appears there\n— this is separate from the dashboard's live clock, which must never\nitself appear on a printed/downloaded result.",
+      "features": {
+        "sqlite_date_functions": 1,
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "MIGRATIONS",
+      "order": 23,
+      "key": "version_023",
+      "function": "migration_023_school_activation",
+      "line_start": 506,
+      "line_end": 533,
+      "docstring": "New-school onboarding via Super Admin: a school starts 'pending'\nuntil its School Admin enters a time-limited, single-use 6-digit code\n(sent to the school's registered email and/or shown to the Super\nAdmin) on the public activation page. Also adds an 'archived' status\ndistinct from suspension, and a force-logout timestamp so the Super\nAdmin can invalidate a school's active sessions without a server-side\nsession store — any session whose login predates this timestamp is\ntreated as stale and signed out on its next request.",
+      "features": {
+        "ensure_column": 5
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 1,
+      "key": "ai_layer",
+      "function": "migration_048_ai_layer",
+      "line_start": 1630,
+      "line_end": 1703,
+      "docstring": "AI layer configuration, consent, draft outputs and audit records.\nAll records are explicitly tenant-scoped; AI is disabled by default.",
+      "features": {
+        "sqlite_upsert": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 2,
+      "key": "school_theme",
+      "function": "migration_049_school_theme",
+      "line_start": 1730,
+      "line_end": 1741,
+      "docstring": "Dashboard theme tokens are per-school and safe to change without affecting data.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 3,
+      "key": "offline_sync",
+      "function": "migration_024_offline_sync",
+      "line_start": 536,
+      "line_end": 651,
+      "docstring": "Offline-first support.\n\nEvery table a device is allowed to create/edit while offline gets three\nextra columns:\n  - client_uuid: generated on the device the record was first created\n    on (server-side too, for rows that already existed before this\n    migration). This — not the integer id — is what offline sync uses\n    to identify a record, because an offline device can't know what\n    integer id a brand-new row will get until it has synced; using a\n    client-generated UUID as the idempotency key means retrying a push\n    (e.g. after a dropped connection mid-sync) safely upserts instead\n    of creating a duplicate.\n  - updated_at: last-write timestamp, used for conflict detection\n    (last-write-wins with a surfaced warning — see sync_api.py).\n  - is_deleted: soft-delete flag, so a deletion made on one device can\n    be propagated to others on their next pull instead of the row just\n    silently disappearing from a diff.\n\nAlso adds device_credentials (one row per device a user has enrolled\nfor offline access — see sync_api.py's /api/offline/enroll) and\nsync_conflicts (a durable record of any push that lost a conflict, so\nan admin can review and manually reconcile it instead of data being\nquietly dropped).",
+      "features": {
+        "ensure_column": 4
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 4,
+      "key": "deferred_actions",
+      "function": "migration_025_deferred_actions",
+      "line_start": 654,
+      "line_end": 682,
+      "docstring": "Support for the 'Functions Requiring Internet' part of the offline\nspec: things like emailing results to parents genuinely need a live\nconnection (SMTP) and are never done purely locally, but a device can\nstill QUEUE the request while offline, and it runs automatically the\nmoment the device is back online and syncs — see /api/actions/queue in\napp.py and SyncEngine.queueAction/pushActions in sync-engine.js.\n\nThis is a log of one-shot commands, not sync-able data: unlike the\ntables migration_024_offline_sync touches, there's nothing to pull\nback down to other devices and no \"conflict\" concept — an action\neither ran or it didn't.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 5,
+      "key": "sync_triggers",
+      "function": "migration_026_sync_triggers",
+      "line_start": 685,
+      "line_end": 747,
+      "docstring": "migration_024_offline_sync added client_uuid/updated_at/is_deleted\nto every syncable table and backfilled existing rows — but that\nbackfill only covered rows that existed AT THAT MOMENT. Every one of\nthis app's existing add-student/add-class/add-teacher/enter-scores/\ntake-attendance/add-comment routes was written before offline sync\nexisted and simply doesn't set these columns on INSERT, and doesn't\nbump updated_at on UPDATE either. Two concrete failures that causes:\n\n  1. A record created through the normal online UI has client_uuid\n     IS NULL. Pulled to an offline device, IndexedDB rejects it (NULL\n     is not a valid key for a keyPath store) — sync breaks for that\n     row.\n  2. A record edited through the normal online UI doesn't bump\n     updated_at. The offline conflict check in sync_api.py compares\n     a device's last-known updated_at to the server's current one;\n     if an online edit doesn't change it, a stale offline edit would\n     look \"not conflicting\" and silently overwrite the online one.\n\nAuditing and fixing every INSERT/UPDATE site across this codebase\nwould be fragile (easy to miss one, easy for a future route to\nreintroduce the gap). Triggers fix it at the one place it can't be\nbypassed: the table itself, regardless of which code path writes to\nit, sync-aware or not.\n\nThe UPDATE trigger only fires `WHEN NEW.updated_at IS OLD.updated_at`\n— i.e. only when the UPDATE statement didn't already set updated_at\nitself — so it never clobbers the value sync_api.py's push endpoint\nexplicitly computes and returns to the client.",
+      "features": {
+        "trigger_ddl": 2,
+        "sqlite_date_functions": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 6,
+      "key": "user_active_status",
+      "function": "migration_024_user_active_status",
+      "line_start": 1115,
+      "line_end": 1121,
+      "docstring": "A per-user active/inactive flag, distinct from school-level suspension.\nLets an admin switch a staff account off (and, with it, every device that\naccount had enrolled for offline use) without suspending the whole school.\n(Same definition the earlier \"queue-based\" build used for its migration 24,\nso a database created by that build already has it.)",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 7,
+      "key": "offline_sync_tokens",
+      "function": "migration_025_offline_sync_tokens",
+      "line_start": 1124,
+      "line_end": 1136,
+      "docstring": "Table used by the earlier queue-based build to de-duplicate replayed\noffline form submissions. Nothing in this build writes to it (offline work\ngoes through the sync engine, whose changes carry their own ids), but it is\ncreated so a database from either build is a superset of both.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 8,
+      "key": "ca3_conflicts_audit_tombstones",
+      "function": "migration_027_ca3_conflicts_audit_tombstones",
+      "line_start": 824,
+      "line_end": 905,
+      "docstring": "Four related additions for the multi-school, multi-device platform:\n\n1. Optional CA3. scores.ca3 (default 0) and grading_config.ca3_max\n   (0 = CA3 switched off for that school, which is what every existing\n   school keeps, so nothing changes for them until an admin opts in).\n2. Grading settings become readable by offline devices, so a device can\n   work out totals/grades/positions without a server round trip.\n3. change_audit: a permanent trail of every change the sync API applied,\n   merged, refused or flagged, with who/which device/when and old vs new\n   values. Its (school_id, change_id) uniqueness is also what makes a\n   retried push idempotent.\n4. sync_tombstones + AFTER DELETE triggers. The online screens hard-DELETE\n   students, classes, subjects, etc., which a \"changed since\" pull can\n   never report, so other devices kept deleted records forever. The\n   triggers record each deletion (scoped to its school) so pulls can\n   tell devices to drop them.",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_date_functions": 1,
+        "ensure_column": 7
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 9,
+      "key": "skills_syncable",
+      "function": "migration_028_skills_syncable",
+      "line_start": 908,
+      "line_end": 926,
+      "docstring": "Skill traits and each student's ratings become readable on devices so\nthe offline result sheet can show the Psychomotor/Affective section (they\nare still entered online).",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_date_functions": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 10,
+      "key": "class_arms",
+      "function": "migration_029_class_arms",
+      "line_start": 929,
+      "line_end": 936,
+      "docstring": "Optional structured class level + arm (\"JSS 1\" + \"A\"). `name` stays the\none authoritative, unique display name (\"JSS 1 A\") that every screen,\nresult and report already uses; level/arm just record how it was made so\nthe admin screens can create several arms at once and group them. Existing\nclasses keep working untouched (both columns NULL).",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 11,
+      "key": "materials_syncable",
+      "function": "migration_030_materials_syncable",
+      "line_start": 1146,
+      "line_end": 1160,
+      "docstring": "Learning-material listings (title, subject, class, type, link or file name) become\nreadable on devices, so the app can list every material the person may see and let them\nsave chosen ones for offline use. The files themselves are never bulk-synced.",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_date_functions": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 12,
+      "key": "user_contact_identifiers",
+      "function": "migration_031_user_contact_identifiers",
+      "line_start": 1163,
+      "line_end": 1171,
+      "docstring": "Lets staff log in with an email or phone number in addition to their\nusername (the login form now accepts any of the three). Both are\noptional and, when present, unique platform-wide — same as username —\nso the login lookup can never match two different accounts.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 13,
+      "key": "student_photo_and_relationship",
+      "function": "migration_032_student_photo_and_relationship",
+      "line_start": 1174,
+      "line_end": 1179,
+      "docstring": "Optional passport photo (uploaded like the school logo — online only,\nnever bulk-synced to devices) and a guardian relationship field\nalongside the existing parent_* contact columns.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 14,
+      "key": "school_branding_extra",
+      "function": "migration_033_school_branding_extra",
+      "line_start": 1182,
+      "line_end": 1189,
+      "docstring": "School-name alignment is its own setting, independent of logo_align\n(a school may want its logo on the left but its name centred). Also adds\nthe school's timezone and preferred date display format, used by the\ndashboard's live date/time card and anywhere else a date is rendered.",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 15,
+      "key": "result_theme",
+      "function": "migration_034_result_theme",
+      "line_start": 1192,
+      "line_end": 1197,
+      "docstring": "Per-school result-sheet visual theme: an accent colour and a header\narrangement, on top of the existing font choice. Kept as plain columns\n(not JSON) so they stay simple to validate and to read from SQL.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 16,
+      "key": "digital_signatures",
+      "function": "migration_035_digital_signatures",
+      "line_start": 1200,
+      "line_end": 1212,
+      "docstring": "Lets a teacher or principal upload a digital signature image from\ntheir own account and choose whether it should be stamped automatically\non results instead of leaving a blank line for a manual signature. Kept\nstrictly separate per user (a form teacher's signature can never appear\nas the principal's, and vice versa — the result template picks the image\nfrom student_term_info.teacher_signed_by / principal_signed_by, each an\nexplicit user id, never \"whoever is logged in\").",
+      "features": {
+        "ensure_column": 5
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 17,
+      "key": "student_status_contact",
+      "function": "migration_036_student_status_contact",
+      "line_start": 1215,
+      "line_end": 1222,
+      "docstring": "An explicit lifecycle status (beyond the plain is_active toggle) and\nan optional contact number for the student themselves, distinct from the\nparent/guardian's. Existing rows default to 'Active', matching the is_active\ndefault they already had.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 18,
+      "key": "attendance_source",
+      "function": "migration_037_attendance_source",
+      "line_start": 1225,
+      "line_end": 1234,
+      "docstring": "Records whether an attendance entry was taken online (saved straight\nto the server) or offline (saved to the device first, then synced), so\nit can be shown in the attendance history and, for offline entries, kept\ndistinct from the moment it was later synced. Existing rows predate this\ncolumn and are assumed online, since offline sync didn't exist before it.",
+      "features": {
+        "ensure_column": 4
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 19,
+      "key": "timetable",
+      "function": "migration_038_timetable",
+      "line_start": 1237,
+      "line_end": 1295,
+      "docstring": "A school timetable: named periods (with times) shared across the\nschool, and one entry per class/day/period holding the subject, teacher\nand room. Both tables are made syncable (client_uuid/updated_at/is_deleted)\nso they can be registered for offline read/write the same way classes and\nsubjects are.",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_date_functions": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 20,
+      "key": "tenant_identifiers",
+      "function": "migration_039_tenant_identifiers",
+      "line_start": 1298,
+      "line_end": 1336,
+      "docstring": "Add permanent human-readable school and tenant identifiers.\n\nExisting numeric school_id values remain the internal relational key.\ntenant_id and school_code are stable identifiers used by the application\nand offline client; they are never accepted as authorization credentials.",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 21,
+      "key": "role_permissions",
+      "function": "migration_036_role_permissions",
+      "line_start": 951,
+      "line_end": 1039,
+      "docstring": "Controlled role assignments and scoped permissions.\n\nA user's legacy role remains the compatibility/authentication role. This\nlayer adds explicit assignments for Nursery/Primary/Secondary workflows,\nscoped access, approval, temporary assignments and auditability.",
+      "features": {
+        "lastrowid": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 22,
+      "key": "scope_indexes",
+      "function": "migration_037_scope_indexes",
+      "line_start": 1044,
+      "line_end": 1048,
+      "docstring": "",
+      "features": {
+        "sqlite_date_functions": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 23,
+      "key": "first_login_onboarding",
+      "function": "migration_038_first_login_onboarding",
+      "line_start": 1051,
+      "line_end": 1059,
+      "docstring": "Track first-login onboarding for newly provisioned school admins.\n\nExisting users are left unchanged; only newly provisioned accounts can\nexplicitly opt into the first-login flow.",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 24,
+      "key": "role_scope_compat",
+      "function": "migration_role_scope_compat",
+      "line_start": 1062,
+      "line_end": 1086,
+      "docstring": "Compatibility repair for upgraded databases.\n\nSome V4/V5/V6 databases already contain role-scope tables but do not have\nthe later tenant-aware columns/indexes fully populated.  This step is\ndeliberately idempotent and never deletes role assignments or permissions.\nIt also fixes the historical NameError where the named migration step was\nreferenced before it had a definition.",
+      "features": {
+        "sqlite_date_functions": 1,
+        "ensure_column": 7
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 25,
+      "key": "school_readiness",
+      "function": "migration_040_school_readiness",
+      "line_start": 1339,
+      "line_end": 1348,
+      "docstring": "Track whether a school has completed the required pre-live setup.\nExisting schools remain usable and are treated as not-yet-verified until\nan administrator explicitly completes the readiness checklist.",
+      "features": {
+        "ensure_column": 4
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 26,
+      "key": "school_subscription",
+      "function": "migration_041_school_subscription",
+      "line_start": 1351,
+      "line_end": 1368,
+      "docstring": "Add non-payment subscription/trial lifecycle fields per school.\nExisting schools default to legacy so migration never changes their access.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 27,
+      "key": "subscription_plans",
+      "function": "migration_042_subscription_plans",
+      "line_start": 1371,
+      "line_end": 1397,
+      "docstring": "Create configurable platform subscription plans. Existing school access is untouched.",
+      "features": {
+        "sqlite_upsert": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 28,
+      "key": "billing_payments",
+      "function": "migration_043_billing_payments",
+      "line_start": 1400,
+      "line_end": 1439,
+      "docstring": "Create non-gateway billing records. No payment is considered successful until explicitly confirmed.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 29,
+      "key": "billing_notification_tracking",
+      "function": "migration_044_billing_notification_tracking",
+      "line_start": 1481,
+      "line_end": 1493,
+      "docstring": "Track automated billing notifications so each reminder is sent once per billing event/day.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 30,
+      "key": "billing_email_notifications",
+      "function": "migration_045_billing_email_notifications",
+      "line_start": 1496,
+      "line_end": 1516,
+      "docstring": "Track opt-in billing email delivery and retries without changing subscription state.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 31,
+      "key": "billing_job_runs",
+      "function": "migration_046_billing_job_runs",
+      "line_start": 1520,
+      "line_end": 1532,
+      "docstring": "Track scheduled billing-job runs and prevent overlapping executions.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 32,
+      "key": "payment_gateway_webhooks",
+      "function": "migration_044_payment_gateway_webhooks",
+      "line_start": 1442,
+      "line_end": 1478,
+      "docstring": "Add gateway webhook idempotency and receipt records.\n\nWebhook rows are immutable processing records; a repeated provider event\nmust never create a second payment or renew a school twice.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 33,
+      "key": "billing_financial_audit",
+      "function": "migration_047_billing_financial_audit",
+      "line_start": 1536,
+      "line_end": 1626,
+      "docstring": "Append-only financial audit trail for billing operations and exports.",
+      "features": {
+        "trigger_ddl": 8
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 34,
+      "key": "billing_finalization",
+      "function": "migration_053_billing_finalization",
+      "line_start": 1744,
+      "line_end": 1804,
+      "docstring": "V38-V47 additive financial finalization tables.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 35,
+      "key": "parent_portal",
+      "function": "migration_050_parent_portal",
+      "line_start": 2807,
+      "line_end": 2880,
+      "docstring": "Dedicated parent accounts, explicit parent-child links and scoped conversations.\nParent accounts are deliberately separate from staff users so existing RBAC is untouched.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 36,
+      "key": "registration_security_v52_finalize",
+      "function": "migration_051_registration_security_spec",
+      "line_start": 1707,
+      "line_end": 1728,
+      "docstring": "",
+      "features": {
+        "trigger_ddl": 5,
+        "rowid": 10,
+        "ensure_column": 12
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 37,
+      "key": "auth_signup_audit_v52",
+      "function": "migration_052_auth_signup_audit_spec",
+      "line_start": 2747,
+      "line_end": 2802,
+      "docstring": "V52 authentication/signup/linking/audit hardening.\n\nIdempotent additions only: existing academic records and RBAC remain intact.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 38,
+      "key": "school_auth_branding_v52",
+      "function": "migration_053_school_auth_branding",
+      "line_start": 2888,
+      "line_end": 2908,
+      "docstring": "Per-school authentication branding controls.\n\nBranding is intentionally stored on the school tenant and never accepted\nas a trusted client-supplied filename or tenant identity.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 39,
+      "key": "system_enhancements_v52",
+      "function": "migration_054_system_enhancements",
+      "line_start": 2913,
+      "line_end": 2936,
+      "docstring": "V52 required system enhancements: upload limits, activation approvals,\ntenant-stamped students, result signature/name toggles and RBAC role labels.",
+      "features": {
+        "ensure_column": 4
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 40,
+      "key": "online_first_stability_v55",
+      "function": "migration_055_online_stability",
+      "line_start": 2941,
+      "line_end": 2952,
+      "docstring": "Online-first stability additions: staff attendance check-in/out timestamps\nand canonical Class Teacher / Form Teacher role naming. Offline sync keeps\nusing the same tables and remains untouched.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 41,
+      "key": "automated_timetable_v2",
+      "function": "migration_056_automated_timetable_v2",
+      "line_start": 2958,
+      "line_end": 3071,
+      "docstring": "Replace the legacy timetable UI/data model with the tenant-scoped\nScheduleSlot + TimetableEntry architecture described in the automated\ntimetable specification. Legacy timetable tables are retained only for\nbackwards/offline compatibility; v2 is the active online source of truth.",
+      "features": {
+        "sqlite_upsert": 5
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 42,
+      "key": "staff_profile_documents_v57",
+      "function": "migration_057_staff_profile_documents",
+      "line_start": 3075,
+      "line_end": 3103,
+      "docstring": "Store the exact staff signup name parts and tenant-scoped staff documents.\nExisting users retain their legacy `name` value and are backfilled safely.",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 43,
+      "key": "runtime_schema_repair_v58",
+      "function": "migration_058_runtime_schema_repair",
+      "line_start": 3108,
+      "line_end": 3165,
+      "docstring": "Repair critical online schemas when schema_steps says a migration ran\nbut a table/column was lost or an older deployment left a partial schema.\nThis is deliberately additive: it never drops or deletes existing data.",
+      "features": {
+        "sqlite_upsert": 1,
+        "ensure_column": 5
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 44,
+      "key": "profiles_customfields_v60",
+      "function": "migration_059_profiles_customfields",
+      "line_start": 3190,
+      "line_end": 3358,
+      "docstring": "",
+      "features": {
+        "trigger_ddl": 9,
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 45,
+      "key": "v61_login_codes_audit_results",
+      "function": "migration_060_v61",
+      "line_start": 3369,
+      "line_end": 3507,
+      "docstring": "",
+      "features": {
+        "sqlite_catalog": 1,
+        "pragma": 2,
+        "trigger_ddl": 4,
+        "sqlite_upsert": 1,
+        "table_rebuild": 1,
+        "ensure_column": 7
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 46,
+      "key": "result_display_settings_v62",
+      "function": "migration_061_v62",
+      "line_start": 3648,
+      "line_end": 3706,
+      "docstring": "",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_date_functions": 1,
+        "ensure_column": 4
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 47,
+      "key": "spec_workflow_attendance_status_v63",
+      "function": "migration_062_v63_spec",
+      "line_start": 3762,
+      "line_end": 3856,
+      "docstring": "",
+      "features": {
+        "trigger_ddl": 1,
+        "sqlite_upsert": 2,
+        "sqlite_date_functions": 3,
+        "ensure_column": 5
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 48,
+      "key": "staff_titles_v64",
+      "function": "migration_063_v64_titles",
+      "line_start": 3865,
+      "line_end": 3869,
+      "docstring": "",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 49,
+      "key": "ai_consent_history_v65",
+      "function": "migration_064_v65_ai_consent",
+      "line_start": 3878,
+      "line_end": 3887,
+      "docstring": "",
+      "features": {
+        "sqlite_date_functions": 1,
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 50,
+      "key": "result_settings_single_home_v65",
+      "function": "migration_065_v65_result_settings",
+      "line_start": 3896,
+      "line_end": 3921,
+      "docstring": "",
+      "features": {
+        "pragma": 2,
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 51,
+      "key": "grading_config_audit_v66",
+      "function": "migration_066_v66_grading_audit",
+      "line_start": 3927,
+      "line_end": 3946,
+      "docstring": "History of changes to CA1/CA2/CA3/Exam maximums, so a lowered maximum\nthat conflicts with saved scores can be reviewed and confirmed instead of\nsilently refused or silently applied. Nothing in `grading_config` or\n`scores` is touched by this migration — it only adds a place to record\nwho changed the weighting, when, what it was before, and which saved\nscores were left exceeding the new maximum at that moment.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 52,
+      "key": "next_term_resumes_v67",
+      "function": "migration_067_v67_next_term_resumes",
+      "line_start": 3952,
+      "line_end": 3987,
+      "docstring": "Consolidates three overlapping date fields into one authoritative model:\n`terms.resumption_date` now always means \"the date THIS term itself resumes\"\n(unchanged meaning, just now read correctly — see app.py), and a dedicated\n`show_next_term_resumes` switch replaces the old `show_resumption_date` /\n`show_result_date` toggles (both of which already lost their checkbox in\nResult Display Settings). Nothing here deletes data:\n  - `show_next_term_resumes` seeds from the old `show_resumption_date` so a\n    school that had it on keeps seeing a date, now correctly placed.\n  - `terms.next_term_begins` (an older, separate \"next term begins\" field\n    entered on the term before) is folded into the next term's own\n    `resumption_date` wherever that next term exists and has no date of its\n    own yet — the two fields meant the same thing, entered in two places.\n  - `terms.result_date` / `student_term_info.result_date` are left exactly\n    as they are; the app simply stops displaying them (removed from Result\n    Display Settings and the result sheet per the \"no duplicate date\n    fields\" requirement), so no historical entry is lost.",
+      "features": {
+        "pragma": 4,
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 53,
+      "key": "print_orientation_fit_font_scale_v73",
+      "function": "migration_068_v73_print_scaling",
+      "line_start": 3993,
+      "line_end": 4008,
+      "docstring": "Three new, independent result-sheet print controls, each additive and defaulted to\ntoday's existing behaviour so nothing changes for a school that never opens the new\nsettings:\n  - page_orientation ('portrait'|'landscape'): the printed/PDF page size for an\n    individual result sheet. Was hardcoded portrait everywhere; defaults to 'portrait'.\n  - fit_to_page (bool): whether an overflowing sheet is automatically shrunk to stay on\n    one page (today's only behaviour) or left to flow across more than one page.\n    Defaults to 1 (today's behaviour, unchanged).\n  - font_scale ('small'|'normal'|'large'): a school-wide print size preference,\n    independent of which of the 13 templates is chosen. Defaults to 'normal' (today's\n    fixed per-template sizes, unchanged).",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 54,
+      "key": "password_reset_tokens_v82",
+      "function": "migration_069_v82_password_reset_tokens",
+      "line_start": 4014,
+      "line_end": 4031,
+      "docstring": "Email-based 'Forgot username/password' recovery (9th requirements document, Phase 5),\ncovering both staff (users) and parent accounts -- the old security-question flow only ever\ncovered staff. A reset token is single-use, short-lived, and stores only a hash of itself (never\nthe raw token), the same pattern class_login_codes/signup_codes already use for other one-time\ncodes in this app.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 55,
+      "key": "activity_log_class_scope_v90",
+      "function": "migration_070_v90_activity_log",
+      "line_start": 4037,
+      "line_end": 4045,
+      "docstring": "V90 (10th requirements doc, Phase 4): adds an optional class_id to the existing,\nlong-standing audit_log table so a \"Recent Activities\" feed can be scoped to the\nclasses a teacher/staff member is actually authorized to see, without a separate new\ntable. Purely additive -- every existing row simply gets class_id=NULL, and nothing\nthat already writes to audit_log needs to change unless it wants to start supplying\none.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 56,
+      "key": "paper_size_v91",
+      "function": "migration_071_v91_paper_size",
+      "line_start": 4051,
+      "line_end": 4063,
+      "docstring": "V91 (10th requirements doc, Phases 6-7): a school's choice of paper size for result\nsheets and cumulative results, independent of the existing page_orientation setting\n(portrait/landscape/auto) added back in V73. Purely additive and defaults to A4 --\ntoday's only size -- so nothing changes for a school that never opens this setting.\n  - paper_size: one of PAPER_SIZES (A4, A3, A5, Letter, Legal, Foolscap, Custom).\n  - custom_width_mm / custom_height_mm: only read when paper_size='Custom'; the\n    PORTRAIT dimensions (narrower side first) -- landscape swaps them the same way\n    every built-in size already does.",
+      "features": {
+        "ensure_column": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 57,
+      "key": "days_late_toggle_v99",
+      "function": "migration_072_v99_days_late_toggle",
+      "line_start": 4069,
+      "line_end": 4074,
+      "docstring": "V99: V97 added a \"Days Late\" attendance figure to the result sheet unconditionally (no\non/off switch of its own, unlike Days School Opened/Present/Absent, which all have one) --\nAustin asked for one. Purely additive, defaults to 1 (shown), so nothing changes for a school\nthat never opens this setting -- Days Late keeps appearing exactly as it already did.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 58,
+      "key": "sample_domain_traits_v100",
+      "function": "migration_073_v100_sample_domain_traits",
+      "line_start": 4080,
+      "line_end": 4108,
+      "docstring": "V100: the Terminal Report Sheet sample has 8 Affective and 7 Psychomotor items, but schools only\never got 6 and 4. Adds every missing sample item to every existing school (as active, selectable\ntraits like all others -- they appear in Update Result Details and Domain settings), and, only for\na school whose items have never been re-ordered (all sort_order 0), puts the sample's order in\nplace. Never renames, deactivates or deletes anything a school already has; INSERT OR IGNORE\nmakes it safe to run repeatedly.",
+      "features": {
+        "sqlite_upsert": 3
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 59,
+      "key": "sample_colours_v100",
+      "function": "migration_074_v100_sample_colours",
+      "line_start": 4114,
+      "line_end": 4125,
+      "docstring": "V100: the result sheet now defaults to the Updated Terminal Report Sheet sample (navy + sky blue).\nSchools still on the OLD built-in defaults (navy #1f3a5f / gold #c9a227) move to the new ones; a\ncolour a school picked for itself is never touched.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 60,
+      "key": "student_next_term_resumes_v103",
+      "function": "migration_075_v103_student_next_term_resumes",
+      "line_start": 4131,
+      "line_end": 4134,
+      "docstring": "V103: 'Next Term Resumes' can now be entered on the Academic Record (Terminal Result) page for a student's\nresult. Stored per student+term; when empty the school-wide date set for the next term (Terms page) is used.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 61,
+      "key": "targeted_notifications_v103",
+      "function": "migration_076_v103_targeted_notifications",
+      "line_start": 4140,
+      "line_end": 4143,
+      "docstring": "V103: a notification can be addressed to ONE staff member (e.g. 'your class results were approved' goes to the\nclass/form teacher who submitted them), not just to a whole role. NULL = everyone in target_role as before.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 62,
+      "key": "term_activation_v104",
+      "function": "migration_077_v104_term_activation",
+      "line_start": 4149,
+      "line_end": 4155,
+      "docstring": "V104: remember WHEN a term was first activated by the School Admin, so result sheets / broadsheets only ever show\nterms that have really been activated (a never-activated Second/Third Term is not displayed). Back-fills terms that are\nalready active, published, or have scores, so existing results look exactly as before.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 63,
+      "key": "published_sheet_snapshot_v104",
+      "function": "migration_078_v104_published_sheet_snapshot",
+      "line_start": 4161,
+      "line_end": 4165,
+      "docstring": "V104: when a class result is published, the school's result-sheet design + display settings at that moment are\nstored with the publication (JSON) and used from then on to render that class's published results, so later\ndesign/configuration changes never alter an already-published result.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 64,
+      "key": "admission_unique_per_class_v104",
+      "function": "migration_079_v104_admission_unique_per_class",
+      "line_start": 4171,
+      "line_end": 4184,
+      "docstring": "V104: an Admission No. / Register No. must be unique WITHIN A CLASS; the same number may be used in different classes.\nReplaces the school-wide unique index and triggers (an index/trigger change only -- no student data is touched).",
+      "features": {
+        "trigger_ddl": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 65,
+      "key": "announcements_v104",
+      "function": "migration_080_v104_announcements",
+      "line_start": 4190,
+      "line_end": 4213,
+      "docstring": "V104: temporary dashboard announcement banners (school-scoped or platform-wide) + per-user dismissals.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 66,
+      "key": "custom_school_info_v104",
+      "function": "migration_081_v104_custom_school_info",
+      "line_start": 4219,
+      "line_end": 4223,
+      "docstring": "V104: Custom School Information becomes usable: each field can be chosen for the result sheet, and a display setting\nswitches the whole block on/off.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 67,
+      "key": "result_custom_fields_v104",
+      "function": "migration_082_v104_result_custom_fields",
+      "line_start": 4229,
+      "line_end": 4250,
+      "docstring": "V104: School Admins can define ADDITIONAL information/assessment fields for the result sheet (text, number or a choice list),\nwith their own names, order and visibility, filled in per student and term.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 68,
+      "key": "fee_summary_v105",
+      "function": "migration_083_v105_fee_summary",
+      "line_start": 4256,
+      "line_end": 4266,
+      "docstring": "V105: the School Fees card on the admin dashboard reads the school's fee totals from here (expected vs collected).\nThere is no fees screen yet; until figures exist the card shows 0. Nothing links to it for now.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 69,
+      "key": "result_show_dob_v110",
+      "function": "migration_084_v110_show_dob",
+      "line_start": 4272,
+      "line_end": 4274,
+      "docstring": "V110: Date of Birth on the result sheet, switched ON/OFF in Result Display Settings (default ON).",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 70,
+      "key": "term_next_resumes_v111",
+      "function": "migration_085_v111_term_next_resumes",
+      "line_start": 4280,
+      "line_end": 4283,
+      "docstring": "V111: the admin sets \"Next Term Resumes\" directly on a term (the date the NEXT term starts, printed on THIS term's sheets).\nIt works even when the following term / next session has not been created yet (e.g. Third Term).",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 71,
+      "key": "result_sheet_gender_v106",
+      "function": "migration_084_v106_show_gender",
+      "line_start": 4347,
+      "line_end": 4350,
+      "docstring": "V106: the student's gender (Male / Female) on the result sheet, with its own switch in Result Display Settings.\nPurely additive and ON by default; existing schools simply start showing it and can switch it off.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 72,
+      "key": "ui_preferences_v107",
+      "function": "migration_085_v107_ui_preferences",
+      "line_start": 4356,
+      "line_end": 4362,
+      "docstring": "V107: each person's own theme (light / dark) and text size, kept on the server so it follows them across devices and sessions.\nKeyed by (kind, actor_id): kind is 'user' (staff / admins), 'student' or 'parent'. Purely additive.",
+      "features": {},
+      "review_required": false
+    },
+    {
+      "registry": "STEPS",
+      "order": 73,
+      "key": "parent_identity_v107",
+      "function": "migration_086_v107_parent_identity",
+      "line_start": 4368,
+      "line_end": 4372,
+      "docstring": "V107: Date of Birth + Gender are now compulsory for parents / guardians too (students and staff already had the columns).\nExisting parents keep NULL until they - or the school - complete them; nothing is invented.",
+      "features": {
+        "ensure_column": 2
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 74,
+      "key": "custom_background_v107",
+      "function": "migration_087_v107_custom_background",
+      "line_start": 4378,
+      "line_end": 4384,
+      "docstring": "V107: Theme & Branding backgrounds (preset / solid / gradient) and the switch that applies them to the sign-in screens.\nAdditive; existing schools keep the standard look (mode 'default', switch OFF).",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 75,
+      "key": "announcement_duration_v107",
+      "function": "migration_088_v107_announcement_duration",
+      "line_start": 4390,
+      "line_end": 4392,
+      "docstring": "V107: how long (seconds) a banner stays on screen before it tucks itself away; 0 = until dismissed / expired. Additive.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    },
+    {
+      "registry": "STEPS",
+      "order": 76,
+      "key": "offline_sync_v113",
+      "function": "migration_089_offline_sync_v113",
+      "line_start": 4399,
+      "line_end": 4432,
+      "docstring": "V113: offline-first support (additive; SQLite stays the primary database).\n\nsync_changes  - one row per change a device replayed from its offline queue. change_id (a UUID made on the device) is the\n                idempotency key: replaying the same change twice can never create a duplicate record.\nsync_conflicts- (table from migration_024) gains the columns the review screen needs.\nNo PostgreSQL-specific SQL is used; every column is plain TEXT/INTEGER so the same schema ports unchanged later.",
+      "features": {
+        "ensure_column": 1
+      },
+      "review_required": true
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+# Install in PostgreSQL deployments only; SQLite/local installs stay lightweight.
+-r requirements.txt
+psycopg[binary]>=3.2,<4
+psycopg-pool>=3.2,<4

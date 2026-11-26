@@ -112,9 +112,16 @@ for sideloading/Play Store distribution.
   first run so you can explore right away — use the **Clear Demo Data**
   button on the admin dashboard when you're ready to load your real school
   (see above), or delete `instance/school.db` and restart for a fully clean database.
-- This uses SQLite, which is fine for a single school on one server. For
-  multiple concurrent users at scale, migrating to PostgreSQL is a
-  straightforward next step (the schema is plain SQL).
+- Local/standalone installations continue to use SQLite. The hosted target is
+  PostgreSQL with a psycopg 3 connection pool; browser offline data remains in
+  IndexedDB and synchronizes through the existing Flask routes. The frontend
+  does not need a database-specific rewrite.
+- PostgreSQL pool settings are documented in `POSTGRES_ENV.example`; install
+  `requirements-postgres.txt` for the optional driver. PostgreSQL is not yet
+  enabled in `db.get_db()` because the current SQL and migration framework still
+  require a full compatibility port. See `MIGRATION_POSTGRES.md` for status and
+  the required acceptance gates. Do not switch production traffic before they
+  pass.
 - The built-in server (`python app.py`) is for development. For real
   deployment, run it behind a production WSGI server (e.g. gunicorn) — ask
   if you'd like help setting that up.
@@ -132,3 +139,7 @@ scope, and role changes are written to a dedicated audit table.
 ## v52 Production Candidate
 
 See `FINAL_RELEASE_CHECKLIST.md` and `RELEASE_NOTES_V52.md` before deploying to Railway.
+
+## PostgreSQL migration Stage 34
+
+Migration 107 (`ai_outputs`) is registered in the standalone PostgreSQL migration path. See `POSTGRES_STAGE34_MIGRATION_107.md` for the reviewed source schema, ported indexes/check/tenant trigger, validation results, and remaining live-PostgreSQL integration requirement.
