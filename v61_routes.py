@@ -14,6 +14,7 @@ from flask import abort, flash, jsonify, redirect, render_template, request, ses
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import profile_core as pc
+from db_compat import utc_date_days_ago_iso
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # no 0/O/1/I to avoid misreading
 CODE_LENGTH = 8
@@ -885,7 +886,7 @@ def register_v61_routes(app, h):
             att = list(reversed(att))
             att_total = sum(r["n"] for r in att)
             att_rate = round(sum(r["p"] for r in att) * 100 / att_total, 1) if att_total else None
-            staff_att = q("SELECT status, COUNT(*) n FROM staff_attendance WHERE school_id=:sid AND COALESCE(is_deleted,0)=0 AND date>=date('now','-30 day') GROUP BY status")
+            staff_att = q("SELECT status, COUNT(*) n FROM staff_attendance WHERE school_id=:sid AND COALESCE(is_deleted,0)=0 AND date>=:cutoff GROUP BY status", cutoff=utc_date_days_ago_iso(30))
             completion = []
             for c in classes:
                 if class_id and c["id"] != class_id:
