@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}
+{% extends "base.html" %}{% set v106_page = true %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel with context %}
 {% block title %}Dashboard — {{ school_name }}{% endblock %}
 {% block content %}
 {% set st = ov.students %}{% set sf = ov.staff %}{% set cp = ov.compilation %}{% set fe = ov.fees %}
@@ -189,19 +189,7 @@
       </ul>
     </article>
 
-    <article class="ad-panel" id="announcements-panel">
-      <header><h2><span class="ni">📢</span> Announcements</h2><a href="{{ url_for('school_announcements') }}">View All →</a></header>
-      <div>
-        {% for a in (announcement_banners or [])[:2] %}<div class="ad-ann-item">
-          <span style="font-size:1.2rem">ℹ️</span>
-          <div><b>{{ a.title }}</b><p style="font-size:0.8rem;color:var(--mut);margin-top:2px">{{ a.message }}</p>{% if a.expires_at %}<small style="color:var(--mut)">Until {{ a.expires_at[:10] }}</small>{% endif %}</div>
-        </div>{% else %}<div class="ad-ann-item">
-          <span style="font-size:1.2rem">ℹ️</span>
-          <div><b>No announcements</b><p style="font-size:0.8rem;color:var(--mut);margin-top:2px">Announcements you publish show here and on dashboards.</p></div>
-        </div>{% endfor %}
-      </div>
-      <div class="ad-tip"><span>💡</span><div><b>Tip:</b> Use the Timetable menu to view class schedules.</div></div>
-    </article>
+    {{ ann_panel(url_for('school_announcements'), 'Use the Timetable menu to view class schedules.') }}
   </section>
 
   <footer class="ad-foot">

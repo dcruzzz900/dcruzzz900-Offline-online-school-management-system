@@ -3,9 +3,11 @@
 {% block content %}
 {% set _tc = namespace(n=0) %}{% for t in teachers %}{% if 'teacher' in ((t.rbac_role or 'Teacher')|lower) %}{% set _tc.n = _tc.n + 1 %}{% endif %}{% endfor %}
 {% set _m = teachers|selectattr('gender','equalto','Male')|list|length + teachers|selectattr('gender','equalto','M')|list|length %}{% set _f = teachers|selectattr('gender','equalto','Female')|list|length + teachers|selectattr('gender','equalto','F')|list|length %}
+{# Add-teacher form starts collapsed; it stays open only when a failed submit needs the user to fix their input. #}
+{% set _add_open = request.method == 'POST' and (get_flashed_messages(category_filter=['error'])|length > 0) %}
 <div class="page-header">
   <div><h2><span class="ni">♙</span> Teachers &amp; Staff</h2><p>{{ teachers|length }} staff member{{ '' if teachers|length == 1 else 's' }}</p></div>
-  <div class="page-actions"><a class="btn btn-outline" href="{{ url_for('signup_codes') }}">Signup Codes</a><a class="btn btn-primary" href="#add-teacher">+ Add Teacher</a></div>
+  <div class="page-actions"><a class="btn btn-outline" href="{{ url_for('signup_codes') }}">Signup Codes</a><button type="button" class="btn btn-primary" data-toggle-form="#add-teacher" aria-expanded="{{ 'true' if _add_open else 'false' }}" aria-controls="add-teacher">+ Add Teacher</button></div>
 </div>
 <div class="kpi-row">
   <div class="kpi-mini"><div class="label">Total Staff</div><div class="value">{{ teachers|length }}</div></div>
@@ -40,8 +42,8 @@
   </table>
 </div>
 
-<div class="card" id="add-teacher" style="margin-top:16px">
-  <div class="panel-header"><h3>Add a Teacher</h3></div>
+<div class="card" id="add-teacher" data-collapsible{% if not _add_open %} hidden{% endif %} style="margin-top:16px">
+  <div class="panel-header"><h3>Add a Teacher</h3><button type="button" class="btn btn-outline btn-sm form-close" data-toggle-form="#add-teacher" aria-controls="add-teacher">Close</button></div>
   <form method="POST" style="padding:0 16px 16px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group"><label>Full Name</label><input type="text" name="name" required class="form-control"></div>
     <div class="form-group"><label>Staff / Employee ID <span class="req">*</span></label><input type="text" name="staff_id" maxlength="40" required placeholder="e.g. GSS/T/014" class="form-control"></div>
@@ -55,4 +57,4 @@
   </form>
 </div>
 {% endblock %}
-{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script>{% endblock %}
+{% block extra_scripts %}<script src="{{ url_for('static', filename='js/table-filter.js') }}"></script><script src="{{ url_for('static', filename='js/toggle-form.js') }}"></script>{% endblock %}
