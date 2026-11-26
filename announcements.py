@@ -115,6 +115,23 @@ def register_announcements(app, h):
             "AND NOT EXISTS (SELECT 1 FROM announcement_dismissals d WHERE d.announcement_id=a.id AND d.actor_type=? AND d.actor_id=?) "
             f"ORDER BY {PRIORITY_ORDER}, a.id DESC LIMIT 5", params).fetchall()
 
+    def feed_for(conn, v):
+        """Every announcement currently addressed to this person, for the Announcements CARD on each dashboard.
+        Unlike the sliding strip (active_for: un-dismissed only, top 5) this is the full list: a banner the person closed with
+        the x button, or one beyond the strip's limit of five, must still be readable on the card. Same audience / school /
+        start-expiry rules as the strip, same priority ordering (urgent first, then newest)."""
+        actor_type, actor_id, aud, school_id = v
+        now = _fmt(_utc_now())
+        auds = sorted(audiences_for(conn, v))
+        marks = ",".join("?" * len(auds))
+        scope = "a.school_id IS NULL" if actor_type == "platform" else "(a.school_id IS NULL OR a.school_id=?)"
+        params = ([] if actor_type == "platform" else [school_id]) + auds + [now, now]
+        return conn.execute(
+            f"SELECT a.* FROM announcements a WHERE a.is_active=1 AND {scope} "
+            f"AND a.audience IN ({marks}) AND (a.starts_at IS NULL OR a.starts_at<=?) "
+            "AND (a.expires_at IS NULL OR a.expires_at>?) "
+            f"ORDER BY {PRIORITY_ORDER}, a.id DESC LIMIT 100", params).fetchall()
+
     # ------------------------------------------------------------------ banners on dashboards
     @app.context_processor
     def inject_announcement_banners():
@@ -128,7 +145,7 @@ def register_announcements(app, h):
             conn = get_db()
             try:
                 purge_expired(conn)
-                return {"announcement_banners": active_for(conn, v)}
+                return {"announcement_banners": active_for(conn, v), "announcement_feed": feed_for(conn, v)}
             finally:
                 conn.close()
         except Exception:

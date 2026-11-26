@@ -20,6 +20,7 @@ import hashlib
 from collections import defaultdict, deque
 
 import v63_core
+from db_compat import days_between_iso_dates
 from db import (
     get_db, init_db, grade_for, get_school, INSTANCE_DIR, table_exists, ensure_school_v61_defaults, generate_school_id, get_result_display, RESULT_BOOL_SETTINGS, RESULT_TEMPLATES,
     FONT_SCALE_FACTORS, PAGE_ORIENTATIONS, FONT_SCALE_CHOICES,
@@ -10854,8 +10855,7 @@ def platform_billing_report_export(report_name):
         rows = conn.execute("""
             SELECT s.name, s.school_code, COALESCE(s.subscription_plan,'legacy'),
                    COALESCE(s.subscription_status,'unknown'), s.subscription_start, s.subscription_end,
-                   CASE WHEN s.subscription_end IS NULL THEN NULL
-                        ELSE CAST(julianday(substr(s.subscription_end,1,10)) - julianday(?) AS INTEGER) END,
+                   s.subscription_end,
                    COALESCE((SELECT SUM(p.amount_ngn) FROM billing_payments p
                              WHERE p.school_id=s.id AND p.status='confirmed'
                                AND COALESCE(p.paid_at,p.confirmed_at,p.created_at) >= ?
@@ -10863,8 +10863,8 @@ def platform_billing_report_export(report_name):
             FROM schools s
             WHERE s.is_archived=0
             ORDER BY s.name ASC
-        """, (datetime.datetime.utcnow().date().isoformat(), start_iso, end_iso)).fetchall()
-        rows = [tuple(r) for r in rows]
+        """, (start_iso, end_iso)).fetchall()
+        rows = [tuple(r[:6]) + (days_between_iso_dates(datetime.datetime.now(datetime.timezone.utc).date().isoformat(), r[6]),) + tuple(r[7:]) for r in rows]
         title, filename = "Subscription Renewals", f"billing_renewals_{start}_{end}.{fmt}"
     else:
         conn.close()

@@ -1,0 +1,9 @@
+# PostgreSQL configuration example. Never commit real credentials.
+DATABASE_URL=postgresql://school_user:CHANGE_ME@localhost:5432/school_db
+PG_POOL_MIN_SIZE=1
+PG_POOL_MAX_SIZE=8
+PG_POOL_TIMEOUT=10
+PG_CONNECT_TIMEOUT=10
+
+# SQLite remains the default for local installations until PostgreSQL
+# compatibility work and acceptance tests are complete.

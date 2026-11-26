@@ -4,6 +4,7 @@ import re
 import datetime as _dt
 import secrets as _secrets
 from werkzeug.security import generate_password_hash
+from db_compat import utc_today_iso, insert_returning_id
 
 # DATA_DIR lets a host with an ephemeral filesystem (e.g. Railway) point the
 # database, uploaded logos/materials and the generated secret key at a
@@ -1045,7 +1046,7 @@ def migration_037_scope_indexes(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_class ON role_assignments(school_id, class_id, class_arm)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_subject ON role_assignments(school_id, subject_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_department ON role_assignments(school_id, department)")
-    conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < date('now')")
+    conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < ?", (utc_today_iso(),))
 
 
 def migration_038_first_login_onboarding(conn):
@@ -1083,7 +1084,7 @@ def migration_role_scope_compat(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_class ON role_assignments(school_id, class_id, class_arm)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_subject ON role_assignments(school_id, subject_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_role_scope_department ON role_assignments(school_id, department)")
-    conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < date('now')")
+    conn.execute("UPDATE role_assignments SET status='expired' WHERE status='active' AND end_date IS NOT NULL AND end_date < ?", (utc_today_iso(),))
 
 MIGRATIONS = [
     migration_001_baseline,
@@ -2091,13 +2092,14 @@ def seed(conn):
         ("003", "Tunde", "Bakare", "M"),
     ]
     for adm, fn, ln, g in students:
-        cur.execute(
+        student_id = insert_returning_id(
+            cur,
             "INSERT INTO students (school_id, tenant_id, admission_no, first_name, last_name, gender, class_id) VALUES (?,?,?,?,?,?,?)",
             (school_id, seed_tenant, adm, fn, ln, g, class_id),
         )
         cur.execute(
             "INSERT INTO enrollments (student_id, session_id, class_id) VALUES (?,?,?)",
-            (cur.lastrowid, session_id, class_id),
+            (student_id, session_id, class_id),
         )
 
     conn.commit()
