@@ -1,7 +1,7 @@
 {% extends "base.html" %}{% set v106_page = true %}{% from "partials/gender_panel.html" import gender_panel %}{% from "partials/top_students.html" import top_students_table %}{% from "partials/v106_banner.html" import v106_banner %}{% from "partials/ann_panel.html" import ann_panel with context %}{% block title %}Teacher Dashboard{% endblock %}{% block content %}
 {% set _r = my_roles or [] %}{% set _kind = 'accountant' if 'Bursar / Accountant' in _r else ('registrar' if 'Registrar / Admissions Officer' in _r else ('staff' if (_r and 'Teacher' not in _r) else 'teacher')) %}
 {% set pf = tx.pass_fail %}{% set pf_total = pf.passed + pf.failed + pf.not_assessed %}
-<div class="ad">
+<div class="ad ad-teacher">
   {% set _nm %}{% set _p = (session.get('name') or '').split() %}{% if _p and _p|length > 1 and _p[0].rstrip('.')|lower in ['mr','mrs','ms','miss','dr','prof','engr','chief','sir','madam','pastor','rev'] %}{{ _p[0] }} {{ _p[-1] }}{% else %}{{ _p[0] if _p else 'Teacher' }}{% endif %}{% endset %}
   {% if _kind == 'teacher' %}{{ v106_banner('teacher', _nm|trim, (position_label ~ ' · ' if position_label else '') ~ ((term.session_name ~ ' · ' ~ term.name ~ ' — ') if term else '') ~ 'your teaching overview.') }}{% else %}{{ v106_banner(_kind) }}{% endif %}
   <div id="dashFilters" data-config='{{ filter_cfg|tojson }}'></div>
@@ -34,7 +34,7 @@
       </svg></div>{% else %}<p style="padding:16px;color:var(--mut);font-size:.85rem">No classes or scores to chart yet.</p>{% endif %}
   </div>
 
-  <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div class="ad-two">
     <div data-slot="gender">{% if gender_stats and (gender_stats.boys or gender_stats.girls) %}{{ gender_panel(gender_stats, 'Your classes') }}{% else %}<article class="ad-panel"><header><h2><span class="ni">⚥</span> Gender Distribution</h2></header><p style="padding:16px;color:var(--mut);font-size:.85rem">No gender data recorded yet.</p></article>{% endif %}</div>
     <!-- Attendance Trend: same selectable chart as the admin dashboard, scoped to the classes you can see -->
     <article class="ad-panel" id="attendance-trend">
@@ -49,7 +49,7 @@
     </article>
   </div>
 
-  <div class="ad-two" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <div class="ad-two">
     <!-- Subject Performance (real data: your classes, this term). data-rc lets the class/term filter redraw it. -->
     <article class="ad-panel" id="subject-performance" data-rc="rcSubjects">
       <header><h2><span class="ni">📚</span> Subject Performance</h2><span style="font-size:0.78rem;color:var(--mut)">Avg score · pass rate</span></header>
