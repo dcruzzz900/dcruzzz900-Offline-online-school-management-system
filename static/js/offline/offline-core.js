@@ -350,7 +350,14 @@
           var e = due[i], res = await sendOne(e, info.csrf);
           e.attempts += 1;
           if (res.kind === "done") {
-            if (res.json && res.json.updated_at !== undefined && e.entityKey) await store.metaSet("ver:" + e.entityKey, res.json.updated_at);
+            if (res.json && res.json.updated_at !== undefined && e.entityKey) {
+              await store.metaSet("ver:" + e.entityKey, res.json.updated_at);
+              /* V118: the next waiting change for the SAME score was made on top of the one just delivered, so it starts from the version that delivery created
+                 (otherwise a person's own two changes to one score looked like "changed by someone else") */
+              var same = (await store.all()).filter(function (x) { return x.id !== e.id && x.entityKey === e.entityKey && x.userFp === e.userFp && x.state === "pending" && x.baseVersion === e.baseVersion; });
+              for (var k = 0; k < same.length; k++) { same[k].baseVersion = res.json.updated_at; await store.put(same[k]); }
+              for (var m = i + 1; m < due.length; m++) if (due[m].entityKey === e.entityKey && due[m].baseVersion === e.baseVersion) due[m].baseVersion = res.json.updated_at;
+            }
             await store.del(e.id); okN += 1; S.synced += 1;
           } else if (res.kind === "conflict") { e.state = "conflict"; e.error = res.error; await store.put(e); confN += 1; }
           else if (res.kind === "failed") { e.state = "failed"; e.error = res.error; await store.put(e); failN += 1; }

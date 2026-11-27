@@ -14,7 +14,7 @@
   var up = null, enrolled = 0, loadedOffline = false, busy = false;
   var MSG = {
     checking: "Checking your connection…",
-    online: "Online — you will sign in through the school server.",
+    online: "",                                           // V118: nothing is shown while online (only the offline states are explained)
     offline_ok: "Offline — you can sign in with this device if you have signed in here before while online.",
     offline_new: "Offline — this device has not been set up yet. Connect to the internet and sign in once; after that you can sign in offline here.",
     offline_https: "Offline — offline sign-in needs a secure (HTTPS) connection on this device. Connect to the internet to sign in."
@@ -30,7 +30,7 @@
   }
   function render() {
     var state = up === null ? "checking" : up ? "online" : !core.crypto.enabled ? "offline_https" : enrolled ? "offline_ok" : "offline_new";
-    if (badge) { badge.textContent = MSG[state]; badge.dataset.state = state; }
+    if (badge) { badge.textContent = MSG[state]; badge.dataset.state = state; badge.hidden = !MSG[state]; }
     form.dataset.mode = up === null ? "checking" : up ? "online" : "offline";
     return state;
   }
