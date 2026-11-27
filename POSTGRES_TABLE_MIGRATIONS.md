@@ -457,3 +457,28 @@ PostgreSQL execution remains outstanding.
 - Recreated the source append-only protections: UPDATE and DELETE are rejected with the audit-history message. The source declares no foreign keys or additional constraints.
 - Added validation for exact columns/nullability, the primary key, index definition, and both append-only triggers. Registered migration 142.
 - The migration remains standalone and is not connected to SQLite startup or the existing offline-sync path. Live PostgreSQL execution remains outstanding.
+
+
+## Stage 70 — Migration 143: `role_assignment_audit`
+
+- Ported all 14 columns from the effective schema snapshot; school ID remains INTEGER, other identifiers are BIGINT.
+- Recreated `idx_role_assignment_audit_school` on `(school_id)`.
+- Recreated append-only UPDATE/DELETE protections using the shared immutable-row trigger.
+- Added validation for exact column definitions, primary key, index and trigger set; registered migration 143.
+- Standalone PostgreSQL migration; SQLite startup/offline sync remain unchanged. Live PostgreSQL execution remains outstanding.
+
+## Stage 71 — Migration 144: `role_assignments`
+
+Added standalone PostgreSQL migration `postgres_migration_144_role_assignments.py`. The migration recreates the 20-column effective schema, school-level and status checks, references to the existing `users` and `schools` tables, and six lookup indexes. It validates the expected columns and indexes and is registered in the standalone registry. It expects the referenced tables to exist with compatible key types. It does not alter SQLite startup or offline synchronization. Unit/contract tests only; live PostgreSQL execution remains untested.
+
+## Stage 74 — migration 147: `score_audit`
+
+Added standalone PostgreSQL migration 147 for the 33-column `score_audit` table from the effective SQLite schema in `db.py`. Preserves the school/term/class/subject composite lookup index and school/student lookup index. Score values use PostgreSQL `DOUBLE PRECISION`; identifiers use `BIGINT`; `changed_at` remains TEXT with the source `CURRENT_TIMESTAMP` default. Adds BEFORE UPDATE and BEFORE DELETE protections using the existing `app_reject_immutable_row` helper. Schema, primary-key, index, and trigger validation plus migration-specific tests are included. This migration is registered only in the standalone PostgreSQL registry; SQLite startup and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+## Stage 76 — Migration 149: `result_publication`
+
+Added standalone PostgreSQL migration 149 for the 17-column `result_publication` workflow-state table defined in `db.py` within `migration_062_v63_spec`. Preserves the seven allowed workflow statuses and the unique `(school_id, class_id, term_id)` constraint. Includes column, constraint, and index validation plus migration-specific tests. Registered only in `postgres_migration_registry.py`; SQLite startup and offline synchronization remain unchanged. Live PostgreSQL execution remains untested.
+
+## Migration 150 — `result_publication_audit`
+
+Ports the result publication workflow audit history table from the SQLite schema into the standalone PostgreSQL registry. Includes its scope index and append-only protections. This migration is not invoked by SQLite startup and does not change offline synchronization.

@@ -1,0 +1,419 @@
+{
+  "stage": 114,
+  "source_schema_version": 99,
+  "source_table_count": 113,
+  "postgres_explicit_create_table_coverage": 110,
+  "unresolved_table_candidate_count": 3,
+  "unresolved_column_count": 39,
+  "unresolved_foreign_key_declaration_count": 1,
+  "unresolved_index_count": 5,
+  "live_postgres_catalog_checked": false,
+  "rows": [
+    {
+      "table": "schema_steps",
+      "column_count": 2,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "applied_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_schema_steps_1",
+          "unique": true,
+          "origin": "pk",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE schema_steps (name TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+      "postgres_non_ddl_references": [
+        "tools/build_postgres_effective_schema_snapshot.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_changes",
+      "column_count": 17,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "change_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "device_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "method",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "path",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "entity_key",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "base_version",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "captured_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "received_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "state",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'applied'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "status_code",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "response_body",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "attempts",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_sync_changes_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "sqlite_autoindex_sync_changes_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_changes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            change_id TEXT NOT NULL,\n            school_id INTEGER NOT NULL,\n            tenant_id TEXT,\n            user_id INTEGER,\n            device_id TEXT,\n            method TEXT,\n            path TEXT,\n            entity TEXT,\n            entity_key TEXT,\n            base_version TEXT,\n            captured_at TEXT,\n            received_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            state TEXT NOT NULL DEFAULT 'applied',   -- applied | conflict | failed\n            status_code INTEGER,\n            response_body TEXT,\n            attempts INTEGER DEFAULT 1,\n            UNIQUE(school_id, change_id)\n        )",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_conflicts",
+      "column_count": 20,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "device_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "client_payload",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "server_payload",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "detected_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "resolved",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "resolved_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "resolution",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "change_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "sensitive",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "entity_key",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "resolved_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 18,
+          "name": "method",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 19,
+          "name": "path",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_sync_conflicts_change",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "idx_sync_conflicts_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_conflicts (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            entity TEXT NOT NULL,\n            client_uuid TEXT NOT NULL,\n            device_id TEXT,\n            client_payload TEXT NOT NULL,\n            server_payload TEXT NOT NULL,\n            detected_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            resolved INTEGER DEFAULT 0,\n            resolved_at TEXT,\n            resolution TEXT, tenant_id TEXT, change_id TEXT, kind TEXT, sensitive INTEGER DEFAULT 0, reason TEXT, entity_key TEXT, resolved_by TEXT, method TEXT, path TEXT,\n            FOREIGN KEY(school_id) REFERENCES schools(id)\n        )",
+      "postgres_non_ddl_references": [
+        "postgres_tenant_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    }
+  ],
+  "limitations": [
+    "A missing explicit CREATE TABLE match is a confirmed source-to-file DDL gap, not proof that a live PostgreSQL database lacks the table.",
+    "The scan records references in helper and trigger files separately; references do not create tables.",
+    "Column type/nullability/default equivalence for the 76 explicitly matched tables is not assessed by this stage.",
+    "SQLite trigger semantics, application SQL compatibility, and live PostgreSQL execution remain outside this static report."
+  ]
+}

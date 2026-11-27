@@ -1,0 +1,505 @@
+{
+ "category_counts": {
+  "audit_or_history_capture": 2,
+  "business_rule_or_other": 2,
+  "cross_row_uniqueness": 5,
+  "immutability_guard": 30,
+  "offline_sync_timestamp": 72,
+  "soft_delete_or_sync_tombstone": 18,
+  "tenant_scope_propagation": 29
+ },
+ "consolidations": {
+  "trg_students_tenant_stamp_pg": [
+   "trg_students_stamp_tenant",
+   "trg_students_tenant_stamp"
+  ]
+ },
+ "errors": [],
+ "mapped_source_triggers": 158,
+ "mapping": {
+  "trg_ai_audit_log_tenant_stamp": [
+   "trg_ai_audit_log_tenant_stamp_pg"
+  ],
+  "trg_ai_outputs_tenant_stamp": [
+   "trg_ai_outputs_tenant_stamp_pg"
+  ],
+  "trg_attendance_audit_no_delete": [
+   "trg_attendance_audit_no_delete"
+  ],
+  "trg_attendance_audit_no_update": [
+   "trg_attendance_audit_no_update"
+  ],
+  "trg_attendance_records_server_ts_immutable": [
+   "trg_attendance_records_server_ts_immutable"
+  ],
+  "trg_attendance_records_sync_defaults": [
+   "trg_attendance_records_sync_timestamp"
+  ],
+  "trg_attendance_records_sync_touch": [
+   "trg_attendance_records_sync_timestamp"
+  ],
+  "trg_attendance_records_tombstone": [
+   "trg_attendance_records_tombstone"
+  ],
+  "trg_audit_log_no_delete": [
+   "trg_audit_log_no_delete"
+  ],
+  "trg_audit_log_no_update": [
+   "trg_audit_log_no_update"
+  ],
+  "trg_billing_financial_audit_no_delete": [
+   "trg_billing_financial_audit_no_delete"
+  ],
+  "trg_billing_financial_audit_no_update": [
+   "trg_billing_financial_audit_no_update"
+  ],
+  "trg_billing_payment_history_no_delete": [
+   "trg_billing_payment_history_no_delete"
+  ],
+  "trg_billing_payment_history_no_update": [
+   "trg_billing_payment_history_no_update"
+  ],
+  "trg_billing_payment_insert_history": [
+   "trg_billing_payment_insert_history_pg"
+  ],
+  "trg_billing_payment_update_history": [
+   "trg_billing_payment_update_history_pg"
+  ],
+  "trg_billing_report_downloads_no_delete": [
+   "trg_billing_report_downloads_no_delete"
+  ],
+  "trg_billing_report_downloads_no_update": [
+   "trg_billing_report_downloads_no_update"
+  ],
+  "trg_class_subject_requirements_v2_sync_defaults": [
+   "trg_class_subject_requirements_v2_sync_timestamp"
+  ],
+  "trg_class_subject_requirements_v2_sync_touch": [
+   "trg_class_subject_requirements_v2_sync_timestamp"
+  ],
+  "trg_class_subjects_sync_defaults": [
+   "trg_class_subjects_sync_timestamp"
+  ],
+  "trg_class_subjects_sync_touch": [
+   "trg_class_subjects_sync_timestamp"
+  ],
+  "trg_class_subjects_tombstone": [
+   "trg_class_subjects_tombstone"
+  ],
+  "trg_class_timetable_preferences_v2_sync_defaults": [
+   "trg_class_timetable_preferences_v2_sync_timestamp"
+  ],
+  "trg_class_timetable_preferences_v2_sync_touch": [
+   "trg_class_timetable_preferences_v2_sync_timestamp"
+  ],
+  "trg_classes_sync_defaults": [
+   "trg_classes_sync_timestamp"
+  ],
+  "trg_classes_sync_touch": [
+   "trg_classes_sync_timestamp"
+  ],
+  "trg_classes_tenant_stamp": [
+   "trg_classes_tenant_stamp_pg"
+  ],
+  "trg_classes_tombstone": [
+   "trg_classes_tombstone"
+  ],
+  "trg_deferred_actions_tenant_stamp": [
+   "trg_deferred_actions_tenant_stamp_pg"
+  ],
+  "trg_device_credentials_tenant_stamp": [
+   "trg_device_credentials_tenant_stamp_pg"
+  ],
+  "trg_enrollments_sync_defaults": [
+   "trg_enrollments_sync_timestamp"
+  ],
+  "trg_enrollments_sync_touch": [
+   "trg_enrollments_sync_timestamp"
+  ],
+  "trg_enrollments_tenant_stamp": [
+   "trg_enrollments_tenant_stamp_pg"
+  ],
+  "trg_enrollments_tombstone": [
+   "trg_enrollments_tombstone"
+  ],
+  "trg_fixed_activities_v2_sync_defaults": [
+   "trg_fixed_activities_v2_sync_timestamp"
+  ],
+  "trg_fixed_activities_v2_sync_touch": [
+   "trg_fixed_activities_v2_sync_timestamp"
+  ],
+  "trg_grade_scale_sync_defaults": [
+   "trg_grade_scale_sync_timestamp"
+  ],
+  "trg_grade_scale_sync_touch": [
+   "trg_grade_scale_sync_timestamp"
+  ],
+  "trg_grade_scale_tenant_stamp": [
+   "trg_grade_scale_tenant_stamp_pg"
+  ],
+  "trg_grade_scale_tombstone": [
+   "trg_grade_scale_tombstone"
+  ],
+  "trg_grading_config_sync_defaults": [
+   "trg_grading_config_sync_timestamp"
+  ],
+  "trg_grading_config_sync_touch": [
+   "trg_grading_config_sync_timestamp"
+  ],
+  "trg_grading_config_tenant_stamp": [
+   "trg_grading_config_tenant_stamp_pg"
+  ],
+  "trg_grading_config_tombstone": [
+   "trg_grading_config_tombstone"
+  ],
+  "trg_materials_sync_defaults": [
+   "trg_materials_sync_timestamp"
+  ],
+  "trg_materials_sync_touch": [
+   "trg_materials_sync_timestamp"
+  ],
+  "trg_materials_tenant_stamp": [
+   "trg_materials_tenant_stamp_pg"
+  ],
+  "trg_materials_tombstone": [
+   "trg_materials_tombstone"
+  ],
+  "trg_notifications_tenant_stamp": [
+   "trg_notifications_tenant_stamp_pg"
+  ],
+  "trg_parent_accounts_tenant_stamp": [
+   "trg_parent_accounts_tenant_stamp_pg"
+  ],
+  "trg_parent_consent_events_tenant_stamp": [
+   "trg_parent_consent_events_tenant_stamp_pg"
+  ],
+  "trg_parent_students_tenant_stamp": [
+   "trg_parent_students_tenant_stamp_pg"
+  ],
+  "trg_parent_teacher_messages_tenant_stamp": [
+   "trg_parent_teacher_messages_tenant_stamp_pg"
+  ],
+  "trg_rbac_audit_log_no_delete": [
+   "trg_rbac_audit_log_no_delete"
+  ],
+  "trg_rbac_audit_log_no_update": [
+   "trg_rbac_audit_log_no_update"
+  ],
+  "trg_result_publication_audit_no_delete": [
+   "trg_result_publication_audit_no_delete"
+  ],
+  "trg_result_publication_audit_no_update": [
+   "trg_result_publication_audit_no_update"
+  ],
+  "trg_role_assignment_audit_no_delete": [
+   "trg_role_assignment_audit_no_delete"
+  ],
+  "trg_role_assignment_audit_no_update": [
+   "trg_role_assignment_audit_no_update"
+  ],
+  "trg_role_assignments_tenant_stamp": [
+   "trg_role_assignments_tenant_stamp_pg"
+  ],
+  "trg_schedule_slots_sync_defaults": [
+   "trg_schedule_slots_sync_timestamp"
+  ],
+  "trg_schedule_slots_sync_touch": [
+   "trg_schedule_slots_sync_timestamp"
+  ],
+  "trg_schedule_templates_sync_defaults": [
+   "trg_schedule_templates_sync_timestamp"
+  ],
+  "trg_schedule_templates_sync_touch": [
+   "trg_schedule_templates_sync_timestamp"
+  ],
+  "trg_school_ai_settings_tenant_stamp": [
+   "trg_school_ai_settings_tenant_stamp_pg"
+  ],
+  "trg_school_days_v2_sync_defaults": [
+   "trg_school_days_v2_sync_timestamp"
+  ],
+  "trg_school_days_v2_sync_touch": [
+   "trg_school_days_v2_sync_timestamp"
+  ],
+  "trg_schools_school_code_permanent": [
+   "trg_schools_school_code_permanent_pg"
+  ],
+  "trg_score_audit_no_delete": [
+   "trg_score_audit_no_delete"
+  ],
+  "trg_score_audit_no_update": [
+   "trg_score_audit_no_update"
+  ],
+  "trg_score_history_tenant_stamp": [
+   "trg_score_history_tenant_stamp_pg"
+  ],
+  "trg_scores_sync_defaults": [
+   "trg_scores_sync_timestamp"
+  ],
+  "trg_scores_sync_touch": [
+   "trg_scores_sync_timestamp"
+  ],
+  "trg_scores_tenant_stamp": [
+   "trg_scores_tenant_stamp_pg"
+  ],
+  "trg_scores_tombstone": [
+   "trg_scores_tombstone"
+  ],
+  "trg_security_events_no_delete": [
+   "trg_security_events_no_delete"
+  ],
+  "trg_security_events_no_update": [
+   "trg_security_events_no_update"
+  ],
+  "trg_sessions_sync_defaults": [
+   "trg_sessions_sync_timestamp"
+  ],
+  "trg_sessions_sync_touch": [
+   "trg_sessions_sync_timestamp"
+  ],
+  "trg_sessions_tenant_stamp": [
+   "trg_sessions_tenant_stamp_pg"
+  ],
+  "trg_sessions_tombstone": [
+   "trg_sessions_tombstone"
+  ],
+  "trg_staff_attendance_server_ts_immutable": [
+   "trg_staff_attendance_server_ts_immutable"
+  ],
+  "trg_staff_attendance_sync_defaults": [
+   "trg_staff_attendance_sync_timestamp"
+  ],
+  "trg_staff_attendance_sync_touch": [
+   "trg_staff_attendance_sync_timestamp"
+  ],
+  "trg_staff_attendance_tenant_stamp": [
+   "trg_staff_attendance_tenant_stamp_pg"
+  ],
+  "trg_staff_attendance_tombstone": [
+   "trg_staff_attendance_tombstone"
+  ],
+  "trg_staff_name_history_no_delete": [
+   "trg_staff_name_history_no_delete"
+  ],
+  "trg_staff_name_history_no_update": [
+   "trg_staff_name_history_no_update"
+  ],
+  "trg_student_ai_consent_events_no_delete": [
+   "trg_student_ai_consent_events_no_delete"
+  ],
+  "trg_student_ai_consent_events_no_update": [
+   "trg_student_ai_consent_events_no_update"
+  ],
+  "trg_student_ai_consent_tenant_stamp": [
+   "trg_student_ai_consent_tenant_stamp_pg"
+  ],
+  "trg_student_skill_ratings_sync_defaults": [
+   "trg_student_skill_ratings_sync_timestamp"
+  ],
+  "trg_student_skill_ratings_sync_touch": [
+   "trg_student_skill_ratings_sync_timestamp"
+  ],
+  "trg_student_skill_ratings_tombstone": [
+   "trg_student_skill_ratings_tombstone"
+  ],
+  "trg_student_status_history_no_delete": [
+   "trg_student_status_history_no_delete"
+  ],
+  "trg_student_status_history_no_update": [
+   "trg_student_status_history_no_update"
+  ],
+  "trg_student_term_info_sync_defaults": [
+   "trg_student_term_info_sync_timestamp"
+  ],
+  "trg_student_term_info_sync_touch": [
+   "trg_student_term_info_sync_timestamp"
+  ],
+  "trg_student_term_info_tombstone": [
+   "trg_student_term_info_tombstone"
+  ],
+  "trg_students_admission_unique_ins": [
+   "trg_students_admission_unique_ins_pg"
+  ],
+  "trg_students_admission_unique_upd": [
+   "trg_students_admission_unique_upd_pg"
+  ],
+  "trg_students_stamp_tenant": [
+   "trg_students_tenant_stamp_pg"
+  ],
+  "trg_students_sync_defaults": [
+   "trg_students_sync_timestamp"
+  ],
+  "trg_students_sync_touch": [
+   "trg_students_sync_timestamp"
+  ],
+  "trg_students_tenant_stamp": [
+   "trg_students_tenant_stamp_pg"
+  ],
+  "trg_students_tombstone": [
+   "trg_students_tombstone"
+  ],
+  "trg_subject_room_requirements_v2_sync_defaults": [
+   "trg_subject_room_requirements_v2_sync_timestamp"
+  ],
+  "trg_subject_room_requirements_v2_sync_touch": [
+   "trg_subject_room_requirements_v2_sync_timestamp"
+  ],
+  "trg_subjects_sync_defaults": [
+   "trg_subjects_sync_timestamp"
+  ],
+  "trg_subjects_sync_touch": [
+   "trg_subjects_sync_timestamp"
+  ],
+  "trg_subjects_tenant_stamp": [
+   "trg_subjects_tenant_stamp_pg"
+  ],
+  "trg_subjects_tombstone": [
+   "trg_subjects_tombstone"
+  ],
+  "trg_subscription_history_no_delete": [
+   "trg_subscription_history_no_delete"
+  ],
+  "trg_subscription_history_no_update": [
+   "trg_subscription_history_no_update"
+  ],
+  "trg_sync_conflicts_tenant_stamp": [
+   "trg_sync_conflicts_tenant_stamp_pg"
+  ],
+  "trg_sync_log_tenant_stamp": [
+   "trg_sync_log_tenant_stamp_pg"
+  ],
+  "trg_teacher_availability_v2_sync_defaults": [
+   "trg_teacher_availability_v2_sync_timestamp"
+  ],
+  "trg_teacher_availability_v2_sync_touch": [
+   "trg_teacher_availability_v2_sync_timestamp"
+  ],
+  "trg_teacher_timetable_preferences_v2_sync_defaults": [
+   "trg_teacher_timetable_preferences_v2_sync_timestamp"
+  ],
+  "trg_teacher_timetable_preferences_v2_sync_touch": [
+   "trg_teacher_timetable_preferences_v2_sync_timestamp"
+  ],
+  "trg_teacher_workload_profiles_v2_sync_defaults": [
+   "trg_teacher_workload_profiles_v2_sync_timestamp"
+  ],
+  "trg_teacher_workload_profiles_v2_sync_touch": [
+   "trg_teacher_workload_profiles_v2_sync_timestamp"
+  ],
+  "trg_terms_sync_defaults": [
+   "trg_terms_sync_timestamp"
+  ],
+  "trg_terms_sync_touch": [
+   "trg_terms_sync_timestamp"
+  ],
+  "trg_terms_tombstone": [
+   "trg_terms_tombstone"
+  ],
+  "trg_timetable_approvals_v2_sync_defaults": [
+   "trg_timetable_approvals_v2_sync_timestamp"
+  ],
+  "trg_timetable_approvals_v2_sync_touch": [
+   "trg_timetable_approvals_v2_sync_timestamp"
+  ],
+  "trg_timetable_audit_v2_sync_defaults": [
+   "trg_timetable_audit_v2_sync_timestamp"
+  ],
+  "trg_timetable_audit_v2_sync_touch": [
+   "trg_timetable_audit_v2_sync_timestamp"
+  ],
+  "trg_timetable_configurations_v2_sync_defaults": [
+   "trg_timetable_configurations_v2_sync_timestamp"
+  ],
+  "trg_timetable_configurations_v2_sync_touch": [
+   "trg_timetable_configurations_v2_sync_timestamp"
+  ],
+  "trg_timetable_conflicts_v2_sync_defaults": [
+   "trg_timetable_conflicts_v2_sync_timestamp"
+  ],
+  "trg_timetable_conflicts_v2_sync_touch": [
+   "trg_timetable_conflicts_v2_sync_timestamp"
+  ],
+  "trg_timetable_entries_sync_defaults": [
+   "trg_timetable_entries_sync_timestamp"
+  ],
+  "trg_timetable_entries_sync_touch": [
+   "trg_timetable_entries_sync_timestamp"
+  ],
+  "trg_timetable_entries_tenant_stamp": [
+   "trg_timetable_entries_tenant_stamp_pg"
+  ],
+  "trg_timetable_entries_tombstone": [
+   "trg_timetable_entries_tombstone"
+  ],
+  "trg_timetable_entries_v2_sync_defaults": [
+   "trg_timetable_entries_v2_sync_timestamp"
+  ],
+  "trg_timetable_entries_v2_sync_touch": [
+   "trg_timetable_entries_v2_sync_timestamp"
+  ],
+  "trg_timetable_periods_sync_defaults": [
+   "trg_timetable_periods_sync_timestamp"
+  ],
+  "trg_timetable_periods_sync_touch": [
+   "trg_timetable_periods_sync_timestamp"
+  ],
+  "trg_timetable_periods_tenant_stamp": [
+   "trg_timetable_periods_tenant_stamp_pg"
+  ],
+  "trg_timetable_periods_tombstone": [
+   "trg_timetable_periods_tombstone"
+  ],
+  "trg_timetable_rooms_v2_sync_defaults": [
+   "trg_timetable_rooms_v2_sync_timestamp"
+  ],
+  "trg_timetable_rooms_v2_sync_touch": [
+   "trg_timetable_rooms_v2_sync_timestamp"
+  ],
+  "trg_timetable_types_v2_sync_defaults": [
+   "trg_timetable_types_v2_sync_timestamp"
+  ],
+  "trg_timetable_types_v2_sync_touch": [
+   "trg_timetable_types_v2_sync_timestamp"
+  ],
+  "trg_timetable_versions_v2_sync_defaults": [
+   "trg_timetable_versions_v2_sync_timestamp"
+  ],
+  "trg_timetable_versions_v2_sync_touch": [
+   "trg_timetable_versions_v2_sync_timestamp"
+  ],
+  "trg_users_identity_unique_ins": [
+   "trg_users_identity_unique_ins_pg"
+  ],
+  "trg_users_identity_unique_upd": [
+   "trg_users_identity_unique_upd_pg"
+  ],
+  "trg_users_signup_name_init": [
+   "trg_users_signup_name_init_pg"
+  ],
+  "trg_users_signup_name_lock": [
+   "trg_users_signup_name_lock_pg"
+  ],
+  "trg_users_sync_defaults": [
+   "trg_users_sync_timestamp"
+  ],
+  "trg_users_sync_touch": [
+   "trg_users_sync_timestamp"
+  ],
+  "trg_users_tenant_stamp": [
+   "trg_users_tenant_stamp_pg"
+  ],
+  "trg_users_tombstone": [
+   "trg_users_tombstone"
+  ]
+ },
+ "ok": true,
+ "plan_declared_count": 158,
+ "postgres_functions": 36,
+ "postgres_trigger_count": 121,
+ "source_trigger_count": 158,
+ "sync_pairs_consolidated": 36,
+ "timing_changes": {
+  "AFTER->BEFORE": 101
+ },
+ "unmapped_source_triggers": 0
+}

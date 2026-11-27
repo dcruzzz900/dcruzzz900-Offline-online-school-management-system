@@ -1,0 +1,58 @@
+{
+  "stage": 116,
+  "source_schema_version": 99,
+  "source_table_count": 113,
+  "postgres_explicit_create_table_coverage": 112,
+  "unresolved_table_candidate_count": 1,
+  "unresolved_column_count": 2,
+  "unresolved_foreign_key_declaration_count": 0,
+  "unresolved_index_count": 1,
+  "live_postgres_catalog_checked": false,
+  "rows": [
+    {
+      "table": "schema_steps",
+      "column_count": 2,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "applied_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_schema_steps_1",
+          "unique": true,
+          "origin": "pk",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE schema_steps (name TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+      "postgres_non_ddl_references": [
+        "postgres_migration_187_sync_conflicts.py",
+        "tools/build_postgres_effective_schema_snapshot.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    }
+  ],
+  "limitations": [
+    "A missing explicit CREATE TABLE match is a confirmed source-to-file DDL gap, not proof that a live PostgreSQL database lacks the table.",
+    "The scan records references in helper and trigger files separately; references do not create tables.",
+    "Column type/nullability/default equivalence for the 76 explicitly matched tables is not assessed by this stage.",
+    "SQLite trigger semantics, application SQL compatibility, and live PostgreSQL execution remain outside this static report."
+  ]
+}

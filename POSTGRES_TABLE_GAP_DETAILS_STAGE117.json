@@ -1,0 +1,27 @@
+{
+  "stage": 117,
+  "source_schema_version": 99,
+  "source_table_count": 113,
+  "postgres_explicit_create_table_coverage": 112,
+  "deliberately_excluded_table_count": 1,
+  "deliberately_excluded_tables": [
+    {
+      "table": "schema_steps",
+      "column_count": 2,
+      "index_count": 1,
+      "reason": "SQLite's own named-migration bookkeeping (read and written only by the SQLite migration runner in db.py). PostgreSQL tracks applied migrations in its own app_schema_migrations table, which carries a checksum per migration."
+    }
+  ],
+  "unresolved_table_candidate_count": 0,
+  "unresolved_column_count": 0,
+  "unresolved_foreign_key_declaration_count": 0,
+  "unresolved_index_count": 0,
+  "live_postgres_catalog_checked": false,
+  "rows": [],
+  "limitations": [
+    "A missing explicit CREATE TABLE match is a confirmed source-to-file DDL gap, not proof that a live PostgreSQL database lacks the table.",
+    "The scan records references in helper and trigger files separately; references do not create tables.",
+    "Column type/nullability/default equivalence for the 76 explicitly matched tables is not assessed by this stage.",
+    "SQLite trigger semantics, application SQL compatibility, and live PostgreSQL execution remain outside this static report."
+  ]
+}
