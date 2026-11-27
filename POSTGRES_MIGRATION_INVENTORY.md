@@ -132,3 +132,116 @@ The counts are pattern matches within registered migration function source bodie
 ## Stage 34 — migration 107: `ai_outputs`
 
 Added `postgres_migration_107_ai_outputs.py` after reviewing the effective SQLite schema snapshot and original table definition. The table has 15 columns, no declared foreign keys, two non-unique indexes (`idx_ai_outputs_school_feature` and `idx_ai_outputs_student`), a status CHECK constraint (`draft`, `approved`, `rejected`), and a tenant-stamping trigger. The PostgreSQL migration uses a BIGINT identity primary key, maps integer identifiers to BIGINT, preserves timestamp fields as TEXT, recreates both indexes, and ports tenant stamping as a BEFORE INSERT trigger. The migration validates the expected columns/types/nullability, exact index set, absence of foreign keys, and presence of the tenant trigger. It is registered as migration 107 and remains separate from SQLite startup. Validation is unit-test based; execution against a live PostgreSQL server remains outstanding.
+
+
+## Stage 72 — migration 145: `role_assignment_permissions`
+
+Added standalone PostgreSQL migration 145 for the four-column `role_assignment_permissions` table, its foreign key to `role_assignments(id)`, and assignment lookup index. Schema/index validation and tests are included. Live PostgreSQL execution remains untested.
+
+## Stage 73 — migration 146: `staff_name_history`
+
+Added standalone PostgreSQL migration 146 for the 16-column `staff_name_history` table and its `(school_id, user_id)` index, based on the original SQLite table definition. Exact column and index validation and migration tests are included. Live PostgreSQL execution remains untested.
+
+## Stage 74 — migration 147: `score_audit`
+
+Added standalone PostgreSQL migration 147 for the 33-column `score_audit` table, its two source-defined indexes, and append-only UPDATE/DELETE protections. The source is the `score_audit` definition in `db.py` within `migration_060_v61`. Live PostgreSQL execution remains untested.
+
+## Stage 75 — migration 148: `subscription_history`
+
+Added standalone PostgreSQL migration 148 for the 14-column `subscription_history` table defined in `db.py` within `migration_060_v61`. Preserves the `(school_id, id)` lookup index and append-only UPDATE/DELETE protections. Migration 148 is registered only in `postgres_migration_registry.py`; SQLite startup and offline synchronization are unchanged. Unit tests validate the declared schema, index, and trigger definitions. Live PostgreSQL execution remains untested.
+
+## Stage 76 — migration 149: `result_publication`
+
+Added standalone PostgreSQL migration 149 for the result publication workflow state table from `migration_062_v63_spec` in `db.py`. Preserves the status CHECK domain and school/class/term uniqueness. Schema and constraint validation plus tests are included. Live PostgreSQL execution remains untested.
+
+## Stage 77 — migration 150: `result_publication_audit`
+
+Added standalone PostgreSQL migration 150 for the 15-column result publication audit history table defined in `db.py` within the result publication workflow migration. Preserves the `(school_id, class_id, term_id, id)` scope index, UTC server timestamp default, and append-only UPDATE/DELETE protections. Schema, primary-key, index, and trigger validation plus migration tests are included. Live PostgreSQL execution remains untested.
+
+Registry checkpoint after Stage 77: standalone PostgreSQL migrations 100–150 are registered (51 consecutive versions). This is a registry count, not a claim that all SQLite schema remediation work is complete.
+
+## Stage 78 — migration 151: `result_workflow_permissions`
+
+Added standalone PostgreSQL migration 151 for the eight-column `result_workflow_permissions` table from the effective SQLite schema snapshot. Preserves the `(user_id, permission)` unique constraint, `granted` default of 1, and `changed_at` CURRENT_TIMESTAMP default. The source definition declares no foreign keys or explicit secondary indexes, so none are added. Schema, constraint, and index validation plus migration registry tests are included. Live PostgreSQL execution remains untested.
+
+Registry checkpoint after Stage 78: standalone PostgreSQL migrations 100–151 are registered (52 consecutive versions). This registry count is not a claim that all SQLite schema remediation work is complete.
+
+## Stage 81 — migration 152: `school_custom_info`
+
+Added standalone PostgreSQL migration 152 for the school-defined custom information table. The base definition is in `db.py` within `migration_060_v61`; the `show_on_result` field is added by the later `custom_school_info_v104` SQLite migration. The PostgreSQL table includes the effective ten-column shape and preserves the case-insensitive unique `(school_id, LOWER(label))` index. Migration registration and schema/index validation are included. SQLite startup, SQLite migration execution, application database selection, and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+Registry checkpoint after Stage 81: standalone PostgreSQL migrations 100–152 are registered (53 consecutive versions). This is a registry count, not a claim that all SQLite schema remediation work is complete.
+
+Stage 81 — Migration 152: `school_custom_info`
+
+Added standalone PostgreSQL migration 152 for the effective ten-column `school_custom_info` table. The base table is created in the V61 schema migration; the later `custom_school_info_v104` migration adds `show_on_result`. The case-insensitive unique index on `(school_id, LOWER(label))` is preserved. Migration tests and registry regression expectations were updated. The Stage 80 static table-gap report now reflects the one additional explicit PostgreSQL table: 77 covered, 36 candidates remaining, 488 columns, 36 foreign-key declarations, and 51 indexes. These remain static source comparisons, not live catalog verification.
+
+## Stage 82 — migration 153: `result_custom_fields`
+
+Added standalone PostgreSQL migration 153 for the V104 `result_custom_fields` table in `db.py`. Preserves the ten-column effective source shape, default values, and case-insensitive unique `(school_id, LOWER(label))` index. The source definition declares no foreign keys or triggers; the migration adds none and validates the expected columns, index, and absence of unexpected foreign keys/triggers. Migration 153 is registered only in the standalone PostgreSQL registry. SQLite startup, SQLite migrations, database selection, and offline storage/synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+Registry checkpoint after Stage 82: standalone PostgreSQL migrations 100–153 are registered (54 consecutive versions). This is a registry count, not a claim that all SQLite schema remediation work is complete.
+
+## Stage 83 — migration 154: `result_custom_values`
+
+Added standalone PostgreSQL migration 154 for the seven-column `result_custom_values` table created in `db.py` within the V104 custom result fields migration. Preserves the `(student_id, term_id, field_id)` uniqueness rule and `updated_at` CURRENT_TIMESTAMP default. The source table declares no foreign keys, secondary indexes, or triggers; no additional ones are introduced. Schema, uniqueness, index, and trigger validation plus registry tests are included. Migration 154 is registered only in the standalone PostgreSQL registry. SQLite startup, SQLite migrations, database selection, and offline storage/synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+Registry checkpoint after Stage 83: standalone PostgreSQL migrations 100–154 are registered (55 consecutive versions). This registry count is not a claim that all SQLite schema remediation work is complete.
+
+
+## Stage 84 addition
+
+- Migration 155: `result_display_settings` (57 effective columns, including later SQLite-added settings).
+
+
+## Stage 85 — Migration 156: `signup_codes`
+
+Added standalone PostgreSQL migration 156 for the effective 18-column `signup_codes` table. The migration includes the later-added `session_id` and `class_arm` columns, preserves the unique code constraint, source `code_type` and `status` CHECK domains, the school foreign key, and the `(school_id, code_type, status)` index. Structural validation covers columns, constraints, indexes and absence of unexpected triggers.
+
+Registry checkpoint after Stage 85: standalone PostgreSQL migrations 100–156 are registered (57 consecutive versions). Static reconciliation now finds 81 of 113 source tables with explicit PostgreSQL CREATE TABLE definitions; 32 candidates remain, containing 396 columns, 35 foreign-key declarations and 47 indexes. These are file-level static comparisons, not live PostgreSQL catalog results.
+
+## Stage 86 — Migration 157: `signups`
+
+Added standalone PostgreSQL migration 157 for the effective 13-column `signups` table created by `migration_052_auth_signup_audit_spec` in `db.py`. Preserves the `pending` signup-status default, optional user and school foreign keys, timestamp defaults, and `(school_id, signup_status)` index. Validation checks the exact column shape, named constraints, index definition, and absence of unexpected triggers. Registry regression tests and the static reconciliation report were updated.
+
+Registry checkpoint after Stage 86: standalone PostgreSQL migrations 100–157 are registered (58 consecutive versions). Static reconciliation finds 82 of 113 source tables with explicit PostgreSQL CREATE TABLE definitions; 31 candidates remain, containing 383 columns, 33 foreign-key declarations and 46 indexes. These are file-level static comparisons, not live catalog verification.
+
+SQLite startup, SQLite migrations, database selection, offline storage and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+## Stage 87 — Migration 158: `school_fee_summary`
+
+- Adds the six-column school dashboard fee-summary table from SQLite migration `migration_083_v105_fee_summary`.
+- Preserves expected and collected monetary totals, zero defaults, update timestamp, and `(school_id, id)` index.
+- No foreign key exists in the source definition; none is invented here.
+- Standalone PostgreSQL DDL only; SQLite startup, SQLite migrations, offline storage, and synchronization remain unchanged.
+- Static reconciliation after this migration: 83 explicit tables, 30 unresolved candidates, 377 unresolved columns, 33 unresolved FK declarations, and 45 unresolved indexes.
+- Live PostgreSQL catalog/execution remains untested.
+
+## Stage 88 — Migration 159: `ui_preferences`
+
+Added standalone PostgreSQL migration 159 for the six-column per-actor UI preferences table from SQLite migration `migration_085_v107_ui_preferences`. Preserves the `(kind, actor_id)` composite primary key, optional school/theme fields, `font_scale` default of 100, and `updated_at` timestamp default. No foreign keys, secondary indexes, or triggers are declared by the source table; no additional ones are introduced. Structural validation checks exact columns, nullability, composite primary-key constraint/index, and absence of unexpected triggers.
+
+Registry checkpoint after Stage 88: standalone PostgreSQL migrations 100–159 are registered (60 consecutive versions). Static reconciliation finds 84 of 113 source tables with explicit PostgreSQL CREATE TABLE definitions; 29 candidates remain, containing 371 columns, 33 foreign-key declarations and 44 indexes. These are file-level static comparisons, not live catalog verification.
+
+SQLite startup, SQLite migrations, database selection, offline storage and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+## Stage 89 — Migration 160: `school_staff_titles`
+
+Added standalone PostgreSQL migration 160 for the four-column `school_staff_titles` table from the effective SQLite schema snapshot. Preserves the identity primary key, required `school_id` and `name`, optional `tenant_id`, and unique `(school_id, name)` constraint. The source table declares no foreign keys, secondary indexes beyond its unique constraint, or triggers; no additional behavior is introduced. Structural validation checks exact columns, constraints, indexes, and absence of unexpected foreign keys/triggers. Migration registration and regression tests are included.
+
+Registry checkpoint after Stage 89: standalone PostgreSQL migrations 100–160 are registered (61 consecutive versions). Static reconciliation now finds 85 of 113 source tables with explicit PostgreSQL CREATE TABLE definitions; 28 candidates remain, containing 367 columns, 33 foreign-key declarations and 43 indexes. These are file-level static comparisons, not live PostgreSQL catalog verification.
+
+SQLite startup, SQLite migrations, database selection, offline storage and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+## Stage 90 — Migration 161: `school_student_statuses`
+
+Added standalone PostgreSQL migration 161 for the six-column school-defined student status table from the effective SQLite schema (`db.py`, `school_student_statuses`). Preserves the identity primary key, required `school_id` and `name`, optional `tenant_id`, integer flags `keeps_enrolled` (default 0) and `is_active` (default 1), and unique `(school_id, name)` constraint. The source table declares no foreign keys, additional indexes, or triggers; none are added. Structural validation checks exact columns/nullability, constraints, indexes, and absence of unexpected foreign keys/triggers.
+
+Registry checkpoint after Stage 90: standalone PostgreSQL migrations 100–161 are registered (62 consecutive versions). Static reconciliation is recorded in `POSTGRES_RECONCILIATION_STAGE90.json` and `.md`. These are file-level checks, not live PostgreSQL catalog verification.
+
+SQLite startup, SQLite migrations, database selection, IndexedDB/offline storage, and offline synchronization are unchanged. Live PostgreSQL execution remains untested.
+
+
+## Registry checkpoint after Stage 91
+
+Standalone PostgreSQL migrations 100–162 are registered (63 consecutive versions). Static reconciliation now finds 87 of 113 source tables with explicit PostgreSQL CREATE TABLE definitions; 26 candidates remain, containing 346 columns. Live PostgreSQL catalog verification has not been performed.

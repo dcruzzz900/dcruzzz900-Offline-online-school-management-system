@@ -1,0 +1,4066 @@
+{
+  "stage": 88,
+  "source_schema_version": 99,
+  "source_table_count": 113,
+  "postgres_explicit_create_table_coverage": 84,
+  "unresolved_table_candidate_count": 29,
+  "unresolved_column_count": 371,
+  "unresolved_foreign_key_declaration_count": 33,
+  "unresolved_index_count": 44,
+  "live_postgres_catalog_checked": false,
+  "rows": [
+    {
+      "table": "schedule_slots",
+      "column_count": 20,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "academic_session_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "term_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "day_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "schedule_template_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "slot_number",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "slot_name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "slot_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'TEACHING'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "start_time",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "end_time",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "duration_minutes",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "is_active",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "is_fixed",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "allows_timetable_entry",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 18,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 19,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 3,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schedule_templates",
+          "from_column": "schedule_template_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "school_days_v2",
+          "from_column": "day_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 2,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_schedule_slots_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE schedule_slots (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,\n        academic_session_id INTEGER, term_id INTEGER, day_id INTEGER NOT NULL, schedule_template_id INTEGER NOT NULL,\n        slot_number INTEGER NOT NULL, slot_name TEXT NOT NULL, slot_type TEXT NOT NULL DEFAULT 'TEACHING',\n        start_time TEXT NOT NULL, end_time TEXT NOT NULL, duration_minutes INTEGER NOT NULL DEFAULT 0,\n        is_active INTEGER NOT NULL DEFAULT 1, is_fixed INTEGER NOT NULL DEFAULT 0, allows_timetable_entry INTEGER NOT NULL DEFAULT 1,\n        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, client_uuid TEXT, is_deleted INTEGER DEFAULT 0,\n        CHECK(slot_type IN ('TEACHING','BREAK','ASSEMBLY','ACTIVITY','OTHER')), CHECK(start_time < end_time),\n        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(day_id) REFERENCES school_days_v2(id), FOREIGN KEY(schedule_template_id) REFERENCES schedule_templates(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "schedule_templates",
+      "column_count": 13,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "academic_session_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "term_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "is_default",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 3,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "terms",
+          "from_column": "term_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "sessions",
+          "from_column": "academic_session_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 2,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_schedule_templates_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE schedule_templates (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,\n        academic_session_id INTEGER, term_id INTEGER, name TEXT NOT NULL, description TEXT,\n        is_default INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, client_uuid TEXT, is_deleted INTEGER DEFAULT 0,\n        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(academic_session_id) REFERENCES sessions(id), FOREIGN KEY(term_id) REFERENCES terms(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "schema_steps",
+      "column_count": 2,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "applied_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_schema_steps_1",
+          "unique": true,
+          "origin": "pk",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE schema_steps (name TEXT PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+      "postgres_non_ddl_references": [
+        "tools/build_postgres_effective_schema_snapshot.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "school_ai_settings",
+      "column_count": 15,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "enabled",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "process_student_data",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "result_analysis",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "teacher_comments",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "principal_comments",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "performance_alerts",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "ai_tutor",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "learning_materials",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "result_assistant",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "retention_days",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "365",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "privacy_notice_version",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'1.0'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "updated_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 0,
+      "indexes": [],
+      "sqlite_create_sql": "CREATE TABLE school_ai_settings (\n            school_id INTEGER PRIMARY KEY,\n            enabled INTEGER NOT NULL DEFAULT 0,\n            process_student_data INTEGER NOT NULL DEFAULT 0,\n            result_analysis INTEGER NOT NULL DEFAULT 1,\n            teacher_comments INTEGER NOT NULL DEFAULT 1,\n            principal_comments INTEGER NOT NULL DEFAULT 1,\n            performance_alerts INTEGER NOT NULL DEFAULT 1,\n            ai_tutor INTEGER NOT NULL DEFAULT 1,\n            learning_materials INTEGER NOT NULL DEFAULT 1,\n            result_assistant INTEGER NOT NULL DEFAULT 0,\n            retention_days INTEGER NOT NULL DEFAULT 365,\n            privacy_notice_version TEXT NOT NULL DEFAULT '1.0',\n            updated_by INTEGER,\n            updated_at TEXT DEFAULT CURRENT_TIMESTAMP\n        , tenant_id TEXT)",
+      "postgres_non_ddl_references": [
+        "postgres_tenant_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "school_days_v2",
+      "column_count": 10,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "day_name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "day_code",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "day_order",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "is_active",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_school_days_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_school_days_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE school_days_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL,\n        day_name TEXT NOT NULL, day_code TEXT NOT NULL, day_order INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(tenant_id,school_id,day_code), FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "school_staff_titles",
+      "column_count": 4,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_school_staff_titles_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE school_staff_titles (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, name TEXT NOT NULL,\n        UNIQUE(school_id, name))",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "school_student_statuses",
+      "column_count": 6,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "keeps_enrolled",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "is_active",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "sqlite_autoindex_school_student_statuses_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE school_student_statuses (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        school_id INTEGER NOT NULL, tenant_id TEXT, name TEXT NOT NULL,\n        keeps_enrolled INTEGER NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1,\n        UNIQUE(school_id, name)\n    )",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "staff_documents",
+      "column_count": 10,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "original_filename",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "stored_filename",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "mime_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "size_bytes",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "uploaded_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_staff_documents_tenant_user",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "sqlite_autoindex_staff_documents_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE staff_documents (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            tenant_id TEXT NOT NULL,\n            user_id INTEGER NOT NULL,\n            original_filename TEXT NOT NULL,\n            stored_filename TEXT NOT NULL,\n            mime_type TEXT,\n            size_bytes INTEGER NOT NULL DEFAULT 0,\n            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            UNIQUE(user_id, stored_filename)\n        )",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "student_ai_consent",
+      "column_count": 14,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "student_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'pending'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "granted_by_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "granted_by_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "policy_version",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "granted_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "withdrawn_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "granted_by_name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "relationship",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "recorded_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "recorded_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_ai_consent_school_status",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE student_ai_consent (\n            student_id INTEGER PRIMARY KEY,\n            school_id INTEGER NOT NULL,\n            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','granted','withdrawn')),\n            granted_by_type TEXT,\n            granted_by_id INTEGER,\n            policy_version TEXT,\n            granted_at TEXT,\n            withdrawn_at TEXT,\n            notes TEXT\n        , tenant_id TEXT, granted_by_name TEXT, relationship TEXT, recorded_by INTEGER, recorded_at TEXT)",
+      "postgres_non_ddl_references": [
+        "postgres_tenant_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "student_ai_consent_events",
+      "column_count": 14,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "student_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "previous_status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "new_status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "consenting_name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "relationship",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "policy_version",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "notes",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "recorded_by_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "recorded_by_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "recorded_by_name",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "server_timestamp",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_ai_consent_events",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE student_ai_consent_events (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, school_id INTEGER NOT NULL, tenant_id TEXT, student_id INTEGER NOT NULL,\n        previous_status TEXT, new_status TEXT NOT NULL, consenting_name TEXT, relationship TEXT, policy_version TEXT, notes TEXT,\n        recorded_by_type TEXT, recorded_by_id INTEGER, recorded_by_name TEXT,\n        server_timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')))",
+      "postgres_non_ddl_references": [
+        "postgres_immutability_triggers.sql",
+        "postgres_timestamp_defaults.sql",
+        "tools/build_postgres_timestamp_defaults.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "subject_room_requirements_v2",
+      "column_count": 10,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "subject_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "room_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "requirement_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 3,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "timetable_rooms_v2",
+          "from_column": "room_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "subjects",
+          "from_column": "subject_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 2,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_subject_room_requirements_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_subject_room_requirements_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE subject_room_requirements_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, subject_id INTEGER NOT NULL, room_id INTEGER NOT NULL,\n        requirement_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, UNIQUE(tenant_id,school_id,subject_id,room_id),\n        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(subject_id) REFERENCES subjects(id), FOREIGN KEY(room_id) REFERENCES timetable_rooms_v2(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "subscription_plans",
+      "column_count": 12,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "code",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "price_ngn",
+          "type": "REAL",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "billing_days",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "365",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "max_students",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "max_teachers",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "max_storage_mb",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "features_json",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'{}'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_active",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_subscription_plans_active",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "sqlite_autoindex_subscription_plans_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE subscription_plans (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        code TEXT UNIQUE NOT NULL,\n        name TEXT NOT NULL,\n        price_ngn REAL NOT NULL DEFAULT 0,\n        billing_days INTEGER NOT NULL DEFAULT 365,\n        max_students INTEGER,\n        max_teachers INTEGER,\n        max_storage_mb INTEGER,\n        features_json TEXT NOT NULL DEFAULT '{}',\n        is_active INTEGER NOT NULL DEFAULT 1,\n        created_at TEXT DEFAULT CURRENT_TIMESTAMP,\n        updated_at TEXT DEFAULT CURRENT_TIMESTAMP\n    )",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_changes",
+      "column_count": 17,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "change_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "device_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "method",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "path",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "entity_key",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "base_version",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "captured_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "received_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "state",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'applied'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "status_code",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "response_body",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "attempts",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_sync_changes_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "sqlite_autoindex_sync_changes_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_changes (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            change_id TEXT NOT NULL,\n            school_id INTEGER NOT NULL,\n            tenant_id TEXT,\n            user_id INTEGER,\n            device_id TEXT,\n            method TEXT,\n            path TEXT,\n            entity TEXT,\n            entity_key TEXT,\n            base_version TEXT,\n            captured_at TEXT,\n            received_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            state TEXT NOT NULL DEFAULT 'applied',   -- applied | conflict | failed\n            status_code INTEGER,\n            response_body TEXT,\n            attempts INTEGER DEFAULT 1,\n            UNIQUE(school_id, change_id)\n        )",
+      "postgres_non_ddl_references": [],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_conflicts",
+      "column_count": 20,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "device_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "client_payload",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "server_payload",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "detected_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "resolved",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "resolved_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "resolution",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "change_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "kind",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "sensitive",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "entity_key",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "resolved_by",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 18,
+          "name": "method",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 19,
+          "name": "path",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_sync_conflicts_change",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "idx_sync_conflicts_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_conflicts (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            entity TEXT NOT NULL,\n            client_uuid TEXT NOT NULL,\n            device_id TEXT,\n            client_payload TEXT NOT NULL,\n            server_payload TEXT NOT NULL,\n            detected_at TEXT DEFAULT CURRENT_TIMESTAMP,\n            resolved INTEGER DEFAULT 0,\n            resolved_at TEXT,\n            resolution TEXT, tenant_id TEXT, change_id TEXT, kind TEXT, sensitive INTEGER DEFAULT 0, reason TEXT, entity_key TEXT, resolved_by TEXT, method TEXT, path TEXT,\n            FOREIGN KEY(school_id) REFERENCES schools(id)\n        )",
+      "postgres_non_ddl_references": [
+        "postgres_tenant_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_log",
+      "column_count": 11,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "device_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "direction",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "record_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "conflict_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "error_count",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_sync_log_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_log (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            device_id TEXT NOT NULL,\n            user_id INTEGER,\n            direction TEXT NOT NULL,   -- 'push' or 'pull'\n            entity TEXT,\n            record_count INTEGER DEFAULT 0,\n            conflict_count INTEGER DEFAULT 0,\n            error_count INTEGER DEFAULT 0,\n            created_at TEXT DEFAULT CURRENT_TIMESTAMP\n        , tenant_id TEXT)",
+      "postgres_non_ddl_references": [
+        "postgres_tenant_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "sync_tombstones",
+      "column_count": 5,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "entity",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "deleted_at",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_sync_tombstones_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE sync_tombstones (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER,\n            entity TEXT NOT NULL,\n            client_uuid TEXT NOT NULL,\n            deleted_at TEXT NOT NULL\n        )",
+      "postgres_non_ddl_references": [
+        "postgres_tombstone_triggers.sql",
+        "tools/build_postgres_tombstone_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "teacher_availability_v2",
+      "column_count": 13,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "teacher_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "day_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "slot_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "availability_status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'Available'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "is_hard_constraint",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 4,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schedule_slots",
+          "from_column": "slot_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "school_days_v2",
+          "from_column": "day_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 2,
+          "sequence": 0,
+          "referenced_table": "users",
+          "from_column": "teacher_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 3,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_teacher_availability_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_teacher_availability_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE teacher_availability_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,\n        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, availability_status TEXT NOT NULL DEFAULT 'Available', reason TEXT,\n        is_hard_constraint INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(tenant_id,school_id,teacher_id,day_id,slot_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id), FOREIGN KEY(day_id) REFERENCES school_days_v2(id), FOREIGN KEY(slot_id) REFERENCES schedule_slots(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "teacher_timetable_preferences_v2",
+      "column_count": 12,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "teacher_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "day_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "slot_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "preference_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "priority",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 2,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "users",
+          "from_column": "teacher_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_teacher_timetable_preferences_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE teacher_timetable_preferences_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,\n        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, preference_type TEXT NOT NULL, priority INTEGER NOT NULL DEFAULT 1, reason TEXT, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0,\n        FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "teacher_workload_profiles_v2",
+      "column_count": 12,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "teacher_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "max_periods_per_day",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "8",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "max_periods_per_week",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "40",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "max_consecutive_periods",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "4",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "preferred_free_periods",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 2,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "users",
+          "from_column": "teacher_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_teacher_workload_profiles_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_teacher_workload_profiles_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE teacher_workload_profiles_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, teacher_id INTEGER NOT NULL,\n        max_periods_per_day INTEGER NOT NULL DEFAULT 8, max_periods_per_week INTEGER NOT NULL DEFAULT 40,\n        max_consecutive_periods INTEGER NOT NULL DEFAULT 4, preferred_free_periods INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active', client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(tenant_id,school_id,teacher_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(teacher_id) REFERENCES users(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_approvals_v2",
+      "column_count": 15,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "timetable_version_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "approval_level",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "assigned_role",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "assigned_user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'pending'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "decision",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "comment",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "decided_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "decided_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_timetable_approvals_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_approvals_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,\n        approval_level INTEGER NOT NULL, assigned_role TEXT NOT NULL, assigned_user_id INTEGER, status TEXT NOT NULL DEFAULT 'pending', decision TEXT,\n        comment TEXT, decided_by INTEGER, decided_at TEXT, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_audit_v2",
+      "column_count": 14,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "timetable_version_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "user_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "action",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "previous_status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "new_status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_timetable_audit_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_audit_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER, user_id INTEGER,\n        role TEXT, action TEXT NOT NULL, previous_status TEXT, new_status TEXT, reason TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_configurations_v2",
+      "column_count": 19,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "academic_session_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "term_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "allow_double_periods",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "allow_triple_periods",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "allow_same_subject_same_day",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "max_same_subject_per_day",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "2",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "max_teacher_consecutive_periods",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "4",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "balance_teacher_workload",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "spread_subjects",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "minimize_class_gaps",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "prefer_morning_subjects",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "solver_time_limit",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "30",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 18,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 0,
+      "foreign_keys": [],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_configurations_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_timetable_configurations_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_configurations_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, academic_session_id INTEGER, term_id INTEGER,\n        allow_double_periods INTEGER DEFAULT 1, allow_triple_periods INTEGER DEFAULT 0, allow_same_subject_same_day INTEGER DEFAULT 1,\n        max_same_subject_per_day INTEGER DEFAULT 2, max_teacher_consecutive_periods INTEGER DEFAULT 4, balance_teacher_workload INTEGER DEFAULT 1,\n        spread_subjects INTEGER DEFAULT 1, minimize_class_gaps INTEGER DEFAULT 1, prefer_morning_subjects INTEGER DEFAULT 0, solver_time_limit INTEGER DEFAULT 30,\n        status TEXT DEFAULT 'active', client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, UNIQUE(tenant_id,school_id,academic_session_id,term_id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_conflicts_v2",
+      "column_count": 16,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "timetable_version_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "conflict_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "severity",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "entity_type",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "entity_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "suggested_action",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "resolved",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "resolved_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "resolved_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 1,
+      "indexes": [
+        {
+          "name": "idx_timetable_conflicts_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_conflicts_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,\n        conflict_type TEXT NOT NULL, severity TEXT NOT NULL, entity_type TEXT, entity_id INTEGER, description TEXT NOT NULL, suggested_action TEXT,\n        resolved INTEGER NOT NULL DEFAULT 0, resolved_by INTEGER, resolved_at TEXT, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_entries",
+      "column_count": 12,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "class_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "day_of_week",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "period_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "subject_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "teacher_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "room",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 5,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "users",
+          "from_column": "teacher_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "subjects",
+          "from_column": "subject_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 2,
+          "sequence": 0,
+          "referenced_table": "timetable_periods",
+          "from_column": "period_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 3,
+          "sequence": 0,
+          "referenced_table": "classes",
+          "from_column": "class_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 4,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 3,
+      "indexes": [
+        {
+          "name": "idx_timetable_entries_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "idx_timetable_entries_teacher",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        },
+        {
+          "name": "idx_timetable_entries_slot",
+          "unique": true,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_entries (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            class_id INTEGER NOT NULL,\n            day_of_week INTEGER NOT NULL,\n            period_id INTEGER NOT NULL,\n            subject_id INTEGER,\n            teacher_id INTEGER,\n            room TEXT, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, tenant_id TEXT,\n            FOREIGN KEY(school_id) REFERENCES schools(id),\n            FOREIGN KEY(class_id) REFERENCES classes(id),\n            FOREIGN KEY(period_id) REFERENCES timetable_periods(id),\n            FOREIGN KEY(subject_id) REFERENCES subjects(id),\n            FOREIGN KEY(teacher_id) REFERENCES users(id)\n        )",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql",
+        "postgres_tenant_triggers.sql",
+        "postgres_tombstone_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py",
+        "tools/build_postgres_tombstone_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_entries_v2",
+      "column_count": 18,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "timetable_version_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "day_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "slot_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "class_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "arm_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "subject_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "teacher_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "room_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "entry_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'LESSON'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "block_group_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "is_fixed",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 2,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "timetable_versions_v2",
+          "from_column": "timetable_version_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_entries_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_timetable_entries_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_entries_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, timetable_version_id INTEGER NOT NULL,\n        day_id INTEGER NOT NULL, slot_id INTEGER NOT NULL, class_id INTEGER NOT NULL, arm_id INTEGER, subject_id INTEGER NOT NULL,\n        teacher_id INTEGER, room_id INTEGER, entry_type TEXT NOT NULL DEFAULT 'LESSON', block_group_id TEXT, is_fixed INTEGER NOT NULL DEFAULT 0,\n        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, client_uuid TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(timetable_version_id,day_id,slot_id,class_id), FOREIGN KEY(school_id) REFERENCES schools(id), FOREIGN KEY(timetable_version_id) REFERENCES timetable_versions_v2(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_periods",
+      "column_count": 11,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "start_time",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "end_time",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "sort_order",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "is_break",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_periods_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "idx_timetable_periods_school",
+          "unique": false,
+          "origin": "c",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_periods (\n            id INTEGER PRIMARY KEY AUTOINCREMENT,\n            school_id INTEGER NOT NULL,\n            name TEXT NOT NULL,\n            start_time TEXT,\n            end_time TEXT,\n            sort_order INTEGER NOT NULL DEFAULT 0,\n            is_break INTEGER NOT NULL DEFAULT 0, client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, tenant_id TEXT,\n            FOREIGN KEY(school_id) REFERENCES schools(id)\n        )",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql",
+        "postgres_tenant_triggers.sql",
+        "postgres_tombstone_triggers.sql",
+        "tools/build_postgres_tenant_triggers.py",
+        "tools/build_postgres_tombstone_triggers.py"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_rooms_v2",
+      "column_count": 13,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "room_name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "room_code",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "room_type",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'ROOM'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "capacity",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "building",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "floor",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_rooms_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_timetable_rooms_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_rooms_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, room_name TEXT NOT NULL,\n        room_code TEXT, room_type TEXT NOT NULL DEFAULT 'ROOM', capacity INTEGER DEFAULT 0, building TEXT, floor TEXT, status TEXT NOT NULL DEFAULT 'active', client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(tenant_id,school_id,room_name), FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_types_v2",
+      "column_count": 10,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "type_code",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "description",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "'active'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_types_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_timetable_types_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_types_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, name TEXT NOT NULL, type_code TEXT NOT NULL,\n        description TEXT, status TEXT DEFAULT 'active', client_uuid TEXT, updated_at TEXT, is_deleted INTEGER DEFAULT 0, UNIQUE(tenant_id,school_id,type_code), FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    },
+    {
+      "table": "timetable_versions_v2",
+      "column_count": 23,
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 1
+        },
+        {
+          "cid": 1,
+          "name": "tenant_id",
+          "type": "TEXT",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 2,
+          "name": "school_id",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 3,
+          "name": "academic_session_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 4,
+          "name": "term_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 5,
+          "name": "timetable_type_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 6,
+          "name": "version_number",
+          "type": "INTEGER",
+          "notnull": true,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 7,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'DRAFT'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 8,
+          "name": "validation_status",
+          "type": "TEXT",
+          "notnull": true,
+          "default": "'PENDING'",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 9,
+          "name": "is_current",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "1",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 10,
+          "name": "parent_version_id",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 11,
+          "name": "created_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 12,
+          "name": "created_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 13,
+          "name": "updated_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 14,
+          "name": "updated_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": "CURRENT_TIMESTAMP",
+          "primary_key_position": 0
+        },
+        {
+          "cid": 15,
+          "name": "submitted_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 16,
+          "name": "submitted_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 17,
+          "name": "published_by",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 18,
+          "name": "published_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 19,
+          "name": "archived_at",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 20,
+          "name": "revision_reason",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 21,
+          "name": "client_uuid",
+          "type": "TEXT",
+          "notnull": false,
+          "default": null,
+          "primary_key_position": 0
+        },
+        {
+          "cid": 22,
+          "name": "is_deleted",
+          "type": "INTEGER",
+          "notnull": false,
+          "default": "0",
+          "primary_key_position": 0
+        }
+      ],
+      "foreign_key_count": 1,
+      "foreign_keys": [
+        {
+          "id": 0,
+          "sequence": 0,
+          "referenced_table": "schools",
+          "from_column": "school_id",
+          "to_column": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "NO ACTION",
+          "match": "NONE"
+        }
+      ],
+      "index_count": 2,
+      "indexes": [
+        {
+          "name": "idx_timetable_versions_v2_client_uuid",
+          "unique": true,
+          "origin": "c",
+          "partial": true
+        },
+        {
+          "name": "sqlite_autoindex_timetable_versions_v2_1",
+          "unique": true,
+          "origin": "u",
+          "partial": false
+        }
+      ],
+      "sqlite_create_sql": "CREATE TABLE timetable_versions_v2 (\n        id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id TEXT NOT NULL, school_id INTEGER NOT NULL, academic_session_id INTEGER, term_id INTEGER,\n        timetable_type_id INTEGER, version_number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'DRAFT', validation_status TEXT NOT NULL DEFAULT 'PENDING',\n        is_current INTEGER DEFAULT 1, parent_version_id INTEGER, created_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_by INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP,\n        submitted_by INTEGER, submitted_at TEXT, published_by INTEGER, published_at TEXT, archived_at TEXT, revision_reason TEXT, client_uuid TEXT, is_deleted INTEGER DEFAULT 0,\n        UNIQUE(tenant_id,school_id,version_number), FOREIGN KEY(school_id) REFERENCES schools(id))",
+      "postgres_non_ddl_references": [
+        "postgres_sync_timestamp_triggers.sql"
+      ],
+      "classification": "NO_EXPLICIT_POSTGRES_CREATE_TABLE_FOUND"
+    }
+  ],
+  "limitations": [
+    "A missing explicit CREATE TABLE match is a confirmed source-to-file DDL gap, not proof that a live PostgreSQL database lacks the table.",
+    "The scan records references in helper and trigger files separately; references do not create tables.",
+    "Column type/nullability/default equivalence for the 76 explicitly matched tables is not assessed by this stage.",
+    "SQLite trigger semantics, application SQL compatibility, and live PostgreSQL execution remain outside this static report."
+  ]
+}
