@@ -210,6 +210,22 @@ def _check_score_conflict(conn, class_id, subject_id):
     base = g.sync_change["base"] or ""
     if server_version == base:
         return None                      # nobody touched it: apply normally
+    key = f"score:{sid}:{subject_id}:{term['id']}"
+    # V118: a difference of versions is only a CONFLICT when somebody ELSE changed the score. Two harmless cases are applied normally:
+    # (a) the score row is still blank (nothing has ever been entered, so there is nothing to overwrite) - e.g. the device opened a saved copy
+    #     of the page before the empty row existed on the server;
+    # (b) the version on the server was written by THIS device's own earlier change (a second change to the same score queued while the first
+    #     was still being sent) - the device simply had not learned the new version yet.
+    if srv is not None and all(float(srv[k] or 0) == 0.0 for k in SCORE_FIELDS):
+        return None
+    for own in conn.execute("SELECT response_body FROM sync_changes WHERE school_id=? AND path=? AND state='applied' AND device_id=? AND user_id=? "
+                            "ORDER BY id DESC LIMIT 25", (session.get("school_id"), request.path, g.sync_change["device"], session.get("user_id"))).fetchall():
+        try:
+            out = json.loads(own["response_body"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        if out.get("student_id") == sid and str(out.get("updated_at") or "") == server_version:
+            return None                  # the current version is this device's own earlier change
     incoming = {}
     for k in SCORE_FIELDS:
         raw = body.get(k)
