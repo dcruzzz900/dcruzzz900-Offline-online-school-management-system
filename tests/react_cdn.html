@@ -1,0 +1,5 @@
+{# V106: React 18 (UMD, production, pinned exact versions >2 weeks old). The components under static/js/react-ui/ use React.createElement
+   directly, so there is no build step and no JSX/Babel at runtime. Loaded only on the pages that use them. #}
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='js/react-ui/lib.js') }}"></script>

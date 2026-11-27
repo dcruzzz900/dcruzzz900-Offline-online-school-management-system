@@ -1,0 +1,4 @@
+{# V117: the online/offline indicator for the header of EVERY dashboard (staff, student, parent, Super Admin).
+   offline-ui.js (loaded on every page) keeps data-state / text / tooltip up to date: green Online, red Offline, blue Synchronizing,
+   amber Sync Failed. Staff get a link to the Sync Center; the other portals show the status only (no link to a page they cannot open). #}
+{% macro conn_chip(link=None) %}{% if link %}<a id="shConn" class="sh-conn no-print" href="{{ link }}" data-state="online" role="status" aria-live="polite" title="Connection status"><i aria-hidden="true"></i><span class="sh-conn-text">Online</span><small class="sh-conn-sub"></small></a>{% else %}<span id="shConn" class="sh-conn no-print" data-state="online" role="status" aria-live="polite" title="Connection status"><i aria-hidden="true"></i><span class="sh-conn-text">Online</span><small class="sh-conn-sub"></small></span>{% endif %}{% endmacro %}

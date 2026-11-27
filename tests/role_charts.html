@@ -1,0 +1,15 @@
+{# V109: role-specific dashboard charts. Specs come from role_charts.py (real rows only). Each chart has a text alternative (a data table) and an
+   honest empty state. static/js/role-charts.js draws them with Chart.js (light/dark and text-size aware). #}
+{% macro render_role_charts(specs, slot='role-charts') %}
+<div class="rc-grid" data-slot="{{ slot }}" data-role-charts>
+{% for s in specs %}
+  <article class="card rc-card" data-rc="{{ s.id }}">
+    <h3>{{ s.title }}</h3>{% if s.subtitle %}<p class="muted small rc-sub">{{ s.subtitle }}</p>{% endif %}
+    <div class="rc-body {{ 'rc-donut' if s.type == 'doughnut' }}" {% if s.empty %}hidden{% endif %}><canvas id="{{ s.id }}" role="img" aria-label="{{ s.title }}" data-rc-spec='{{ s|tojson }}'></canvas></div>
+    <p class="muted rc-empty" {% if not s.empty %}hidden{% endif %}>{{ s.empty or '' }}</p>
+    {% if not s.empty %}<details class="rc-table small"><summary>View as table</summary><div class="table-responsive"><table class="table table-sm"><thead><tr><th></th>{% for d in s.datasets %}<th>{{ d.label }}</th>{% endfor %}</tr></thead><tbody>
+      {% for lbl in s.labels %}{% set i = loop.index0 %}<tr><th scope="row">{{ lbl }}</th>{% for d in s.datasets %}<td>{{ d.data[i] }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></details>{% endif %}
+  </article>
+{% endfor %}
+</div>
+{% endmacro %}

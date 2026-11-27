@@ -1,0 +1,13 @@
+{# V115: the Announcements card shown on EVERY dashboard (Admin, Teacher / staff, Registrar, Student, Parent, Super Admin).
+   It lists ALL announcements addressed to the viewer (`announcement_feed`, see announcements.py feed_for) - including ones closed from the
+   sliding strip at the top and ones beyond the strip's limit of five. Long lists scroll inside the card so it never stretches the layout.
+   IMPORTANT: import with context, otherwise the macro cannot see `announcement_feed`:
+       {% from "partials/ann_panel.html" import ann_panel with context %} #}
+{% macro ann_panel(view_all_url='', tip='') %}{% set _items = announcement_feed if announcement_feed is defined and announcement_feed is not none else (announcement_banners or []) %}<article class="ad-panel ann-card" id="announcements-panel" data-ann-count="{{ _items|length }}">
+  <header><h2><span class="ni">📢</span> Announcements{% if _items|length > 1 %} <span class="ann-count" aria-label="{{ _items|length }} announcements">{{ _items|length }}</span>{% endif %}</h2>{% if view_all_url %}<a href="{{ view_all_url }}">View All →</a>{% endif %}</header>
+  <ul class="ann-list" tabindex="0" aria-label="All announcements">
+    {% for a in _items %}<li class="ann-item ann-item-{{ a.level }}"><span class="ann-ico" aria-hidden="true">{{ {'danger':'⚠️','warning':'❗','success':'✅'}.get(a.level, 'ℹ️') }}</span><div><b>{{ a.title }}{% if a.level == 'danger' %} <em class="ann-pri ann-pri-urgent">Urgent</em>{% elif a.level == 'warning' %} <em class="ann-pri ann-pri-important">Important</em>{% endif %}</b><span>{{ a.message }}</span><small class="ann-meta">{% if a.created_at %}Posted {{ (a.created_at|string)[:10] }}{% endif %}{% if a.expires_at %}{{ ' · ' if a.created_at else '' }}Until {{ (a.expires_at|string)[:10] }}{% endif %}</small></div></li>
+    {% else %}<li class="ann-item"><span class="ann-ico" aria-hidden="true">ℹ️</span><div><b>No announcements</b><span>Announcements from your school appear here and at the top of the page.</span></div></li>{% endfor %}
+  </ul>
+  {% if tip %}<div class="ad-tip"><span>💡</span><div><b>Tip:</b> {{ tip }}</div></div>{% endif %}
+</article>{% endmacro %}

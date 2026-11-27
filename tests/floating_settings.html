@@ -1,0 +1,11 @@
+{# V112: ONE draggable floating "Display settings" control on every page (signed-in or not): text size (A- / reset / A+) and
+   light/dark mode. It reuses the existing data-fs-step / data-theme-toggle hooks, so size + theme keep saving per person on the server
+   and per device (static/js/theme-toggle.js); its own position is remembered on this device (static/js/floating-settings.js). #}
+<div class="theme-fab sh-fab no-print" id="shFab" data-sh-fab>
+  <button type="button" class="sh-fab-btn" id="shFabBtn" aria-label="Display settings. Drag to move." aria-haspopup="dialog" aria-expanded="false" aria-controls="shFabPanel" title="Display settings — drag to move"><span aria-hidden="true">Aa</span></button>
+  <div class="sh-fab-panel" id="shFabPanel" role="dialog" aria-label="Display settings" hidden>
+    <div class="sh-fab-row"><span class="sh-fab-lbl">Text size</span>{% include "partials/text_size_control.html" %}</div>
+    <div class="sh-fab-row"><span class="sh-fab-lbl">Appearance</span><button type="button" class="theme-toggle sh-fab-theme" data-theme-toggle aria-label="Switch to dark mode" title="Light / dark mode"><span class="tt-ico" aria-hidden="true"></span><span class="tt-label">Dark mode</span></button></div>
+    <button type="button" class="sh-fab-reset" data-fab-reset>Reset position</button>
+  </div>
+</div>

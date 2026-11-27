@@ -1,0 +1,15 @@
+{# V112: the v106 welcome banner, fed by the SAME school-timezone data as the v107 header (tz + server UTC anchor), with an offline,
+   dependency-free clock (no React needed). Usage: {% from "partials/v106_banner.html" import v106_banner %}{{ v106_banner('teacher', heading, subtitle) }} #}
+{% macro v106_banner(kind, name='', subtitle='') %}{% set w = welcome_header_data(kind, session.get('name')) %}
+<section class="ad-banner" data-v106-banner data-config='{{ w|tojson }}'>
+  <div><h1>{% if name %}Welcome, <span data-first-name>{{ name }}</span>!{% else %}{{ w.heading }}{% endif %}</h1><p>{{ subtitle or w.description }}</p></div>
+  <div class="ad-banner-clock"><div>📅 <span data-clock-date>{{ w.date }}</span></div><div>🕐 <span data-clock-time>{{ w.time }}</span></div></div>
+</section>
+<script>
+(function(){var host=document.currentScript.previousElementSibling;if(!host)return;var cfg={};try{cfg=JSON.parse(host.getAttribute('data-config')||'{}');}catch(e){}
+if(!cfg.utc_ms||!cfg.tz)return;var t0=Date.now(),D=host.querySelector('[data-clock-date]'),T=host.querySelector('[data-clock-time]');
+function tick(){var d=new Date(cfg.utc_ms+(Date.now()-t0));try{var p={};new Intl.DateTimeFormat('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:cfg.tz}).formatToParts(d).forEach(function(x){p[x.type]=x.value;});
+if(D)D.textContent=p.weekday+', '+p.day+' '+p.month+' '+p.year;if(T)T.textContent=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:cfg.tz});}catch(e){}}
+tick();setInterval(tick,15000);})();
+</script>
+{% endmacro %}

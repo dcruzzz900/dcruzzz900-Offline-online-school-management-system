@@ -1,0 +1,20 @@
+{# V107: Date of Birth + Gender, compulsory on every registration / profile form. Server-rendered (works without JavaScript and is
+   validated again by identity_rules.py); static/js/react-ui/identity-fields.js upgrades it with live messages and a submit guard. #}
+{% macro identity_fields(dob='', gender='', min_age=0, who='person', uid='idf') %}
+<div class="row g-3 identity-fields" data-identity-fields data-min-age="{{ min_age }}" data-who="{{ who }}">
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ uid }}_dob">Date of Birth <span class="text-danger" aria-hidden="true">*</span></label>
+    <input type="date" id="{{ uid }}_dob" name="date_of_birth" class="form-control" required min="1900-01-01" max="{{ today_iso() }}" value="{{ dob or '' }}" aria-describedby="{{ uid }}_dob_msg">
+    <div class="invalid-feedback" id="{{ uid }}_dob_msg" role="alert"></div>
+  </div>
+  <div class="col-12 col-md-6">
+    <label class="form-label" for="{{ uid }}_gender">Gender <span class="text-danger" aria-hidden="true">*</span></label>
+    <select id="{{ uid }}_gender" name="gender" class="form-select" required aria-describedby="{{ uid }}_gender_msg">
+      <option value="">Select gender…</option>
+      <option value="M" {% if gender in ('M','Male','male') %}selected{% endif %}>Male</option>
+      <option value="F" {% if gender in ('F','Female','female') %}selected{% endif %}>Female</option>
+    </select>
+    <div class="invalid-feedback" id="{{ uid }}_gender_msg" role="alert"></div>
+  </div>
+</div>
+{% endmacro %}
