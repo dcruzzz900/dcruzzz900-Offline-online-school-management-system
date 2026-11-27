@@ -245,3 +245,4 @@ html[data-font-scale="130"] .ad .ad-two,html[data-font-scale="150"] .ad .ad-two{
 .ad .grade-row-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px}
 .ad .grade-row-top b{min-width:0;overflow-wrap:break-word}
 .ad .grade-row-top span{flex:0 1 auto;margin-left:auto;text-align:right}
+.login-conn[hidden]{display:none!important}
