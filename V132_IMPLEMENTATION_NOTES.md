@@ -1,21 +1,16 @@
-# Migration 132 — device_credentials
+# V132 implementation notes — Stage 84 / Migration 155
 
-## Source review
+- Added standalone PostgreSQL migration 155 for `result_display_settings`.
+- Ported the effective 57-column source shape from the Stage 83 schema snapshot, including columns introduced by later SQLite migrations.
+- Preserved the school_id primary key and source defaults.
+- Added structural validation for columns, nullability, primary-key index, foreign keys and triggers.
+- Registered migration 155 and added static migration tests.
+- SQLite startup, SQLite migrations, database selection, offline storage and offline synchronization were not changed.
+- Live PostgreSQL execution was not performed.
 
-The effective SQLite schema snapshot contains 14 columns, two foreign keys (to `schools.id` and `users.id`), three explicit non-unique lookup indexes, an inline unique constraint on `device_id`, and one AFTER INSERT trigger named `trg_device_credentials_tenant_stamp`.
+## Reconciliation after Migration 155
 
-## PostgreSQL mapping
-
-- `id`: BIGINT identity primary key.
-- `school_id`, `user_id`: INTEGER, matching the baseline `schools.id` and `users.id` types.
-- Other SQLite INTEGER field `revoked`: BIGINT with source default `0`.
-- TEXT fields remain TEXT, including `issued_at` with `CURRENT_TIMESTAMP` default.
-- `device_id` remains unique.
-
-## Trigger behavior
-
-When an inserted credential has a NULL or empty `tenant_id`, the trigger updates the inserted row with the `tenant_id` belonging to its referenced school. An explicitly supplied non-empty tenant ID is preserved, matching the source trigger condition.
-
-## Scope and validation
-
-Migration 132 is registered in the standalone PostgreSQL migration runner. It is not imported by `db.py`, does not alter SQLite startup, and does not modify browser IndexedDB or offline synchronization. Automated tests validate DDL structure and catalog-validation behavior. A live PostgreSQL server was not available for executing the DDL or checking trigger behavior against a real catalog.
+- Static table-definition coverage: 80 of 113 source tables.
+- Remaining table candidates: 33, containing 414 source columns.
+- Remaining foreign-key declarations: 36; remaining explicit index declarations: 49.
+- These counts are static comparisons only and do not establish live PostgreSQL catalog parity.

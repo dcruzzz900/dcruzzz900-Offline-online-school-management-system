@@ -1,9 +1,13 @@
-# Migration 133 — offline_sync_tokens
+# V133 — Stage 85 implementation notes
 
-Reviewed `offline_sync_tokens` in `postgres_effective_schema_snapshot.json` from Stage 59.
+Stage 85 added standalone PostgreSQL migration 156 for `signup_codes`.
 
-The source table contains four columns: `token TEXT PRIMARY KEY`, required `entity_type TEXT`, required `entity_id INTEGER`, and nullable `created_at TEXT DEFAULT CURRENT_TIMESTAMP`. It declares only its primary-key autoindex and no foreign keys or triggers.
+# V134 — Stage 86 implementation notes
 
-The PostgreSQL migration uses TEXT for token/entity type/timestamp and BIGINT for the non-key entity identifier. PostgreSQL primary keys enforce NOT NULL for `token`; SQLite's legacy rowid-table handling of NULL values in non-integer primary keys can differ, so applications should supply a token as intended by the token's idempotency role. No FK was inferred for `entity_id`, because the source intentionally has no declared relationship and does not identify a single parent table.
+Added standalone PostgreSQL migration 157 for `signups`, ported from `migration_052_auth_signup_audit_spec` in `db.py`. The migration preserves all 13 source columns, the pending status default, user/school foreign keys, and school/status lookup index. Updated the explicit migration registry, registry regression tests, migration inventory, and Stage 86 static reconciliation report.
 
-The migration is registered as version 133 and remains separate from SQLite startup and the existing offline-sync path. Unit/fake-connection validation does not substitute for execution against a live PostgreSQL server.
+PostgreSQL test suite results are recorded separately in the Stage 86 delivery summary. No live PostgreSQL execution was performed. SQLite startup, SQLite migrations, database selection, offline storage, and offline synchronization were not modified.
+
+## V135 — Stage 87 / PostgreSQL Migration 158
+
+Added standalone PostgreSQL DDL for `school_fee_summary`, preserving the effective six-column SQLite schema, amount defaults, timestamp default, and school/id index. SQLite startup, SQLite migrations, offline storage, and synchronization are unchanged. Live PostgreSQL execution has not been tested.
